@@ -7,10 +7,10 @@ import {
   Store,
   Warehouse,
   ThermometerSnowflake,
-  Database,
   RotateCcw,
   User,
   CheckCircle2,
+  LogOut,
 } from 'lucide-react';
 
 export const Header: React.FC = () => {
@@ -26,7 +26,8 @@ export const Header: React.FC = () => {
     reassignmentRequests,
     loadingBills,
     resetToDefaults,
-    isOnlineDb,
+    currentUser,
+    logout,
   } = useApp();
 
   const pendingReassignments = reassignmentRequests.filter((r) => r.status === 'pending').length;
@@ -78,18 +79,39 @@ export const Header: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            {/* Status Indicator */}
-            <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700/60 text-xs text-slate-300">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-              <span className="text-emerald-400 font-medium">سردخانه: ۱۸- درجه</span>
+          <div className="flex items-center gap-2.5">
+            {/* Active User Info */}
+            <div
+              id="header-user-badge"
+              className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-slate-800/90 border border-slate-700/70 text-slate-200 shadow-sm"
+            >
+              <div className="w-7 h-7 rounded-lg bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
+                <User className="w-3.5 h-3.5" />
+              </div>
+              <div className="flex flex-col text-right">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold text-slate-100">{currentUser.name}</span>
+                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-blue-950/80 text-blue-400 border border-blue-800/50">
+                    {currentUser.roleTitle}
+                  </span>
+                </div>
+              </div>
             </div>
 
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700/60 text-xs text-slate-300">
-              <Database className="w-3.5 h-3.5 text-slate-400" />
-              <span>{isOnlineDb ? 'دیتابیس آنلاین Supabase' : 'پایگاه داده آفلاین / محلی'}</span>
-            </div>
+            {/* Logout Button */}
+            <button
+              id="header-logout-btn"
+              onClick={() => {
+                logout();
+              }}
+              title="خروج از حساب کاربری و بازگشت به صفحه ورود"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 active:scale-95 text-rose-300 hover:text-rose-200 border border-rose-500/40 transition text-xs font-semibold cursor-pointer shadow-sm"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>خروج</span>
+            </button>
 
+            {/* Reset to defaults */}
             <button
               onClick={() => {
                 if (window.confirm('آیا از بازنشانی داده‌های نمونه اولیه اطمینان دارید؟')) {
@@ -97,9 +119,9 @@ export const Header: React.FC = () => {
                 }
               }}
               title="بازنشانی داده‌های اولیه"
-              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 border border-slate-700/60 transition"
+              className="p-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-slate-200 border border-slate-700/60 transition cursor-pointer"
             >
-              <RotateCcw className="w-4 h-4" />
+              <RotateCcw className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>

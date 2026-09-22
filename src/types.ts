@@ -1,5 +1,13 @@
 export type UserRole = 'admin' | 'warehouse' | 'visitor' | 'supermarket';
 
+export interface CurrentUser {
+  id: string;
+  name: string;
+  role: UserRole;
+  roleTitle: string;
+  phone: string;
+}
+
 export interface Profile {
   id: string;
   name: string;

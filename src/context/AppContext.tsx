@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import {
   UserRole,
+  CurrentUser,
   Product,
   Category,
   Visitor,
@@ -13,6 +14,7 @@ import {
   ProductPriceHistory
 } from '../types';
 import {
+  INITIAL_PROFILES,
   INITIAL_CATEGORIES,
   INITIAL_PRODUCTS,
   INITIAL_VISITORS,
@@ -42,6 +44,11 @@ interface AppContextType {
   selectedSupermarketId: string;
   setSelectedSupermarketId: (id: string) => void;
   
+  isLoggedIn: boolean;
+  currentUser: CurrentUser;
+  login: (profileId: string) => void;
+  logout: () => void;
+
   categories: Category[];
   products: Product[];
   visitors: Visitor[];
@@ -78,9 +85,18 @@ const STORAGE_KEYS = {
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
+    const saved = localStorage.getItem('alborz_auth_logged_in');
+    return saved !== null ? saved === 'true' : true;
+  });
+
   const [role, setRole] = useState<UserRole>('admin');
   const [selectedVisitorId, setSelectedVisitorId] = useState<string>('vis-1');
   const [selectedSupermarketId, setSelectedSupermarketId] = useState<string>('shop-1');
+
+  useEffect(() => {
+    localStorage.setItem('alborz_auth_logged_in', String(isLoggedIn));
+  }, [isLoggedIn]);
 
   const [categories] = useState<Category[]>(INITIAL_CATEGORIES);
   const [visitors] = useState<Visitor[]>(INITIAL_VISITORS);
@@ -524,6 +540,73 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     ]);
   };
 
+  const currentUser: CurrentUser = useMemo(() => {
+    if (role === 'admin') {
+      return {
+        id: 'admin-1',
+        name: 'مدیریت مرکزی البرز',
+        role: 'admin',
+        roleTitle: 'مدیر ارشد',
+        phone: '۰۹۱۲۰۰۰۰۰۰۰',
+      };
+    }
+    if (role === 'warehouse') {
+      return {
+        id: 'wh-1',
+        name: 'انباردار سردخانه البرز',
+        role: 'warehouse',
+        roleTitle: 'انباردار سردخانه',
+        phone: '۰۹۱۲۱۱۱۰۰۰۰',
+      };
+    }
+    if (role === 'visitor') {
+      const v = visitors.find((vis) => vis.id === selectedVisitorId) || visitors[0];
+      return {
+        id: v?.id || 'vis-1',
+        name: v?.name || 'علیرضا رضایی',
+        role: 'visitor',
+        roleTitle: `ویزیتور (${v?.region || 'منطقه توزیع'})`,
+        phone: v?.phone || '۰۹۱۲۳۴۵۶۷۸۹',
+      };
+    }
+    if (role === 'supermarket') {
+      const s = supermarkets.find((sm) => sm.id === selectedSupermarketId) || supermarkets[0];
+      return {
+        id: s?.id || 'shop-1',
+        name: s?.name || 'سوپرمارکت بهاران',
+        role: 'supermarket',
+        roleTitle: `فروشگاه (${s?.owner || 'مدیریت'})`,
+        phone: s?.phone || '۰۹۱۲۱۱۱۱۱۱۱',
+      };
+    }
+    return {
+      id: 'admin-1',
+      name: 'مدیریت مرکزی البرز',
+      role: 'admin',
+      roleTitle: 'مدیر ارشد',
+      phone: '۰۹۱۲۰۰۰۰۰۰۰',
+    };
+  }, [role, selectedVisitorId, selectedSupermarketId, visitors, supermarkets]);
+
+  const login = (profileId: string) => {
+    const profile = INITIAL_PROFILES.find((p) => p.id === profileId);
+    if (profile) {
+      setRole(profile.role);
+      if (profile.role === 'visitor') {
+        setSelectedVisitorId(profile.id);
+      } else if (profile.role === 'supermarket') {
+        setSelectedSupermarketId(profile.id);
+      }
+    }
+    setIsLoggedIn(true);
+    localStorage.setItem('alborz_auth_logged_in', 'true');
+  };
+
+  const logout = () => {
+    setIsLoggedIn(false);
+    localStorage.setItem('alborz_auth_logged_in', 'false');
+  };
+
   const resetToDefaults = () => {
     localStorage.clear();
     setProducts(INITIAL_PRODUCTS);
@@ -544,6 +627,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setSelectedVisitorId,
         selectedSupermarketId,
         setSelectedSupermarketId,
+        isLoggedIn,
+        currentUser,
+        login,
+        logout,
         categories,
         products,
         visitors,

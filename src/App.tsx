@@ -5,9 +5,14 @@ import { AdminPanel } from './components/AdminPanel';
 import { VisitorPortal } from './components/VisitorPortal';
 import { SupermarketPortal } from './components/SupermarketPortal';
 import { WarehousePanel } from './components/WarehousePanel';
+import { LoginScreen } from './components/LoginScreen';
 
 export const App: React.FC = () => {
-  const { role } = useApp();
+  const { role, isLoggedIn } = useApp();
+
+  if (!isLoggedIn) {
+    return <LoginScreen />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-blue-600 selection:text-white">

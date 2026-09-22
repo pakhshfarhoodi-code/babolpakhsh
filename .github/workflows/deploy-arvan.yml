@@ -1,0 +1,42 @@
+name: Deploy to ArvanCloud Object Storage
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build Project
+        run: npm run build
+
+      - name: Sync Dist to ArvanCloud Object Storage
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.ARVAN_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.ARVAN_SECRET_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
+          ARVAN_ENDPOINT: ${{ secrets.ARVAN_ENDPOINT || 'https://s3.ir-thr-at1.arvanstorage.ir' }}
+          BUCKET_NAME: ${{ secrets.ARVAN_BUCKET }}
+        run: |
+          aws s3 sync dist/ s3://$BUCKET_NAME \
+            --endpoint-url="$ARVAN_ENDPOINT" \
+            --delete \
+            --acl public-read \
+            --no-progress

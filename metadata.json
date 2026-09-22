@@ -1,0 +1,6 @@
+{
+  "name": "مدیریت سفارش و پخش مویرگی",
+  "description": "سامانه یکپارچه مدیریت سفارشات سوپرمارکت، پورتال ویزیتورها و پنل مدیریت پخش مویرگی",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

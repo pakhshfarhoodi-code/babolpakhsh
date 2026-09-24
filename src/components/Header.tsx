@@ -11,6 +11,8 @@ import {
   LogOut,
   MapPin,
   Phone,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -30,6 +32,8 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
     logout,
     supermarkets,
     selectedSupermarketId,
+    theme,
+    toggleTheme,
   } = useApp();
 
   const currentStore = supermarkets.find((s) => s.id === selectedSupermarketId) || supermarkets[0];
@@ -76,10 +80,27 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
             </div>
           </div>
 
-          {/* 2. Left Section (RTL): User info + Reset + Logout (Order 2 on mobile, Order 3 on desktop) */}
+          {/* 2. Left Section (RTL): User info + Theme Toggle + Logout (Order 2 on mobile, Order 3 on desktop) */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 order-2 lg:order-3 justify-end">
-            {/* User Identity badge for Admin / Warehouse */}
-            {role !== 'supermarket' && (
+            {/* User Identity badge for Visitor */}
+            {role === 'visitor' ? (
+              <div
+                id="header-visitor-badge"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-950/70 border border-blue-800/60 text-slate-200 shadow-sm"
+              >
+                <div className="w-5 h-5 rounded bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400 shrink-0">
+                  <User className="w-3 h-3" />
+                </div>
+                <div className="flex items-center gap-1.5 text-right">
+                  <span className="text-xs font-bold text-slate-100 max-w-[90px] sm:max-w-none truncate">
+                    {currentVisitor?.name || currentUser.name}
+                  </span>
+                  <span className="text-[10px] font-mono font-medium text-blue-300 bg-blue-900/70 px-1.5 py-0.2 rounded border border-blue-700/50 dir-ltr whitespace-nowrap">
+                    {currentVisitor?.username || currentUser.username || 'visitor1'}
+                  </span>
+                </div>
+              </div>
+            ) : (role === 'admin' || role === 'warehouse') ? (
               <div
                 id="header-user-badge"
                 className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-800/90 border border-slate-700/70 text-slate-200 shadow-sm"
@@ -94,7 +115,21 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
                   </span>
                 </div>
               </div>
-            )}
+            ) : null}
+
+            {/* Day / Night Theme Toggle */}
+            <button
+              id="theme-toggle-btn"
+              onClick={toggleTheme}
+              title={theme === 'dark' ? 'تغییر به حالت روز (روشن)' : 'تغییر به حالت شب (تاریک)'}
+              className="p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 transition cursor-pointer shrink-0 shadow-sm"
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-3.5 h-3.5 text-amber-400" />
+              ) : (
+                <Moon className="w-3.5 h-3.5 text-indigo-500" />
+              )}
+            </button>
 
             {/* Logout button */}
             <button
@@ -158,29 +193,7 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
                   </div>
                 )}
               </div>
-            ) : role === 'visitor' ? (
-              /* Active Visitor Info Pill */
-              <div className="w-full lg:w-auto flex items-center justify-between sm:justify-start gap-2 px-2.5 py-1.5 rounded-lg bg-blue-950/40 border border-blue-800/50 text-slate-200 shadow-sm min-w-0">
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className="w-6 h-6 rounded-md bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
-                    <Truck className="w-3.5 h-3.5" />
-                  </div>
-                  <div className="flex items-center gap-1.5 text-xs truncate">
-                    <span className="text-slate-400 text-[11px] whitespace-nowrap">ویزیتور:</span>
-                    <span className="font-bold text-slate-100 truncate">{currentUser.name}</span>
-                    <span className="text-[10px] text-blue-300 bg-blue-900/60 px-1.5 py-0.5 rounded border border-blue-700/40 hidden sm:inline-block whitespace-nowrap">
-                      {currentVisitor.region || 'منطقه توزیع البرز'}
-                    </span>
-                  </div>
-                </div>
-                <a
-                  href={`tel:${currentVisitor.phone}`}
-                  className="text-[11px] text-slate-300 font-mono dir-ltr bg-slate-900/80 px-2 py-0.5 rounded border border-slate-700/50 shrink-0 hover:text-white"
-                >
-                  {currentVisitor.phone}
-                </a>
-              </div>
-            ) : (
+            ) : role === 'visitor' ? null : (
               /* Admin & Warehouse Navigation Tabs */
               <div className="grid grid-cols-2 lg:flex items-center gap-1 bg-slate-950/80 p-0.5 rounded-lg border border-slate-800 shadow-inner w-full lg:w-auto">
                 <button

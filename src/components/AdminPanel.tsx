@@ -22,6 +22,7 @@ import {
   Tag,
   Layers,
   Trash2,
+  Pencil,
 } from 'lucide-react';
 import { SupermarketRegisterModal } from './SupermarketRegisterModal';
 import { CategorySelectPicker, BrandSelectPicker } from './CategoryBrandSelectors';
@@ -41,6 +42,8 @@ export const AdminPanel: React.FC = () => {
     deleteProduct,
     updateOrderStatus,
     requestReassignment,
+    updateCategory,
+    updateBrand,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'orders' | 'products' | 'visitors' | 'transactions' | 'pricing'>('orders');
@@ -55,6 +58,13 @@ export const AdminPanel: React.FC = () => {
   const [selectedNewVisitor, setSelectedNewVisitor] = useState<string>('');
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [deleteProductFeedback, setDeleteProductFeedback] = useState<string | null>(null);
+
+  // Category and Brand Quick Edit state
+  const [editingCategoryModal, setEditingCategoryModal] = useState<{ id: string; name: string } | null>(null);
+  const [newCatNameInput, setNewCatNameInput] = useState('');
+  const [editingBrandModal, setEditingBrandModal] = useState<string | null>(null);
+  const [newBrandNameInput, setNewBrandNameInput] = useState('');
+  const [catBrandFeedback, setCatBrandFeedback] = useState<string | null>(null);
 
   // New product form state
   const [newProdName, setNewProdName] = useState('');
@@ -263,12 +273,15 @@ export const AdminPanel: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-800/60">
                 {orders
-                  .filter(
-                    (o) =>
-                      o.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                      o.supermarket_name.includes(searchTerm) ||
-                      o.visitor_name.includes(searchTerm)
-                  )
+                  .filter((o) => {
+                    if (!searchTerm.trim()) return true;
+                    const term = searchTerm.toLowerCase().trim();
+                    return (
+                      o.id.toLowerCase().includes(term) ||
+                      o.supermarket_name.toLowerCase().includes(term) ||
+                      o.visitor_name.toLowerCase().includes(term)
+                    );
+                  })
                   .map((order) => {
                     const statusConfig = {
                       assigned: { label: 'تخصیص یافته', bg: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
@@ -379,38 +392,77 @@ export const AdminPanel: React.FC = () => {
                   همه دسته‌ها
                 </button>
                 {categories.map((c) => (
-                  <button
-                    key={c.id}
-                    onClick={() => setSelectedCategoryFilter(c.id)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition ${
-                      selectedCategoryFilter === c.id
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
-                    }`}
-                  >
-                    {c.name}
-                  </button>
+                  <div key={c.id} className="inline-flex items-center shrink-0">
+                    <div
+                      className={`inline-flex items-center gap-1 rounded-lg text-xs font-medium whitespace-nowrap transition border ${
+                        selectedCategoryFilter === c.id
+                          ? 'bg-blue-600 text-white border-blue-500 shadow-sm'
+                          : 'bg-slate-950 text-slate-400 hover:text-slate-200 border-slate-800'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCategoryFilter(c.id)}
+                        className="px-2.5 py-1 cursor-pointer"
+                      >
+                        {c.name}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingCategoryModal(c);
+                          setNewCatNameInput(c.name);
+                          setCatBrandFeedback(null);
+                        }}
+                        title={`ویرایش نام دسته‌بندی «${c.name}»`}
+                        className={`p-1 pl-1.5 rounded-l-lg transition cursor-pointer ${
+                          selectedCategoryFilter === c.id
+                            ? 'text-white/80 hover:text-white hover:bg-blue-700'
+                            : 'text-slate-500 hover:text-amber-400 hover:bg-slate-800'
+                        }`}
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
                 ))}
               </div>
 
               {/* Brand Filter Selector */}
-              <div className="flex items-center gap-2 text-xs">
+              <div className="flex items-center gap-1.5 text-xs">
                 <div className="flex items-center gap-1 text-slate-400 font-medium shrink-0">
                   <Tag className="w-3.5 h-3.5 text-amber-400" />
                   <span>فیلتر برند:</span>
                 </div>
-                <select
-                  value={selectedBrandFilter}
-                  onChange={(e) => setSelectedBrandFilter(e.target.value)}
-                  className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-200 focus:outline-none focus:border-blue-500 font-medium"
-                >
-                  <option value="all">همه برندها ({brands.length})</option>
-                  {brands.map((brand) => (
-                    <option key={brand} value={brand}>
-                      برند {brand}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-center gap-1">
+                  <select
+                    value={selectedBrandFilter}
+                    onChange={(e) => setSelectedBrandFilter(e.target.value)}
+                    className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-200 focus:outline-none focus:border-blue-500 font-medium"
+                  >
+                    <option value="all">همه برندها ({brands.length})</option>
+                    {brands.map((brand) => (
+                      <option key={brand} value={brand}>
+                        برند {brand}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedBrandFilter !== 'all' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingBrandModal(selectedBrandFilter);
+                        setNewBrandNameInput(selectedBrandFilter);
+                        setCatBrandFeedback(null);
+                      }}
+                      title={`ویرایش نام برند «${selectedBrandFilter}»`}
+                      className="p-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition cursor-pointer shrink-0 shadow-sm"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -434,8 +486,11 @@ export const AdminPanel: React.FC = () => {
               <tbody className="divide-y divide-slate-800/60">
                 {products
                   .filter((p) => {
+                    const term = searchTerm.toLowerCase().trim();
                     const matchSearch =
-                      p.name.includes(searchTerm) || (p.brand && p.brand.includes(searchTerm));
+                      !term ||
+                      p.name.toLowerCase().includes(term) ||
+                      (p.brand && p.brand.toLowerCase().includes(term));
                     const matchCategory =
                       selectedCategoryFilter === 'all' || p.category_id === selectedCategoryFilter;
                     const matchBrand =
@@ -904,6 +959,156 @@ export const AdminPanel: React.FC = () => {
                 بله، حذف شود
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Modal for Editing Category */}
+      {editingCategoryModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5 max-w-sm w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-600/20 text-blue-400 flex items-center justify-center border border-blue-500/30">
+                  <Pencil className="w-4 h-4" />
+                </div>
+                <h4 className="font-bold text-sm text-slate-100">ویرایش نام دسته‌بندی</h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingCategoryModal(null)}
+                className="text-slate-400 hover:text-slate-200 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {catBrandFeedback && (
+              <div className="p-2.5 bg-rose-500/15 border border-rose-500/30 rounded-xl text-rose-300 text-xs">
+                {catBrandFeedback}
+              </div>
+            )}
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!newCatNameInput.trim()) return;
+                const res = updateCategory(editingCategoryModal.id, newCatNameInput.trim());
+                if (res.success) {
+                  setEditingCategoryModal(null);
+                  setCatBrandFeedback(null);
+                } else {
+                  setCatBrandFeedback(res.message);
+                }
+              }}
+              className="space-y-4 text-xs"
+            >
+              <div>
+                <label className="block text-slate-400 mb-1 font-medium">عنوان دسته‌بندی:</label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  value={newCatNameInput}
+                  onChange={(e) => setNewCatNameInput(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:border-blue-500"
+                  placeholder="نام دسته‌بندی..."
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingCategoryModal(null)}
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium cursor-pointer"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold cursor-pointer shadow-lg shadow-blue-600/30 flex items-center gap-1.5"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>ذخیره تغییرات</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal for Editing Brand */}
+      {editingBrandModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5 max-w-sm w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
+                  <Pencil className="w-4 h-4" />
+                </div>
+                <h4 className="font-bold text-sm text-slate-100">ویرایش نام برند</h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingBrandModal(null)}
+                className="text-slate-400 hover:text-slate-200 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {catBrandFeedback && (
+              <div className="p-2.5 bg-rose-500/15 border border-rose-500/30 rounded-xl text-rose-300 text-xs">
+                {catBrandFeedback}
+              </div>
+            )}
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!newBrandNameInput.trim()) return;
+                const res = updateBrand(editingBrandModal, newBrandNameInput.trim());
+                if (res.success) {
+                  if (selectedBrandFilter === editingBrandModal) {
+                    setSelectedBrandFilter(newBrandNameInput.trim());
+                  }
+                  setEditingBrandModal(null);
+                  setCatBrandFeedback(null);
+                } else {
+                  setCatBrandFeedback(res.message);
+                }
+              }}
+              className="space-y-4 text-xs"
+            >
+              <div>
+                <label className="block text-slate-400 mb-1 font-medium">نام برند / کارخانه:</label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  value={newBrandNameInput}
+                  onChange={(e) => setNewBrandNameInput(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:border-amber-500"
+                  placeholder="نام برند..."
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingBrandModal(null)}
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium cursor-pointer"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold cursor-pointer shadow-lg shadow-amber-500/30 flex items-center gap-1.5"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>ذخیره تغییرات</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

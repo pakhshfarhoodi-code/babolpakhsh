@@ -1,6 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { X, Search, Plus, Minus, ShoppingCart, AlertTriangle, CheckCircle } from 'lucide-react';
+import {
+  X,
+  Search,
+  Plus,
+  Minus,
+  ShoppingCart,
+  AlertTriangle,
+  CheckCircle,
+  ChevronDown,
+  Check,
+  Store,
+  MapPin,
+} from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
@@ -26,15 +38,54 @@ export const NewOrderModal: React.FC<Props> = ({
   const [selectedSupermarketId, setSelectedSupermarketId] = useState<string>(
     defaultSupermarketId || supermarkets[0]?.id || ''
   );
+  const [isStoreDropdownOpen, setIsStoreDropdownOpen] = useState(false);
+  const [storeSearchTerm, setStoreSearchTerm] = useState('');
+  const storeDropdownRef = useRef<HTMLDivElement>(null);
+
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [cart, setCart] = useState<Record<string, number>>({});
   const [feedback, setFeedback] = useState<{ type: 'error' | 'success'; message: string } | null>(null);
 
+  // Sync selectedSupermarketId if defaultSupermarketId changes
+  useEffect(() => {
+    if (defaultSupermarketId) {
+      setSelectedSupermarketId(defaultSupermarketId);
+    } else if (!selectedSupermarketId && supermarkets.length > 0) {
+      setSelectedSupermarketId(supermarkets[0].id);
+    }
+  }, [defaultSupermarketId, supermarkets, isOpen]);
+
+  // Close customer dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (storeDropdownRef.current && !storeDropdownRef.current.contains(event.target as Node)) {
+        setIsStoreDropdownOpen(false);
+      }
+    };
+    if (isStoreDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isStoreDropdownOpen]);
+
   if (!isOpen) return null;
 
   const currentSupermarket = supermarkets.find((s) => s.id === selectedSupermarketId);
   const currentVisitor = visitors.find((v) => v.id === (defaultVisitorId || currentSupermarket?.assigned_visitor_id));
+
+  // Filter supermarkets by search term
+  const filteredSupermarkets = supermarkets.filter((s) => {
+    if (!storeSearchTerm.trim()) return true;
+    const term = storeSearchTerm.toLowerCase();
+    return (
+      s.name.toLowerCase().includes(term) ||
+      s.owner.toLowerCase().includes(term) ||
+      (s.address && s.address.toLowerCase().includes(term))
+    );
+  });
 
   const filteredProducts = products.filter((p) => {
     if (!p.is_active) return false;
@@ -139,20 +190,117 @@ export const NewOrderModal: React.FC<Props> = ({
 
         {/* Store & Visitor Selector */}
         <div className="p-4 bg-slate-950/30 border-b border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-          <div>
+          {/* Custom Searchable Customer Dropdown */}
+          <div className="relative" ref={storeDropdownRef}>
             <label className="block text-slate-400 mb-1 font-medium">سوپرمارکت مقصد سفارش:</label>
-            <select
-              value={selectedSupermarketId}
-              onChange={(e) => setSelectedSupermarketId(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-blue-500"
+            
+            {/* Dropdown trigger button */}
+            <button
+              type="button"
+              onClick={() => setIsStoreDropdownOpen((prev) => !prev)}
+              className={`w-full bg-slate-900 border rounded-lg p-2 text-slate-200 flex items-center justify-between transition cursor-pointer text-right shadow-sm ${
+                isStoreDropdownOpen ? 'border-blue-500 ring-1 ring-blue-500' : 'border-slate-700 hover:border-slate-600'
+              }`}
             >
-              {supermarkets.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} ({s.owner})
-                </option>
-              ))}
-            </select>
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-5 h-5 rounded bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                  <Store className="w-3 h-3" />
+                </div>
+                {currentSupermarket ? (
+                  <div className="truncate">
+                    <span className="font-bold text-slate-100">{currentSupermarket.name}</span>
+                    <span className="text-slate-400 text-[11px] mr-1.5">({currentSupermarket.owner})</span>
+                  </div>
+                ) : (
+                  <span className="text-slate-500">انتخاب سوپرمارکت مقصد...</span>
+                )}
+              </div>
+              <ChevronDown
+                className={`w-4 h-4 text-slate-400 shrink-0 transition-transform duration-200 ${
+                  isStoreDropdownOpen ? 'rotate-180 text-blue-400' : ''
+                }`}
+              />
+            </button>
+
+            {/* Dropdown Menu */}
+            {isStoreDropdownOpen && (
+              <div className="absolute z-30 top-full mt-1.5 right-0 left-0 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
+                {/* 1st Row: Search input box */}
+                <div className="p-2 border-b border-slate-800 bg-slate-950/80 sticky top-0 z-10">
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 absolute right-2.5 top-2.5 text-slate-400" />
+                    <input
+                      type="text"
+                      autoFocus
+                      value={storeSearchTerm}
+                      onChange={(e) => setStoreSearchTerm(e.target.value)}
+                      placeholder="جستجوی نام فروشگاه یا مدیر مشتری..."
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg pr-8 pl-7 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
+                    {storeSearchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => setStoreSearchTerm('')}
+                        className="absolute left-2 top-2 text-slate-400 hover:text-slate-200 cursor-pointer p-0.5"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Customer items list */}
+                <div className="max-h-52 overflow-y-auto divide-y divide-slate-800/60 no-scrollbar">
+                  {filteredSupermarkets.length === 0 ? (
+                    <div className="p-4 text-center text-slate-400 text-xs">
+                      هیچ مشتری یا فروشگاهی با مشخصات «{storeSearchTerm}» یافت نشد.
+                    </div>
+                  ) : (
+                    filteredSupermarkets.map((s) => {
+                      const isSelected = s.id === selectedSupermarketId;
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedSupermarketId(s.id);
+                            setIsStoreDropdownOpen(false);
+                            setStoreSearchTerm('');
+                          }}
+                          className={`w-full p-2.5 text-right flex items-center justify-between gap-2 transition cursor-pointer text-xs ${
+                            isSelected
+                              ? 'bg-blue-600/15 text-blue-200'
+                              : 'hover:bg-slate-800/80 text-slate-200'
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-bold text-slate-100">{s.name}</span>
+                              <span className="text-[11px] text-slate-400 bg-slate-800 px-1.5 py-0.2 rounded border border-slate-700/60">
+                                {s.owner}
+                              </span>
+                            </div>
+                            {s.address && (
+                              <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-1 truncate">
+                                <MapPin className="w-2.5 h-2.5 text-slate-500 shrink-0" />
+                                <span className="truncate">{s.address}</span>
+                              </div>
+                            )}
+                          </div>
+                          {isSelected && (
+                            <div className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 border border-blue-500/40">
+                              <Check className="w-3 h-3" />
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
           </div>
+
           <div>
             <label className="block text-slate-400 mb-1 font-medium">ویزیتور تخصیص‌یافته:</label>
             <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 font-semibold flex items-center justify-between">

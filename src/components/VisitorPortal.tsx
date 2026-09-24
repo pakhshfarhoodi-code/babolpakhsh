@@ -63,7 +63,7 @@ export const VisitorPortal: React.FC = () => {
 
   // Customer Management state
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
-  const [customerTimeFilter, setCustomerTimeFilter] = useState<'all' | 'month' | 'year'>('all');
+  const [customerTimeFilter, setCustomerTimeFilter] = useState<'all' | 'today' | 'week' | 'month' | 'year'>('all');
   const [selectedCustomerForReport, setSelectedCustomerForReport] = useState<Supermarket | null>(null);
   const [printReportType, setPrintReportType] = useState<'aggregated' | 'individual' | null>(null);
 
@@ -121,20 +121,72 @@ export const VisitorPortal: React.FC = () => {
     );
   };
 
+  // Helper to convert Persian digits to English digits
+  const toEnglishDigits = (str: string) =>
+    str.replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString());
+
+  // Convert Jalali date (year, month, day) to an absolute day count
+  const jalaliToDayCount = (y: number, m: number, d: number): number => {
+    let days = y * 365 + Math.floor((y * 682 - 110) / 2816);
+    if (m <= 6) {
+      days += (m - 1) * 31;
+    } else {
+      days += 6 * 31 + (m - 7) * 30;
+    }
+    days += d;
+    return days;
+  };
+
+  // Get current Jalali date parts
+  const getTodayJalali = () => {
+    try {
+      const parts = new Intl.DateTimeFormat('fa-IR-u-nu-latn', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(new Date()).split('/');
+      return {
+        year: parseInt(parts[0], 10),
+        month: parseInt(parts[1], 10),
+        day: parseInt(parts[2], 10),
+      };
+    } catch {
+      return { year: 1403, month: 7, day: 1 };
+    }
+  };
+
   // Helper to filter orders by time range
-  const filterOrdersByTime = (orderList: Order[], timeRange: 'all' | 'month' | 'year') => {
+  const filterOrdersByTime = (
+    orderList: Order[],
+    timeRange: 'all' | 'today' | 'week' | 'month' | 'year'
+  ) => {
     if (timeRange === 'all') return orderList;
 
-    // Normalizing Persian/English digits for detection
+    const today = getTodayJalali();
+    const todayDayCount = jalaliToDayCount(today.year, today.month, today.day);
+
     return orderList.filter((o) => {
-      const normalizedDate = o.order_date.replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString());
-      if (timeRange === 'year') {
-        // Current Jalali year 1403/1404
-        return normalizedDate.includes('1403') || normalizedDate.includes('1404');
+      const norm = toEnglishDigits(o.order_date || '');
+      const match = norm.match(/(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+      if (!match) return true;
+
+      const oYear = parseInt(match[1], 10);
+      const oMonth = parseInt(match[2], 10);
+      const oDay = parseInt(match[3], 10);
+      const orderDayCount = jalaliToDayCount(oYear, oMonth, oDay);
+      const daysDiff = todayDayCount - orderDayCount;
+
+      if (timeRange === 'today') {
+        return daysDiff === 0 || (oYear === today.year && oMonth === today.month && oDay === today.day);
+      }
+      if (timeRange === 'week') {
+        return daysDiff >= 0 && daysDiff <= 6;
       }
       if (timeRange === 'month') {
-        // Recent / current month indicator
-        return normalizedDate.includes('/07') || normalizedDate.includes('/08') || normalizedDate.includes('/06');
+        return (oYear === today.year && oMonth === today.month) || (daysDiff >= 0 && daysDiff <= 30);
+      }
+      if (timeRange === 'year') {
+        return oYear === today.year || oYear === 1403 || oYear === 1404;
       }
       return true;
     });
@@ -246,77 +298,49 @@ export const VisitorPortal: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Visitor Profile Hero Banner */}
-      <div className="p-5 rounded-2xl bg-gradient-to-l from-slate-900 via-blue-950/40 to-slate-900 border border-slate-800 shadow-md flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-600/30">
-            <Truck className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-slate-100">{currentVisitor.name}</h2>
-              <span className="text-xs px-2 py-0.5 rounded-md bg-blue-900/80 text-blue-300 border border-blue-700/50">
-                {currentVisitor.region}
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 mt-0.5">شماره تماس سازمانی: {currentVisitor.phone}</p>
-          </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <button
-            type="button"
-            onClick={() => setIsRegisterStoreModalOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600/90 hover:bg-emerald-600 text-white text-xs font-bold transition shadow-lg shadow-emerald-600/25 cursor-pointer"
-          >
-            <Store className="w-4 h-4" />
-            <span>ثبت فروشگاه جدید</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleOpenNewOrder()}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-600/25 cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>ثبت سفارش ویزیت حضوری</span>
-          </button>
-        </div>
-      </div>
-
       {/* Main Tabs Navigation */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
-        <button
-          type="button"
-          onClick={() => setActiveTab('orders')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition cursor-pointer ${
-            activeTab === 'orders'
-              ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-          }`}
-        >
-          <ShoppingBag className="w-4 h-4" />
-          <span>سفارشات و عملیات توزیع</span>
-          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-900 border border-slate-700">
-            {myOrders.length}
-          </span>
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-2">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+          <button
+            type="button"
+            onClick={() => setActiveTab('orders')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition cursor-pointer whitespace-nowrap ${
+              activeTab === 'orders'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <ShoppingBag className="w-4 h-4" />
+            <span>سفارشات و عملیات توزیع</span>
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-900 border border-slate-700">
+              {myOrders.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('customers')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition cursor-pointer whitespace-nowrap ${
+              activeTab === 'customers'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>مدیریت مشتریان و گزارشات آماری</span>
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-900 border border-slate-700">
+              {mySupermarkets.length} فروشگاه
+            </span>
+          </button>
+        </div>
 
         <button
           type="button"
-          onClick={() => setActiveTab('customers')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition cursor-pointer ${
-            activeTab === 'customers'
-              ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-          }`}
+          onClick={() => handleOpenNewOrder()}
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-md shadow-blue-600/25 cursor-pointer whitespace-nowrap"
         >
-          <Users className="w-4 h-4" />
-          <span>مدیریت مشتریان و گزارشات آماری</span>
-          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-900 border border-slate-700">
-            {mySupermarkets.length} فروشگاه
-          </span>
+          <Plus className="w-4 h-4" />
+          <span>ثبت سفارش ویزیت حضوری</span>
         </button>
       </div>
 
@@ -609,11 +633,11 @@ export const VisitorPortal: React.FC = () => {
               </div>
 
               {/* Time Range Filter */}
-              <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+              <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs overflow-x-auto no-scrollbar">
                 <button
                   type="button"
                   onClick={() => setCustomerTimeFilter('all')}
-                  className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer whitespace-nowrap ${
                     customerTimeFilter === 'all'
                       ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-400 hover:text-slate-200'
@@ -623,8 +647,30 @@ export const VisitorPortal: React.FC = () => {
                 </button>
                 <button
                   type="button"
+                  onClick={() => setCustomerTimeFilter('today')}
+                  className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer whitespace-nowrap ${
+                    customerTimeFilter === 'today'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  امروز
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCustomerTimeFilter('week')}
+                  className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer whitespace-nowrap ${
+                    customerTimeFilter === 'week'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  این هفته
+                </button>
+                <button
+                  type="button"
                   onClick={() => setCustomerTimeFilter('month')}
-                  className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer whitespace-nowrap ${
                     customerTimeFilter === 'month'
                       ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-400 hover:text-slate-200'
@@ -635,13 +681,13 @@ export const VisitorPortal: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setCustomerTimeFilter('year')}
-                  className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer whitespace-nowrap ${
                     customerTimeFilter === 'year'
                       ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  سال جاری (۱۴۰۳)
+                  سال جاری
                 </button>
               </div>
             </div>
@@ -679,9 +725,13 @@ export const VisitorPortal: React.FC = () => {
                   (بازه زمانی:{' '}
                   {customerTimeFilter === 'all'
                     ? 'کل دوران'
+                    : customerTimeFilter === 'today'
+                    ? 'امروز'
+                    : customerTimeFilter === 'week'
+                    ? 'این هفته'
                     : customerTimeFilter === 'month'
                     ? 'ماه جاری'
-                    : 'سال جاری ۱۴۰۳'}
+                    : 'سال جاری'}
                   )
                 </span>
               </h3>
@@ -815,22 +865,23 @@ export const VisitorPortal: React.FC = () => {
                           {item.lastOrderDate}
                         </td>
                         <td className="py-3.5 px-4 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedCustomerForReport(item.supermarket)}
-                              className="px-2.5 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/30 transition text-xs font-semibold cursor-pointer"
-                              title="مشاهده کارنامه و سفارشات قبلی این مشتری"
-                            >
-                              گزارش تکی
-                            </button>
+                          <div className="flex items-center justify-center gap-2">
                             <button
                               type="button"
                               onClick={() => handleOpenNewOrder(item.supermarket.id)}
-                              className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition cursor-pointer"
-                              title="ثبت سفارش جدید برای این مشتری"
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white transition text-xs font-bold cursor-pointer shadow-sm shadow-emerald-600/25 whitespace-nowrap"
+                              title="ثبت سفارش حضوری برای این فروشگاه"
                             >
                               <Plus className="w-3.5 h-3.5" />
+                              <span>ثبت سفارش</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedCustomerForReport(item.supermarket)}
+                              className="px-2.5 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/30 transition text-xs font-semibold cursor-pointer whitespace-nowrap"
+                              title="مشاهده کارنامه و سفارشات قبلی این مشتری"
+                            >
+                              گزارش تکی
                             </button>
                           </div>
                         </td>
@@ -1046,9 +1097,13 @@ export const VisitorPortal: React.FC = () => {
                       <strong>بازه زمانی گزارش:</strong>{' '}
                       {customerTimeFilter === 'all'
                         ? 'کلیه سوابق'
+                        : customerTimeFilter === 'today'
+                        ? 'امروز'
+                        : customerTimeFilter === 'week'
+                        ? 'این هفته'
                         : customerTimeFilter === 'month'
                         ? 'ماه جاری'
-                        : 'سال جاری ۱۴۰۳'}
+                        : 'سال جاری'}
                     </span>
                     <span>
                       <strong>تعداد مشتریان تحت پوشش:</strong> {mySupermarkets.length} فروشگاه

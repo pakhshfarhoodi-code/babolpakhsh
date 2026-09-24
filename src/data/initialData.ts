@@ -233,9 +233,9 @@ export const INITIAL_PRODUCTS: Product[] = [
 ];
 
 export const INITIAL_VISITORS: Visitor[] = [
-  { id: 'vis-1', name: 'علیرضا رضایی', phone: '۰۹۱۲۳۴۵۶۷۸۹', region: 'منطقه ۱ (شمال تهران)', is_active: true },
-  { id: 'vis-2', name: 'مریم حسینی', phone: '۰۹۱۹۸۷۶۵۴۳۲', region: 'منطقه ۲ (غرب تهران)', is_active: true },
-  { id: 'vis-3', name: 'محمد کریمی', phone: '۰۹۱۸۲۲۲۳۳۴۴', region: 'منطقه ۳ (شرق تهران)', is_active: true },
+  { id: 'vis-1', name: 'علیرضا رضایی', username: 'visitor1', phone: '۰۹۱۲۳۴۵۶۷۸۹', region: 'منطقه ۱ (شمال تهران)', is_active: true },
+  { id: 'vis-2', name: 'مریم حسینی', username: 'visitor2', phone: '۰۹۱۹۸۷۶۵۴۳۲', region: 'منطقه ۲ (غرب تهران)', is_active: true },
+  { id: 'vis-3', name: 'محمد کریمی', username: 'visitor3', phone: '۰۹۱۸۲۲۲۳۳۴۴', region: 'منطقه ۳ (شرق تهران)', is_active: true },
 ];
 
 export const INITIAL_SUPERMARKETS: Supermarket[] = [
@@ -296,6 +296,21 @@ export const INITIAL_SUPERMARKETS: Supermarket[] = [
   },
 ];
 
+export const getRelativeJalaliDate = (daysAgo: number = 0, timeStr = '10:30') => {
+  try {
+    const d = new Date();
+    d.setDate(d.getDate() - daysAgo);
+    const parts = new Intl.DateTimeFormat('fa-IR-u-nu-latn', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(d);
+    return `${parts} ${timeStr}`;
+  } catch {
+    return `1403/07/01 ${timeStr}`;
+  }
+};
+
 export const INITIAL_ORDERS: Order[] = [
   {
     id: 'ORD-1001',
@@ -305,7 +320,7 @@ export const INITIAL_ORDERS: Order[] = [
     visitor_name: 'علیرضا رضایی',
     status: 'assigned',
     total_amount: 735000,
-    order_date: '1403/07/01 10:30',
+    order_date: getRelativeJalaliDate(0, '10:30'),
     items: [
       { id: 'item-1', order_id: 'ORD-1001', product_id: 'prod-1', name: 'بستنی مگنوم شکلاتی میهن', price: 25000, quantity: 15 },
       { id: 'item-2', order_id: 'ORD-1001', product_id: 'prod-2', name: 'بستنی عروسکی دومینو', price: 12000, quantity: 30 },
@@ -319,7 +334,7 @@ export const INITIAL_ORDERS: Order[] = [
     visitor_name: 'مریم حسینی',
     status: 'delivered',
     total_amount: 2595000,
-    order_date: '1403/06/30 14:15',
+    order_date: getRelativeJalaliDate(1, '14:15'),
     items: [
       { id: 'item-3', order_id: 'ORD-1002', product_id: 'prod-5', name: 'سوسیس کوکتل ۸۰٪ دمس (۱ کیلوگرم)', price: 220000, quantity: 5 },
       { id: 'item-4', order_id: 'ORD-1002', product_id: 'prod-7', name: 'همبرگر ۹۰٪ ممتاز کاله (بسته ۴ عددی)', price: 185000, quantity: 8 },
@@ -333,11 +348,38 @@ export const INITIAL_ORDERS: Order[] = [
     visitor_name: 'مریم حسینی',
     status: 'assigned',
     total_amount: 1915000,
-    order_date: '1403/07/01 11:45',
+    order_date: getRelativeJalaliDate(4, '11:45'),
     items: [
       { id: 'item-5', order_id: 'ORD-1003', product_id: 'prod-4', name: 'بستنی لیتری وانیلی پاک', price: 75000, quantity: 5 },
       { id: 'item-6', order_id: 'ORD-1003', product_id: 'prod-6', name: 'کالباس ژامبون مرغ ۹۰٪ سولیکو', price: 290000, quantity: 4 },
       { id: 'item-7', order_id: 'ORD-1003', product_id: 'prod-5', name: 'سوسیس کوکتل ۸۰٪ دمس (۱ کیلوگرم)', price: 220000, quantity: 5 },
+    ],
+  },
+  {
+    id: 'ORD-1004',
+    supermarket_id: 'shop-2',
+    supermarket_name: 'فروشگاه زنجیره‌ای افق کوروش - ونک',
+    assigned_visitor_id: 'vis-1',
+    visitor_name: 'علیرضا رضایی',
+    status: 'delivered',
+    total_amount: 1850000,
+    order_date: getRelativeJalaliDate(3, '15:20'),
+    items: [
+      { id: 'item-8', order_id: 'ORD-1004', product_id: 'prod-7', name: 'همبرگر ۹۰٪ ممتاز کاله (بسته ۴ عددی)', price: 185000, quantity: 10 },
+    ],
+  },
+  {
+    id: 'ORD-1005',
+    supermarket_id: 'shop-4',
+    supermarket_name: 'هایپرمارکت پالادیوم',
+    assigned_visitor_id: 'vis-1',
+    visitor_name: 'علیرضا رضایی',
+    status: 'delivered',
+    total_amount: 3200000,
+    order_date: getRelativeJalaliDate(14, '09:40'),
+    items: [
+      { id: 'item-9', order_id: 'ORD-1005', product_id: 'prod-5', name: 'سوسیس کوکتل ۸۰٪ دمس (۱ کیلوگرم)', price: 220000, quantity: 10 },
+      { id: 'item-10', order_id: 'ORD-1005', product_id: 'prod-1', name: 'بستنی مگنوم شکلاتی میهن', price: 25000, quantity: 40 },
     ],
   },
 ];

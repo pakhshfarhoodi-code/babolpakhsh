@@ -6,6 +6,7 @@ export interface CurrentUser {
   role: UserRole;
   roleTitle: string;
   phone: string;
+  username?: string;
 }
 
 export interface Profile {
@@ -54,6 +55,7 @@ export interface Visitor {
   name: string;
   phone: string;
   region: string;
+  username?: string;
   is_active: boolean;
   created_at?: string;
 }

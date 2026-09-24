@@ -9,6 +9,7 @@ import {
   Check,
   AlertTriangle,
   Trash2,
+  Pencil,
 } from 'lucide-react';
 
 interface CategorySelectPickerProps {
@@ -20,10 +21,12 @@ export const CategorySelectPicker: React.FC<CategorySelectPickerProps> = ({
   selectedCategoryId,
   onSelectCategory,
 }) => {
-  const { categories, addCategory, deleteCategory, products } = useApp();
+  const { categories, addCategory, updateCategory, deleteCategory, products } = useApp();
   const [isOpen, setIsOpen] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [newCatName, setNewCatName] = useState('');
+  const [editingCatId, setEditingCatId] = useState<string | null>(null);
+  const [editingCatName, setEditingCatName] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string; productCount: number } | null>(null);
 
@@ -35,6 +38,7 @@ export const CategorySelectPicker: React.FC<CategorySelectPickerProps> = ({
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setIsOpen(false);
         setIsAdding(false);
+        setEditingCatId(null);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -54,6 +58,23 @@ export const CategorySelectPicker: React.FC<CategorySelectPickerProps> = ({
       setIsAdding(false);
       setIsOpen(false);
       setFeedback({ type: 'success', message: res.message });
+      setTimeout(() => setFeedback(null), 3000);
+    } else {
+      setFeedback({ type: 'error', message: res.message });
+      setTimeout(() => setFeedback(null), 3000);
+    }
+  };
+
+  const handleEditSubmit = (e?: React.FormEvent, catId?: string) => {
+    if (e) e.preventDefault();
+    const idToEdit = catId || editingCatId;
+    if (!idToEdit || !editingCatName.trim()) return;
+
+    const res = updateCategory(idToEdit, editingCatName.trim());
+    if (res.success) {
+      setFeedback({ type: 'success', message: res.message });
+      setEditingCatId(null);
+      setEditingCatName('');
       setTimeout(() => setFeedback(null), 3000);
     } else {
       setFeedback({ type: 'error', message: res.message });
@@ -173,15 +194,59 @@ export const CategorySelectPicker: React.FC<CategorySelectPickerProps> = ({
 
       {/* Dropdown Options List */}
       {isOpen && (
-        <div className="absolute top-full right-0 left-0 mt-1 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-800/80 p-1.5">
+        <div className="absolute top-full right-0 left-0 mt-1 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-800/80 p-1.5 no-scrollbar">
           <div className="px-2 py-1 text-[10px] text-slate-400 font-medium flex items-center justify-between">
-            <span>انتخاب دسته یا حذف با ضربدر (×):</span>
+            <span>مدیریت و ویرایش با قلم (✎) یا حذف (×):</span>
             <span>{categories.length} دسته موجود</span>
           </div>
 
           {categories.map((cat) => {
             const isSelected = cat.id === selectedCategoryId;
+            const isEditing = editingCatId === cat.id;
             const productCount = products.filter((p) => p.category_id === cat.id).length;
+
+            if (isEditing) {
+              return (
+                <div
+                  key={cat.id}
+                  onClick={(e) => e.stopPropagation()}
+                  className="p-1.5 bg-blue-950/80 border border-blue-700/80 rounded-lg flex items-center gap-1.5 my-1"
+                >
+                  <input
+                    type="text"
+                    autoFocus
+                    value={editingCatName}
+                    onChange={(e) => setEditingCatName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleEditSubmit(undefined, cat.id);
+                      } else if (e.key === 'Escape') {
+                        setEditingCatId(null);
+                      }
+                    }}
+                    className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
+                    placeholder="نام جدید دسته‌بندی..."
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleEditSubmit(undefined, cat.id)}
+                    title="ذخیره تغییرات"
+                    className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer transition shrink-0 shadow-sm"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingCatId(null)}
+                    title="انصراف"
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer transition shrink-0"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              );
+            }
 
             return (
               <div
@@ -204,15 +269,32 @@ export const CategorySelectPicker: React.FC<CategorySelectPickerProps> = ({
                   )}
                 </div>
 
-                {/* Prominent Delete Button */}
-                <button
-                  type="button"
-                  onClick={(e) => handleOpenDeleteConfirm(e, cat.id, cat.name)}
-                  title={`حذف دسته‌بندی «${cat.name}»`}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-300 hover:bg-rose-950/60 border border-transparent hover:border-rose-800/50 transition cursor-pointer shrink-0 ml-1"
-                >
-                  <X className="w-3.5 h-3.5 text-rose-400" />
-                </button>
+                <div className="flex items-center gap-0.5 shrink-0 mr-1" onClick={(e) => e.stopPropagation()}>
+                  {/* Pencil Edit Button (No text, icon only as requested) */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      setEditingCatId(cat.id);
+                      setEditingCatName(cat.name);
+                    }}
+                    title={`ویرایش نام دسته‌بندی «${cat.name}»`}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-amber-300 hover:bg-amber-950/60 border border-transparent hover:border-amber-800/50 transition cursor-pointer shrink-0"
+                  >
+                    <Pencil className="w-3.5 h-3.5 text-amber-400" />
+                  </button>
+
+                  {/* Delete Button */}
+                  <button
+                    type="button"
+                    onClick={(e) => handleOpenDeleteConfirm(e, cat.id, cat.name)}
+                    title={`حذف دسته‌بندی «${cat.name}»`}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-300 hover:bg-rose-950/60 border border-transparent hover:border-rose-800/50 transition cursor-pointer shrink-0"
+                  >
+                    <X className="w-3.5 h-3.5 text-rose-400" />
+                  </button>
+                </div>
               </div>
             );
           })}
@@ -273,10 +355,12 @@ export const BrandSelectPicker: React.FC<BrandSelectPickerProps> = ({
   selectedBrand,
   onSelectBrand,
 }) => {
-  const { brands, addBrand, deleteBrand, products } = useApp();
+  const { brands, addBrand, updateBrand, deleteBrand, products } = useApp();
   const [isOpen, setIsOpen] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [newBrandName, setNewBrandName] = useState('');
+  const [editingBrandName, setEditingBrandName] = useState<string | null>(null);
+  const [editingBrandVal, setEditingBrandVal] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ name: string; productCount: number } | null>(null);
 
@@ -288,6 +372,7 @@ export const BrandSelectPicker: React.FC<BrandSelectPickerProps> = ({
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setIsOpen(false);
         setIsAdding(false);
+        setEditingBrandName(null);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -306,6 +391,27 @@ export const BrandSelectPicker: React.FC<BrandSelectPickerProps> = ({
       setIsAdding(false);
       setIsOpen(false);
       setFeedback({ type: 'success', message: res.message });
+      setTimeout(() => setFeedback(null), 3000);
+    } else {
+      setFeedback({ type: 'error', message: res.message });
+      setTimeout(() => setFeedback(null), 3000);
+    }
+  };
+
+  const handleEditSubmit = (e?: React.FormEvent, oldBrand?: string) => {
+    if (e) e.preventDefault();
+    const targetBrand = oldBrand || editingBrandName;
+    if (!targetBrand || !editingBrandVal.trim()) return;
+
+    const trimmedNew = editingBrandVal.trim();
+    const res = updateBrand(targetBrand, trimmedNew);
+    if (res.success) {
+      if (selectedBrand === targetBrand) {
+        onSelectBrand(trimmedNew);
+      }
+      setFeedback({ type: 'success', message: res.message });
+      setEditingBrandName(null);
+      setEditingBrandVal('');
       setTimeout(() => setFeedback(null), 3000);
     } else {
       setFeedback({ type: 'error', message: res.message });
@@ -423,15 +529,59 @@ export const BrandSelectPicker: React.FC<BrandSelectPickerProps> = ({
 
       {/* Dropdown Options List */}
       {isOpen && (
-        <div className="absolute top-full right-0 left-0 mt-1 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-800/80 p-1.5">
+        <div className="absolute top-full right-0 left-0 mt-1 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-800/80 p-1.5 no-scrollbar">
           <div className="px-2 py-1 text-[10px] text-slate-400 font-medium flex items-center justify-between">
-            <span>انتخاب برند یا حذف با ضربدر (×):</span>
+            <span>مدیریت و ویرایش با قلم (✎) یا حذف (×):</span>
             <span>{brands.length} برند موجود</span>
           </div>
 
           {brands.map((brand) => {
             const isSelected = brand === selectedBrand;
+            const isEditing = editingBrandName === brand;
             const productCount = products.filter((p) => p.brand && p.brand.trim() === brand.trim()).length;
+
+            if (isEditing) {
+              return (
+                <div
+                  key={brand}
+                  onClick={(e) => e.stopPropagation()}
+                  className="p-1.5 bg-amber-950/80 border border-amber-700/80 rounded-lg flex items-center gap-1.5 my-1"
+                >
+                  <input
+                    type="text"
+                    autoFocus
+                    value={editingBrandVal}
+                    onChange={(e) => setEditingBrandVal(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleEditSubmit(undefined, brand);
+                      } else if (e.key === 'Escape') {
+                        setEditingBrandName(null);
+                      }
+                    }}
+                    className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-100 focus:outline-none focus:border-amber-500"
+                    placeholder="نام جدید برند..."
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleEditSubmit(undefined, brand)}
+                    title="ذخیره تغییرات"
+                    className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer transition shrink-0 shadow-sm"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingBrandName(null)}
+                    title="انصراف"
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer transition shrink-0"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              );
+            }
 
             return (
               <div
@@ -454,15 +604,32 @@ export const BrandSelectPicker: React.FC<BrandSelectPickerProps> = ({
                   )}
                 </div>
 
-                {/* Prominent Delete Button */}
-                <button
-                  type="button"
-                  onClick={(e) => handleOpenDeleteConfirm(e, brand)}
-                  title={`حذف برند «${brand}»`}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-300 hover:bg-rose-950/60 border border-transparent hover:border-rose-800/50 transition cursor-pointer shrink-0 ml-1"
-                >
-                  <X className="w-3.5 h-3.5 text-rose-400" />
-                </button>
+                <div className="flex items-center gap-0.5 shrink-0 mr-1" onClick={(e) => e.stopPropagation()}>
+                  {/* Pencil Edit Button (No text, icon only as requested) */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      setEditingBrandName(brand);
+                      setEditingBrandVal(brand);
+                    }}
+                    title={`ویرایش نام برند «${brand}»`}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-amber-300 hover:bg-amber-950/60 border border-transparent hover:border-amber-800/50 transition cursor-pointer shrink-0"
+                  >
+                    <Pencil className="w-3.5 h-3.5 text-amber-400" />
+                  </button>
+
+                  {/* Delete Button */}
+                  <button
+                    type="button"
+                    onClick={(e) => handleOpenDeleteConfirm(e, brand)}
+                    title={`حذف برند «${brand}»`}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-300 hover:bg-rose-950/60 border border-transparent hover:border-rose-800/50 transition cursor-pointer shrink-0"
+                  >
+                    <X className="w-3.5 h-3.5 text-rose-400" />
+                  </button>
+                </div>
               </div>
             );
           })}

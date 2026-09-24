@@ -73,8 +73,10 @@ interface AppContextType {
   addNewProduct: (product: Omit<Product, 'id' | 'reserved_stock'>) => void;
   deleteProduct: (productId: string) => { success: boolean; message: string };
   addCategory: (name: string, icon?: string) => { success: boolean; message: string; category?: Category };
+  updateCategory: (categoryId: string, newName: string) => { success: boolean; message: string };
   deleteCategory: (categoryId: string) => { success: boolean; message: string };
   addBrand: (name: string) => { success: boolean; message: string };
+  updateBrand: (oldBrandName: string, newBrandName: string) => { success: boolean; message: string };
   deleteBrand: (brandName: string) => { success: boolean; message: string };
   registerSupermarket: (data: {
     name: string;
@@ -87,6 +89,8 @@ interface AppContextType {
   }) => { success: boolean; message: string; supermarket?: Supermarket };
   resetToDefaults: () => void;
   isOnlineDb: boolean;
+  theme: 'dark' | 'light';
+  toggleTheme: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -108,6 +112,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const saved = localStorage.getItem('alborz_auth_logged_in');
     return saved !== null ? saved === 'true' : true;
   });
+
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('alborz_theme');
+      if (saved === 'light' || saved === 'dark') return saved;
+    }
+    return 'dark';
+  });
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      if (theme === 'light') {
+        document.documentElement.classList.add('theme-light');
+        document.documentElement.classList.remove('dark');
+      } else {
+        document.documentElement.classList.remove('theme-light');
+        document.documentElement.classList.add('dark');
+      }
+    }
+    localStorage.setItem('alborz_theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  };
 
   const [role, setRole] = useState<UserRole>('admin');
   const [selectedVisitorId, setSelectedVisitorId] = useState<string>('vis-1');
@@ -653,6 +682,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true, message: `دسته‌بندی «${trimmed}» با موفقیت افزوده شد.`, category: newCat };
   };
 
+  // 11b. Update category
+  const updateCategory = (categoryId: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed) {
+      return { success: false, message: 'نام دسته‌بندی نمی‌تواند خالی باشد.' };
+    }
+    const exists = categories.some(
+      (c) => c.id !== categoryId && c.name.trim().toLowerCase() === trimmed.toLowerCase()
+    );
+    if (exists) {
+      return { success: false, message: 'دسته‌بندی دیگری با این نام از قبل وجود دارد.' };
+    }
+    setCategories((prev) =>
+      prev.map((c) => (c.id === categoryId ? { ...c, name: trimmed } : c))
+    );
+    return { success: true, message: `نام دسته‌بندی با موفقیت به «${trimmed}» تغییر یافت.` };
+  };
+
   // 12. Delete category
   const deleteCategory = (categoryId: string) => {
     const cat = categories.find((c) => c.id === categoryId);
@@ -685,6 +732,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true, message: `برند «${trimmed}» با موفقیت افزوده شد.` };
   };
 
+  // 13b. Update brand
+  const updateBrand = (oldBrandName: string, newBrandName: string) => {
+    const trimmed = newBrandName.trim();
+    if (!trimmed) {
+      return { success: false, message: 'نام برند نمی‌تواند خالی باشد.' };
+    }
+    if (trimmed.toLowerCase() !== oldBrandName.trim().toLowerCase()) {
+      const exists = brands.some((b) => b.trim().toLowerCase() === trimmed.toLowerCase());
+      if (exists) {
+        return { success: false, message: 'این برند از قبل در فهرست برندها تعریف شده است.' };
+      }
+    }
+    // Update brands list
+    setBrands((prev) =>
+      prev.map((b) => (b.trim().toLowerCase() === oldBrandName.trim().toLowerCase() ? trimmed : b))
+    );
+    // Update products that use this brand
+    setProducts((prev) =>
+      prev.map((p) =>
+        p.brand && p.brand.trim().toLowerCase() === oldBrandName.trim().toLowerCase()
+          ? { ...p, brand: trimmed }
+          : p
+      )
+    );
+    return { success: true, message: `نام برند با موفقیت به «${trimmed}» تغییر یافت.` };
+  };
+
   // 14. Delete brand
   const deleteBrand = (brandName: string) => {
     const trimmed = brandName.trim();
@@ -711,6 +785,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return {
         id: 'admin-1',
         name: 'مدیریت مرکزی البرز',
+        username: 'admin',
         role: 'admin',
         roleTitle: 'مدیر ارشد',
         phone: '۰۹۱۲۰۰۰۰۰۰۰',
@@ -720,6 +795,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return {
         id: 'wh-1',
         name: 'انباردار سردخانه البرز',
+        username: 'warehouse',
         role: 'warehouse',
         roleTitle: 'انباردار سردخانه',
         phone: '۰۹۱۲۱۱۱۰۰۰۰',
@@ -730,6 +806,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return {
         id: v?.id || 'vis-1',
         name: v?.name || 'علیرضا رضایی',
+        username: v?.username || 'visitor1',
         role: 'visitor',
         roleTitle: `ویزیتور (${v?.region || 'منطقه توزیع'})`,
         phone: v?.phone || '۰۹۱۲۳۴۵۶۷۸۹',
@@ -740,6 +817,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return {
         id: s?.id || 'shop-1',
         name: s?.name || 'سوپرمارکت بهاران',
+        username: s?.username || 'shop1',
         role: 'supermarket',
         roleTitle: `فروشگاه (${s?.owner || 'مدیریت'})`,
         phone: s?.phone || '۰۹۱۲۱۱۱۱۱۱۱',
@@ -748,6 +826,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return {
       id: 'admin-1',
       name: 'مدیریت مرکزی البرز',
+      username: 'admin',
       role: 'admin',
       roleTitle: 'مدیر ارشد',
       phone: '۰۹۱۲۰۰۰۰۰۰۰',
@@ -953,12 +1032,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addNewProduct,
         deleteProduct,
         addCategory,
+        updateCategory,
         deleteCategory,
         addBrand,
+        updateBrand,
         deleteBrand,
         registerSupermarket,
         resetToDefaults,
         isOnlineDb: isSupabaseConfigured,
+        theme,
+        toggleTheme,
       }}
     >
       {children}

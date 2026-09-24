@@ -13,6 +13,8 @@ export interface Profile {
   name: string;
   role: UserRole;
   phone: string;
+  username: string;
+  password?: string;
   created_at?: string;
 }
 
@@ -27,6 +29,7 @@ export interface Category {
 export interface Product {
   id: string;
   category_id: string;
+  brand?: string;
   name: string;
   price: number;
   stock: number;
@@ -63,6 +66,8 @@ export interface Supermarket {
   address: string;
   assigned_visitor_id: string;
   is_active: boolean;
+  username?: string;
+  password?: string;
   created_at?: string;
 }
 

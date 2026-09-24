@@ -11,21 +11,38 @@ import {
   ArrowDownCircle,
   Truck,
   AlertCircle,
+  X,
+  PackagePlus,
+  Tag,
+  Layers,
 } from 'lucide-react';
+import { CategorySelectPicker, BrandSelectPicker } from './CategoryBrandSelectors';
 
 export const WarehousePanel: React.FC = () => {
   const {
     products,
+    categories,
+    brands,
     loadingBills,
     inventoryTransactions,
     approveLoadingBill,
     updateProductStock,
+    addNewProduct,
   } = useApp();
 
   const [selectedBillId, setSelectedBillId] = useState<string | null>(null);
   const [restockProductId, setRestockProductId] = useState<string>('');
   const [restockAmount, setRestockAmount] = useState<number>(10);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+
+  // New product definition state
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [newProdName, setNewProdName] = useState('');
+  const [newProdBrand, setNewProdBrand] = useState('میهن');
+  const [newProdCat, setNewProdCat] = useState('cat-1');
+  const [newProdPrice, setNewProdPrice] = useState<number>(0);
+  const [newProdStock, setNewProdStock] = useState<number>(50);
+  const [newProdUnit, setNewProdUnit] = useState('عدد');
 
   const pendingBills = loadingBills.filter((b) => b.status === 'pending');
   const approvedBills = loadingBills.filter((b) => b.status === 'approved');
@@ -45,6 +62,50 @@ export const WarehousePanel: React.FC = () => {
     setActionSuccess(`ورود ${restockAmount} واحد از ${prod?.name} با موفقیت در انبار سردخانه ثبت شد.`);
     setRestockProductId('');
     setTimeout(() => setActionSuccess(null), 4000);
+  };
+
+  const getSampleImage = (catId: string) => {
+    switch (catId) {
+      case 'cat-1': // بستنی و پالپ
+        return 'https://images.unsplash.com/photo-1579954115545-a95591f28bfc?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer';
+      case 'cat-2': // محصولات منجمد و پروتئینی
+        return 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer';
+      case 'cat-3': // لبنیات زنجیره سرد
+        return 'https://images.unsplash.com/photo-1628088062854-d1870b4553da?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer';
+      case 'cat-4': // نوشیدنی خنک
+        return 'https://images.unsplash.com/photo-1613478223719-2ab802602423?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer';
+      case 'cat-5': // کیک و تنقلات سوپرمارکتی
+      default:
+        return 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer';
+    }
+  };
+
+  const handleCreateProduct = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProdName.trim() || newProdPrice <= 0) return;
+
+    addNewProduct({
+      name: newProdName.trim(),
+      brand: newProdBrand.trim() || 'متفرقه',
+      category_id: newProdCat,
+      price: newProdPrice,
+      stock: newProdStock,
+      unit: newProdUnit,
+      image_url: getSampleImage(newProdCat),
+      is_active: true,
+    });
+
+    const categoryObj = categories.find((c) => c.id === newProdCat);
+    setActionSuccess(
+      `کالای جدید «${newProdName.trim()}» با دسته‌بندی «${categoryObj?.name || 'سردخانه‌ای'}» و برند «${newProdBrand}» با موجودی اولیه ${newProdStock} ${newProdUnit} با موفقیت در انبار تعریف شد.`
+    );
+    setTimeout(() => setActionSuccess(null), 5000);
+
+    setIsAddModalOpen(false);
+    setNewProdName('');
+    setNewProdBrand('میهن');
+    setNewProdPrice(0);
+    setNewProdStock(50);
   };
 
   return (
@@ -68,10 +129,21 @@ export const WarehousePanel: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 bg-slate-900/90 border border-slate-800 p-2.5 rounded-xl text-xs">
-          <ThermometerSnowflake className="w-4 h-4 text-cyan-400 animate-pulse" />
-          <span className="text-slate-300">سیستم برودتی:</span>
-          <span className="text-emerald-400 font-bold">پایدار و استاندارد</span>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setIsAddModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-lg shadow-indigo-600/25 cursor-pointer whitespace-nowrap"
+          >
+            <Plus className="w-4 h-4" />
+            <span>تعریف کالای جدید در سردخانه</span>
+          </button>
+
+          <div className="flex items-center gap-2 bg-slate-900/90 border border-slate-800 p-2.5 rounded-xl text-xs">
+            <ThermometerSnowflake className="w-4 h-4 text-cyan-400 animate-pulse" />
+            <span className="text-slate-300">سیستم برودتی:</span>
+            <span className="text-emerald-400 font-bold">پایدار و استاندارد</span>
+          </div>
         </div>
       </div>
 
@@ -189,10 +261,20 @@ export const WarehousePanel: React.FC = () => {
         {/* Right Side: Fast Restock Entry (1 col) */}
         <div className="space-y-4">
           <div className="bg-slate-900/90 rounded-xl border border-slate-800 p-4">
-            <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2 pb-3 border-b border-slate-800">
-              <ArrowDownCircle className="w-4 h-4 text-emerald-400" />
-              <span>ثبت ورود محموله جدید به سردخانه</span>
-            </h3>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800 gap-2">
+              <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
+                <ArrowDownCircle className="w-4 h-4 text-emerald-400" />
+                <span>ثبت ورود محموله جدید به سردخانه</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsAddModalOpen(true)}
+                className="text-[11px] text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1 cursor-pointer"
+              >
+                <Plus className="w-3 h-3" />
+                <span>تعریف کالا</span>
+              </button>
+            </div>
 
             <form onSubmit={handleRestockSubmit} className="space-y-3.5 mt-3 text-xs">
               <div>
@@ -271,6 +353,113 @@ export const WarehousePanel: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Modal: Define New Product in Warehouse */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-5 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-indigo-600/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30">
+                  <PackagePlus className="w-4 h-4" />
+                </div>
+                <h3 className="font-bold text-sm text-slate-100">تعریف کالای جدید در سردخانه</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddModalOpen(false)}
+                className="text-slate-400 hover:text-slate-200 p-1 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateProduct} className="space-y-3.5 mt-4 text-xs">
+              <div>
+                <label className="block text-slate-400 mb-1 font-medium">نام کالا</label>
+                <input
+                  type="text"
+                  required
+                  value={newProdName}
+                  onChange={(e) => setNewProdName(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 focus:outline-none focus:border-indigo-500"
+                  placeholder="مثال: پنیر پیتزا موزارلا ۲ کیلوگرمی"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <CategorySelectPicker
+                  selectedCategoryId={newProdCat}
+                  onSelectCategory={setNewProdCat}
+                />
+                <BrandSelectPicker
+                  selectedBrand={newProdBrand}
+                  onSelectBrand={setNewProdBrand}
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1 font-medium">واحد سنجش</label>
+                <select
+                  value={newProdUnit}
+                  onChange={(e) => setNewProdUnit(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="عدد">عدد</option>
+                  <option value="باکس">باکس</option>
+                  <option value="بسته">بسته</option>
+                  <option value="کیلوگرم">کیلوگرم</option>
+                  <option value="سطل">سطل</option>
+                  <option value="جعبه">جعبه</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1 font-medium">قیمت مصوب فروش (تومان)</label>
+                  <input
+                    type="number"
+                    required
+                    min="1000"
+                    value={newProdPrice || ''}
+                    onChange={(e) => setNewProdPrice(Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-indigo-500"
+                    placeholder="مثال: 85000"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1 font-medium">موجودی اولیه فیزیکی سردخانه</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={newProdStock || ''}
+                    onChange={(e) => setNewProdStock(Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-indigo-500"
+                    placeholder="50"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 cursor-pointer"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold cursor-pointer transition shadow-md"
+                >
+                  ذخیره و ورود به سردخانه
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

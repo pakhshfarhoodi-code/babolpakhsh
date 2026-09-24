@@ -13,16 +13,18 @@ import {
   LogOut,
 } from 'lucide-react';
 
-export const Header: React.FC = () => {
+interface HeaderProps {
+  currentPath?: string;
+  onNavigate?: (path: string) => void;
+}
+
+export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
   const {
     role,
     setRole,
     selectedVisitorId,
     setSelectedVisitorId,
-    selectedSupermarketId,
-    setSelectedSupermarketId,
     visitors,
-    supermarkets,
     reassignmentRequests,
     loadingBills,
     resetToDefaults,
@@ -30,15 +32,30 @@ export const Header: React.FC = () => {
     logout,
   } = useApp();
 
+  const handleRoleClick = (newRole: UserRole) => {
+    setRole(newRole);
+    if (onNavigate) {
+      if (newRole === 'supermarket') onNavigate('/');
+      else if (newRole === 'visitor') onNavigate('/visitor');
+      else if (newRole === 'admin' || newRole === 'warehouse') onNavigate('/admin');
+    }
+  };
+
   const pendingReassignments = reassignmentRequests.filter((r) => r.status === 'pending').length;
   const pendingLoadingBills = loadingBills.filter((b) => b.status === 'pending').length;
 
-  const rolesConfig: { role: UserRole; title: string; icon: React.ReactNode; badge?: number }[] = [
+  const allRolesConfig: { role: UserRole; title: string; icon: React.ReactNode; badge?: number }[] = [
     {
       role: 'admin',
       title: 'مدیریت مرکزی',
       icon: <ShieldCheck className="w-4 h-4" />,
       badge: pendingReassignments > 0 ? pendingReassignments : undefined,
+    },
+    {
+      role: 'warehouse',
+      title: 'انبار و سردخانه',
+      icon: <Warehouse className="w-4 h-4" />,
+      badge: pendingLoadingBills > 0 ? pendingLoadingBills : undefined,
     },
     {
       role: 'visitor',
@@ -51,13 +68,21 @@ export const Header: React.FC = () => {
       title: 'سفارش سوپرمارکت',
       icon: <Store className="w-4 h-4" />,
     },
-    {
-      role: 'warehouse',
-      title: 'انبار و سردخانه',
-      icon: <Warehouse className="w-4 h-4" />,
-      badge: pendingLoadingBills > 0 ? pendingLoadingBills : undefined,
-    },
   ];
+
+  // Filter tabs according to current section/route
+  const rolesConfig = allRolesConfig.filter((item) => {
+    if (currentPath === '/admin') {
+      return item.role === 'admin' || item.role === 'warehouse';
+    }
+    if (currentPath === '/visitor') {
+      return item.role === 'visitor';
+    }
+    if (currentPath === '/') {
+      return item.role === 'supermarket';
+    }
+    return true;
+  });
 
   return (
     <header className="border-b border-slate-800 bg-slate-900/95 sticky top-0 z-40 backdrop-blur-md">
@@ -74,6 +99,11 @@ export const Header: React.FC = () => {
                 <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-950 text-blue-400 border border-blue-800/60">
                   زنجیره سرد منجمد
                 </span>
+                {currentPath && (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700 dir-ltr">
+                    {currentPath}
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-400">سیستم متمرکز توزیع، رزرو کالا و پورتال یکپارچه فروش</p>
             </div>
@@ -136,8 +166,8 @@ export const Header: React.FC = () => {
                 <button
                   key={item.role}
                   id={`role-btn-${item.role}`}
-                  onClick={() => setRole(item.role)}
-                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all ${
+                  onClick={() => handleRoleClick(item.role)}
+                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all cursor-pointer ${
                     active
                       ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
@@ -155,43 +185,65 @@ export const Header: React.FC = () => {
             })}
           </div>
 
+          {/* Quick Route Switcher */}
+          {onNavigate && (
+            <div className="hidden lg:flex items-center gap-1.5 bg-slate-950/60 px-2 py-1 rounded-xl border border-slate-800 text-[11px]">
+              <span className="text-slate-500 text-[10px] ml-1">مسیرها:</span>
+              <button
+                type="button"
+                onClick={() => onNavigate('/')}
+                className={`px-2 py-0.5 rounded-lg transition font-mono ${
+                  currentPath === '/'
+                    ? 'bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                / فروشگاه
+              </button>
+              <button
+                type="button"
+                onClick={() => onNavigate('/visitor')}
+                className={`px-2 py-0.5 rounded-lg transition font-mono ${
+                  currentPath === '/visitor'
+                    ? 'bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                /visitor ویزیتور
+              </button>
+              <button
+                type="button"
+                onClick={() => onNavigate('/admin')}
+                className={`px-2 py-0.5 rounded-lg transition font-mono ${
+                  currentPath === '/admin'
+                    ? 'bg-blue-500/20 text-blue-300 font-bold border border-blue-500/30'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                /admin مدیریت و انبار
+              </button>
+            </div>
+          )}
+
           {/* Persona selector depending on role */}
           <div className="flex items-center gap-2">
             {role === 'visitor' && (
-              <div className="flex items-center gap-2 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700 text-xs">
-                <User className="w-3.5 h-3.5 text-blue-400" />
-                <span className="text-slate-400">ویزیتور فعال:</span>
-                <select
-                  id="visitor-selector"
-                  value={selectedVisitorId}
-                  onChange={(e) => setSelectedVisitorId(e.target.value)}
-                  className="bg-slate-900 text-slate-200 font-semibold rounded px-2 py-0.5 border border-slate-700 focus:outline-none focus:border-blue-500"
-                >
-                  {visitors.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.name} ({v.region})
-                    </option>
-                  ))}
-                </select>
+              <div className="flex items-center gap-2 bg-blue-950/60 border border-blue-800/50 px-3 py-1.5 rounded-lg text-xs text-blue-300">
+                <Truck className="w-3.5 h-3.5 text-blue-400" />
+                <span className="font-semibold">{currentUser.name}</span>
+                <span className="text-[10px] text-blue-400/80 bg-blue-900/60 px-1.5 py-0.5 rounded border border-blue-700/40">
+                  {visitors.find((v) => v.id === selectedVisitorId)?.region || 'ویزیتور البرز'}
+                </span>
               </div>
             )}
 
             {role === 'supermarket' && (
-              <div className="flex items-center gap-2 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700 text-xs">
+              <div className="flex items-center gap-2 bg-emerald-950/60 border border-emerald-800/50 px-3 py-1.5 rounded-lg text-xs text-emerald-300">
                 <Store className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="text-slate-400">فروشگاه فعال:</span>
-                <select
-                  id="supermarket-selector"
-                  value={selectedSupermarketId}
-                  onChange={(e) => setSelectedSupermarketId(e.target.value)}
-                  className="bg-slate-900 text-slate-200 font-semibold rounded px-2 py-0.5 border border-slate-700 focus:outline-none focus:border-emerald-500"
-                >
-                  {supermarkets.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} - {s.owner}
-                    </option>
-                  ))}
-                </select>
+                <span className="font-semibold">{currentUser.name}</span>
+                <span className="text-[10px] text-emerald-400/80 bg-emerald-900/60 px-1.5 py-0.5 rounded border border-emerald-700/40">
+                  پنل سفارش آنلاین
+                </span>
               </div>
             )}
 

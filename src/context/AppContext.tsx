@@ -16,6 +16,7 @@ import {
 import {
   INITIAL_PROFILES,
   INITIAL_CATEGORIES,
+  INITIAL_BRANDS,
   INITIAL_PRODUCTS,
   INITIAL_VISITORS,
   INITIAL_SUPERMARKETS,
@@ -47,9 +48,11 @@ interface AppContextType {
   isLoggedIn: boolean;
   currentUser: CurrentUser;
   login: (profileId: string) => void;
+  loginWithCredentials: (username: string, password: string, allowedRoles?: UserRole[]) => { success: boolean; message?: string };
   logout: () => void;
 
   categories: Category[];
+  brands: string[];
   products: Product[];
   visitors: Visitor[];
   supermarkets: Supermarket[];
@@ -68,6 +71,20 @@ interface AppContextType {
   updateProductPrice: (productId: string, newPrice: number) => void;
   updateProductStock: (productId: string, additionalStock: number) => void;
   addNewProduct: (product: Omit<Product, 'id' | 'reserved_stock'>) => void;
+  deleteProduct: (productId: string) => { success: boolean; message: string };
+  addCategory: (name: string, icon?: string) => { success: boolean; message: string; category?: Category };
+  deleteCategory: (categoryId: string) => { success: boolean; message: string };
+  addBrand: (name: string) => { success: boolean; message: string };
+  deleteBrand: (brandName: string) => { success: boolean; message: string };
+  registerSupermarket: (data: {
+    name: string;
+    owner: string;
+    phone: string;
+    address: string;
+    assigned_visitor_id: string;
+    username?: string;
+    password?: string;
+  }) => { success: boolean; message: string; supermarket?: Supermarket };
   resetToDefaults: () => void;
   isOnlineDb: boolean;
 }
@@ -75,6 +92,8 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const STORAGE_KEYS = {
+  CATEGORIES: 'alborz_categories_v2',
+  BRANDS: 'alborz_brands_v2',
   PRODUCTS: 'alborz_products_v1',
   ORDERS: 'alborz_orders_v1',
   REASSIGNMENTS: 'alborz_reassignments_v1',
@@ -98,7 +117,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem('alborz_auth_logged_in', String(isLoggedIn));
   }, [isLoggedIn]);
 
-  const [categories] = useState<Category[]>(INITIAL_CATEGORIES);
+  const [categories, setCategories] = useState<Category[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
+    if (!saved) return INITIAL_CATEGORIES;
+    try {
+      const parsed: Category[] = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+      return INITIAL_CATEGORIES;
+    } catch {
+      return INITIAL_CATEGORIES;
+    }
+  });
+
+  const [brands, setBrands] = useState<string[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.BRANDS);
+    if (!saved) return INITIAL_BRANDS;
+    try {
+      const parsed: string[] = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+      return INITIAL_BRANDS;
+    } catch {
+      return INITIAL_BRANDS;
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories));
+  }, [categories]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.BRANDS, JSON.stringify(brands));
+  }, [brands]);
+
   const [visitors] = useState<Visitor[]>(INITIAL_VISITORS);
 
   const [supermarkets, setSupermarkets] = useState<Supermarket[]>(() => {
@@ -108,7 +162,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [products, setProducts] = useState<Product[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
-    return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
+    if (!saved) return INITIAL_PRODUCTS;
+    try {
+      const parsed: Product[] = JSON.parse(saved);
+      // Merge with INITIAL_PRODUCTS to ensure any newly added categories/products and brand properties exist
+      const existingIds = new Set(parsed.map((p) => p.id));
+      const updatedExisting = parsed.map((p) => {
+        const init = INITIAL_PRODUCTS.find((ip) => ip.id === p.id);
+        return {
+          ...p,
+          brand: p.brand || init?.brand,
+        };
+      });
+      const missingInitial = INITIAL_PRODUCTS.filter((ip) => !existingIds.has(ip.id));
+      return [...updatedExisting, ...missingInitial];
+    } catch {
+      return INITIAL_PRODUCTS;
+    }
   });
 
   const [orders, setOrders] = useState<Order[]>(() => {
@@ -160,6 +230,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.PRICE_HISTORIES, JSON.stringify(priceHistories));
   }, [priceHistories]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.SUPERMARKETS, JSON.stringify(supermarkets));
+  }, [supermarkets]);
 
   // If Supabase is connected, attempt initial load
   useEffect(() => {
@@ -538,6 +612,98 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         reserved_stock: 0,
       },
     ]);
+    if (newProd.brand && newProd.brand.trim()) {
+      const bTrimmed = newProd.brand.trim();
+      setBrands((prev) => (prev.includes(bTrimmed) ? prev : [...prev, bTrimmed]));
+    }
+  };
+
+  // 10. Delete product
+  const deleteProduct = (productId: string) => {
+    const prod = products.find((p) => p.id === productId);
+    if (!prod) return { success: false, message: 'کالای مورد نظر یافت نشد.' };
+    if (prod.reserved_stock > 0) {
+      return {
+        success: false,
+        message: `امکان حذف کالا وجود ندارد زیرا ${prod.reserved_stock} واحد از آن در سفارشات جاری رزرو است.`,
+      };
+    }
+    setProducts((prev) => prev.filter((p) => p.id !== productId));
+    return { success: true, message: `کالای «${prod.name}» با موفقیت حذف گردید.` };
+  };
+
+  // 11. Add category
+  const addCategory = (name: string, icon = 'Layers') => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      return { success: false, message: 'لطفاً نام دسته‌بندی را وارد نمایید.' };
+    }
+    const exists = categories.some((c) => c.name.trim().toLowerCase() === trimmed.toLowerCase());
+    if (exists) {
+      return { success: false, message: 'دسته‌بندی با این نام قبلاً ثبت شده است.' };
+    }
+    const newCat: Category = {
+      id: `cat-${Date.now()}`,
+      name: trimmed,
+      icon,
+      sort_order: categories.length + 1,
+      created_at: new Date().toISOString(),
+    };
+    setCategories((prev) => [...prev, newCat]);
+    return { success: true, message: `دسته‌بندی «${trimmed}» با موفقیت افزوده شد.`, category: newCat };
+  };
+
+  // 12. Delete category
+  const deleteCategory = (categoryId: string) => {
+    const cat = categories.find((c) => c.id === categoryId);
+    if (!cat) {
+      return { success: false, message: 'دسته‌بندی یافت نشد.' };
+    }
+    const remainingCats = categories.filter((c) => c.id !== categoryId);
+    const fallbackCatId = remainingCats.length > 0 ? remainingCats[0].id : 'cat-1';
+
+    // Reassign products of this category to fallback category
+    setProducts((prev) =>
+      prev.map((p) => (p.category_id === categoryId ? { ...p, category_id: fallbackCatId } : p))
+    );
+
+    setCategories((prev) => prev.filter((c) => c.id !== categoryId));
+    return { success: true, message: `دسته‌بندی «${cat.name}» با موفقیت حذف شد.` };
+  };
+
+  // 13. Add brand
+  const addBrand = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      return { success: false, message: 'لطفاً نام برند را وارد نمایید.' };
+    }
+    const exists = brands.some((b) => b.trim().toLowerCase() === trimmed.toLowerCase());
+    if (exists) {
+      return { success: false, message: 'این برند قبلاً در فهرست برندها تعریف شده است.' };
+    }
+    setBrands((prev) => [...prev, trimmed]);
+    return { success: true, message: `برند «${trimmed}» با موفقیت افزوده شد.` };
+  };
+
+  // 14. Delete brand
+  const deleteBrand = (brandName: string) => {
+    const trimmed = brandName.trim();
+    const exists = brands.some((b) => b.trim().toLowerCase() === trimmed.toLowerCase());
+    if (!exists) {
+      return { success: false, message: 'برند مورد نظر یافت نشد.' };
+    }
+
+    // Reassign any products with this brand to "متفرقه"
+    setProducts((prev) =>
+      prev.map((p) =>
+        p.brand && p.brand.trim().toLowerCase() === trimmed.toLowerCase()
+          ? { ...p, brand: 'متفرقه' }
+          : p
+      )
+    );
+
+    setBrands((prev) => prev.filter((b) => b.trim().toLowerCase() !== trimmed.toLowerCase()));
+    return { success: true, message: `برند «${trimmed}» با موفقیت حذف شد.` };
   };
 
   const currentUser: CurrentUser = useMemo(() => {
@@ -588,6 +754,131 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [role, selectedVisitorId, selectedSupermarketId, visitors, supermarkets]);
 
+  const registerSupermarket = (data: {
+    name: string;
+    owner: string;
+    phone: string;
+    address: string;
+    assigned_visitor_id: string;
+    username: string;
+    password: string;
+  }) => {
+    const trimmedName = data.name.trim();
+    const trimmedPhone = data.phone.trim();
+    const trimmedUsername = data.username.trim();
+    const trimmedPassword = data.password.trim();
+
+    if (!trimmedName) {
+      return { success: false, message: 'لطفاً نام فروشگاه را وارد نمایید.' };
+    }
+    if (!trimmedPhone) {
+      return { success: false, message: 'لطفاً شماره تماس را وارد نمایید.' };
+    }
+    if (!trimmedUsername) {
+      return { success: false, message: 'تعیین نام کاربری جهت ورود به حساب الزامی است.' };
+    }
+    if (!trimmedPassword) {
+      return { success: false, message: 'تعیین رمز عبور جهت ورود به حساب الزامی است.' };
+    }
+
+    // Check duplicate phone
+    const phoneExists = supermarkets.some((s) => s.phone.replace(/\s+/g, '') === trimmedPhone.replace(/\s+/g, ''));
+    if (phoneExists) {
+      return { success: false, message: 'این شماره تماس قبلاً برای یک فروشگاه دیگر ثبت شده است.' };
+    }
+
+    // Check duplicate username
+    const usernameExists = supermarkets.some(
+      (s) => s.username && s.username.trim().toLowerCase() === trimmedUsername.toLowerCase()
+    );
+    if (usernameExists) {
+      return {
+        success: false,
+        message: 'این نام کاربری قبلاً توسط فروشگاه دیگری ثبت شده است. لطفاً نام کاربری دیگری انتخاب نمایید.',
+      };
+    }
+
+    const newId = `shop-${Date.now()}`;
+    const newSupermarket: Supermarket = {
+      id: newId,
+      name: trimmedName,
+      owner: data.owner.trim() || 'مدیر فروشگاه',
+      phone: trimmedPhone,
+      address: data.address.trim() || 'تهران - منطقه توزیع زنجیره سرد',
+      assigned_visitor_id: data.assigned_visitor_id || 'vis-1',
+      username: trimmedUsername,
+      password: trimmedPassword,
+      is_active: true,
+      created_at: new Date().toISOString(),
+    };
+
+    setSupermarkets((prev) => [newSupermarket, ...prev]);
+    setSelectedSupermarketId(newId);
+    setRole('supermarket');
+    setIsLoggedIn(true);
+    localStorage.setItem('alborz_auth_logged_in', 'true');
+
+    return { success: true, message: 'حساب کاربری فروشگاه با موفقیت ایجاد شد و وارد شدید.', supermarket: newSupermarket };
+  };
+
+  const loginWithCredentials = (
+    inputUser: string,
+    inputPass: string,
+    allowedRoles?: UserRole[]
+  ): { success: boolean; message?: string } => {
+    const cleanUser = inputUser.trim().toLowerCase();
+    const cleanPass = inputPass.trim();
+
+    // 1. Search in predefined profiles
+    const matchedProfile = INITIAL_PROFILES.find((p) => {
+      if (allowedRoles && !allowedRoles.includes(p.role)) return false;
+      const u = p.username.toLowerCase();
+      // Allow login via username or phone
+      const phoneDigits = p.phone.replace(/[^0-9]/g, '');
+      const inputDigits = cleanUser.replace(/[^0-9]/g, '');
+      const isUserMatch = u === cleanUser || (inputDigits.length > 5 && phoneDigits === inputDigits);
+      const isPassMatch = (p.password || '123') === cleanPass;
+      return isUserMatch && isPassMatch;
+    });
+
+    if (matchedProfile) {
+      setRole(matchedProfile.role);
+      if (matchedProfile.role === 'visitor') {
+        setSelectedVisitorId(matchedProfile.id);
+      } else if (matchedProfile.role === 'supermarket') {
+        setSelectedSupermarketId(matchedProfile.id);
+      }
+      setIsLoggedIn(true);
+      localStorage.setItem('alborz_auth_logged_in', 'true');
+      return { success: true };
+    }
+
+    // 2. Search in registered supermarkets (if role allows)
+    if (!allowedRoles || allowedRoles.includes('supermarket')) {
+      const matchedSm = supermarkets.find((s) => {
+        const u = (s.username || s.id).toLowerCase();
+        const phoneDigits = s.phone.replace(/[^0-9]/g, '');
+        const inputDigits = cleanUser.replace(/[^0-9]/g, '');
+        const isUserMatch = u === cleanUser || (inputDigits.length > 5 && phoneDigits === inputDigits);
+        const isPassMatch = (s.password || '123') === cleanPass;
+        return isUserMatch && isPassMatch;
+      });
+
+      if (matchedSm) {
+        setRole('supermarket');
+        setSelectedSupermarketId(matchedSm.id);
+        setIsLoggedIn(true);
+        localStorage.setItem('alborz_auth_logged_in', 'true');
+        return { success: true };
+      }
+    }
+
+    return {
+      success: false,
+      message: 'نام کاربری یا رمز عبور وارد شده نادرست است.',
+    };
+  };
+
   const login = (profileId: string) => {
     const profile = INITIAL_PROFILES.find((p) => p.id === profileId);
     if (profile) {
@@ -596,6 +887,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setSelectedVisitorId(profile.id);
       } else if (profile.role === 'supermarket') {
         setSelectedSupermarketId(profile.id);
+      }
+    } else {
+      // Check if it's a dynamic supermarket registered by the user
+      const dynamicSm = supermarkets.find((s) => s.id === profileId);
+      if (dynamicSm) {
+        setRole('supermarket');
+        setSelectedSupermarketId(dynamicSm.id);
       }
     }
     setIsLoggedIn(true);
@@ -609,6 +907,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const resetToDefaults = () => {
     localStorage.clear();
+    setCategories(INITIAL_CATEGORIES);
+    setBrands(INITIAL_BRANDS);
     setProducts(INITIAL_PRODUCTS);
     setOrders(INITIAL_ORDERS);
     setReassignmentRequests([]);
@@ -630,8 +930,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isLoggedIn,
         currentUser,
         login,
+        loginWithCredentials,
         logout,
         categories,
+        brands,
         products,
         visitors,
         supermarkets,
@@ -649,6 +951,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateProductPrice,
         updateProductStock,
         addNewProduct,
+        deleteProduct,
+        addCategory,
+        deleteCategory,
+        addBrand,
+        deleteBrand,
+        registerSupermarket,
         resetToDefaults,
         isOnlineDb: isSupabaseConfigured,
       }}

@@ -18,11 +18,19 @@ import {
   CheckCircle,
   Clock,
   ArrowRightLeft,
+  UserPlus,
+  Tag,
+  Layers,
+  Trash2,
 } from 'lucide-react';
+import { SupermarketRegisterModal } from './SupermarketRegisterModal';
+import { CategorySelectPicker, BrandSelectPicker } from './CategoryBrandSelectors';
 
 export const AdminPanel: React.FC = () => {
   const {
     products,
+    categories,
+    brands,
     orders,
     visitors,
     supermarkets,
@@ -30,20 +38,27 @@ export const AdminPanel: React.FC = () => {
     priceHistories,
     updateProductPrice,
     addNewProduct,
+    deleteProduct,
     updateOrderStatus,
     requestReassignment,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'orders' | 'products' | 'visitors' | 'transactions' | 'pricing'>('orders');
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all');
+  const [selectedBrandFilter, setSelectedBrandFilter] = useState('all');
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
   const [tempPrice, setTempPrice] = useState<number>(0);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isRegisterStoreModalOpen, setIsRegisterStoreModalOpen] = useState(false);
   const [reassigningOrderId, setReassigningOrderId] = useState<string | null>(null);
   const [selectedNewVisitor, setSelectedNewVisitor] = useState<string>('');
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [deleteProductFeedback, setDeleteProductFeedback] = useState<string | null>(null);
 
   // New product form state
   const [newProdName, setNewProdName] = useState('');
+  const [newProdBrand, setNewProdBrand] = useState('میهن');
   const [newProdCat, setNewProdCat] = useState('cat-1');
   const [newProdPrice, setNewProdPrice] = useState(0);
   const [newProdStock, setNewProdStock] = useState(0);
@@ -62,22 +77,40 @@ export const AdminPanel: React.FC = () => {
     setEditingPriceId(null);
   };
 
+  const getSampleImage = (catId: string) => {
+    switch (catId) {
+      case 'cat-1':
+        return 'https://images.unsplash.com/photo-1579954115545-a95591f28bfc?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer';
+      case 'cat-2':
+        return 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer';
+      case 'cat-3':
+        return 'https://images.unsplash.com/photo-1628088062854-d1870b4553da?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer';
+      case 'cat-4':
+        return 'https://images.unsplash.com/photo-1613478223719-2ab802602423?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer';
+      case 'cat-5':
+      default:
+        return 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer';
+    }
+  };
+
   const handleCreateProduct = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProdName || newProdPrice <= 0) return;
 
     addNewProduct({
-      name: newProdName,
+      name: newProdName.trim(),
+      brand: newProdBrand.trim() || 'متفرقه',
       category_id: newProdCat,
       price: newProdPrice,
       stock: newProdStock,
       unit: newProdUnit,
-      image_url: 'https://images.unsplash.com/photo-1551024601-bec78aea704b?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer',
+      image_url: getSampleImage(newProdCat),
       is_active: true,
     });
 
     setIsAddModalOpen(false);
     setNewProdName('');
+    setNewProdBrand('میهن');
     setNewProdPrice(0);
     setNewProdStock(0);
   };
@@ -196,16 +229,6 @@ export const AdminPanel: React.FC = () => {
             تاریخچه قیمت‌گذاری ({priceHistories.length})
           </button>
         </div>
-
-        {activeTab === 'products' && (
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition shadow-sm"
-          >
-            <Plus className="w-4 h-4" />
-            <span>افزودن کالای جدید</span>
-          </button>
-        )}
       </div>
 
       {/* Tab Content: ORDERS */}
@@ -307,22 +330,88 @@ export const AdminPanel: React.FC = () => {
       {/* Tab Content: PRODUCTS & PRICING */}
       {activeTab === 'products' && (
         <div className="bg-slate-900/90 rounded-xl border border-slate-800 overflow-hidden shadow-sm">
-          <div className="p-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-bold text-slate-200">فهرست کالاها و مدیریت موجودی انبار</h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                موجودی قابل سفارش = موجودی فیزیکی منهای موجودی رزرو شده
-              </p>
+          <div className="p-4 border-b border-slate-800 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-bold text-slate-200">فهرست کالاها و مدیریت موجودی انبار</h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  موجودی قابل سفارش = موجودی فیزیکی منهای موجودی رزرو شده
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(true)}
+                  className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 transition shadow-sm cursor-pointer whitespace-nowrap"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>تعریف کالای جدید</span>
+                </button>
+                <div className="relative w-56 sm:w-64">
+                  <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-500" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="جستجوی کالا یا برند..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg pr-9 pl-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
             </div>
-            <div className="relative w-64">
-              <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-500" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="جستجوی کالا..."
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg pr-9 pl-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
-              />
+
+            {/* Dual Filter Controls: Categories & Brands */}
+            <div className="pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3">
+              {/* Category Filter Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full text-xs">
+                <div className="flex items-center gap-1 text-slate-400 pl-1 shrink-0 font-medium">
+                  <Layers className="w-3.5 h-3.5 text-blue-400" />
+                  <span>دسته‌بندی:</span>
+                </div>
+                <button
+                  onClick={() => setSelectedCategoryFilter('all')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition ${
+                    selectedCategoryFilter === 'all'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                  }`}
+                >
+                  همه دسته‌ها
+                </button>
+                {categories.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => setSelectedCategoryFilter(c.id)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition ${
+                      selectedCategoryFilter === c.id
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                    }`}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+
+              {/* Brand Filter Selector */}
+              <div className="flex items-center gap-2 text-xs">
+                <div className="flex items-center gap-1 text-slate-400 font-medium shrink-0">
+                  <Tag className="w-3.5 h-3.5 text-amber-400" />
+                  <span>فیلتر برند:</span>
+                </div>
+                <select
+                  value={selectedBrandFilter}
+                  onChange={(e) => setSelectedBrandFilter(e.target.value)}
+                  className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-200 focus:outline-none focus:border-blue-500 font-medium"
+                >
+                  <option value="all">همه برندها ({brands.length})</option>
+                  {brands.map((brand) => (
+                    <option key={brand} value={brand}>
+                      برند {brand}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 
@@ -331,21 +420,32 @@ export const AdminPanel: React.FC = () => {
               <thead className="bg-slate-950/60 text-slate-400 border-b border-slate-800">
                 <tr>
                   <th className="p-3">کالا</th>
+                  <th className="p-3">دسته‌بندی</th>
+                  <th className="p-3">برند</th>
                   <th className="p-3">قیمت واحد (تومان)</th>
                   <th className="p-3">موجودی فیزیکی</th>
                   <th className="p-3">رزرو شده</th>
                   <th className="p-3">موجودی آزاد</th>
                   <th className="p-3">واحد</th>
                   <th className="p-3">وضعیت</th>
-                  <th className="p-3 text-center">ویرایش قیمت</th>
+                  <th className="p-3 text-center">عملیات کالا</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
                 {products
-                  .filter((p) => p.name.includes(searchTerm))
+                  .filter((p) => {
+                    const matchSearch =
+                      p.name.includes(searchTerm) || (p.brand && p.brand.includes(searchTerm));
+                    const matchCategory =
+                      selectedCategoryFilter === 'all' || p.category_id === selectedCategoryFilter;
+                    const matchBrand =
+                      selectedBrandFilter === 'all' || p.brand === selectedBrandFilter;
+                    return matchSearch && matchCategory && matchBrand;
+                  })
                   .map((product) => {
                     const freeStock = product.stock - product.reserved_stock;
                     const isEditing = editingPriceId === product.id;
+                    const categoryObj = categories.find((c) => c.id === product.category_id);
 
                     return (
                       <tr key={product.id} className="hover:bg-slate-800/40 transition">
@@ -357,6 +457,16 @@ export const AdminPanel: React.FC = () => {
                             referrerPolicy="no-referrer"
                           />
                           <span className="font-semibold text-slate-200">{product.name}</span>
+                        </td>
+                        <td className="p-3 text-slate-300">
+                          <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-[11px]">
+                            {categoryObj?.name || 'عمومی'}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 text-[11px] font-semibold">
+                            {product.brand || 'متفرقه'}
+                          </span>
                         </td>
                         <td className="p-3">
                           {isEditing ? (
@@ -412,19 +522,31 @@ export const AdminPanel: React.FC = () => {
                           </span>
                         </td>
                         <td className="p-3 text-center">
-                          {!isEditing && (
+                          <div className="flex items-center justify-center gap-1.5">
+                            {!isEditing && (
+                              <button
+                                onClick={() => {
+                                  setEditingPriceId(product.id);
+                                  setTempPrice(product.price);
+                                }}
+                                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 inline-flex items-center gap-1 cursor-pointer"
+                                title="تغییر رسمی قیمت با ثبت در تاریخچه"
+                              >
+                                <Edit2 className="w-3 h-3 text-blue-400" />
+                                <span className="text-[10px]">تغییر نرخ</span>
+                              </button>
+                            )}
                             <button
                               onClick={() => {
-                                setEditingPriceId(product.id);
-                                setTempPrice(product.price);
+                                setDeleteProductFeedback(null);
+                                setProductToDelete(product);
                               }}
-                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 inline-flex items-center gap-1"
-                              title="تغییر رسمی قیمت با ثبت در تاریخچه"
+                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 border border-slate-700 inline-flex items-center gap-1 cursor-pointer"
+                              title="حذف کالا از سامانه"
                             >
-                              <Edit2 className="w-3 h-3 text-blue-400" />
-                              <span className="text-[10px]">تغییر نرخ</span>
+                              <Trash2 className="w-3 h-3" />
                             </button>
-                          )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -467,10 +589,20 @@ export const AdminPanel: React.FC = () => {
           </div>
 
           <div className="bg-slate-900/90 rounded-xl border border-slate-800 p-4">
-            <h2 className="text-sm font-bold text-slate-200 mb-3 flex items-center gap-2">
-              <Users className="w-4 h-4 text-emerald-400" />
-              <span>فهرست سوپرمارکت‌های طرف قرارداد</span>
-            </h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-bold text-slate-200 flex items-center gap-2">
+                <Users className="w-4 h-4 text-emerald-400" />
+                <span>فهرست سوپرمارکت‌های طرف قرارداد ({supermarkets.length})</span>
+              </h2>
+              <button
+                type="button"
+                onClick={() => setIsRegisterStoreModalOpen(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs font-medium transition cursor-pointer"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>افزودن فروشگاه</span>
+              </button>
+            </div>
             <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
               {supermarkets.map((shop) => {
                 const visitor = visitors.find((v) => v.id === shop.assigned_visitor_id);
@@ -610,6 +742,18 @@ export const AdminPanel: React.FC = () => {
                   placeholder="مثال: بستنی مگنوم شکلاتی"
                 />
               </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <CategorySelectPicker
+                  selectedCategoryId={newProdCat}
+                  onSelectCategory={setNewProdCat}
+                />
+                <BrandSelectPicker
+                  selectedBrand={newProdBrand}
+                  onSelectBrand={setNewProdBrand}
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-400 mb-1">قیمت فروش (تومان)</label>
@@ -699,6 +843,65 @@ export const AdminPanel: React.FC = () => {
                 className="px-3 py-1.5 rounded-lg bg-blue-600 disabled:opacity-50 text-white font-medium hover:bg-blue-500"
               >
                 تایید انتقال
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Register New Supermarket */}
+      <SupermarketRegisterModal
+        isOpen={isRegisterStoreModalOpen}
+        onClose={() => setIsRegisterStoreModalOpen(false)}
+      />
+
+      {/* Modal: Confirm Delete Product */}
+      {productToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5 max-w-sm w-full shadow-2xl space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-sm text-slate-100">تأیید حذف کالا</h4>
+                <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                  آیا از حذف کالای «<strong className="text-white">{productToDelete.name}</strong>» مطمئن هستید؟
+                </p>
+              </div>
+            </div>
+
+            {deleteProductFeedback && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs">
+                {deleteProductFeedback}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800 text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setProductToDelete(null);
+                  setDeleteProductFeedback(null);
+                }}
+                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium cursor-pointer"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const res = deleteProduct(productToDelete.id);
+                  if (res.success) {
+                    setProductToDelete(null);
+                    setDeleteProductFeedback(null);
+                  } else {
+                    setDeleteProductFeedback(res.message);
+                  }
+                }}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold cursor-pointer shadow-lg shadow-rose-600/30"
+              >
+                بله، حذف شود
               </button>
             </div>
           </div>

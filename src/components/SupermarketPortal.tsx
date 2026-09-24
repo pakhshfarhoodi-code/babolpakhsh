@@ -1,17 +1,27 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
+import { Product, Order } from '../types';
+import { ProductRow } from './shop/ProductRow';
+import { FilterSheet } from './shop/FilterSheet';
+import { CartBar } from './shop/CartBar';
+import { CartSheet } from './shop/CartSheet';
+import { ReorderCard } from './shop/ReorderCard';
+import { OrderCard } from './shop/OrderCard';
 import {
-  Plus,
-  Minus,
-  ShoppingCart,
-  CheckCircle2,
-  Clock,
-  PackageCheck,
+  getTopPurchasedProducts,
+  buildCartFromOrder,
+  clampQuantity,
+} from './shop/shopUtils';
+import {
   Search,
-  AlertTriangle,
-  Layers,
-  Tag,
   X,
+  SlidersHorizontal,
+  ShoppingBag,
+  CheckCircle2,
+  Package,
+  Layers,
+  ArrowLeft,
+  RotateCcw,
 } from 'lucide-react';
 
 export const SupermarketPortal: React.FC = () => {
@@ -25,490 +35,576 @@ export const SupermarketPortal: React.FC = () => {
     createOrder,
   } = useApp();
 
-  const currentStore = supermarkets.find((s) => s.id === selectedSupermarketId) || supermarkets[0];
-  const assignedVisitor = visitors.find((v) => v.id === currentStore.assigned_visitor_id);
+  const currentStore =
+    supermarkets.find((s) => s.id === selectedSupermarketId) || supermarkets[0];
+  const assignedVisitor = visitors.find(
+    (v) => v.id === currentStore?.assigned_visitor_id
+  );
 
+  // Tabs: 'catalog' | 'orders'
+  const [activeTab, setActiveTab] = useState<'catalog' | 'orders'>('catalog');
+
+  // Search & Filter state
+  const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
   const [selectedBrand, setSelectedBrand] = useState<string>('all');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [cart, setCart] = useState<Record<string, number>>({});
-  const [activeTab, setActiveTab] = useState<'catalog' | 'history'>('catalog');
-  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
 
-  // Store's orders
-  const storeOrders = orders.filter((o) => o.supermarket_id === currentStore.id);
+  // Mobile cart sheet state
+  const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+  const [orderError, setOrderError] = useState<string | null>(null);
+  const [placedOrderId, setPlacedOrderId] = useState<string | null>(null);
 
-  // Extract unique brands from active products
-  const availableBrands = useMemo(() => {
+  // Toast / Short notice message
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = useCallback((msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage((prev) => (prev === msg ? null : prev));
+    }, 3500);
+  }, []);
+
+  // Cart state persisted per supermarket: alborz_cart_{storeId}
+  const storageKey = `alborz_cart_${currentStore.id}`;
+
+  const [cart, setCart] = useState<Record<string, number>>(() => {
+    if (typeof window === 'undefined') return {};
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (!saved) return {};
+      const parsed = JSON.parse(saved) as Record<string, number>;
+      return parsed || {};
+    } catch {
+      return {};
+    }
+  });
+
+  // Re-sync cart on store change or product stock updates
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      const parsed = saved ? (JSON.parse(saved) as Record<string, number>) : {};
+      const validatedCart: Record<string, number> = {};
+
+      for (const [pId, qty] of Object.entries(parsed)) {
+        const prod = products.find((p) => p.id === pId);
+        if (prod && prod.is_active && qty > 0) {
+          const available = Math.max(0, prod.stock - prod.reserved_stock);
+          if (available > 0) {
+            validatedCart[pId] = Math.min(qty, available);
+          }
+        }
+      }
+      setCart(validatedCart);
+    } catch {
+      setCart({});
+    }
+  }, [storageKey, products]);
+
+  // Persist cart to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(storageKey, JSON.stringify(cart));
+    }
+  }, [cart, storageKey]);
+
+  // Store's orders (newest first)
+  const storeOrders = useMemo(() => {
+    return orders
+      .filter((o) => o.supermarket_id === currentStore.id)
+      .slice()
+      .reverse();
+  }, [orders, currentStore.id]);
+
+  // Active pending orders count for tab badge (only 'assigned' and 'delegated')
+  const activePendingOrdersCount = useMemo(() => {
+    return storeOrders.filter(
+      (o) => o.status === 'assigned' || o.status === 'delegated'
+    ).length;
+  }, [storeOrders]);
+
+  // Top purchased products
+  const topProducts = useMemo(() => {
+    return getTopPurchasedProducts(orders, products, currentStore.id, 5);
+  }, [orders, products, currentStore.id]);
+
+  // Brands available in currently selected category (only active products)
+  const availableBrandsInCategory = useMemo(() => {
     const brandsSet = new Set<string>();
     products.forEach((p) => {
+      if (!p.is_active) return;
+      if (selectedCategoryId !== 'all' && p.category_id !== selectedCategoryId) return;
       if (p.brand && p.brand.trim()) {
         brandsSet.add(p.brand.trim());
       }
     });
     return Array.from(brandsSet);
-  }, [products]);
+  }, [products, selectedCategoryId]);
 
-  const filteredProducts = products.filter((p) => {
-    if (!p.is_active) return false;
-    if (selectedCategoryId !== 'all' && p.category_id !== selectedCategoryId) return false;
-    if (selectedBrand !== 'all' && p.brand !== selectedBrand) return false;
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      const matchName = p.name.toLowerCase().includes(term);
-      const matchBrand = p.brand && p.brand.toLowerCase().includes(term);
-      if (!matchName && !matchBrand) return false;
+  // Reset selected brand if no longer present in chosen category
+  useEffect(() => {
+    if (selectedBrand !== 'all' && !availableBrandsInCategory.includes(selectedBrand)) {
+      setSelectedBrand('all');
     }
-    return true;
-  });
+  }, [selectedCategoryId, availableBrandsInCategory, selectedBrand]);
 
-  const updateQuantity = (productId: string, delta: number) => {
-    const prod = products.find((p) => p.id === productId);
-    if (!prod) return;
+  // Filtered Products for Catalog
+  const filteredProducts = useMemo(() => {
+    return products.filter((p) => {
+      if (!p.is_active) return false;
+      if (selectedCategoryId !== 'all' && p.category_id !== selectedCategoryId) return false;
+      if (selectedBrand !== 'all' && p.brand !== selectedBrand) return false;
+      if (searchTerm.trim()) {
+        const term = searchTerm.toLowerCase().trim();
+        const matchName = p.name.toLowerCase().includes(term);
+        const matchBrand = p.brand && p.brand.toLowerCase().includes(term);
+        if (!matchName && !matchBrand) return false;
+      }
+      return true;
+    });
+  }, [products, selectedCategoryId, selectedBrand, searchTerm]);
 
-    const available = prod.stock - prod.reserved_stock;
-    const currentQty = cart[productId] || 0;
-    const newQty = Math.max(0, currentQty + delta);
+  // Cart Calculations
+  const totalCartCount = useMemo(() => {
+    return Object.values(cart).reduce((sum: number, qty: number) => sum + (Number(qty) || 0), 0);
+  }, [cart]);
 
-    if (newQty > available) {
-      setNotification({
-        type: 'error',
-        message: `حداکثر موجودی قابل سفارش برای ${prod.name}، ${available} ${prod.unit} است.`,
-      });
-      return;
-    }
+  const totalCartAmount = useMemo(() => {
+    return Object.entries(cart).reduce((sum: number, [pId, qty]) => {
+      const prod = products.find((p) => p.id === pId);
+      const numQty = Number(qty) || 0;
+      return sum + (prod ? prod.price * numQty : 0);
+    }, 0);
+  }, [cart, products]);
 
-    setNotification(null);
+  // Quantity updates
+  const handleQuantityChange = useCallback((productId: string, newQty: number) => {
     setCart((prev) => {
-      if (newQty === 0) {
+      if (newQty <= 0) {
         const next = { ...prev };
         delete next[productId];
         return next;
       }
       return { ...prev, [productId]: newQty };
     });
-  };
+  }, []);
 
-  const cartItems = Object.entries(cart).map(([productId, quantity]) => {
-    const prod = products.find((p) => p.id === productId)!;
-    const qty = Number(quantity);
-    return {
-      productId,
-      name: prod.name,
-      price: prod.price,
-      quantity: qty,
-      unit: prod.unit,
-      total: prod.price * qty,
-    };
-  });
+  const handleExceedLimit = useCallback(
+    (maxAvailable: number) => {
+      showToast(`موجودی کالا به سقف ${maxAvailable.toLocaleString('fa-IR')} واحد محدود شد.`);
+    },
+    [showToast]
+  );
 
-  const cartTotalAmount = cartItems.reduce((sum, i) => sum + i.total, 0);
-  const totalItemCount = cartItems.reduce((sum, i) => sum + i.quantity, 0);
+  const handleClearCart = useCallback(() => {
+    setCart({});
+    showToast('سبد سفارش خالی شد.');
+  }, [showToast]);
 
-  const handleCheckout = () => {
-    if (cartItems.length === 0) return;
+  // Quick reorder handler
+  const handleReorder = useCallback(
+    (order: Order) => {
+      const {
+        cart: newItems,
+        unavailableItems,
+        reducedItems,
+      } = buildCartFromOrder(order, products);
 
-    const res = createOrder({
-      supermarketId: currentStore.id,
-      visitorId: assignedVisitor?.id || visitors[0].id,
-      items: cartItems.map((c) => ({
-        productId: c.productId,
-        name: c.name,
-        price: c.price,
-        quantity: c.quantity,
-      })),
-    });
+      setCart((prev) => ({ ...prev, ...newItems }));
 
-    if (res.success) {
-      setCart({});
-      setNotification({ type: 'success', message: 'سفارش شما با موفقیت ثبت شد و به ویزیتور منطقه ارجاع گردید.' });
-      setActiveTab('history');
-    } else {
-      setNotification({ type: 'error', message: res.message });
+      if (unavailableItems.length > 0) {
+        showToast(
+          `کالاهای ناموجود اضافه نشدند: ${unavailableItems.slice(0, 2).join('، ')}`
+        );
+      } else if (reducedItems.length > 0) {
+        showToast(`تعداد برخی کالاها بر اساس موجودی سردخانه تنظیم شد.`);
+      } else {
+        showToast('اقلام سفارش به سبد خرید افزوده شدند.');
+      }
+
+      // Auto switch to catalog so user sees their updated cart
+      setActiveTab('catalog');
+    },
+    [products, showToast]
+  );
+
+  const handleAddTopProduct = useCallback(
+    (productId: string) => {
+      const prod = products.find((p) => p.id === productId);
+      if (!prod) return;
+      const available = Math.max(0, prod.stock - prod.reserved_stock);
+      if (available <= 0) {
+        showToast(`کالای ${prod.name} در حال حاضر ناموجود است.`);
+        return;
+      }
+      const currentQty = cart[productId] || 0;
+      const nextQty = Math.min(currentQty + 1, available);
+      handleQuantityChange(productId, nextQty);
+    },
+    [products, cart, handleQuantityChange, showToast]
+  );
+
+  // Clear all filters
+  const handleClearAllFilters = useCallback(() => {
+    setSearchTerm('');
+    setSelectedCategoryId('all');
+    setSelectedBrand('all');
+  }, []);
+
+  const isAnyFilterActive =
+    searchTerm.trim() !== '' || selectedCategoryId !== 'all' || selectedBrand !== 'all';
+
+  // Checkout submission
+  const handleCheckoutSubmit = async () => {
+    const items = Object.entries(cart)
+      .map(([productId, quantity]) => {
+        const numQty = Number(quantity);
+        const prod = products.find((p) => p.id === productId);
+        if (!prod || numQty <= 0) return null;
+        return {
+          productId,
+          name: prod.name,
+          price: prod.price,
+          quantity: numQty,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+
+    if (items.length === 0) return;
+
+    setIsSubmittingOrder(true);
+    setOrderError(null);
+
+    try {
+      const res = createOrder({
+        supermarketId: currentStore.id,
+        visitorId: assignedVisitor?.id || visitors[0]?.id || 'vis-1',
+        items,
+      });
+
+      if (res.success) {
+        setCart({});
+        setIsMobileCartOpen(false);
+        setPlacedOrderId(res.orderId || 'ORD-NEW');
+      } else {
+        setOrderError(res.message || 'خطا در ثبت سفارش. لطفاً موجودی را بررسی کنید.');
+      }
+    } catch {
+      setOrderError('خطای ارتباط با سرور. لطفاً مجدداً تلاش کنید.');
+    } finally {
+      setIsSubmittingOrder(false);
     }
   };
 
   return (
-    <div className="space-y-6">
-      {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-3 overflow-x-auto no-scrollbar">
-        <button
-          onClick={() => setActiveTab('catalog')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 whitespace-nowrap ${
-            activeTab === 'catalog'
-              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-              : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
-          }`}
-        >
-          <ShoppingCart className="w-4 h-4" />
-          <span>کاتالوگ محصولات ({products.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('history')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 whitespace-nowrap ${
-            activeTab === 'history'
-              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-              : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
-          }`}
-        >
-          <Clock className="w-4 h-4" />
-          <span>پیگیری فاکتورها و سفارشات ({storeOrders.length})</span>
-        </button>
-      </div>
-
-      {notification && (
-        <div
-          className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
-            notification.type === 'error'
-              ? 'bg-rose-500/10 text-rose-300 border border-rose-500/30'
-              : 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30'
-          }`}
-        >
-          {notification.type === 'error' ? (
-            <AlertTriangle className="w-4 h-4 shrink-0" />
-          ) : (
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
-          )}
-          <span>{notification.message}</span>
+    <div className="space-y-4 pb-20 lg:pb-8">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-16 inset-x-4 z-50 max-w-md mx-auto p-3 rounded-2xl bg-slate-900 border border-emerald-500/50 text-slate-100 text-xs font-semibold shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-top-3">
+          <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+          <p className="flex-1 leading-snug">{toastMessage}</p>
+          <button
+            type="button"
+            onClick={() => setToastMessage(null)}
+            className="text-slate-400 hover:text-slate-200 p-1"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 
-      {/* Tab: CATALOG & CART */}
-      {activeTab === 'catalog' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Catalog (2 cols) */}
-          <div className="lg:col-span-2 space-y-4">
-            {/* Dual Filter Section: Search + Category Filter + Brand Filter */}
-            <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 space-y-3 shadow-sm">
-              {/* Search Bar & Active Count */}
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="relative flex-1 min-w-[220px]">
-                  <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-500" />
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="جستجو در محصولات، برند، طعم..."
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg pr-9 pl-8 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 transition"
-                  />
-                  {searchTerm && (
-                    <button
-                      type="button"
-                      onClick={() => setSearchTerm('')}
-                      className="absolute left-2.5 top-2.5 text-slate-500 hover:text-slate-300 cursor-pointer"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-slate-400">
-                    نمایش <strong className="text-emerald-400 font-bold">{filteredProducts.length}</strong> از {products.filter(p => p.is_active).length} کالا
-                  </span>
-                  {(selectedCategoryId !== 'all' || selectedBrand !== 'all' || searchTerm) && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedCategoryId('all');
-                        setSelectedBrand('all');
-                        setSearchTerm('');
-                      }}
-                      className="text-[11px] text-rose-400 hover:text-rose-300 underline cursor-pointer"
-                    >
-                      حذف فیلترها
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Filter 1: Category Filter (به همین شکل فعلی) */}
-              <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
-                <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
-                  <Layers className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>فیلتر دسته‌بندی کالا:</span>
-                </div>
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedCategoryId('all')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${
-                      selectedCategoryId === 'all'
-                        ? 'bg-emerald-600 text-white shadow-sm'
-                        : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
-                    }`}
-                  >
-                    همه دسته‌ها
-                  </button>
-                  {categories.map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => setSelectedCategoryId(c.id)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${
-                        selectedCategoryId === c.id
-                          ? 'bg-emerald-600 text-white shadow-sm'
-                          : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
-                      }`}
-                    >
-                      {c.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Filter 2: Brand Filter (براساس برند محصولات) */}
-              <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
-                <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
-                  <Tag className="w-3.5 h-3.5 text-amber-400" />
-                  <span>فیلتر بر اساس برند محصولات:</span>
-                </div>
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedBrand('all')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${
-                      selectedBrand === 'all'
-                        ? 'bg-amber-600 text-white shadow-sm'
-                        : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
-                    }`}
-                  >
-                    همه برندها
-                  </button>
-                  {availableBrands.map((brand) => (
-                    <button
-                      key={brand}
-                      type="button"
-                      onClick={() => setSelectedBrand(brand)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${
-                        selectedBrand === brand
-                          ? 'bg-amber-600 text-white shadow-sm'
-                          : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
-                      }`}
-                    >
-                      {brand}
-                    </button>
-                  ))}
-                </div>
-              </div>
+      {/* Order Success Card / Modal */}
+      {placedOrderId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4">
+          <div className="bg-slate-900 border border-emerald-500/40 rounded-3xl p-6 max-w-sm w-full text-center space-y-4 shadow-2xl animate-in zoom-in-95">
+            <div className="w-16 h-16 rounded-full bg-emerald-600/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto">
+              <CheckCircle2 className="w-10 h-10" />
             </div>
 
-            {/* Products Grid */}
-            {filteredProducts.length === 0 ? (
-              <div className="py-12 text-center bg-slate-900/60 rounded-xl border border-slate-800 p-6 space-y-2">
-                <p className="text-slate-300 font-semibold text-xs">کالایی با فیلترهای انتخابی یافت نشد.</p>
-                <p className="text-[11px] text-slate-500">می‌توانید فیلتر دسته‌بندی یا برند را تغییر دهید یا دکمه حذف فیلترها را بزنید.</p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedCategoryId('all');
-                    setSelectedBrand('all');
-                    setSearchTerm('');
-                  }}
-                  className="mt-2 px-3 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 text-xs font-medium cursor-pointer"
-                >
-                  نمایش همه محصولات
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                {filteredProducts.map((prod) => {
-                  const available = prod.stock - prod.reserved_stock;
-                  const qty = cart[prod.id] || 0;
-                  const isOutOfStock = available <= 0;
-
-                  return (
-                    <div
-                      key={prod.id}
-                      className={`p-3.5 rounded-xl border flex flex-col justify-between transition ${
-                        qty > 0
-                          ? 'bg-emerald-950/20 border-emerald-500/40 shadow-sm'
-                          : 'bg-slate-900/80 border-slate-800/80 hover:border-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <img
-                          src={prod.image_url}
-                          alt={prod.name}
-                          className="w-16 h-16 rounded-xl object-cover border border-slate-800 shrink-0"
-                          referrerPolicy="no-referrer"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                            {prod.brand && (
-                              <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 text-[10px] font-bold">
-                                {prod.brand}
-                              </span>
-                            )}
-                            <span className="text-[10px] text-slate-400">
-                              {categories.find((c) => c.id === prod.category_id)?.name}
-                            </span>
-                          </div>
-                          <h4 className="font-bold text-xs text-slate-100 line-clamp-2">{prod.name}</h4>
-                          <p className="text-xs font-extrabold text-emerald-400 mt-1">
-                            {prod.price.toLocaleString('fa-IR')} <span className="text-[10px] font-normal text-slate-400">تومان</span>
-                          </p>
-                          <p className="text-[10px] text-slate-400 mt-0.5">
-                            وضعیت موجودی: <span className={available > 0 ? 'text-slate-300 font-semibold' : 'text-rose-400 font-semibold'}>{available > 0 ? `${available} ${prod.unit}` : 'ناموجود'}</span>
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="mt-3 pt-2.5 border-t border-slate-800/70 flex items-center justify-between">
-                        <span className="text-[11px] text-slate-400">قیمت مصوب کارخانه</span>
-                        <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-700 rounded-lg p-0.5">
-                          <button
-                            onClick={() => updateQuantity(prod.id, -1)}
-                            disabled={qty === 0}
-                            className="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-200 flex items-center justify-center transition cursor-pointer"
-                          >
-                            <Minus className="w-3 h-3" />
-                          </button>
-                          <span className="w-6 text-center text-xs font-bold text-slate-100">{qty}</span>
-                          <button
-                            onClick={() => updateQuantity(prod.id, 1)}
-                            disabled={isOutOfStock || qty >= available}
-                            className="w-6 h-6 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-30 text-white flex items-center justify-center transition cursor-pointer"
-                          >
-                            <Plus className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Cart Sidebar (1 col) */}
-          <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-4 flex flex-col justify-between shadow-sm">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
-                  <ShoppingCart className="w-4 h-4 text-emerald-400" />
-                  <span>سبد سفارش سوپرمارکت</span>
-                </h3>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800">
-                  {totalItemCount} کالا
-                </span>
-              </div>
-
-              {cartItems.length === 0 ? (
-                <div className="py-14 text-center text-slate-500 text-xs">
-                  سبد خرید شما خالی است. اقلام مورد نظر را اضافه کنید.
-                </div>
-              ) : (
-                <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
-                  {cartItems.map((item) => (
-                    <div key={item.productId} className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 text-xs">
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-slate-200 truncate">{item.name}</span>
-                        <span className="font-bold text-emerald-400">{item.total.toLocaleString('fa-IR')} ت</span>
-                      </div>
-                      <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1.5">
-                        <span>
-                          {item.quantity} {item.unit} × {item.price.toLocaleString('fa-IR')}
-                        </span>
-                        <button
-                          onClick={() => updateQuantity(item.productId, -item.quantity)}
-                          className="text-rose-400 hover:text-rose-300"
-                        >
-                          حذف
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+            <div className="space-y-1">
+              <h3 className="text-base font-bold text-slate-100">سفارش شما با موفقیت ثبت شد</h3>
+              <p className="text-xs text-slate-400">
+                شماره پیگیری:{' '}
+                <span className="font-mono font-bold text-emerald-400 dir-ltr">{placedOrderId}</span>
+              </p>
             </div>
 
-            <div className="pt-4 border-t border-slate-800 space-y-3 mt-4">
-              <div className="space-y-1.5 text-xs">
-                <div className="flex items-center justify-between text-slate-400">
-                  <span>تعداد اقلام:</span>
-                  <span className="font-semibold text-slate-200">{totalItemCount} عدد / بسته</span>
-                </div>
-                <div className="flex items-center justify-between text-slate-200 font-bold">
-                  <span>مبلغ قابل پرداخت فاکتور:</span>
-                  <span className="text-base text-emerald-400">{cartTotalAmount.toLocaleString('fa-IR')} تومان</span>
-                </div>
-              </div>
+            <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/60 p-3 rounded-2xl border border-slate-800">
+              سفارش بلافاصله به انبار و ویزیتور مربوطه ارسال و موجودی اقلام در سردخانه رزرو گردید.
+            </p>
+
+            <div className="space-y-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setPlacedOrderId(null);
+                  setActiveTab('orders');
+                }}
+                className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 transition cursor-pointer"
+              >
+                پیگیری سفارش در «سفارش‌های من»
+              </button>
 
               <button
-                disabled={cartItems.length === 0}
-                onClick={handleCheckout}
-                className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-bold text-xs transition shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2"
+                type="button"
+                onClick={() => setPlacedOrderId(null)}
+                className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs transition cursor-pointer"
               >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>ارسال مستقیم سفارش به ویزیتور</span>
+                بازگشت به کاتالوگ
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Tab: ORDER HISTORY */}
-      {activeTab === 'history' && (
-        <div className="bg-slate-900/90 rounded-2xl border border-slate-800 overflow-hidden shadow-sm">
-          <div className="p-4 border-b border-slate-800">
-            <h3 className="text-sm font-bold text-slate-200">فاکتورها و سفارشات فروشگاه</h3>
-            <p className="text-xs text-slate-400 mt-0.5">وضعیت تحویل کالاهای زنجیره سرد به صورت لحظه‌ای</p>
-          </div>
+      {/* 2. Navigation Tabs */}
+      <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+        <button
+          type="button"
+          onClick={() => setActiveTab('catalog')}
+          className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 cursor-pointer ${
+            activeTab === 'catalog'
+              ? 'bg-emerald-600 text-white shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+          }`}
+        >
+          <Package className="w-4 h-4" />
+          <span>کاتالوگ محصولات</span>
+        </button>
 
-          <div className="divide-y divide-slate-800/80">
-            {storeOrders.length === 0 ? (
-              <div className="p-12 text-center text-slate-500 text-xs">
-                هنوز سفارشی برای این سوپرمارکت ثبت نشده است.
+        <button
+          type="button"
+          onClick={() => setActiveTab('orders')}
+          className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 cursor-pointer ${
+            activeTab === 'orders'
+              ? 'bg-emerald-600 text-white shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+          }`}
+        >
+          <ShoppingBag className="w-4 h-4" />
+          <span>سفارش‌های من</span>
+          {activePendingOrdersCount > 0 && (
+            <span className="w-5 h-5 rounded-full bg-emerald-400 text-slate-950 font-extrabold text-xs flex items-center justify-center">
+              {activePendingOrdersCount.toLocaleString('fa-IR')}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Main Tab Content */}
+      {activeTab === 'catalog' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+          {/* Products Column (2 cols on desktop) */}
+          <div className="lg:col-span-2 space-y-3.5">
+            {/* 3. Search & Filter Bar */}
+            <div className="space-y-2 bg-slate-900/60 p-2.5 sm:p-3 rounded-2xl border border-slate-800/80">
+              {/* Row 1: Search input + Brand filter button */}
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 absolute right-3 top-3 text-slate-500" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="جستجوی نام یا برند کالا..."
+                    className="w-full h-10 bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-8 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                  />
+                  {searchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchTerm('')}
+                      className="absolute left-2.5 top-2.5 text-slate-400 hover:text-slate-200 p-1"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Filter Sheet Trigger Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsFilterSheetOpen(true)}
+                  className={`h-10 px-3 rounded-xl border font-bold text-xs flex items-center gap-1.5 transition shrink-0 cursor-pointer ${
+                    selectedBrand !== 'all'
+                      ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50'
+                      : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                  }`}
+                  title="فیلتر بر اساس برند"
+                >
+                  <SlidersHorizontal className="w-4 h-4 text-emerald-400" />
+                  <span>فیلتر</span>
+                  {selectedBrand !== 'all' && (
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                  )}
+                </button>
               </div>
-            ) : (
-              storeOrders.map((order) => {
-                const statusConfig = {
-                  assigned: { label: 'در نوبت بارگیری و توزیع', bg: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
-                  delegated: { label: 'در مسیر انتقال به ویزیتور جایگزین', bg: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
-                  delivered: { label: 'تحویل داده شد و تسویه گردید', bg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
-                  undelivered: { label: 'عدم تحویل (برگشت به سردخانه)', bg: 'bg-rose-500/10 text-rose-400 border-rose-500/20' },
-                }[order.status];
 
-                return (
-                  <div key={order.id} className="p-4 hover:bg-slate-800/30 transition">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-blue-400 text-sm">{order.id}</span>
-                          <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium border ${statusConfig.bg}`}>
-                            {statusConfig.label}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-400 mt-1">
-                          تاریخ ثبت: {order.order_date} | ویزیتور تحویل‌دهنده: <span className="text-slate-300 font-semibold">{order.visitor_name}</span>
-                        </p>
-                      </div>
+              {/* Row 2: Category chips horizontal scroll */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategoryId('all')}
+                  className={`h-8 px-3 rounded-xl whitespace-nowrap font-semibold transition cursor-pointer shrink-0 ${
+                    selectedCategoryId === 'all'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                  }`}
+                >
+                  همه
+                </button>
 
-                      <div className="text-left">
-                        <span className="text-base font-extrabold text-slate-100">
-                          {order.total_amount.toLocaleString('fa-IR')} <span className="text-xs font-normal text-slate-400">تومان</span>
-                        </span>
-                      </div>
-                    </div>
+                {categories.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setSelectedCategoryId(c.id)}
+                    className={`h-8 px-3 rounded-xl whitespace-nowrap font-semibold transition cursor-pointer shrink-0 ${
+                      selectedCategoryId === c.id
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                    }`}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </div>
 
-                    {order.items && order.items.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-slate-800/60 flex flex-wrap gap-2 text-xs">
-                        {order.items.map((it) => (
-                          <span key={it.id} className="px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-300">
-                            {it.name} - <span className="font-bold text-slate-100">{it.quantity} عدد</span> ({it.price.toLocaleString('fa-IR')} ت)
-                          </span>
-                        ))}
-                      </div>
+              {/* Clear filters link if active */}
+              {isAnyFilterActive && (
+                <div className="pt-1 flex items-center justify-between text-xs text-slate-400 border-t border-slate-800/60">
+                  <div className="flex items-center gap-2">
+                    {selectedBrand !== 'all' && (
+                      <span className="bg-slate-800 px-2 py-0.5 rounded-lg text-emerald-400">
+                        برند: {selectedBrand}
+                      </span>
                     )}
                   </div>
-                );
-              })
+                  <button
+                    type="button"
+                    onClick={handleClearAllFilters}
+                    className="text-xs text-rose-400 hover:underline cursor-pointer"
+                  >
+                    حذف فیلترها
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Top Purchased Products (Shown only if store has previous orders) */}
+            <ReorderCard
+              topProducts={topProducts}
+              cart={cart}
+              onAddProductToCart={handleAddTopProduct}
+            />
+
+            {/* 4. Products Grid */}
+            {filteredProducts.length === 0 ? (
+              <div className="py-16 text-center text-slate-400 space-y-3 bg-slate-900/40 border border-slate-800/60 rounded-3xl p-6">
+                <Package className="w-12 h-12 mx-auto text-slate-600" />
+                <p className="text-xs font-bold text-slate-300">کالایی با فیلترهای انتخابی یافت نشد.</p>
+                {isAnyFilterActive && (
+                  <button
+                    type="button"
+                    onClick={handleClearAllFilters}
+                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition cursor-pointer"
+                  >
+                    حذف فیلترها
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3">
+                {filteredProducts.map((product) => (
+                  <ProductRow
+                    key={product.id}
+                    product={product}
+                    quantity={cart[product.id] || 0}
+                    onChangeQuantity={(qty) => handleQuantityChange(product.id, qty)}
+                    onExceedLimit={handleExceedLimit}
+                  />
+                ))}
+              </div>
             )}
           </div>
+
+          {/* Desktop Cart Sidebar (1 col on lg+) */}
+          <div className="hidden lg:block lg:col-span-1">
+            <CartSheet
+              isOpen={true}
+              isMobileModal={false}
+              onClose={() => {}}
+              cart={cart}
+              products={products}
+              onUpdateQuantity={handleQuantityChange}
+              onClearCart={handleClearCart}
+              onSubmitOrder={handleCheckoutSubmit}
+              isSubmitting={isSubmittingOrder}
+              errorMessage={orderError}
+              onExceedLimit={handleExceedLimit}
+            />
+          </div>
+        </div>
+      ) : (
+        /* 8. My Orders Tab */
+        <div className="space-y-3 max-w-2xl mx-auto">
+          {storeOrders.length === 0 ? (
+            <div className="py-16 text-center text-slate-400 space-y-3 bg-slate-900/40 border border-slate-800/60 rounded-3xl p-6">
+              <ShoppingBag className="w-12 h-12 mx-auto text-slate-600" />
+              <p className="text-xs font-bold text-slate-300">هنوز سفارشی ثبت نشده است.</p>
+              <button
+                type="button"
+                onClick={() => setActiveTab('catalog')}
+                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-sm cursor-pointer"
+              >
+                رفتن به کالاها
+              </button>
+            </div>
+          ) : (
+            storeOrders.map((order) => (
+              <OrderCard
+                key={order.id}
+                order={order}
+                assignedVisitor={assignedVisitor}
+                onReorder={handleReorder}
+              />
+            ))
+          )}
         </div>
       )}
+
+      {/* Brand Filter Bottom Sheet */}
+      <FilterSheet
+        isOpen={isFilterSheetOpen}
+        onClose={() => setIsFilterSheetOpen(false)}
+        availableBrands={availableBrandsInCategory}
+        selectedBrand={selectedBrand}
+        onSelectBrand={setSelectedBrand}
+        onClearFilter={() => setSelectedBrand('all')}
+      />
+
+      {/* Mobile Sticky Cart Bar */}
+      <CartBar
+        itemCount={totalCartCount}
+        totalAmount={totalCartAmount}
+        onOpenCart={() => setIsMobileCartOpen(true)}
+      />
+
+      {/* Mobile Cart Bottom Sheet */}
+      <CartSheet
+        isOpen={isMobileCartOpen}
+        isMobileModal={true}
+        onClose={() => setIsMobileCartOpen(false)}
+        cart={cart}
+        products={products}
+        onUpdateQuantity={handleQuantityChange}
+        onClearCart={handleClearCart}
+        onSubmitOrder={handleCheckoutSubmit}
+        isSubmitting={isSubmittingOrder}
+        errorMessage={orderError}
+        onExceedLimit={handleExceedLimit}
+      />
     </div>
   );
 };

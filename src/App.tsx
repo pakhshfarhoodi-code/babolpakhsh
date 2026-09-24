@@ -43,11 +43,15 @@ export const App: React.FC = () => {
   // Auto-sync active role based on current URL path
   useEffect(() => {
     if (currentPath === '/admin') {
-      if (role !== 'admin' && role !== 'warehouse') {
+      if (role === 'supermarket') {
+        navigateTo('/');
+      } else if (role !== 'admin' && role !== 'warehouse') {
         setRole('admin');
       }
     } else if (currentPath === '/visitor') {
-      if (role !== 'visitor') {
+      if (role === 'supermarket') {
+        navigateTo('/');
+      } else if (role !== 'visitor') {
         setRole('visitor');
       }
     } else {
@@ -56,7 +60,7 @@ export const App: React.FC = () => {
         setRole('supermarket');
       }
     }
-  }, [currentPath, role, setRole]);
+  }, [currentPath, role, setRole, navigateTo]);
 
   // If user is not logged in, show tailored login screen for the route
   if (!isLoggedIn) {
@@ -103,34 +107,36 @@ export const App: React.FC = () => {
       <footer className="border-t border-slate-900 bg-slate-950/80 py-4 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-wrap items-center justify-between gap-2">
           <span>سامانه مدیریت سفارش و پخش مویرگی البرز — نسخه سازمانی توزیع زنجیره سرد</span>
-          <div className="flex items-center gap-3 text-[11px] font-mono">
-            <button
-              onClick={() => navigateTo('/')}
-              className={`hover:text-amber-400 transition cursor-pointer ${
-                currentPath === '/' ? 'text-amber-400 font-bold underline' : 'text-slate-500'
-              }`}
-            >
-              / (فروشگاه‌ها)
-            </button>
-            <span className="text-slate-700">|</span>
-            <button
-              onClick={() => navigateTo('/visitor')}
-              className={`hover:text-emerald-400 transition cursor-pointer ${
-                currentPath === '/visitor' ? 'text-emerald-400 font-bold underline' : 'text-slate-500'
-              }`}
-            >
-              /visitor (ویزیتورها)
-            </button>
-            <span className="text-slate-700">|</span>
-            <button
-              onClick={() => navigateTo('/admin')}
-              className={`hover:text-blue-400 transition cursor-pointer ${
-                currentPath === '/admin' ? 'text-blue-400 font-bold underline' : 'text-slate-500'
-              }`}
-            >
-              /admin (مدیر و انبار)
-            </button>
-          </div>
+          {role !== 'supermarket' && (
+            <div className="flex items-center gap-3 text-xs font-mono">
+              <button
+                onClick={() => navigateTo('/')}
+                className={`hover:text-amber-400 transition cursor-pointer ${
+                  currentPath === '/' ? 'text-amber-400 font-bold underline' : 'text-slate-500'
+                }`}
+              >
+                / (فروشگاه‌ها)
+              </button>
+              <span className="text-slate-700">|</span>
+              <button
+                onClick={() => navigateTo('/visitor')}
+                className={`hover:text-emerald-400 transition cursor-pointer ${
+                  currentPath === '/visitor' ? 'text-emerald-400 font-bold underline' : 'text-slate-500'
+                }`}
+              >
+                /visitor (ویزیتورها)
+              </button>
+              <span className="text-slate-700">|</span>
+              <button
+                onClick={() => navigateTo('/admin')}
+                className={`hover:text-blue-400 transition cursor-pointer ${
+                  currentPath === '/admin' ? 'text-blue-400 font-bold underline' : 'text-slate-500'
+                }`}
+              >
+                /admin (مدیر و انبار)
+              </button>
+            </div>
+          )}
         </div>
       </footer>
     </div>

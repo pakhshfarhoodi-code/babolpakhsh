@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { UserRole } from '../types';
 import {
@@ -14,6 +14,7 @@ import {
   Sun,
   Moon,
 } from 'lucide-react';
+import { StoreProfileSheet } from './shop/StoreProfileSheet';
 
 interface HeaderProps {
   currentPath?: string;
@@ -36,6 +37,8 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
     toggleTheme,
   } = useApp();
 
+  const [isStoreProfileOpen, setIsStoreProfileOpen] = useState(false);
+
   const currentStore = supermarkets.find((s) => s.id === selectedSupermarketId) || supermarkets[0];
   const assignedVisitor = visitors.find((v) => v.id === currentStore?.assigned_visitor_id) || visitors[0];
   const currentVisitor = visitors.find((v) => v.id === selectedVisitorId) || visitors[0];
@@ -51,6 +54,81 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
 
   const pendingReassignments = reassignmentRequests.filter((r) => r.status === 'pending').length;
   const pendingLoadingBills = loadingBills.filter((b) => b.status === 'pending').length;
+
+  // 1. Slim single-line header for Supermarket role
+  if (role === 'supermarket') {
+    return (
+      <>
+        <header className="border-b border-slate-800 bg-slate-900/95 sticky top-0 z-40 backdrop-blur-md shadow-sm">
+          <div className="max-w-7xl mx-auto px-3 sm:px-5 py-2">
+            <div className="flex items-center justify-between gap-2">
+              {/* Right: Store Name & Profile Sheet Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsStoreProfileOpen(true)}
+                className="flex items-center gap-2 min-w-0 hover:opacity-85 transition cursor-pointer text-right group"
+                title="مشاهده پروفایل فروشگاه و ویزیتور"
+              >
+                <div className="w-8 h-8 rounded-lg bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                  <Store className="w-4 h-4" />
+                </div>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-sm font-bold text-slate-100 truncate max-w-[170px] sm:max-w-[280px]">
+                    {currentStore.name}
+                  </span>
+                  <span className="text-xs text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-800/40 shrink-0">
+                    پروفایل
+                  </span>
+                </div>
+              </button>
+
+              {/* Left: Call Visitor + Theme Toggle + Logout */}
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                {assignedVisitor?.phone && (
+                  <a
+                    href={`tel:${assignedVisitor.phone}`}
+                    title={`تماس تلفنی با ویزیتور (${assignedVisitor.name})`}
+                    className="p-2 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/40 transition cursor-pointer shrink-0"
+                  >
+                    <Phone className="w-4 h-4" />
+                  </a>
+                )}
+
+                <button
+                  id="theme-toggle-btn"
+                  onClick={toggleTheme}
+                  title={theme === 'dark' ? 'تغییر به حالت روز (روشن)' : 'تغییر به حالت شب (تاریک)'}
+                  className="p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 transition cursor-pointer shrink-0"
+                >
+                  {theme === 'dark' ? (
+                    <Sun className="w-4 h-4 text-amber-400" />
+                  ) : (
+                    <Moon className="w-4 h-4 text-indigo-400" />
+                  )}
+                </button>
+
+                <button
+                  id="header-logout-btn"
+                  onClick={() => logout()}
+                  title="خروج از حساب کاربری و بازگشت به صفحه ورود"
+                  className="p-2 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 hover:text-rose-200 border border-rose-500/40 transition cursor-pointer shrink-0"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <StoreProfileSheet
+          isOpen={isStoreProfileOpen}
+          onClose={() => setIsStoreProfileOpen(false)}
+          store={currentStore}
+          visitor={assignedVisitor}
+        />
+      </>
+    );
+  }
 
   return (
     <header className="border-b border-slate-800 bg-slate-900/95 sticky top-0 z-40 backdrop-blur-md shadow-sm">

@@ -7,10 +7,10 @@ import {
   Store,
   Warehouse,
   ThermometerSnowflake,
-  RotateCcw,
   User,
-  CheckCircle2,
   LogOut,
+  MapPin,
+  Phone,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -23,14 +23,18 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
     role,
     setRole,
     selectedVisitorId,
-    setSelectedVisitorId,
     visitors,
     reassignmentRequests,
     loadingBills,
-    resetToDefaults,
     currentUser,
     logout,
+    supermarkets,
+    selectedSupermarketId,
   } = useApp();
+
+  const currentStore = supermarkets.find((s) => s.id === selectedSupermarketId) || supermarkets[0];
+  const assignedVisitor = visitors.find((v) => v.id === currentStore?.assigned_visitor_id) || visitors[0];
+  const currentVisitor = visitors.find((v) => v.id === selectedVisitorId) || visitors[0];
 
   const handleRoleClick = (newRole: UserRole) => {
     setRole(newRole);
@@ -44,223 +48,180 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
   const pendingReassignments = reassignmentRequests.filter((r) => r.status === 'pending').length;
   const pendingLoadingBills = loadingBills.filter((b) => b.status === 'pending').length;
 
-  const allRolesConfig: { role: UserRole; title: string; icon: React.ReactNode; badge?: number }[] = [
-    {
-      role: 'admin',
-      title: 'مدیریت مرکزی',
-      icon: <ShieldCheck className="w-4 h-4" />,
-      badge: pendingReassignments > 0 ? pendingReassignments : undefined,
-    },
-    {
-      role: 'warehouse',
-      title: 'انبار و سردخانه',
-      icon: <Warehouse className="w-4 h-4" />,
-      badge: pendingLoadingBills > 0 ? pendingLoadingBills : undefined,
-    },
-    {
-      role: 'visitor',
-      title: 'پورتال ویزیتور',
-      icon: <Truck className="w-4 h-4" />,
-      badge: pendingReassignments > 0 ? pendingReassignments : undefined,
-    },
-    {
-      role: 'supermarket',
-      title: 'سفارش سوپرمارکت',
-      icon: <Store className="w-4 h-4" />,
-    },
-  ];
-
-  // Filter tabs according to current section/route
-  const rolesConfig = allRolesConfig.filter((item) => {
-    if (currentPath === '/admin') {
-      return item.role === 'admin' || item.role === 'warehouse';
-    }
-    if (currentPath === '/visitor') {
-      return item.role === 'visitor';
-    }
-    if (currentPath === '/') {
-      return item.role === 'supermarket';
-    }
-    return true;
-  });
-
   return (
-    <header className="border-b border-slate-800 bg-slate-900/95 sticky top-0 z-40 backdrop-blur-md">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3">
-        {/* Top bar */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
-              <ThermometerSnowflake className="w-5 h-5 text-blue-100 animate-pulse" />
+    <header className="border-b border-slate-800 bg-slate-900/95 sticky top-0 z-40 backdrop-blur-md shadow-sm">
+      <div className="max-w-7xl mx-auto px-3 sm:px-5 py-1.5">
+        <div className="flex items-center justify-between gap-x-2 sm:gap-x-4 gap-y-1.5 flex-wrap lg:flex-nowrap">
+          
+          {/* 1. Right Section (RTL): Brand & Portal Badge */}
+          <div className="flex items-center gap-2 shrink-0 order-1">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-blue-600 to-cyan-500 flex items-center justify-center text-white shadow-sm shrink-0">
+              <ThermometerSnowflake className="w-4 h-4 text-white" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-lg font-bold text-slate-100 tracking-tight">سامانه پخش مویرگی البرز</h1>
-                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-950 text-blue-400 border border-blue-800/60">
-                  زنجیره سرد منجمد
+            <div className="flex items-center gap-1.5">
+              <h1 className="text-xs sm:text-sm font-bold text-slate-100 whitespace-nowrap">سامانه پخش البرز</h1>
+              {role === 'supermarket' ? (
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/60 whitespace-nowrap">
+                  سفارش آنلاین
                 </span>
-                {currentPath && (
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700 dir-ltr">
-                    {currentPath}
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-slate-400">سیستم متمرکز توزیع، رزرو کالا و پورتال یکپارچه فروش</p>
+              ) : role === 'visitor' ? (
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-950 text-blue-400 border border-blue-800/60 whitespace-nowrap">
+                  پورتال ویزیتور
+                </span>
+              ) : (
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-indigo-950 text-indigo-400 border border-indigo-800/60 whitespace-nowrap">
+                  مدیریت و انبار
+                </span>
+              )}
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
-            {/* Active User Info */}
-            <div
-              id="header-user-badge"
-              className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-slate-800/90 border border-slate-700/70 text-slate-200 shadow-sm"
-            >
-              <div className="w-7 h-7 rounded-lg bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
-                <User className="w-3.5 h-3.5" />
-              </div>
-              <div className="flex flex-col text-right">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold text-slate-100">{currentUser.name}</span>
-                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-blue-950/80 text-blue-400 border border-blue-800/50">
+          {/* 2. Left Section (RTL): User info + Reset + Logout (Order 2 on mobile, Order 3 on desktop) */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 order-2 lg:order-3 justify-end">
+            {/* User Identity badge for Admin / Warehouse */}
+            {role !== 'supermarket' && (
+              <div
+                id="header-user-badge"
+                className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-800/90 border border-slate-700/70 text-slate-200 shadow-sm"
+              >
+                <div className="w-5 h-5 rounded bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400 shrink-0">
+                  <User className="w-3 h-3" />
+                </div>
+                <div className="flex items-center gap-1 text-right">
+                  <span className="text-xs font-bold text-slate-100 max-w-[80px] sm:max-w-none truncate">{currentUser.name}</span>
+                  <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-blue-950/80 text-blue-400 border border-blue-800/50 hidden md:inline-block">
                     {currentUser.roleTitle}
                   </span>
                 </div>
               </div>
-            </div>
+            )}
 
-            {/* Logout Button */}
+            {/* Logout button */}
             <button
               id="header-logout-btn"
-              onClick={() => {
-                logout();
-              }}
+              onClick={() => logout()}
               title="خروج از حساب کاربری و بازگشت به صفحه ورود"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 active:scale-95 text-rose-300 hover:text-rose-200 border border-rose-500/40 transition text-xs font-semibold cursor-pointer shadow-sm"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 active:scale-95 text-rose-300 hover:text-rose-200 border border-rose-500/40 transition text-xs font-semibold cursor-pointer shadow-sm shrink-0"
             >
               <LogOut className="w-3.5 h-3.5" />
               <span>خروج</span>
             </button>
-
-            {/* Reset to defaults */}
-            <button
-              onClick={() => {
-                if (window.confirm('آیا از بازنشانی داده‌های نمونه اولیه اطمینان دارید؟')) {
-                  resetToDefaults();
-                }
-              }}
-              title="بازنشانی داده‌های اولیه"
-              className="p-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-slate-200 border border-slate-700/60 transition cursor-pointer"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
           </div>
-        </div>
 
-        {/* Role navigation and active profile selector */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-3">
-          {/* Role switcher tabs */}
-          <div className="flex items-center gap-1.5 bg-slate-950/70 p-1 rounded-xl border border-slate-800">
-            {rolesConfig.map((item) => {
-              const active = role === item.role;
-              return (
+          {/* 3. Center Section: Compact context details (Order 3 on mobile -> takes w-full, Order 2 on desktop -> takes flex-1) */}
+          <div className="w-full lg:w-auto lg:flex-1 order-3 lg:order-2 flex items-center justify-center min-w-0">
+            {role === 'supermarket' ? (
+              <div className="w-full lg:w-auto flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-1.5 sm:gap-2 min-w-0">
+                {/* Store identity: Title & owner on line 1, address directly under on line 2 */}
+                <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-800/90 border border-slate-700/80 text-slate-100 shadow-sm min-w-0 flex-1 sm:flex-initial">
+                  <div className="w-6 h-6 rounded-md bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                    <Store className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="flex flex-col text-right justify-center min-w-0 flex-1">
+                    {/* Line 1: Title and Owner */}
+                    <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+                      <span className="font-bold text-slate-100 text-xs truncate">{currentStore.name}</span>
+                      <span className="text-[10px] text-emerald-300 bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-800/40 whitespace-nowrap">
+                        مدیریت: {currentStore.owner}
+                      </span>
+                    </div>
+                    {/* Line 2: Address directly underneath */}
+                    {currentStore.address && (
+                      <div className="flex items-center gap-1 text-[11px] text-slate-400 mt-0.5 min-w-0" title={currentStore.address}>
+                        <MapPin className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+                        <span className="truncate max-w-[280px] sm:max-w-[240px] xl:max-w-[360px]">{currentStore.address}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Assigned Visitor Pill: in width alongside the supermarket box */}
+                {assignedVisitor && (
+                  <div className="flex items-center justify-between sm:justify-start gap-2 px-2.5 py-1.5 rounded-lg bg-blue-950/40 border border-blue-800/50 text-slate-200 shadow-sm min-w-0 flex-1 sm:flex-initial">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <div className="w-6 h-6 rounded-md bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
+                        <Truck className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="flex items-center gap-1 text-xs truncate">
+                        <span className="text-slate-400 text-[11px] whitespace-nowrap">ویزیتور:</span>
+                        <span className="font-bold text-slate-100 text-xs truncate">{assignedVisitor.name}</span>
+                      </div>
+                    </div>
+                    <a
+                      href={`tel:${assignedVisitor.phone}`}
+                      title="تماس با ویزیتور"
+                      className="flex items-center gap-1 text-[11px] text-blue-300 hover:text-white bg-blue-900/60 hover:bg-blue-800/80 px-1.5 py-0.5 rounded border border-blue-700/40 transition font-mono dir-ltr shrink-0"
+                    >
+                      <Phone className="w-2.5 h-2.5 text-blue-400" />
+                      <span>{assignedVisitor.phone}</span>
+                    </a>
+                  </div>
+                )}
+              </div>
+            ) : role === 'visitor' ? (
+              /* Active Visitor Info Pill */
+              <div className="w-full lg:w-auto flex items-center justify-between sm:justify-start gap-2 px-2.5 py-1.5 rounded-lg bg-blue-950/40 border border-blue-800/50 text-slate-200 shadow-sm min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-6 h-6 rounded-md bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
+                    <Truck className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs truncate">
+                    <span className="text-slate-400 text-[11px] whitespace-nowrap">ویزیتور:</span>
+                    <span className="font-bold text-slate-100 truncate">{currentUser.name}</span>
+                    <span className="text-[10px] text-blue-300 bg-blue-900/60 px-1.5 py-0.5 rounded border border-blue-700/40 hidden sm:inline-block whitespace-nowrap">
+                      {currentVisitor.region || 'منطقه توزیع البرز'}
+                    </span>
+                  </div>
+                </div>
+                <a
+                  href={`tel:${currentVisitor.phone}`}
+                  className="text-[11px] text-slate-300 font-mono dir-ltr bg-slate-900/80 px-2 py-0.5 rounded border border-slate-700/50 shrink-0 hover:text-white"
+                >
+                  {currentVisitor.phone}
+                </a>
+              </div>
+            ) : (
+              /* Admin & Warehouse Navigation Tabs */
+              <div className="grid grid-cols-2 lg:flex items-center gap-1 bg-slate-950/80 p-0.5 rounded-lg border border-slate-800 shadow-inner w-full lg:w-auto">
                 <button
-                  key={item.role}
-                  id={`role-btn-${item.role}`}
-                  onClick={() => handleRoleClick(item.role)}
-                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all cursor-pointer ${
-                    active
-                      ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                  id="role-btn-admin"
+                  onClick={() => handleRoleClick('admin')}
+                  className={`flex items-center justify-center gap-1.5 px-3 py-1.5 lg:py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
+                    role === 'admin'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                   }`}
                 >
-                  {item.icon}
-                  <span>{item.title}</span>
-                  {item.badge ? (
-                    <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-500 text-slate-950">
-                      {item.badge}
+                  <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                  <span className="whitespace-nowrap">مدیریت مرکزی</span>
+                  {pendingReassignments > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-500 text-slate-950 shrink-0">
+                      {pendingReassignments}
                     </span>
-                  ) : null}
+                  )}
                 </button>
-              );
-            })}
-          </div>
 
-          {/* Quick Route Switcher */}
-          {onNavigate && (
-            <div className="hidden lg:flex items-center gap-1.5 bg-slate-950/60 px-2 py-1 rounded-xl border border-slate-800 text-[11px]">
-              <span className="text-slate-500 text-[10px] ml-1">مسیرها:</span>
-              <button
-                type="button"
-                onClick={() => onNavigate('/')}
-                className={`px-2 py-0.5 rounded-lg transition font-mono ${
-                  currentPath === '/'
-                    ? 'bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                / فروشگاه
-              </button>
-              <button
-                type="button"
-                onClick={() => onNavigate('/visitor')}
-                className={`px-2 py-0.5 rounded-lg transition font-mono ${
-                  currentPath === '/visitor'
-                    ? 'bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                /visitor ویزیتور
-              </button>
-              <button
-                type="button"
-                onClick={() => onNavigate('/admin')}
-                className={`px-2 py-0.5 rounded-lg transition font-mono ${
-                  currentPath === '/admin'
-                    ? 'bg-blue-500/20 text-blue-300 font-bold border border-blue-500/30'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                /admin مدیریت و انبار
-              </button>
-            </div>
-          )}
-
-          {/* Persona selector depending on role */}
-          <div className="flex items-center gap-2">
-            {role === 'visitor' && (
-              <div className="flex items-center gap-2 bg-blue-950/60 border border-blue-800/50 px-3 py-1.5 rounded-lg text-xs text-blue-300">
-                <Truck className="w-3.5 h-3.5 text-blue-400" />
-                <span className="font-semibold">{currentUser.name}</span>
-                <span className="text-[10px] text-blue-400/80 bg-blue-900/60 px-1.5 py-0.5 rounded border border-blue-700/40">
-                  {visitors.find((v) => v.id === selectedVisitorId)?.region || 'ویزیتور البرز'}
-                </span>
-              </div>
-            )}
-
-            {role === 'supermarket' && (
-              <div className="flex items-center gap-2 bg-emerald-950/60 border border-emerald-800/50 px-3 py-1.5 rounded-lg text-xs text-emerald-300">
-                <Store className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="font-semibold">{currentUser.name}</span>
-                <span className="text-[10px] text-emerald-400/80 bg-emerald-900/60 px-1.5 py-0.5 rounded border border-emerald-700/40">
-                  پنل سفارش آنلاین
-                </span>
-              </div>
-            )}
-
-            {role === 'admin' && (
-              <div className="hidden sm:flex items-center gap-1.5 text-xs text-blue-400 bg-blue-950/60 border border-blue-800/50 px-3 py-1.5 rounded-lg">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>دسترسی مدیر ارشد (نظارت کلی و قیمت‌گذاری)</span>
-              </div>
-            )}
-
-            {role === 'warehouse' && (
-              <div className="hidden sm:flex items-center gap-1.5 text-xs text-indigo-400 bg-indigo-950/60 border border-indigo-800/50 px-3 py-1.5 rounded-lg">
-                <Warehouse className="w-3.5 h-3.5" />
-                <span>پایانه انبارداری و تحویل حواله بارگیری</span>
+                <button
+                  id="role-btn-warehouse"
+                  onClick={() => handleRoleClick('warehouse')}
+                  className={`flex items-center justify-center gap-1.5 px-3 py-1.5 lg:py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
+                    role === 'warehouse'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
+                >
+                  <Warehouse className="w-3.5 h-3.5 shrink-0" />
+                  <span className="whitespace-nowrap">انبار و سردخانه</span>
+                  {pendingLoadingBills > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-500 text-slate-950 shrink-0">
+                      {pendingLoadingBills}
+                    </span>
+                  )}
+                </button>
               </div>
             )}
           </div>
+
         </div>
       </div>
     </header>

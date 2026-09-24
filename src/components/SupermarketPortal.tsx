@@ -1,10 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import {
-  Store,
-  Phone,
-  MapPin,
-  Truck,
   Plus,
   Minus,
   ShoppingCart,
@@ -134,69 +130,30 @@ export const SupermarketPortal: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Store Banner */}
-      <div className="p-5 rounded-2xl bg-gradient-to-l from-slate-900 via-emerald-950/30 to-slate-900 border border-slate-800 shadow-md flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-lg shadow-emerald-600/30">
-            <Store className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-slate-100">{currentStore.name}</h2>
-              <span className="text-xs px-2 py-0.5 rounded-md bg-emerald-900/80 text-emerald-300 border border-emerald-700/50">
-                مدیریت: {currentStore.owner}
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
-              <MapPin className="w-3.5 h-3.5 text-slate-500" />
-              <span>{currentStore.address}</span>
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {assignedVisitor && (
-            <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 text-xs flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-blue-600/20 text-blue-400 flex items-center justify-center border border-blue-500/30">
-                <Truck className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="text-[11px] text-slate-400">ویزیتور اختصاصی شما:</p>
-                <p className="font-bold text-slate-200">{assignedVisitor.name}</p>
-                <a href={`tel:${assignedVisitor.phone}`} className="text-blue-400 hover:text-blue-300 text-[11px] flex items-center gap-1 mt-0.5">
-                  <Phone className="w-3 h-3" />
-                  <span>{assignedVisitor.phone}</span>
-                </a>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+      <div className="flex items-center gap-2 border-b border-slate-800 pb-3 overflow-x-auto no-scrollbar">
         <button
           onClick={() => setActiveTab('catalog')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 whitespace-nowrap ${
             activeTab === 'catalog'
               ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
               : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
           }`}
         >
           <ShoppingCart className="w-4 h-4" />
-          <span>کاتالوگ سفارش مستقیم از شرکت ({products.length} کالا)</span>
+          <span>کاتالوگ محصولات ({products.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('history')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 whitespace-nowrap ${
             activeTab === 'history'
               ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
               : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
           }`}
         >
           <Clock className="w-4 h-4" />
-          <span>پیگیری فاکتورها و سوابق سفارشات ({storeOrders.length})</span>
+          <span>پیگیری فاکتورها و سفارشات ({storeOrders.length})</span>
         </button>
       </div>
 
@@ -496,7 +453,7 @@ export const SupermarketPortal: React.FC = () => {
       {activeTab === 'history' && (
         <div className="bg-slate-900/90 rounded-2xl border border-slate-800 overflow-hidden shadow-sm">
           <div className="p-4 border-b border-slate-800">
-            <h3 className="text-sm font-bold text-slate-200">سوابق سفارشات و فاکتورهای فروشگاه</h3>
+            <h3 className="text-sm font-bold text-slate-200">فاکتورها و سفارشات فروشگاه</h3>
             <p className="text-xs text-slate-400 mt-0.5">وضعیت تحویل کالاهای زنجیره سرد به صورت لحظه‌ای</p>
           </div>
 

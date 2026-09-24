@@ -264,7 +264,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(STORAGE_KEYS.SUPERMARKETS, JSON.stringify(supermarkets));
   }, [supermarkets]);
 
-  // If Supabase is connected, attempt initial load
+  // If Supabase is connected, attempt initial load and poll every 20 seconds
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return;
     async function loadFromSupabase() {
@@ -282,6 +282,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
     loadFromSupabase();
+    const interval = setInterval(loadFromSupabase, 20000); // هر ۲۰ ثانیه
+    return () => clearInterval(interval);
   }, []);
 
   // 1. Submit Order (Reserves stock & appends audit ledger)
@@ -370,6 +372,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setInventoryTransactions((prev) => [...newTxList, ...prev]);
     setOrders((prev) => [newOrder, ...prev]);
 
+    // ارسال به Supabase در پس‌زمینه
+    if (isSupabaseConfigured && supabase) {
+      supabase
+        .rpc('create_order_transaction', {
+          p_order_id: newOrder.id,
+          p_supermarket_id: newOrder.supermarket_id,
+          p_supermarket_name: newOrder.supermarket_name,
+          p_assigned_visitor_id: newOrder.assigned_visitor_id,
+          p_visitor_name: newOrder.visitor_name,
+          p_status: newOrder.status,
+          p_total_amount: newOrder.total_amount,
+          p_items: payload.items.map((i) => ({
+            productId: i.productId,
+            name: i.name,
+            price: i.price,
+            quantity: i.quantity,
+          })),
+        })
+        .then(({ error }) => {
+          if (error) console.error('خطا در ثبت سفارش روی Supabase:', error);
+        });
+    }
+
     return { success: true, message: `سفارش با شماره ${orderId} با موفقیت ثبت و موجودی رزرو شد.`, orderId };
   };
 
@@ -383,6 +408,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return order;
       })
     );
+
+    if (isSupabaseConfigured && supabase) {
+      supabase
+        .from('orders')
+        .update({ status })
+        .eq('id', orderId)
+        .then(({ error }) => {
+          if (error) console.error('خطا در به‌روزرسانی وضعیت سفارش روی Supabase:', error);
+        });
+    }
   };
 
   // 3. Request Reassignment (Handover between visitors)
@@ -489,23 +524,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       minute: '2-digit',
     }).format(new Date());
 
+    const billItems = Array.from(itemsMap.values()).map((val, idx) => ({
+      id: `lbi-${Date.now()}-${idx}`,
+      loading_bill_id: billId,
+      order_id: val.orderId,
+      product_id: val.productId,
+      product_name: val.name,
+      quantity: val.quantity,
+    }));
+
     const bill: LoadingBill = {
       id: billId,
       visitor_id: visitorId,
       visitor_name: visitor.name,
       status: 'pending',
       created_at: nowPersian,
-      items: Array.from(itemsMap.values()).map((val, idx) => ({
-        id: `lbi-${Date.now()}-${idx}`,
-        loading_bill_id: billId,
-        order_id: val.orderId,
-        product_id: val.productId,
-        product_name: val.name,
-        quantity: val.quantity,
-      })),
+      items: billItems,
     };
 
     setLoadingBills((prev) => [bill, ...prev]);
+
+    if (isSupabaseConfigured && supabase) {
+      supabase
+        .from('loading_bills')
+        .insert({
+          id: billId,
+          visitor_id: visitorId,
+          visitor_name: visitor.name,
+          status: 'pending',
+        })
+        .then(({ error }) => {
+          if (error) {
+            console.error('خطا در ثبت برگه بارگیری روی Supabase:', error);
+            return;
+          }
+          if (billItems.length > 0) {
+            supabase
+              .from('loading_bill_items')
+              .insert(
+                billItems.map((item) => ({
+                  id: item.id,
+                  loading_bill_id: item.loading_bill_id,
+                  order_id: item.order_id,
+                  product_id: item.product_id,
+                  product_name: item.product_name,
+                  quantity: item.quantity,
+                }))
+              )
+              .then(({ error: itemsErr }) => {
+                if (itemsErr) console.error('خطا در ثبت اقلام برگه بارگیری روی Supabase:', itemsErr);
+              });
+          }
+        });
+    }
   };
 
   // 6. Approve Loading Bill (Cold-chain warehouse commits dispatch & deducts physical stock)
@@ -568,6 +639,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setLoadingBills((prev) =>
       prev.map((b) => (b.id === billId ? { ...b, status: 'approved' } : b))
     );
+
+    if (isSupabaseConfigured && supabase) {
+      supabase
+        .rpc('approve_loading_bill_transaction', { p_loading_bill_id: billId })
+        .then(({ error }) => {
+          if (error) console.error('خطا در تایید برگه بارگیری روی Supabase:', error);
+        });
+    }
   };
 
   // 7. Update product price
@@ -596,6 +675,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setProducts((prev) =>
       prev.map((p) => (p.id === productId ? { ...p, price: newPrice } : p))
     );
+
+    if (isSupabaseConfigured && supabase) {
+      supabase
+        .from('products')
+        .update({ price: newPrice })
+        .eq('id', productId)
+        .then(({ error }) => {
+          if (error) console.error('خطا در تغییر قیمت کالا روی Supabase:', error);
+        });
+
+      supabase
+        .from('product_price_history')
+        .insert({
+          product_id: productId,
+          old_price: prod.price,
+          new_price: newPrice,
+          changed_by: 'مدیریت مرکزی',
+        })
+        .then(({ error }) => {
+          if (error) console.error('خطا در ثبت تاریخچه قیمت روی Supabase:', error);
+        });
+    }
   };
 
   // 8. Update product stock (Warehouse adjustment)
@@ -605,10 +706,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       minute: '2-digit',
     }).format(new Date());
 
+    let targetStock = 0;
     setProducts((prev) =>
       prev.map((p) => {
         if (p.id === productId) {
           const newStock = Math.max(0, p.stock + additionalStock);
+          targetStock = newStock;
           return { ...p, stock: newStock };
         }
         return p;
@@ -628,6 +731,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       },
       ...prev,
     ]);
+
+    if (isSupabaseConfigured && supabase) {
+      supabase
+        .from('products')
+        .update({ stock: targetStock })
+        .eq('id', productId)
+        .then(({ error }) => {
+          if (error) console.error('خطا در به‌روزرسانی موجودی انبار روی Supabase:', error);
+        });
+
+      supabase
+        .from('inventory_transactions')
+        .insert({
+          product_id: productId,
+          transaction_type: 'manual_adjustment',
+          quantity: additionalStock,
+          reference_id: 'ورود به انبار سردخانه',
+        })
+        .then(({ error }) => {
+          if (error) console.error('خطا در ثبت تراکنش انبار روی Supabase:', error);
+        });
+    }
   };
 
   // 9. Add new product
@@ -644,6 +769,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (newProd.brand && newProd.brand.trim()) {
       const bTrimmed = newProd.brand.trim();
       setBrands((prev) => (prev.includes(bTrimmed) ? prev : [...prev, bTrimmed]));
+    }
+
+    if (isSupabaseConfigured && supabase) {
+      supabase
+        .from('products')
+        .insert({
+          id,
+          name: newProd.name,
+          category_id: newProd.category_id,
+          brand: newProd.brand,
+          price: newProd.price,
+          stock: newProd.stock,
+          reserved_stock: 0,
+          unit: newProd.unit,
+          image_url: newProd.image_url,
+          is_active: newProd.is_active,
+        })
+        .then(({ error }) => {
+          if (error) console.error('خطا در افزودن کالای جدید روی Supabase:', error);
+        });
     }
   };
 

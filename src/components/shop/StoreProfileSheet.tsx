@@ -5,7 +5,7 @@ import { X, Store, User, MapPin, Truck, Phone } from 'lucide-react';
 interface StoreProfileSheetProps {
   isOpen: boolean;
   onClose: () => void;
-  store: Supermarket;
+  store?: Supermarket;
   visitor?: Visitor;
 }
 
@@ -30,7 +30,7 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
               <Store className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-100">{store.name}</h3>
+              <h3 className="text-sm font-bold text-slate-100">{store?.name || 'فروشگاه طرف قرارداد'}</h3>
               <p className="text-xs text-slate-400">پروفایل فروشگاه و اطلاعات تماس</p>
             </div>
           </div>
@@ -50,10 +50,10 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
               <User className="w-4 h-4 text-emerald-400" />
               <span>مدیریت / مالک:</span>
             </div>
-            <span className="font-bold text-slate-200">{store.owner}</span>
+            <span className="font-bold text-slate-200">{store?.owner || 'مدیر فروشگاه'}</span>
           </div>
 
-          {store.address && (
+          {store?.address && (
             <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1">
               <div className="flex items-center gap-2 text-slate-400">
                 <MapPin className="w-4 h-4 text-emerald-400 shrink-0" />

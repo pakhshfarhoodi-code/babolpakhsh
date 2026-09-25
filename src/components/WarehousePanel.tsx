@@ -1,465 +1,278 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   Warehouse,
-  ThermometerSnowflake,
   FileCheck,
   CheckCircle2,
-  Clock,
-  Boxes,
   Plus,
-  ArrowDownCircle,
-  Truck,
-  AlertCircle,
-  X,
-  PackagePlus,
-  Tag,
-  Layers,
+  History,
+  AlertTriangle,
+  Boxes,
+  Sparkles,
 } from 'lucide-react';
-import { CategorySelectPicker, BrandSelectPicker } from './CategoryBrandSelectors';
+import { PendingBillCard } from './warehouse/PendingBillCard';
+import { BillHistoryList } from './warehouse/BillHistoryList';
+import { RestockForm } from './warehouse/RestockForm';
+import { LowStockList } from './warehouse/LowStockList';
+import { NewProductModal } from './warehouse/NewProductModal';
+import { LOW_STOCK_THRESHOLD, formatNumber } from './warehouse/helpers';
 
-export const WarehousePanel: React.FC = () => {
+export type WarehouseTabKey = 'pending' | 'history';
+
+interface WarehousePanelProps {
+  activeTab?: WarehouseTabKey;
+  onTabChange?: (tab: WarehouseTabKey) => void;
+}
+
+export const WarehousePanel: React.FC<WarehousePanelProps> = ({
+  activeTab: externalTab,
+  onTabChange,
+}) => {
   const {
     products,
     categories,
     brands,
     loadingBills,
-    inventoryTransactions,
     approveLoadingBill,
     updateProductStock,
     addNewProduct,
   } = useApp();
 
-  const [selectedBillId, setSelectedBillId] = useState<string | null>(null);
-  const [restockProductId, setRestockProductId] = useState<string>('');
-  const [restockAmount, setRestockAmount] = useState<number>(10);
-  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [internalTab, setInternalTab] = useState<WarehouseTabKey>('pending');
+  const activeTab = onTabChange && externalTab ? externalTab : internalTab;
 
-  // New product definition state
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [newProdName, setNewProdName] = useState('');
-  const [newProdBrand, setNewProdBrand] = useState('میهن');
-  const [newProdCat, setNewProdCat] = useState('cat-1');
-  const [newProdPrice, setNewProdPrice] = useState<number>(0);
-  const [newProdStock, setNewProdStock] = useState<number>(50);
-  const [newProdUnit, setNewProdUnit] = useState('عدد');
+  const setActiveTab = (tab: WarehouseTabKey) => {
+    if (onTabChange) onTabChange(tab);
+    setInternalTab(tab);
+  };
 
-  const pendingBills = loadingBills.filter((b) => b.status === 'pending');
-  const approvedBills = loadingBills.filter((b) => b.status === 'approved');
+  const [isNewProductModalOpen, setIsNewProductModalOpen] = useState(false);
+  const [actionFeedback, setActionFeedback] = useState<string | null>(null);
+
+  // Filter pending vs approved bills
+  const pendingBills = useMemo(
+    () => loadingBills.filter((b) => b.status === 'pending'),
+    [loadingBills]
+  );
+
+  const approvedBills = useMemo(
+    () => loadingBills.filter((b) => b.status === 'approved'),
+    [loadingBills]
+  );
+
+  // Real KPI calculations (zero fake sensor data)
+  const lowStockCount = useMemo(
+    () => products.filter((p) => p.stock <= LOW_STOCK_THRESHOLD).length,
+    [products]
+  );
 
   const handleApproveBill = (billId: string) => {
     approveLoadingBill(billId);
-    setActionSuccess(`برگه بارگیری ${billId} تایید شد و اقلام به طور فیزیکی از موجودی سردخانه کسر گردید.`);
-    setTimeout(() => setActionSuccess(null), 4000);
+    setActionFeedback(`برگه بارگیری ${billId} تایید شد و اقلام به طور قطعی از موجودی سردخانه ترخیص شدند.`);
+    setTimeout(() => setActionFeedback(null), 5000);
   };
 
-  const handleRestockSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!restockProductId || restockAmount <= 0) return;
-
-    updateProductStock(restockProductId, restockAmount);
-    const prod = products.find((p) => p.id === restockProductId);
-    setActionSuccess(`ورود ${restockAmount} واحد از ${prod?.name} با موفقیت در انبار سردخانه ثبت شد.`);
-    setRestockProductId('');
-    setTimeout(() => setActionSuccess(null), 4000);
+  const handleRestockSubmit = (productId: string, amount: number) => {
+    updateProductStock(productId, amount);
+    const prod = products.find((p) => p.id === productId);
+    setActionFeedback(`ورود ${formatNumber(amount)} واحد از ${prod?.name || 'کالا'} با موفقیت ثبت شد.`);
+    setTimeout(() => setActionFeedback(null), 4000);
   };
 
-  const getSampleImage = (catId: string) => {
-    switch (catId) {
-      case 'cat-1': // بستنی و پالپ
-        return 'https://images.unsplash.com/photo-1579954115545-a95591f28bfc?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer';
-      case 'cat-2': // محصولات منجمد و پروتئینی
-        return 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer';
-      case 'cat-3': // لبنیات زنجیره سرد
-        return 'https://images.unsplash.com/photo-1628088062854-d1870b4553da?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer';
-      case 'cat-4': // نوشیدنی خنک
-        return 'https://images.unsplash.com/photo-1613478223719-2ab802602423?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer';
-      case 'cat-5': // کیک و تنقلات سوپرمارکتی
-      default:
-        return 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer';
-    }
-  };
-
-  const handleCreateProduct = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newProdName.trim() || newProdPrice <= 0) return;
-
+  const handleCreateProduct = (data: {
+    name: string;
+    brand: string;
+    category_id: string;
+    price: number;
+    stock: number;
+    unit: string;
+    image_url: string;
+  }) => {
     addNewProduct({
-      name: newProdName.trim(),
-      brand: newProdBrand.trim() || 'متفرقه',
-      category_id: newProdCat,
-      price: newProdPrice,
-      stock: newProdStock,
-      unit: newProdUnit,
-      image_url: getSampleImage(newProdCat),
+      name: data.name,
+      brand: data.brand,
+      category_id: data.category_id,
+      price: data.price,
+      stock: data.stock,
+      unit: data.unit,
+      image_url: data.image_url,
       is_active: true,
     });
-
-    const categoryObj = categories.find((c) => c.id === newProdCat);
-    setActionSuccess(
-      `کالای جدید «${newProdName.trim()}» با دسته‌بندی «${categoryObj?.name || 'سردخانه‌ای'}» و برند «${newProdBrand}» با موجودی اولیه ${newProdStock} ${newProdUnit} با موفقیت در انبار تعریف شد.`
-    );
-    setTimeout(() => setActionSuccess(null), 5000);
-
-    setIsAddModalOpen(false);
-    setNewProdName('');
-    setNewProdBrand('میهن');
-    setNewProdPrice(0);
-    setNewProdStock(50);
+    setActionFeedback(`کالای جدید «${data.name}» با موجودی ${formatNumber(data.stock)} ${data.unit} در سردخانه تعریف شد.`);
+    setTimeout(() => setActionFeedback(null), 5000);
   };
 
   return (
     <div className="space-y-6">
-      {/* Cold Storage Header Card */}
-      <div className="p-5 rounded-2xl bg-gradient-to-l from-slate-900 via-indigo-950/30 to-slate-900 border border-slate-800 shadow-md flex flex-wrap items-center justify-between gap-4">
+      {/* 1. Header Banner & Operations Summary */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-l from-slate-900 via-indigo-950/40 to-slate-900 border border-slate-800/90 shadow-xl shadow-indigo-950/20 backdrop-blur-xl flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-600/30">
-            <Warehouse className="w-6 h-6" />
+          <div className="relative">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 via-blue-600 to-cyan-400 flex items-center justify-center text-white shadow-lg shadow-indigo-600/30 shrink-0 border border-indigo-400/20">
+              <Warehouse className="w-6 h-6" />
+            </div>
+            <span className="absolute -bottom-0.5 -left-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-slate-900 shadow-sm"></span>
           </div>
+
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-slate-100">پایانه لجستیک و انبار سردخانه مرکزی البرز</h2>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-950 text-blue-400 border border-blue-800">
-                دمای حسگرها: ۱۸.۴- درجه سانتی‌گراد
+              <h2 className="text-base font-extrabold text-slate-100 tracking-tight">
+                پایانه لجستیک و انبار سردخانه مرکزی
+              </h2>
+              <span className="hidden md:inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-950/80 text-indigo-300 border border-indigo-800/60 shadow-inner">
+                <Sparkles className="w-3 h-3 text-cyan-400" />
+                <span>زنجیره سرد</span>
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              تایید خروج فیزیکی حواله‌های بارگیری خودروهای مویرگی و کنترل موجودی انبار
+              ترخیص حواله‌های خودروهای پخش مویرگی و کنترل موجودی فیزیکی
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap">
+        {/* Real KPI Metrics & New Product Button */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-950/70 border border-slate-800 text-xs shadow-inner">
+            <div className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></div>
+            <span className="text-slate-400">برگه‌های در انتظار:</span>
+            <span className="font-black text-indigo-300 font-mono text-xs">
+              {formatNumber(pendingBills.length)}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-950/70 border border-slate-800 text-xs shadow-inner">
+            <div className="w-2 h-2 rounded-full bg-amber-400"></div>
+            <span className="text-slate-400">اقلام کم‌موجود:</span>
+            <span className="font-black text-amber-300 font-mono text-xs">
+              {formatNumber(lowStockCount)}
+            </span>
+          </div>
+
           <button
             type="button"
-            onClick={() => setIsAddModalOpen(true)}
-            className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-lg shadow-indigo-600/25 cursor-pointer whitespace-nowrap"
+            onClick={() => setIsNewProductModalOpen(true)}
+            className="min-h-[40px] px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 active:scale-98 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-lg shadow-indigo-600/30 border border-indigo-400/30 cursor-pointer whitespace-nowrap"
           >
             <Plus className="w-4 h-4" />
-            <span>تعریف کالای جدید در سردخانه</span>
+            <span>تعریف کالای جدید</span>
           </button>
-
-          <div className="flex items-center gap-2 bg-slate-900/90 border border-slate-800 p-2.5 rounded-xl text-xs">
-            <ThermometerSnowflake className="w-4 h-4 text-cyan-400 animate-pulse" />
-            <span className="text-slate-300">سیستم برودتی:</span>
-            <span className="text-emerald-400 font-bold">پایدار و استاندارد</span>
-          </div>
         </div>
       </div>
 
-      {actionSuccess && (
-        <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 shrink-0" />
-          <span>{actionSuccess}</span>
+      {/* Action Toast Feedback */}
+      {actionFeedback && (
+        <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2.5 animate-in fade-in">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{actionFeedback}</span>
         </div>
       )}
 
-      {/* Main Grid: Left Loading Bills Approval, Right Restock Inbound */}
+      {/* 2. Main Two-Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Loading Bills Dispatch (2 cols) */}
+        {/* Left Column: Loading Bills (2 Cols on lg) */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="bg-slate-900/90 rounded-xl border border-slate-800 p-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div>
-                <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
-                  <FileCheck className="w-4 h-4 text-indigo-400" />
-                  <span>حواله‌ها و برگه‌های بارگیری در انتظار تایید انبار ({pendingBills.length})</span>
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  تایید حواله موجب کسر فیزیکی از سردخانه و تحویل به ویزیتور می‌شود
-                </p>
+          <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-4 sm:p-5 shadow-sm space-y-4">
+            
+            {/* Dedicated Tabs (Identical to Supermarket Portal style) */}
+            <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+              <button
+                type="button"
+                onClick={() => setActiveTab('pending')}
+                className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 cursor-pointer ${
+                  activeTab === 'pending'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                }`}
+              >
+                <FileCheck className="w-4 h-4" />
+                <span>برگه‌های در انتظار</span>
+                <span
+                  className={`w-5 h-5 rounded-full font-extrabold text-xs flex items-center justify-center font-mono ${
+                    activeTab === 'pending'
+                      ? 'bg-white/20 text-white'
+                      : 'bg-slate-800 text-slate-400'
+                  }`}
+                >
+                  {formatNumber(pendingBills.length)}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('history')}
+                className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 cursor-pointer ${
+                  activeTab === 'history'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                }`}
+              >
+                <History className="w-4 h-4" />
+                <span>تاریخچه ترخیص</span>
+                <span
+                  className={`w-5 h-5 rounded-full font-extrabold text-xs flex items-center justify-center font-mono ${
+                    activeTab === 'history'
+                      ? 'bg-white/20 text-white'
+                      : 'bg-slate-800 text-slate-400'
+                  }`}
+                >
+                  {formatNumber(approvedBills.length)}
+                </span>
+              </button>
+            </div>
+
+            {/* Sub-Tab 1: Pending Bills Cards */}
+            {activeTab === 'pending' && (
+              <div className="space-y-3.5">
+                {pendingBills.length === 0 ? (
+                  <div className="py-12 text-center text-slate-500 text-xs space-y-2">
+                    <FileCheck className="w-8 h-8 text-slate-600 mx-auto" />
+                    <p>در حال حاضر هیچ برگه بارگیری در انتظار تایید وجود ندارد.</p>
+                    <p className="text-slate-600">
+                      ویزیتورها پس از جمع‌آوری سفارش‌های روزانه، حواله جدید صادر خواهند کرد.
+                    </p>
+                  </div>
+                ) : (
+                  pendingBills.map((bill) => (
+                    <PendingBillCard
+                      key={bill.id}
+                      bill={bill}
+                      products={products}
+                      onApprove={handleApproveBill}
+                    />
+                  ))
+                )}
               </div>
-            </div>
+            )}
 
-            <div className="space-y-3.5 mt-4">
-              {pendingBills.length === 0 ? (
-                <div className="py-10 text-center text-slate-500 text-xs">
-                  در حال حاضر برگه بارگیری تایید نشده‌ای وجود ندارد.
-                </div>
-              ) : (
-                pendingBills.map((bill) => (
-                  <div
-                    key={bill.id}
-                    className="p-4 rounded-xl bg-slate-950/70 border border-indigo-500/30 space-y-3"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-xs text-indigo-400">{bill.id}</span>
-                        <span className="text-xs font-semibold text-slate-200">
-                          خودروی ویزیتور: {bill.visitor_name}
-                        </span>
-                      </div>
-                      <span className="text-[11px] text-slate-400">زمان صدور: {bill.created_at}</span>
-                    </div>
-
-                    {/* Items table */}
-                    {bill.items && bill.items.length > 0 && (
-                      <div className="bg-slate-900/90 rounded-lg p-2.5 border border-slate-800/80">
-                        <p className="text-[11px] font-bold text-slate-400 mb-2">اقلام تحویلی به خودرو:</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                          {bill.items.map((it) => (
-                            <div
-                              key={it.id}
-                              className="p-2 rounded bg-slate-950 border border-slate-800 flex items-center justify-between"
-                            >
-                              <span className="text-slate-300">{it.product_name}</span>
-                              <span className="font-bold text-indigo-300">
-                                {it.quantity} عدد
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="pt-2 flex justify-end gap-2 text-xs">
-                      <button
-                        onClick={() => handleApproveBill(bill.id)}
-                        className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold flex items-center gap-2 transition shadow-md shadow-indigo-600/20"
-                      >
-                        <CheckCircle2 className="w-4 h-4" />
-                        <span>تایید نهایی خروج بار از سردخانه</span>
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Approved Loading Bills History */}
-          <div className="bg-slate-900/90 rounded-xl border border-slate-800 p-4">
-            <h3 className="text-sm font-bold text-slate-200 pb-3 border-b border-slate-800">
-              سوابق برگه‌های بارگیری ترخیص شده
-            </h3>
-            <div className="space-y-2 mt-3 max-h-52 overflow-y-auto pr-1">
-              {approvedBills.length === 0 ? (
-                <div className="py-6 text-center text-slate-500 text-xs">سابقه‌ای وجود ندارد.</div>
-              ) : (
-                approvedBills.map((b) => (
-                  <div
-                    key={b.id}
-                    className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 text-xs flex items-center justify-between"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-emerald-400">{b.id}</span>
-                        <span className="text-slate-300">{b.visitor_name}</span>
-                      </div>
-                      <p className="text-[11px] text-slate-400 mt-0.5">{b.created_at}</p>
-                    </div>
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                      ترخیص و خارج شده
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
+            {/* Sub-Tab 2: Approved History (Accordion) */}
+            {activeTab === 'history' && (
+              <BillHistoryList approvedBills={approvedBills} />
+            )}
           </div>
         </div>
 
-        {/* Right Side: Fast Restock Entry (1 col) */}
-        <div className="space-y-4">
-          <div className="bg-slate-900/90 rounded-xl border border-slate-800 p-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800 gap-2">
-              <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
-                <ArrowDownCircle className="w-4 h-4 text-emerald-400" />
-                <span>ثبت ورود محموله جدید به سردخانه</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsAddModalOpen(true)}
-                className="text-[11px] text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1 cursor-pointer"
-              >
-                <Plus className="w-3 h-3" />
-                <span>تعریف کالا</span>
-              </button>
-            </div>
+        {/* Right Column: Restock Entry Form & Low Stock Monitoring */}
+        <div className="space-y-5">
+          {/* Quick Restock Inbound Form */}
+          <RestockForm
+            products={products}
+            onRestockSubmit={handleRestockSubmit}
+            onOpenNewProductModal={() => setIsNewProductModalOpen(true)}
+          />
 
-            <form onSubmit={handleRestockSubmit} className="space-y-3.5 mt-3 text-xs">
-              <div>
-                <label className="block text-slate-400 mb-1">انتخاب کالا:</label>
-                <select
-                  required
-                  value={restockProductId}
-                  onChange={(e) => setRestockProductId(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-indigo-500"
-                >
-                  <option value="">انتخاب محصول دریافتی...</option>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} (فعلی: {p.stock} {p.unit})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-slate-400 mb-1">تعداد وارده به سردخانه:</label>
-                <input
-                  type="number"
-                  min="1"
-                  required
-                  value={restockAmount || ''}
-                  onChange={(e) => setRestockAmount(Number(e.target.value))}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-indigo-500"
-                  placeholder="مثال: 50"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={!restockProductId}
-                className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-bold transition flex items-center justify-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                <span>افزایش موجودی فیزیکی انبار</span>
-              </button>
-            </form>
-          </div>
-
-          {/* Quick Stock Status Snapshot */}
-          <div className="bg-slate-900/90 rounded-xl border border-slate-800 p-4">
-            <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2 pb-3 border-b border-slate-800">
-              <Boxes className="w-4 h-4 text-blue-400" />
-              <span>پایش موجودی فیزیکی و رزرو</span>
-            </h3>
-
-            <div className="space-y-2 mt-3 max-h-72 overflow-y-auto pr-1 text-xs">
-              {products.map((p) => {
-                const free = p.stock - p.reserved_stock;
-                return (
-                  <div
-                    key={p.id}
-                    className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80 flex items-center justify-between"
-                  >
-                    <div className="min-w-0 pr-1">
-                      <p className="font-semibold text-slate-200 truncate">{p.name}</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">
-                        رزرو سفارشات: <span className="text-amber-400 font-bold">{p.reserved_stock}</span> {p.unit}
-                      </p>
-                    </div>
-                    <div className="text-left shrink-0">
-                      <span className="font-bold text-slate-100">{p.stock}</span>
-                      <span className="text-[10px] text-slate-400 mr-1">کل</span>
-                      <div className="text-[10px] text-emerald-400 font-bold">
-                        {free} آزاد
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          {/* Low Stock Live Monitor */}
+          <LowStockList products={products} />
         </div>
       </div>
 
       {/* Modal: Define New Product in Warehouse */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-5 shadow-2xl">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-indigo-600/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30">
-                  <PackagePlus className="w-4 h-4" />
-                </div>
-                <h3 className="font-bold text-sm text-slate-100">تعریف کالای جدید در سردخانه</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsAddModalOpen(false)}
-                className="text-slate-400 hover:text-slate-200 p-1 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateProduct} className="space-y-3.5 mt-4 text-xs">
-              <div>
-                <label className="block text-slate-400 mb-1 font-medium">نام کالا</label>
-                <input
-                  type="text"
-                  required
-                  value={newProdName}
-                  onChange={(e) => setNewProdName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 focus:outline-none focus:border-indigo-500"
-                  placeholder="مثال: پنیر پیتزا موزارلا ۲ کیلوگرمی"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <CategorySelectPicker
-                  selectedCategoryId={newProdCat}
-                  onSelectCategory={setNewProdCat}
-                />
-                <BrandSelectPicker
-                  selectedBrand={newProdBrand}
-                  onSelectBrand={setNewProdBrand}
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 mb-1 font-medium">واحد سنجش</label>
-                <select
-                  value={newProdUnit}
-                  onChange={(e) => setNewProdUnit(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 focus:outline-none focus:border-indigo-500"
-                >
-                  <option value="عدد">عدد</option>
-                  <option value="باکس">باکس</option>
-                  <option value="بسته">بسته</option>
-                  <option value="کیلوگرم">کیلوگرم</option>
-                  <option value="سطل">سطل</option>
-                  <option value="جعبه">جعبه</option>
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-400 mb-1 font-medium">قیمت مصوب فروش (تومان)</label>
-                  <input
-                    type="number"
-                    required
-                    min="1000"
-                    value={newProdPrice || ''}
-                    onChange={(e) => setNewProdPrice(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-indigo-500"
-                    placeholder="مثال: 85000"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-400 mb-1 font-medium">موجودی اولیه فیزیکی سردخانه</label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={newProdStock || ''}
-                    onChange={(e) => setNewProdStock(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-indigo-500"
-                    placeholder="50"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 cursor-pointer"
-                >
-                  انصراف
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold cursor-pointer transition shadow-md"
-                >
-                  ذخیره و ورود به سردخانه
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <NewProductModal
+        isOpen={isNewProductModalOpen}
+        categories={categories}
+        brands={brands}
+        onClose={() => setIsNewProductModalOpen(false)}
+        onSubmit={handleCreateProduct}
+      />
     </div>
   );
 };

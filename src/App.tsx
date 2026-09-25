@@ -89,14 +89,30 @@ export const App: React.FC = () => {
     );
   }
 
+  const [adminActiveTab, setAdminActiveTab] = useState<'overview' | 'orders' | 'products' | 'team' | 'reports'>('overview');
+  const [warehouseActiveTab, setWarehouseActiveTab] = useState<'pending' | 'history'>('pending');
+
   // Render main screen matching the route
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-blue-600 selection:text-white">
-      <Header currentPath={currentPath} onNavigate={navigateTo} />
+      <Header
+        currentPath={currentPath}
+        onNavigate={navigateTo}
+      />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
         {currentPath === '/admin' ? (
-          role === 'warehouse' ? <WarehousePanel /> : <AdminPanel />
+          role === 'warehouse' ? (
+            <WarehousePanel
+              activeTab={warehouseActiveTab}
+              onTabChange={setWarehouseActiveTab}
+            />
+          ) : (
+            <AdminPanel
+              activeTab={adminActiveTab}
+              onTabChange={setAdminActiveTab}
+            />
+          )
         ) : currentPath === '/visitor' ? (
           <VisitorPortal />
         ) : (

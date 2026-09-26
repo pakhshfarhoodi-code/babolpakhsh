@@ -198,6 +198,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setBrands: catalog.setBrands,
     setReassignmentRequests: orders.setReassignmentRequests,
     setSupermarkets,
+    setVisitors,
+    setLoadingBills: warehouse.setLoadingBills,
+    setInventoryTransactions: warehouse.setInventoryTransactions,
   });
 
   // Reset to default factory state

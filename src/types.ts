@@ -182,3 +182,12 @@ export interface UpdateSupermarketPayload {
   assigned_visitor_id: string;
   is_active: boolean;
 }
+
+export interface UpdateVisitorPayload {
+  name?: string;
+  phone?: string;
+  region?: string;
+  username?: string;
+  is_active?: boolean;
+}
+

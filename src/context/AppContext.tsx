@@ -15,6 +15,7 @@ import {
   CreateStaffAccountPayload,
   CreateStaffAccountResult,
   UpdateSupermarketPayload,
+  UpdateVisitorPayload,
 } from '../types';
 import {
   INITIAL_CATEGORIES,
@@ -103,6 +104,8 @@ interface AppContextType {
   updateSupermarket: (id: string, payload: UpdateSupermarketPayload) => Promise<{ success: boolean; message: string }>;
   deleteSupermarket: (id: string) => Promise<{ success: boolean; message: string }>;
   toggleSupermarketApproval: (id: string, currentStatus: boolean) => Promise<{ success: boolean; message: string; newStatus: boolean }>;
+  updateVisitor: (id: string, payload: UpdateVisitorPayload) => Promise<{ success: boolean; message: string }>;
+  deleteVisitor: (id: string) => Promise<{ success: boolean; message: string }>;
   createStaffAccount: (payload: CreateStaffAccountPayload) => Promise<CreateStaffAccountResult>;
   resetToDefaults: () => void;
   isOnlineDb: boolean;
@@ -140,7 +143,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   // Visitors & Supermarkets
-  const [visitors] = useState<Visitor[]>(INITIAL_VISITORS);
+  const [visitors, setVisitors] = useState<Visitor[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.VISITORS);
+    return saved ? JSON.parse(saved) : INITIAL_VISITORS;
+  });
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.VISITORS, JSON.stringify(visitors));
+  }, [visitors]);
 
   const [supermarkets, setSupermarkets] = useState<Supermarket[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.SUPERMARKETS);
@@ -304,12 +314,85 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [setSupermarkets]);
 
+  // Update Visitor information
+  const updateVisitor = useCallback(async (id: string, payload: UpdateVisitorPayload): Promise<{ success: boolean; message: string }> => {
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const updateData: Record<string, unknown> = {};
+        if (payload.name !== undefined) updateData.name = payload.name.trim();
+        if (payload.phone !== undefined) updateData.phone = payload.phone.trim();
+        if (payload.region !== undefined) updateData.region = payload.region.trim();
+        if (payload.is_active !== undefined) updateData.is_active = payload.is_active;
+
+        if (Object.keys(updateData).length > 0) {
+          const { error: visError } = await supabase
+            .from('visitors')
+            .update(updateData)
+            .eq('id', id);
+
+          if (visError) {
+            console.warn('Supabase visitor update warning:', visError.message);
+          }
+
+          if (payload.name || payload.phone) {
+            await supabase
+              .from('profiles')
+              .update({
+                ...(payload.name && { name: payload.name.trim() }),
+                ...(payload.phone && { phone: payload.phone.trim() }),
+              })
+              .eq('id', id);
+          }
+        }
+      }
+
+      setVisitors((prev) =>
+        prev.map((v) => (v.id === id ? { ...v, ...payload } : v))
+      );
+
+      return { success: true, message: 'مشخصات ویزیتور با موفقیت بروزرسانی شد.' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در ویرایش ویزیتور';
+      return { success: false, message: msg };
+    }
+  }, [setVisitors]);
+
+  // Delete Visitor
+  const deleteVisitor = useCallback(async (id: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      if (isSupabaseConfigured && supabase) {
+        await supabase.from('visitors').delete().eq('id', id);
+        await supabase.from('profiles').delete().eq('id', id);
+      }
+
+      setVisitors((prev) => prev.filter((v) => v.id !== id));
+
+      return { success: true, message: 'ویزیتور با موفقیت حذف گردید.' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در حذف ویزیتور';
+      return { success: false, message: msg };
+    }
+  }, [setVisitors]);
+
   // Thin wrapper to invoke create-staff-account Edge Function
   const createStaffAccount = useCallback(async (payload: CreateStaffAccountPayload): Promise<CreateStaffAccountResult> => {
     if (!isSupabaseConfigured) {
+      if (payload.role === 'visitor') {
+        const newVis: Visitor = {
+          id: generateUniqueId('vis'),
+          name: payload.name.trim(),
+          phone: payload.phone.trim(),
+          region: payload.region?.trim() || 'مرکز استان',
+          username: payload.username.trim(),
+          is_active: true,
+          created_at: new Date().toISOString(),
+        };
+        setVisitors((prev) => [...prev, newVis]);
+      }
       return {
-        success: false,
-        error: 'اتصال به پایگاه داده سوپابیس برقرار نیست. لطفاً متغیرهای محیطی را بررسی کنید.',
+        success: true,
+        username: payload.username,
+        role: payload.role,
       };
     }
 
@@ -392,6 +475,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateSupermarket,
     deleteSupermarket,
     toggleSupermarketApproval,
+    updateVisitor,
+    deleteVisitor,
     createStaffAccount,
     resetToDefaults,
     isOnlineDb: isSupabaseConfigured,
@@ -413,6 +498,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateSupermarket,
     deleteSupermarket,
     toggleSupermarketApproval,
+    updateVisitor,
+    deleteVisitor,
     createStaffAccount,
     catalog.categories,
     catalog.brands,

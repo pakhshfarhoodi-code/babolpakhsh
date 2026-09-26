@@ -38,13 +38,44 @@ export const TeamTab: React.FC<TeamTabProps> = ({
   supermarkets,
   orders,
 }) => {
-  const { createStaffAccount, updateSupermarket, deleteSupermarket, toggleSupermarketApproval } = useApp();
+  const {
+    createStaffAccount,
+    updateSupermarket,
+    deleteSupermarket,
+    toggleSupermarketApproval,
+    updateVisitor,
+    deleteVisitor,
+  } = useApp();
   const [selectedVisitorFilter, setSelectedVisitorFilter] = useState<string | null>(null);
   const [storeSearchTerm, setStoreSearchTerm] = useState('');
   const [storeStatusFilter, setStoreStatusFilter] = useState<'all' | 'pending' | 'approved'>('all');
   const [isRegisterStoreModalOpen, setIsRegisterStoreModalOpen] = useState(false);
   const [togglingStoreId, setTogglingStoreId] = useState<string | null>(null);
   const [toastNotification, setToastNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Edit Visitor State
+  const [editingVisitor, setEditingVisitor] = useState<Visitor | null>(null);
+  const [visitorEditForm, setVisitorEditForm] = useState<{
+    name: string;
+    phone: string;
+    region: string;
+    username: string;
+    is_active: boolean;
+  }>({
+    name: '',
+    phone: '',
+    region: '',
+    username: '',
+    is_active: true,
+  });
+  const [isUpdatingVisitor, setIsUpdatingVisitor] = useState(false);
+  const [editVisitorError, setEditVisitorError] = useState<string | null>(null);
+  const [editVisitorSuccess, setEditVisitorSuccess] = useState<string | null>(null);
+
+  // Delete Visitor State
+  const [deletingVisitor, setDeletingVisitor] = useState<Visitor | null>(null);
+  const [isDeletingVisitor, setIsDeletingVisitor] = useState(false);
+  const [deleteVisitorError, setDeleteVisitorError] = useState<string | null>(null);
 
   // Edit Supermarket State
   const [editingSupermarket, setEditingSupermarket] = useState<Supermarket | null>(null);
@@ -252,6 +283,85 @@ export const TeamTab: React.FC<TeamTabProps> = ({
     }
   };
 
+  // Visitor Edit & Delete Handlers
+  const handleStartEditVisitor = (visitor: Visitor) => {
+    setEditingVisitor(visitor);
+    setVisitorEditForm({
+      name: visitor.name || '',
+      phone: visitor.phone || '',
+      region: visitor.region || '',
+      username: visitor.username || '',
+      is_active: visitor.is_active ?? true,
+    });
+    setEditVisitorError(null);
+    setEditVisitorSuccess(null);
+  };
+
+  const handleSaveVisitorEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingVisitor) return;
+
+    if (!visitorEditForm.name.trim()) {
+      setEditVisitorError('لطفاً نام و نام خانوادگی ویزیتور را وارد نمایید.');
+      return;
+    }
+    if (!visitorEditForm.phone.trim()) {
+      setEditVisitorError('لطفاً شماره همراه ویزیتور را وارد نمایید.');
+      return;
+    }
+
+    setIsUpdatingVisitor(true);
+    setEditVisitorError(null);
+    setEditVisitorSuccess(null);
+
+    try {
+      const res = await updateVisitor(editingVisitor.id, {
+        name: visitorEditForm.name.trim(),
+        phone: visitorEditForm.phone.trim(),
+        region: visitorEditForm.region.trim(),
+        username: visitorEditForm.username.trim(),
+        is_active: visitorEditForm.is_active,
+      });
+
+      if (res.success) {
+        setEditVisitorSuccess('مشخصات ویزیتور با موفقیت بروزرسانی شد.');
+        setTimeout(() => {
+          setEditingVisitor(null);
+          setEditVisitorSuccess(null);
+        }, 1200);
+      } else {
+        setEditVisitorError(res.message || 'خطا در ویرایش ویزیتور');
+      }
+    } catch (err: unknown) {
+      setEditVisitorError('خطایی در فرایند بروزرسانی ویزیتور رخ داد.');
+    } finally {
+      setIsUpdatingVisitor(false);
+    }
+  };
+
+  const handleConfirmDeleteVisitor = async () => {
+    if (!deletingVisitor) return;
+    setIsDeletingVisitor(true);
+    setDeleteVisitorError(null);
+
+    try {
+      const res = await deleteVisitor(deletingVisitor.id);
+      if (res.success) {
+        setToastNotification({
+          type: 'success',
+          message: `ویزیتور «${deletingVisitor.name}» با موفقیت حذف گردید.`,
+        });
+        setDeletingVisitor(null);
+      } else {
+        setDeleteVisitorError(res.message || 'خطا در حذف ویزیتور');
+      }
+    } catch (err: unknown) {
+      setDeleteVisitorError('خطایی در فرایند حذف ویزیتور به وجود آمد.');
+    } finally {
+      setIsDeletingVisitor(false);
+    }
+  };
+
   // Quick Toggle Supermarket Approval / Active Check
   const handleToggleApproval = async (shop: Supermarket) => {
     setTogglingStoreId(shop.id);
@@ -398,14 +508,30 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                       </span>
                     </button>
 
-                    <button
-                      type="button"
-                      disabled
-                      title="ویرایش ویزیتور در آپدیت بعدی فعال خواهد شد"
-                      className="text-slate-500 hover:text-slate-400 cursor-not-allowed text-xs"
-                    >
-                      ویرایش ویزیتور
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleStartEditVisitor(visitor)}
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 transition flex items-center gap-1 cursor-pointer"
+                        title="ویرایش مشخصات ویزیتور"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                        <span>ویرایش</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDeletingVisitor(visitor);
+                          setDeleteVisitorError(null);
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition flex items-center gap-1 cursor-pointer"
+                        title="حذف ویزیتور"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>حذف</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -1137,6 +1263,203 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                   <>
                     <Trash2 className="w-4 h-4" />
                     <span>تایید و حذف</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Visitor Modal */}
+      {editingVisitor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl p-5 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center border border-amber-500/30">
+                  <Edit2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-100">ویرایش مشخصات ویزیتور</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">ویرایش اطلاعات «{editingVisitor.name}»</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingVisitor(null);
+                  setEditVisitorError(null);
+                  setEditVisitorSuccess(null);
+                }}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {editVisitorError && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-2 text-rose-400 text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{editVisitorError}</span>
+              </div>
+            )}
+
+            {editVisitorSuccess && (
+              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-start gap-2 text-emerald-400 text-xs">
+                <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{editVisitorSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveVisitorEdit} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">نام و نام خانوادگی ویزیتور</label>
+                <input
+                  type="text"
+                  value={visitorEditForm.name}
+                  onChange={(e) => setVisitorEditForm({ ...visitorEditForm, name: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-xs focus:outline-hidden focus:border-amber-500"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">شماره تماس</label>
+                  <input
+                    type="text"
+                    value={visitorEditForm.phone}
+                    onChange={(e) => setVisitorEditForm({ ...visitorEditForm, phone: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-xs focus:outline-hidden focus:border-amber-500 font-mono"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">منطقه فعالیت</label>
+                  <input
+                    type="text"
+                    value={visitorEditForm.region}
+                    onChange={(e) => setVisitorEditForm({ ...visitorEditForm, region: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-xs focus:outline-hidden focus:border-amber-500"
+                    placeholder="مثلاً: بابل و حومه"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">نام کاربری جهت ورود</label>
+                <input
+                  type="text"
+                  value={visitorEditForm.username}
+                  onChange={(e) => setVisitorEditForm({ ...visitorEditForm, username: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-xs focus:outline-hidden focus:border-amber-500 font-mono"
+                  placeholder="آیدی ورود"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <input
+                  type="checkbox"
+                  id="visitor-active-toggle"
+                  checked={visitorEditForm.is_active}
+                  onChange={(e) => setVisitorEditForm({ ...visitorEditForm, is_active: e.target.checked })}
+                  className="rounded border-slate-700 text-amber-500 focus:ring-amber-500 bg-slate-950"
+                />
+                <label htmlFor="visitor-active-toggle" className="text-xs text-slate-300 font-medium cursor-pointer">
+                  حساب فعال است و اجازه ثبت سفارش دارد
+                </label>
+              </div>
+
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingVisitor(null);
+                    setEditVisitorError(null);
+                    setEditVisitorSuccess(null);
+                  }}
+                  disabled={isUpdatingVisitor}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition cursor-pointer disabled:opacity-50"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingVisitor}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 active:scale-95 text-white text-xs font-bold transition shadow-md shadow-amber-600/30 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isUpdatingVisitor ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>در حال ذخیره...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>ذخیره تغییرات</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Visitor Confirmation Modal */}
+      {deletingVisitor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-5 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/15 text-rose-400 flex items-center justify-center shrink-0 border border-rose-500/30">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-slate-100">حذف ویزیتور</h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  آیا از حذف ویزیتور <strong className="text-white font-bold">{deletingVisitor.name}</strong> (منطقه {deletingVisitor.region}) اطمینان دارید؟
+                </p>
+                <p className="text-[11px] text-rose-400/90 pt-1">
+                  توجه: با حذف ویزیتور، فروشگاه‌های تحت پوشش وی باقی می‌مانند و می‌توانید آن‌ها را به ویزیتور دیگری اختصاص دهید.
+                </p>
+              </div>
+            </div>
+
+            {deleteVisitorError && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-2 text-rose-400 text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{deleteVisitorError}</span>
+              </div>
+            )}
+
+            <div className="pt-2 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeletingVisitor(null);
+                  setDeleteVisitorError(null);
+                }}
+                disabled={isDeletingVisitor}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition cursor-pointer disabled:opacity-50"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteVisitor}
+                disabled={isDeletingVisitor}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white text-xs font-bold transition shadow-md shadow-rose-600/30 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isDeletingVisitor ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>در حال حذف...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>تایید و حذف ویزیتور</span>
                   </>
                 )}
               </button>

@@ -12,6 +12,7 @@ export const STORAGE_KEYS = {
   TRANSACTIONS: 'alborz_tx_v1',
   PRICE_HISTORIES: 'alborz_price_histories_v1',
   SUPERMARKETS: 'alborz_supermarkets_v1',
+  VISITORS: 'alborz_visitors_v1',
 } as const;
 
 // Collision-free unique ID generator using crypto.randomUUID

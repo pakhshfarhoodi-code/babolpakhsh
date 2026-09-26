@@ -191,7 +191,7 @@ export const Header: React.FC<HeaderProps> = () => {
                   <ShieldCheck className="w-3 h-3" />
                   <span>مدیریت</span>
                   {pendingReassignments > 0 && (
-                    <span className="px-1 py-0.2 rounded-full text-[10px] font-black bg-amber-400 text-slate-950">
+                    <span className="px-1.5 py-0.5 rounded-full text-xs font-black bg-amber-400 text-slate-950">
                       {pendingReassignments}
                     </span>
                   )}
@@ -210,7 +210,7 @@ export const Header: React.FC<HeaderProps> = () => {
                   <Warehouse className="w-3 h-3" />
                   <span>انبار</span>
                   {pendingLoadingBills > 0 && (
-                    <span className="px-1 py-0.2 rounded-full text-[10px] font-black bg-amber-400 text-slate-950">
+                    <span className="px-1.5 py-0.5 rounded-full text-xs font-black bg-amber-400 text-slate-950">
                       {pendingLoadingBills}
                     </span>
                   )}

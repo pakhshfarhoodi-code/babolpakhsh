@@ -118,7 +118,7 @@ export const VisitorPortal: React.FC = () => {
             <Truck className="w-4 h-4" />
             <span>امروز</span>
             {pendingDeliveryOrders.length > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500 text-slate-950 font-black">
+              <span className="px-1.5 py-0.5 rounded-full text-xs bg-amber-500 text-slate-950 font-black">
                 {pendingDeliveryOrders.length}
               </span>
             )}
@@ -135,7 +135,7 @@ export const VisitorPortal: React.FC = () => {
           >
             <Users className="w-4 h-4" />
             <span>مشتریان</span>
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-950 text-slate-400 border border-slate-800">
+            <span className="px-1.5 py-0.5 rounded-full text-xs bg-slate-950 text-slate-400 border border-slate-800">
               {mySupermarkets.length}
             </span>
           </button>
@@ -213,12 +213,12 @@ export const VisitorPortal: React.FC = () => {
             <div className="relative">
               <Truck className="w-5 h-5" />
               {pendingDeliveryOrders.length > 0 && (
-                <span className="absolute -top-1.5 -right-2 w-4 h-4 rounded-full bg-amber-500 text-slate-950 text-[9px] font-black flex items-center justify-center">
+                <span className="absolute -top-1.5 -right-2 w-4 h-4 rounded-full bg-amber-500 text-slate-950 text-xs font-black flex items-center justify-center">
                   {pendingDeliveryOrders.length}
                 </span>
               )}
             </div>
-            <span className="text-[11px] mt-0.5">امروز</span>
+            <span className="text-xs mt-0.5">امروز</span>
           </button>
 
           {/* Center Floating Action Button: + New Order */}
@@ -242,7 +242,7 @@ export const VisitorPortal: React.FC = () => {
             }`}
           >
             <Users className="w-5 h-5" />
-            <span className="text-[11px] mt-0.5">مشتریان</span>
+            <span className="text-xs mt-0.5">مشتریان</span>
           </button>
 
           {/* Tab 3: Reports */}
@@ -254,7 +254,7 @@ export const VisitorPortal: React.FC = () => {
             }`}
           >
             <BarChart3 className="w-5 h-5" />
-            <span className="text-[11px] mt-0.5">گزارش‌ها</span>
+            <span className="text-xs mt-0.5">گزارش‌ها</span>
           </button>
         </div>
       </div>

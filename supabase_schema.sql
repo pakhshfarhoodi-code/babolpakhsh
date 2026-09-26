@@ -80,9 +80,10 @@ CREATE TABLE orders (
   supermarket_name TEXT NOT NULL,
   assigned_visitor_id TEXT REFERENCES visitors(id) ON DELETE RESTRICT,
   visitor_name TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'assigned' CHECK (status IN ('assigned', 'delegated', 'delivered', 'undelivered')),
+  status TEXT NOT NULL DEFAULT 'assigned' CHECK (status IN ('assigned', 'loading', 'delegated', 'delivered', 'undelivered')),
   total_amount NUMERIC NOT NULL DEFAULT 0 CHECK (total_amount >= 0),
   reassignment_id TEXT, -- References reassignment_requests if under negotiation
+  loading_bill_id TEXT REFERENCES loading_bills(id) ON DELETE SET NULL,
   order_date TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -261,6 +262,8 @@ $$ LANGUAGE sql SECURITY DEFINER;
 -- 18.1. Profiles Policies
 CREATE POLICY "Allow read profiles for authenticated" ON profiles FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Admin full access profiles" ON profiles FOR ALL TO authenticated USING (get_user_role() IN ('admin', 'superadmin'));
+CREATE POLICY "Users can insert own profile" ON profiles FOR INSERT TO authenticated WITH CHECK (id = auth.uid()::text);
+CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE TO authenticated USING (id = auth.uid()::text);
 
 -- 18.2. Categories Policies
 CREATE POLICY "Allow read categories for authenticated" ON categories FOR SELECT TO authenticated USING (true);
@@ -285,6 +288,8 @@ CREATE POLICY "Supermarkets read policy" ON supermarkets FOR SELECT TO authentic
   (get_user_role() = 'supermarket' AND id = auth.uid()::text)
 );
 CREATE POLICY "Admin manage supermarkets" ON supermarkets FOR ALL TO authenticated USING (get_user_role() IN ('admin', 'superadmin'));
+CREATE POLICY "Supermarkets can insert own record" ON supermarkets FOR INSERT TO authenticated WITH CHECK (id = auth.uid()::text);
+CREATE POLICY "Supermarkets can update own record" ON supermarkets FOR UPDATE TO authenticated USING (id = auth.uid()::text);
 
 -- 18.7. Orders Policies
 CREATE POLICY "Orders read policy" ON orders FOR SELECT TO authenticated USING (

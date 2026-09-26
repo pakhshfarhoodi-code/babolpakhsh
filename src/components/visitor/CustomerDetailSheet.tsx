@@ -91,15 +91,15 @@ export const CustomerDetailSheet: React.FC<CustomerDetailSheetProps> = ({
           {/* Quick Metrics */}
           <div className="grid grid-cols-2 gap-2.5">
             <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800">
-              <p className="text-[11px] text-slate-400">مجموع خرید تاریخچه</p>
+              <p className="text-xs text-slate-400">مجموع خرید تاریخچه</p>
               <p className="text-sm font-bold text-emerald-400 mt-1">
-                {formatPrice(totalPurchases)} <span className="text-[10px] text-slate-400">تومان</span>
+                {formatPrice(totalPurchases)} <span className="text-xs text-slate-400">تومان</span>
               </p>
             </div>
             <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800">
-              <p className="text-[11px] text-slate-400">تعداد کل سفارش‌ها</p>
+              <p className="text-xs text-slate-400">تعداد کل سفارش‌ها</p>
               <p className="text-sm font-bold text-blue-400 mt-1">
-                {customerOrders.length} <span className="text-[10px] text-slate-400">فاکتور</span>
+                {customerOrders.length} <span className="text-xs text-slate-400">فاکتور</span>
               </p>
             </div>
           </div>
@@ -111,7 +111,7 @@ export const CustomerDetailSheet: React.FC<CustomerDetailSheetProps> = ({
                 <Receipt className="w-3.5 h-3.5 text-blue-400" />
                 <span>۳ سفارش اخیر این فروشگاه</span>
               </h4>
-              <span className="text-[11px] text-slate-400">از کل {customerOrders.length} سفارش</span>
+              <span className="text-xs text-slate-400">از کل {customerOrders.length} سفارش</span>
             </div>
 
             {recentOrders.length === 0 ? (
@@ -128,10 +128,10 @@ export const CustomerDetailSheet: React.FC<CustomerDetailSheetProps> = ({
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-blue-400 font-mono">{ord.id}</span>
-                        <span className="text-[11px] text-slate-400">{ord.order_date}</span>
+                        <span className="text-xs text-slate-400">{ord.order_date}</span>
                       </div>
                       <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${
+                        className={`px-2 py-0.5 rounded-full text-xs font-medium border ${
                           ord.status === 'delivered'
                             ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                             : ord.status === 'undelivered'
@@ -148,11 +148,11 @@ export const CustomerDetailSheet: React.FC<CustomerDetailSheetProps> = ({
                     </div>
 
                     {ord.items && ord.items.length > 0 && (
-                      <div className="flex flex-wrap gap-1 text-[11px] text-slate-300">
+                      <div className="flex flex-wrap gap-1 text-xs text-slate-300">
                         {ord.items.map((it) => (
                           <span
                             key={it.id}
-                            className="bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded text-[10px]"
+                            className="bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded text-xs"
                           >
                             {it.name} ({it.quantity})
                           </span>

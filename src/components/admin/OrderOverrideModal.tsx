@@ -24,6 +24,7 @@ export const OrderOverrideModal: React.FC<OrderOverrideModalProps> = ({
 
   const statusTitleMap: Record<OrderStatus, string> = {
     assigned: 'آماده ارسال (تخصیص‌یافته)',
+    loading: 'در حال بارگیری (حواله سردخانه)',
     delegated: 'در حال واگذاری به همکار',
     delivered: 'تحویل داده شد (موفق)',
     undelivered: 'عدم تحویل (برگشتی)',

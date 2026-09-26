@@ -1,12 +1,28 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import fs from 'fs';
 import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
     base: './',
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      {
+        name: 'inject-sw-build-version',
+        closeBundle() {
+          const swPath = path.resolve(__dirname, 'dist/sw.js');
+          if (fs.existsSync(swPath)) {
+            const buildTimestamp = Date.now().toString();
+            let content = fs.readFileSync(swPath, 'utf-8');
+            content = content.replace(/__BUILD_TIMESTAMP__/g, buildTimestamp);
+            fs.writeFileSync(swPath, content, 'utf-8');
+          }
+        },
+      },
+    ],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),

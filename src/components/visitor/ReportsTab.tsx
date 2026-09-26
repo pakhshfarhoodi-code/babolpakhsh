@@ -256,34 +256,34 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 shadow-sm">
-          <p className="text-[11px] text-slate-400">مجموع فروش دوره</p>
+          <p className="text-xs text-slate-400">مجموع فروش دوره</p>
           <p className="text-base sm:text-lg font-black text-emerald-400 mt-1">
             {formatPrice(aggregatedStats.totalRevenue)}{' '}
-            <span className="text-[10px] font-normal text-slate-400">تومان</span>
+            <span className="text-xs font-normal text-slate-400">تومان</span>
           </p>
         </div>
 
         <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 shadow-sm">
-          <p className="text-[11px] text-slate-400">تعداد کل فاکتورها</p>
+          <p className="text-xs text-slate-400">تعداد کل فاکتورها</p>
           <p className="text-base sm:text-lg font-black text-blue-400 mt-1">
             {aggregatedStats.totalOrdersCount}{' '}
-            <span className="text-[10px] font-normal text-slate-400">سفارش</span>
+            <span className="text-xs font-normal text-slate-400">سفارش</span>
           </p>
         </div>
 
         <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 shadow-sm">
-          <p className="text-[11px] text-slate-400">میانگین هر سفارش</p>
+          <p className="text-xs text-slate-400">میانگین هر سفارش</p>
           <p className="text-base sm:text-lg font-black text-amber-400 mt-1">
             {formatPrice(aggregatedStats.avgOrderValue)}{' '}
-            <span className="text-[10px] font-normal text-slate-400">تومان</span>
+            <span className="text-xs font-normal text-slate-400">تومان</span>
           </p>
         </div>
 
         <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 shadow-sm">
-          <p className="text-[11px] text-slate-400">مشتریان تحت پوشش</p>
+          <p className="text-xs text-slate-400">مشتریان تحت پوشش</p>
           <p className="text-base sm:text-lg font-black text-purple-400 mt-1">
             {aggregatedStats.activeCustomerCount}{' '}
-            <span className="text-[10px] font-normal text-slate-400">فروشگاه</span>
+            <span className="text-xs font-normal text-slate-400">فروشگاه</span>
           </p>
         </div>
       </div>
@@ -328,10 +328,10 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
                   >
                     <td className="py-3 px-3">
                       <div className="font-bold text-slate-100">{item.supermarket.name}</div>
-                      <p className="text-[11px] text-slate-400">{item.supermarket.owner}</p>
+                      <p className="text-xs text-slate-400">{item.supermarket.owner}</p>
                     </td>
                     <td className="py-3 px-3 text-center">
-                      <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-200 font-bold text-[11px]">
+                      <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-200 font-bold text-xs">
                         {item.ordersCount}
                       </span>
                     </td>
@@ -339,7 +339,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
                       <span className="font-bold text-emerald-400">
                         {formatPrice(item.totalPurchases)}
                       </span>{' '}
-                      <span className="text-[10px] text-slate-400">تومان</span>
+                      <span className="text-xs text-slate-400">تومان</span>
                     </td>
                     <td className="py-3 px-3">
                       <div className="flex items-center gap-1.5">
@@ -349,7 +349,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
                             style={{ width: `${Math.min(100, item.sharePercent)}%` }}
                           />
                         </div>
-                        <span className="text-[11px] text-slate-300 font-bold">{item.sharePercent}%</span>
+                        <span className="text-xs text-slate-300 font-bold">{item.sharePercent}%</span>
                       </div>
                     </td>
                     <td className="py-3 px-3 text-center">
@@ -381,7 +381,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
                 <h4 className="font-bold text-sm text-slate-100">
                   کارنامه تفصیلی «{activeCustomerReport.supermarket.name}»
                 </h4>
-                <p className="text-[11px] text-slate-400 mt-0.5">
+                <p className="text-xs text-slate-400 mt-0.5">
                   مدیریت: {activeCustomerReport.supermarket.owner} | تلفن: {activeCustomerReport.supermarket.phone}
                 </p>
               </div>
@@ -408,13 +408,13 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
 
           <div className="grid grid-cols-2 gap-2.5">
             <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-              <p className="text-[11px] text-slate-400">مجموع خرید در بازه</p>
+              <p className="text-xs text-slate-400">مجموع خرید در بازه</p>
               <p className="text-sm font-bold text-emerald-400 mt-1">
                 {formatPrice(activeCustomerReport.totalAmount)} تومان
               </p>
             </div>
             <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-              <p className="text-[11px] text-slate-400">تعداد فاکتورها</p>
+              <p className="text-xs text-slate-400">تعداد فاکتورها</p>
               <p className="text-sm font-bold text-blue-400 mt-1">
                 {activeCustomerReport.ordersCount} فاکتور
               </p>
@@ -431,10 +431,10 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-blue-400">{ord.id}</span>
-                    <span className="text-[11px] text-slate-400">{ord.order_date}</span>
+                    <span className="text-xs text-slate-400">{ord.order_date}</span>
                   </div>
                   {ord.items && (
-                    <p className="text-[11px] text-slate-400 mt-0.5 truncate max-w-xs">
+                    <p className="text-xs text-slate-400 mt-0.5 truncate max-w-xs">
                       {ord.items.map((i) => `${i.name} (${i.quantity})`).join('، ')}
                     </p>
                   )}
@@ -442,7 +442,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
                 <div className="text-left shrink-0">
                   <div className="font-bold text-slate-200">{formatPrice(ord.total_amount)} تومان</div>
                   <span
-                    className={`text-[10px] font-medium ${
+                    className={`text-xs font-medium ${
                       ord.status === 'delivered' ? 'text-emerald-400' : 'text-amber-400'
                     }`}
                   >

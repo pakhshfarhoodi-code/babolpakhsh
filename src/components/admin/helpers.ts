@@ -35,6 +35,29 @@ export const getTodayJalali = (): JalaliDateParts => {
 
 export const parseJalaliDate = (dateStr?: string): JalaliDateParts | null => {
   if (!dateStr) return null;
+
+  // 1. Check if dateStr is an ISO 8601 or Gregorian timestamp (from Supabase or toISOString)
+  if (dateStr.includes('T') || (dateStr.startsWith('20') && !isNaN(Date.parse(dateStr)))) {
+    const parsedDate = new Date(dateStr);
+    if (!isNaN(parsedDate.getTime())) {
+      try {
+        const parts = new Intl.DateTimeFormat('fa-IR-u-nu-latn', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        }).format(parsedDate).split(/[\/\-]/);
+        return {
+          year: parseInt(parts[0], 10),
+          month: parseInt(parts[1], 10),
+          day: parseInt(parts[2], 10),
+        };
+      } catch {
+        // fallback
+      }
+    }
+  }
+
+  // 2. Otherwise parse as Jalali string
   const norm = toEnglishDigits(dateStr);
   const match = norm.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
   if (!match) return null;
@@ -81,6 +104,23 @@ export const isWithinDays = (dateStr: string | undefined, daysLimit: number): bo
 
 export const formatPrice = (price: number): string => {
   return price.toLocaleString('fa-IR');
+};
+
+export const formatOrderDate = (dateStr?: string): string => {
+  if (!dateStr) return '';
+  if (dateStr.includes('T') || (dateStr.startsWith('20') && !isNaN(Date.parse(dateStr)))) {
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+      return new Intl.DateTimeFormat('fa-IR', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(d);
+    }
+  }
+  return dateStr;
 };
 
 // Check if a store had no orders in last 30 days

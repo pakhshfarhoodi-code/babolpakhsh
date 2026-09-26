@@ -11,7 +11,7 @@ import {
   Calendar,
   Filter,
 } from 'lucide-react';
-import { isToday, isWithinDays, formatPrice } from './helpers';
+import { isToday, isWithinDays, formatPrice, formatOrderDate } from './helpers';
 import { OrderOverrideModal } from './OrderOverrideModal';
 
 interface OrdersTabProps {
@@ -206,6 +206,10 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                       text: 'آماده ارسال',
                       bg: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
                     },
+                    loading: {
+                      text: 'در حال بارگیری',
+                      bg: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30',
+                    },
                     delegated: {
                       text: 'در حال واگذاری',
                       bg: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
@@ -237,7 +241,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                       <td className="py-3 px-4 font-bold text-slate-100">
                         {formatPrice(order.total_amount)}
                       </td>
-                      <td className="py-3 px-4 text-slate-400 font-mono">{order.order_date}</td>
+                      <td className="py-3 px-4 text-slate-400 font-mono">{formatOrderDate(order.order_date)}</td>
                       <td className="py-3 px-4 text-center">
                         <span
                           className={`inline-block px-2.5 py-0.5 rounded-full font-medium border text-xs ${currentStatus.bg}`}

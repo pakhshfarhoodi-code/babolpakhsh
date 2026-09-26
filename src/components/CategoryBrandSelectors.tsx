@@ -134,7 +134,7 @@ export const CategorySelectPicker: React.FC<CategorySelectPickerProps> = ({
 
       {feedback && (
         <div
-          className={`mb-2 p-2 rounded-lg text-[11px] font-medium transition ${
+          className={`mb-2 p-2 rounded-lg text-xs font-medium transition ${
             feedback.type === 'success'
               ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
               : 'bg-rose-500/15 border border-rose-500/30 text-rose-300'
@@ -147,7 +147,7 @@ export const CategorySelectPicker: React.FC<CategorySelectPickerProps> = ({
       {/* Inline Add Category Form */}
       {isAdding && (
         <form onSubmit={handleAddSubmit} className="mb-2 p-2.5 bg-blue-950/70 border border-blue-800/80 rounded-xl space-y-2">
-          <div className="flex items-center justify-between text-[11px] text-blue-300 font-semibold">
+          <div className="flex items-center justify-between text-xs text-blue-300 font-semibold">
             <span>نام دسته‌بندی جدید:</span>
             <button
               type="button"
@@ -195,7 +195,7 @@ export const CategorySelectPicker: React.FC<CategorySelectPickerProps> = ({
       {/* Dropdown Options List */}
       {isOpen && (
         <div className="absolute top-full right-0 left-0 mt-1 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-800/80 p-1.5 no-scrollbar">
-          <div className="px-2 py-1 text-[10px] text-slate-400 font-medium flex items-center justify-between">
+          <div className="px-2 py-1 text-xs text-slate-400 font-medium flex items-center justify-between">
             <span>مدیریت و ویرایش با قلم (✎) یا حذف (×):</span>
             <span>{categories.length} دسته موجود</span>
           </div>
@@ -263,7 +263,7 @@ export const CategorySelectPicker: React.FC<CategorySelectPickerProps> = ({
                   {isSelected ? <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" /> : <div className="w-3.5 shrink-0" />}
                   <span className="text-xs truncate">{cat.name}</span>
                   {productCount > 0 && (
-                    <span className="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded shrink-0">
+                    <span className="text-xs text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded shrink-0">
                       {productCount} کالا
                     </span>
                   )}
@@ -471,7 +471,7 @@ export const BrandSelectPicker: React.FC<BrandSelectPickerProps> = ({
 
       {feedback && (
         <div
-          className={`mb-2 p-2 rounded-lg text-[11px] font-medium transition ${
+          className={`mb-2 p-2 rounded-lg text-xs font-medium transition ${
             feedback.type === 'success'
               ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
               : 'bg-rose-500/15 border border-rose-500/30 text-rose-300'
@@ -484,7 +484,7 @@ export const BrandSelectPicker: React.FC<BrandSelectPickerProps> = ({
       {/* Inline Add Brand Form */}
       {isAdding && (
         <form onSubmit={handleAddSubmit} className="mb-2 p-2.5 bg-amber-950/70 border border-amber-800/80 rounded-xl space-y-2">
-          <div className="flex items-center justify-between text-[11px] text-amber-300 font-semibold">
+          <div className="flex items-center justify-between text-xs text-amber-300 font-semibold">
             <span>نام برند یا کارخانه جدید:</span>
             <button
               type="button"
@@ -530,7 +530,7 @@ export const BrandSelectPicker: React.FC<BrandSelectPickerProps> = ({
       {/* Dropdown Options List */}
       {isOpen && (
         <div className="absolute top-full right-0 left-0 mt-1 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-800/80 p-1.5 no-scrollbar">
-          <div className="px-2 py-1 text-[10px] text-slate-400 font-medium flex items-center justify-between">
+          <div className="px-2 py-1 text-xs text-slate-400 font-medium flex items-center justify-between">
             <span>مدیریت و ویرایش با قلم (✎) یا حذف (×):</span>
             <span>{brands.length} برند موجود</span>
           </div>
@@ -598,7 +598,7 @@ export const BrandSelectPicker: React.FC<BrandSelectPickerProps> = ({
                   {isSelected ? <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" /> : <div className="w-3.5 shrink-0" />}
                   <span className="text-xs truncate">{brand}</span>
                   {productCount > 0 && (
-                    <span className="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded shrink-0">
+                    <span className="text-xs text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded shrink-0">
                       {productCount} کالا
                     </span>
                   )}

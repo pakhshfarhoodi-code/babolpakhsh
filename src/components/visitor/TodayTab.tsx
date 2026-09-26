@@ -64,9 +64,15 @@ export const TodayTab: React.FC<TodayTabProps> = ({
     return map;
   }, [supermarkets]);
 
-  // Pending delivery orders (assigned to this visitor)
+  // Orders eligible for new loading bill (strictly status === 'assigned' and not yet in a loading bill)
   const pendingOrders = useMemo(
-    () => orders.filter((o) => o.assigned_visitor_id === currentVisitor.id && o.status === 'assigned'),
+    () => orders.filter((o) => o.assigned_visitor_id === currentVisitor.id && o.status === 'assigned' && !o.loading_bill_id),
+    [orders, currentVisitor.id]
+  );
+
+  // Active delivery orders (both assigned and loading, ready for delivery or undelivered actions)
+  const activeDeliveryOrders = useMemo(
+    () => orders.filter((o) => o.assigned_visitor_id === currentVisitor.id && (o.status === 'assigned' || o.status === 'loading')),
     [orders, currentVisitor.id]
   );
 
@@ -93,7 +99,7 @@ export const TodayTab: React.FC<TodayTabProps> = ({
 
   // Loading bill handler
   const handleGenerateBill = () => {
-    // If none selected, default to all pending orders
+    // If none selected, default to all pending orders eligible for bill
     const targetOrderIds =
       selectedOrdersForBill.length > 0
         ? selectedOrdersForBill
@@ -120,7 +126,7 @@ export const TodayTab: React.FC<TodayTabProps> = ({
         <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-sm flex flex-col justify-between">
           <span className="text-xs text-slate-400 font-medium">سفارشات در انتظار تحویل</span>
           <div className="mt-1.5 flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-amber-400">{pendingOrders.length}</span>
+            <span className="text-2xl font-black text-amber-400">{activeDeliveryOrders.length}</span>
             <span className="text-xs text-slate-400">فاکتور فعال</span>
           </div>
         </div>
@@ -129,7 +135,7 @@ export const TodayTab: React.FC<TodayTabProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-400 font-medium">مبلغ تحویل‌شده امروز</span>
             {todayDeliveredCount > 0 && (
-              <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/50">
+              <span className="text-xs px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/50">
                 {todayDeliveredCount} موفق
               </span>
             )}
@@ -158,7 +164,7 @@ export const TodayTab: React.FC<TodayTabProps> = ({
               >
                 <div>
                   <p className="font-bold text-slate-100">{req.supermarket_name}</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
+                  <p className="text-xs text-slate-400 mt-0.5">
                     از طرف: <span className="text-slate-300 font-medium">{req.from_visitor_name}</span>
                     <span className="text-slate-500 mr-1.5">({req.timestamp})</span>
                   </p>
@@ -200,7 +206,7 @@ export const TodayTab: React.FC<TodayTabProps> = ({
               >
                 <div>
                   <p className="font-bold text-slate-200">{req.supermarket_name}</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
+                  <p className="text-xs text-slate-400 mt-0.5">
                     مقصد:{' '}
                     <span className="text-blue-300">
                       {req.to_visitor_name || 'انتشار عمومی'}
@@ -211,7 +217,7 @@ export const TodayTab: React.FC<TodayTabProps> = ({
                   type="button"
                   disabled
                   title="قابلیت لغو درخواست واگذاری به‌زودی فعال خواهد شد"
-                  className="px-2.5 py-1 rounded-lg bg-slate-800/60 text-slate-500 border border-slate-700/40 text-[11px] cursor-not-allowed"
+                  className="px-2.5 py-1 rounded-lg bg-slate-800/60 text-slate-500 border border-slate-700/40 text-xs cursor-not-allowed"
                 >
                   لغو درخواست (به‌زودی)
                 </button>
@@ -236,10 +242,10 @@ export const TodayTab: React.FC<TodayTabProps> = ({
             <Truck className="w-4 h-4 text-blue-400" />
             <span>برنامه توزیع و تحویل امروز</span>
           </h2>
-          <span className="text-xs text-slate-400">{pendingOrders.length} سفارش باقی‌مانده</span>
+          <span className="text-xs text-slate-400">{activeDeliveryOrders.length} سفارش فعال</span>
         </div>
 
-        {pendingOrders.length === 0 ? (
+        {activeDeliveryOrders.length === 0 ? (
           <div className="py-12 px-4 text-center rounded-2xl bg-slate-900/60 border border-slate-800 space-y-2">
             <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mx-auto">
               <CheckCircle2 className="w-6 h-6" />
@@ -251,7 +257,7 @@ export const TodayTab: React.FC<TodayTabProps> = ({
           </div>
         ) : (
           <div className="space-y-3">
-            {pendingOrders.map((order) => {
+            {activeDeliveryOrders.map((order) => {
               const shop = supermarketMap.get(order.supermarket_id);
               const isMenuOpen = activeMenuOrderId === order.id;
 
@@ -267,7 +273,12 @@ export const TodayTab: React.FC<TodayTabProps> = ({
                         <span className="font-bold text-sm text-slate-100 truncate">
                           {order.supermarket_name}
                         </span>
-                        <span className="text-[10px] font-mono text-slate-500">{order.id}</span>
+                        <span className="text-xs font-mono text-slate-500">{order.id}</span>
+                        {order.status === 'loading' && (
+                          <span className="text-xs px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800/50 font-medium">
+                            در حواله بارگیری
+                          </span>
+                        )}
                       </div>
 
                       {/* Address 1 Line Truncate */}
@@ -283,17 +294,17 @@ export const TodayTab: React.FC<TodayTabProps> = ({
                       <div className="font-black text-sm text-slate-100">
                         {formatPrice(order.total_amount)}
                       </div>
-                      <span className="text-[10px] text-slate-400">تومان</span>
+                      <span className="text-xs text-slate-400">تومان</span>
                     </div>
                   </div>
 
                   {/* Items Preview Chips */}
                   {order.items && order.items.length > 0 && (
-                    <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex flex-wrap gap-1.5 text-[11px] text-slate-300">
+                    <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex flex-wrap gap-1.5 text-xs text-slate-300">
                       {order.items.map((it) => (
                         <span
                           key={it.id}
-                          className="bg-slate-950 border border-slate-800 px-2 py-0.5 rounded-lg text-[10px]"
+                          className="bg-slate-950 border border-slate-800 px-2 py-0.5 rounded-lg text-xs"
                         >
                           {it.name} ({it.quantity})
                         </span>
@@ -399,7 +410,7 @@ export const TodayTab: React.FC<TodayTabProps> = ({
                 <h3 className="text-xs sm:text-sm font-bold text-slate-100">
                   صدور برگه بارگیری و حواله سردخانه
                 </h3>
-                <p className="text-[11px] text-slate-400">
+                <p className="text-xs text-slate-400">
                   ارسال فاکتورهای آماده برای تحویل‌گیری بار از انبار مرکزی
                 </p>
               </div>
@@ -462,7 +473,7 @@ export const TodayTab: React.FC<TodayTabProps> = ({
                           className="w-4 h-4 rounded text-blue-600 bg-slate-900 border-slate-700 focus:ring-0 cursor-pointer"
                         />
                         <span className="font-bold truncate">{ord.supermarket_name}</span>
-                        <span className="font-mono text-[10px] text-slate-500">{ord.id}</span>
+                        <span className="font-mono text-xs text-slate-500">{ord.id}</span>
                       </div>
                       <span className="font-bold text-slate-300 shrink-0">
                         {formatPrice(ord.total_amount)} تومان

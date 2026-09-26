@@ -73,7 +73,7 @@ export interface Supermarket {
   created_at?: string;
 }
 
-export type OrderStatus = 'assigned' | 'delegated' | 'delivered' | 'undelivered';
+export type OrderStatus = 'assigned' | 'loading' | 'delegated' | 'delivered' | 'undelivered';
 
 export interface OrderItem {
   id: string;
@@ -94,6 +94,7 @@ export interface Order {
   status: OrderStatus;
   total_amount: number;
   reassignment_id?: string | null;
+  loading_bill_id?: string | null;
   order_date: string;
   items?: OrderItem[];
 }

@@ -118,7 +118,7 @@ export const CustomersTab: React.FC<CustomersTabProps> = ({
                       <h3 className="font-bold text-sm text-slate-100 truncate group-hover:text-blue-300 transition">
                         {shop.name}
                       </h3>
-                      <p className="text-[11px] text-slate-400 mt-0.5">مدیریت: {shop.owner}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">مدیریت: {shop.owner}</p>
                     </div>
                   </div>
 

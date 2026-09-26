@@ -51,7 +51,7 @@ export const UndeliveredModal: React.FC<UndeliveredModalProps> = ({
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-100">ثبت عدم تحویل سفارش</h3>
-              <p className="text-[11px] text-slate-400 font-mono">{order.id} - {order.supermarket_name}</p>
+              <p className="text-xs text-slate-400 font-mono">{order.id} - {order.supermarket_name}</p>
             </div>
           </div>
           <button
@@ -70,7 +70,7 @@ export const UndeliveredModal: React.FC<UndeliveredModalProps> = ({
           </p>
 
           <div>
-            <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
+            <label className="block text-xs font-medium text-slate-400 mb-1.5">
               انتخاب سریع دلیل عدم تحویل (اختیاری):
             </label>
             <div className="flex flex-wrap gap-1.5 mb-2">
@@ -79,7 +79,7 @@ export const UndeliveredModal: React.FC<UndeliveredModalProps> = ({
                   key={r}
                   type="button"
                   onClick={() => handleSelectPredefined(r)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] transition text-right cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-lg text-xs transition text-right cursor-pointer ${
                     selectedPredefined === r
                       ? 'bg-rose-950/70 border border-rose-600/50 text-rose-200'
                       : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-slate-200'
@@ -92,7 +92,7 @@ export const UndeliveredModal: React.FC<UndeliveredModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-[11px] font-medium text-slate-400 mb-1">
+            <label className="block text-xs font-medium text-slate-400 mb-1">
               توضیحات و یادداشت تکمیلی:
             </label>
             <textarea

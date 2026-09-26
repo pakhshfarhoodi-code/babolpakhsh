@@ -37,6 +37,7 @@ export const INITIAL_BRANDS: string[] = [
   'شیرین عسل',
 ];
 
+// NOTE: آدرس‌های تصاویر زیر موقتی و نمونه (از Unsplash) هستند و تا زمان آپلود تصاویر واقعی محصولات در باکت Supabase Storage برای نمایش کاتالوگ استفاده می‌شوند. در صورت عدم دسترسی اینترنت، کامپوننت‌های ProductRow و کارت‌های کالا به آیکن پیش‌فرض سوییچ می‌کنند.
 export const INITIAL_PRODUCTS: Product[] = [
   {
     id: 'prod-1',

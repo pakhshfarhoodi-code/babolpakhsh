@@ -44,7 +44,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
     }
   }, [initialRole]);
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
 
@@ -58,16 +58,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
     }
 
     setIsSubmitting(true);
-    const result = loginWithCredentials(
-      usernameInput,
-      passwordInput,
-      allowedRoles && allowedRoles.length > 0 ? allowedRoles : [activeTab]
-    );
+    try {
+      const result = await loginWithCredentials(
+        usernameInput,
+        passwordInput,
+        allowedRoles && allowedRoles.length > 0 ? allowedRoles : [activeTab]
+      );
 
-    setIsSubmitting(false);
-
-    if (!result.success) {
-      setErrorMessage(result.message || 'نام کاربری یا رمز عبور نامعتبر است.');
+      if (!result.success) {
+        setErrorMessage(result.message || 'نام کاربری یا رمز عبور نامعتبر است.');
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'خطا در برقراری ارتباط با سامانه.';
+      setErrorMessage(message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -246,7 +251,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
               <button
                 type="button"
                 onClick={() => setShowDemoHelp(!showDemoHelp)}
-                className="text-[11px] text-blue-400 hover:text-blue-300 flex items-center gap-1 cursor-pointer transition"
+                className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 cursor-pointer transition"
               >
                 <HelpCircle className="w-3 h-3" />
                 <span>حساب‌های پیش‌فرض؟</span>
@@ -274,19 +279,19 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
           {showDemoHelp && (
             <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl text-xs space-y-1 text-slate-400 animate-in fade-in duration-200">
               <div className="font-semibold text-slate-300 text-right">اطلاعات ورود پیش‌فرض سیستم:</div>
-              <div className="flex justify-between font-mono dir-ltr text-[11px] pt-1 border-t border-slate-800/80">
+              <div className="flex justify-between font-mono dir-ltr text-xs pt-1 border-t border-slate-800/80">
                 <span className="text-blue-400">admin / 123</span>
                 <span className="text-slate-400">مدیریت:</span>
               </div>
-              <div className="flex justify-between font-mono dir-ltr text-[11px]">
+              <div className="flex justify-between font-mono dir-ltr text-xs">
                 <span className="text-indigo-400">warehouse / 123</span>
                 <span className="text-slate-400">انباردار:</span>
               </div>
-              <div className="flex justify-between font-mono dir-ltr text-[11px]">
+              <div className="flex justify-between font-mono dir-ltr text-xs">
                 <span className="text-emerald-400">visitor1 یا visitor2 / 123</span>
                 <span className="text-slate-400">ویزیتور:</span>
               </div>
-              <div className="flex justify-between font-mono dir-ltr text-[11px]">
+              <div className="flex justify-between font-mono dir-ltr text-xs">
                 <span className="text-amber-400">shop1 تا shop5 / 123</span>
                 <span className="text-slate-400">فروشگاه:</span>
               </div>
@@ -316,7 +321,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
           <div className="mt-5 pt-4 border-t border-slate-800/80 space-y-2">
             <div className="flex items-center justify-between text-xs text-slate-400 px-1">
               <span>فروشگاه شما هنوز در سامانه ثبت نشده؟</span>
-              <span className="text-[11px] text-amber-400/90 font-medium">سفارش مستقیم و آسان</span>
+              <span className="text-xs text-amber-400/90 font-medium">سفارش مستقیم و آسان</span>
             </div>
             <button
               id="register-supermarket-bottom-btn"
@@ -332,13 +337,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
                   <div className="text-xs font-bold text-amber-200 group-hover:text-amber-100 transition-colors">
                     ثبت‌نام آنلاین فروشگاه
                   </div>
-                  <div className="text-[10px] text-amber-400/70">
+                  <div className="text-xs text-amber-400/70">
                     ثبت فوری سفارش و دریافت کد اختصاصی
                   </div>
                 </div>
               </div>
               <div className="flex items-center gap-1 text-xs font-semibold text-amber-400 group-hover:text-amber-300">
-                <span className="text-[11px]">شروع ثبت‌نام</span>
+                <span className="text-xs">شروع ثبت‌نام</span>
                 <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
               </div>
             </button>

@@ -43,7 +43,7 @@ export const DelegateModal: React.FC<DelegateModalProps> = ({
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-100">واگذاری سفارش به همکار</h3>
-              <p className="text-[11px] text-slate-400 font-mono">{order.id} - {order.supermarket_name}</p>
+              <p className="text-xs text-slate-400 font-mono">{order.id} - {order.supermarket_name}</p>
             </div>
           </div>
           <button
@@ -63,7 +63,7 @@ export const DelegateModal: React.FC<DelegateModalProps> = ({
             </p>
 
             <div>
-              <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">
                 انتخاب ویزیتور مقصد:
               </label>
               <select
@@ -80,7 +80,7 @@ export const DelegateModal: React.FC<DelegateModalProps> = ({
               </select>
             </div>
 
-            <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800/80 text-[11px] text-slate-400 flex items-center gap-2">
+            <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800/80 text-xs text-slate-400 flex items-center gap-2">
               <Users className="w-4 h-4 text-blue-400 shrink-0" />
               <span>
                 پس از ارسال درخواست، سفارش در وضعیت «در انتظار واگذاری» قرار می‌گیرد و همکار مقصد می‌تواند آن را قبول کند.

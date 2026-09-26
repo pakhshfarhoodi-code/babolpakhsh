@@ -36,7 +36,7 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -70,23 +70,28 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
     }
 
     setIsSubmitting(true);
-    const result = registerSupermarket({
-      name: name.trim(),
-      owner: owner.trim(),
-      phone: phone.trim(),
-      address: address.trim(),
-      assigned_visitor_id: assignedVisitorId,
-      username: username.trim(),
-      password: password.trim(),
-    });
+    try {
+      const result = await registerSupermarket({
+        name: name.trim(),
+        owner: owner.trim(),
+        phone: phone.trim(),
+        address: address.trim(),
+        assigned_visitor_id: assignedVisitorId,
+        username: username.trim(),
+        password: password.trim(),
+      });
 
-    setIsSubmitting(false);
-
-    if (result.success) {
-      if (onSuccess) onSuccess();
-      onClose();
-    } else {
-      setError(result.message);
+      if (result.success) {
+        if (onSuccess) onSuccess();
+        onClose();
+      } else {
+        setError(result.message);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'خطا در برقراری ارتباط با سرور.';
+      setError(message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -189,7 +194,7 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
                 />
                 <AtSign className="w-4 h-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
               </div>
-              <p className="text-[10px] text-slate-500 mt-1">از این نام کاربری برای ورود به پنل فروشگاه استفاده خواهید کرد.</p>
+              <p className="text-xs text-slate-500 mt-1">از این نام کاربری برای ورود به پنل فروشگاه استفاده خواهید کرد.</p>
             </div>
 
             <div>
@@ -208,7 +213,7 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
                 />
                 <KeyRound className="w-4 h-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
               </div>
-              <p className="text-[10px] text-slate-500 mt-1">رمز عبور اختصاصی جهت امنیت حساب کاربری شما</p>
+              <p className="text-xs text-slate-500 mt-1">رمز عبور اختصاصی جهت امنیت حساب کاربری شما</p>
             </div>
           </div>
 
@@ -230,7 +235,7 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
               </select>
               <Truck className="w-4 h-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
             </div>
-            <p className="text-[11px] text-slate-500 mt-1">
+            <p className="text-xs text-slate-500 mt-1">
               سفارشات شما به ویزیتور اختصاص‌داده‌شده این منطقه جهت بارگیری و ارسال ارجاع خواهد شد.
             </p>
           </div>

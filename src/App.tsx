@@ -20,6 +20,8 @@ function getNormalizedPath(): string {
 export const App: React.FC = () => {
   const { role, setRole, isLoggedIn } = useApp();
   const [currentPath, setCurrentPath] = useState<string>(getNormalizedPath);
+  const [adminActiveTab, setAdminActiveTab] = useState<'overview' | 'orders' | 'products' | 'team' | 'reports'>('overview');
+  const [warehouseActiveTab, setWarehouseActiveTab] = useState<'pending' | 'history'>('pending');
 
   // Synchronize route changes via popstate and custom navigation
   const navigateTo = useCallback((targetPath: string) => {
@@ -88,9 +90,6 @@ export const App: React.FC = () => {
       />
     );
   }
-
-  const [adminActiveTab, setAdminActiveTab] = useState<'overview' | 'orders' | 'products' | 'team' | 'reports'>('overview');
-  const [warehouseActiveTab, setWarehouseActiveTab] = useState<'pending' | 'history'>('pending');
 
   // Render main screen matching the route
   return (

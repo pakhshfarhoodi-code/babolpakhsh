@@ -1,10 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   X,
   Search,
-  Plus,
-  Minus,
   ShoppingCart,
   AlertTriangle,
   CheckCircle,
@@ -12,7 +10,11 @@ import {
   Check,
   Store,
   MapPin,
+  Filter,
 } from 'lucide-react';
+import { ProductRow } from './shop/ProductRow';
+import { FilterSheet } from './shop/FilterSheet';
+import { formatPrice } from './shop/shopUtils';
 
 interface Props {
   isOpen: boolean;
@@ -30,6 +32,7 @@ export const NewOrderModal: React.FC<Props> = ({
   const {
     products,
     categories,
+    brands,
     supermarkets,
     visitors,
     createOrder,
@@ -43,6 +46,8 @@ export const NewOrderModal: React.FC<Props> = ({
   const storeDropdownRef = useRef<HTMLDivElement>(null);
 
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
+  const [selectedBrand, setSelectedBrand] = useState<string>('all');
+  const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [cart, setCart] = useState<Record<string, number>>({});
   const [feedback, setFeedback] = useState<{ type: 'error' | 'success'; message: string } | null>(null);
@@ -54,7 +59,7 @@ export const NewOrderModal: React.FC<Props> = ({
     } else if (!selectedSupermarketId && supermarkets.length > 0) {
       setSelectedSupermarketId(supermarkets[0].id);
     }
-  }, [defaultSupermarketId, supermarkets, isOpen]);
+  }, [defaultSupermarketId, supermarkets, isOpen, selectedSupermarketId]);
 
   // Close customer dropdown on click outside
   useEffect(() => {
@@ -71,7 +76,25 @@ export const NewOrderModal: React.FC<Props> = ({
     };
   }, [isStoreDropdownOpen]);
 
-  if (!isOpen) return null;
+  // Available brands in selected category
+  const availableBrandsInCategory = useMemo(() => {
+    const brandSet = new Set<string>();
+    products.forEach((p) => {
+      if (!p.is_active) return;
+      if (selectedCategoryId !== 'all' && p.category_id !== selectedCategoryId) return;
+      if (p.brand && p.brand.trim()) {
+        brandSet.add(p.brand.trim());
+      }
+    });
+    return Array.from(brandSet).sort();
+  }, [products, selectedCategoryId]);
+
+  // Reset selected brand if no longer available
+  useEffect(() => {
+    if (selectedBrand !== 'all' && !availableBrandsInCategory.includes(selectedBrand)) {
+      setSelectedBrand('all');
+    }
+  }, [selectedCategoryId, availableBrandsInCategory, selectedBrand]);
 
   const currentSupermarket = supermarkets.find((s) => s.id === selectedSupermarketId);
   const currentVisitor = visitors.find((v) => v.id === (defaultVisitorId || currentSupermarket?.assigned_visitor_id));
@@ -87,55 +110,62 @@ export const NewOrderModal: React.FC<Props> = ({
     );
   });
 
-  const filteredProducts = products.filter((p) => {
-    if (!p.is_active) return false;
-    if (selectedCategoryId !== 'all' && p.category_id !== selectedCategoryId) return false;
-    if (searchTerm && !p.name.includes(searchTerm)) return false;
-    return true;
-  });
+  const filteredProducts = useMemo(() => {
+    return products.filter((p) => {
+      if (!p.is_active) return false;
+      if (selectedCategoryId !== 'all' && p.category_id !== selectedCategoryId) return false;
+      if (selectedBrand !== 'all' && p.brand !== selectedBrand) return false;
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        const matchName = p.name.toLowerCase().includes(term);
+        const matchBrand = p.brand?.toLowerCase().includes(term);
+        if (!matchName && !matchBrand) return false;
+      }
+      return true;
+    });
+  }, [products, selectedCategoryId, selectedBrand, searchTerm]);
 
-  const updateQuantity = (productId: string, delta: number) => {
-    const prod = products.find((p) => p.id === productId);
-    if (!prod) return;
-
-    const available = prod.stock - prod.reserved_stock;
-    const currentQty = cart[productId] || 0;
-    const newQty = Math.max(0, currentQty + delta);
-
-    if (newQty > available) {
-      setFeedback({
-        type: 'error',
-        message: `حداکثر موجودی قابل سفارش برای ${prod.name}، ${available} ${prod.unit} می‌باشد.`,
-      });
-      return;
-    }
-
+  const handleSetQuantity = useCallback((productId: string, newQty: number) => {
     setFeedback(null);
     setCart((prev) => {
-      if (newQty === 0) {
+      if (newQty <= 0) {
         const next = { ...prev };
         delete next[productId];
         return next;
       }
       return { ...prev, [productId]: newQty };
     });
-  };
+  }, []);
 
-  const cartItems = Object.entries(cart).map(([productId, quantity]) => {
-    const prod = products.find((p) => p.id === productId)!;
-    const qty = Number(quantity);
-    return {
-      productId,
-      name: prod.name,
-      price: prod.price,
-      quantity: qty,
-      unit: prod.unit,
-      total: prod.price * qty,
-    };
-  });
+  const handleExceedLimit = useCallback((maxAvailable: number) => {
+    setFeedback({
+      type: 'error',
+      message: `حداکثر موجودی قابل سفارش برای این کالا، ${maxAvailable} واحد می‌باشد.`,
+    });
+  }, []);
 
-  const cartTotalAmount = cartItems.reduce((sum, item) => sum + item.total, 0);
-  const totalItemCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+  const cartItems = useMemo(() => {
+    return (Object.entries(cart) as [string, number][]).map(([productId, quantity]) => {
+      const prod = products.find((p) => p.id === productId);
+      if (!prod || quantity <= 0) return null;
+      return {
+        productId,
+        name: prod.name,
+        price: prod.price,
+        quantity,
+        unit: prod.unit,
+        total: prod.price * quantity,
+      };
+    }).filter((i): i is NonNullable<typeof i> => i !== null);
+  }, [cart, products]);
+
+  const cartTotalAmount = useMemo(() => {
+    return cartItems.reduce((sum, item) => sum + item.total, 0);
+  }, [cartItems]);
+
+  const totalItemCount = useMemo(() => {
+    return cartItems.reduce((sum, item) => sum + item.quantity, 0);
+  }, [cartItems]);
 
   const handleSubmit = () => {
     if (!currentSupermarket || !currentVisitor) {
@@ -169,6 +199,8 @@ export const NewOrderModal: React.FC<Props> = ({
     }
   };
 
+  if (!isOpen) return null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-3 sm:p-5 overflow-y-auto">
       <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
@@ -180,7 +212,7 @@ export const NewOrderModal: React.FC<Props> = ({
             </div>
             <div>
               <h2 className="text-sm font-bold text-slate-100">ثبت سفارش جدید و تخصیص به ویزیتور</h2>
-              <p className="text-[11px] text-slate-400">کالاهای انتخابی بلافاصله در سیستم سردخانه رزرو می‌شوند</p>
+              <p className="text-xs text-slate-400">کالاهای انتخابی بلافاصله در سیستم سردخانه رزرو می‌شوند</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800">
@@ -209,7 +241,7 @@ export const NewOrderModal: React.FC<Props> = ({
                 {currentSupermarket ? (
                   <div className="truncate">
                     <span className="font-bold text-slate-100">{currentSupermarket.name}</span>
-                    <span className="text-slate-400 text-[11px] mr-1.5">({currentSupermarket.owner})</span>
+                    <span className="text-slate-400 text-xs mr-1.5">({currentSupermarket.owner})</span>
                   </div>
                 ) : (
                   <span className="text-slate-500">انتخاب سوپرمارکت مقصد...</span>
@@ -225,7 +257,6 @@ export const NewOrderModal: React.FC<Props> = ({
             {/* Dropdown Menu */}
             {isStoreDropdownOpen && (
               <div className="absolute z-30 top-full mt-1.5 right-0 left-0 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
-                {/* 1st Row: Search input box */}
                 <div className="p-2 border-b border-slate-800 bg-slate-950/80 sticky top-0 z-10">
                   <div className="relative">
                     <Search className="w-3.5 h-3.5 absolute right-2.5 top-2.5 text-slate-400" />
@@ -249,7 +280,6 @@ export const NewOrderModal: React.FC<Props> = ({
                   </div>
                 </div>
 
-                {/* Customer items list */}
                 <div className="max-h-52 overflow-y-auto divide-y divide-slate-800/60 no-scrollbar">
                   {filteredSupermarkets.length === 0 ? (
                     <div className="p-4 text-center text-slate-400 text-xs">
@@ -276,13 +306,13 @@ export const NewOrderModal: React.FC<Props> = ({
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="font-bold text-slate-100">{s.name}</span>
-                              <span className="text-[11px] text-slate-400 bg-slate-800 px-1.5 py-0.2 rounded border border-slate-700/60">
+                              <span className="text-xs text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700/60">
                                 {s.owner}
                               </span>
                             </div>
                             {s.address && (
-                              <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-1 truncate">
-                                <MapPin className="w-2.5 h-2.5 text-slate-500 shrink-0" />
+                              <div className="flex items-center gap-1 text-xs text-slate-400 mt-1 truncate">
+                                <MapPin className="w-3 h-3 text-slate-500 shrink-0" />
                                 <span className="truncate">{s.address}</span>
                               </div>
                             )}
@@ -305,7 +335,7 @@ export const NewOrderModal: React.FC<Props> = ({
             <label className="block text-slate-400 mb-1 font-medium">ویزیتور تخصیص‌یافته:</label>
             <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 font-semibold flex items-center justify-between">
               <span>{currentVisitor?.name || 'ویزیتور عمومی'}</span>
-              <span className="text-[10px] text-blue-400 px-2 py-0.5 rounded bg-blue-950 border border-blue-800">
+              <span className="text-xs text-blue-400 px-2 py-0.5 rounded bg-blue-950 border border-blue-800">
                 {currentVisitor?.region}
               </span>
             </div>
@@ -330,7 +360,7 @@ export const NewOrderModal: React.FC<Props> = ({
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 overflow-hidden">
           {/* Products List (2 cols) */}
           <div className="lg:col-span-2 p-4 flex flex-col overflow-y-auto border-b lg:border-b-0 lg:border-l border-slate-800 space-y-3">
-            {/* Search & Categories */}
+            {/* Search & Categories & Brand Filter */}
             <div className="flex flex-wrap items-center gap-2">
               <div className="relative flex-1 min-w-[180px]">
                 <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-500" />
@@ -338,17 +368,32 @@ export const NewOrderModal: React.FC<Props> = ({
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="جستجوی کالا..."
+                  placeholder="جستجوی نام یا برند کالا..."
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg pr-9 pl-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
                 />
               </div>
 
-              <div className="flex items-center gap-1 overflow-x-auto pb-1 max-w-full text-xs">
+              {/* Brand Filter Sheet Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsFilterSheetOpen(true)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
+                  selectedBrand !== 'all'
+                    ? 'bg-amber-600/20 text-amber-300 border-amber-500/50'
+                    : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <Filter className="w-3.5 h-3.5" />
+                <span>{selectedBrand === 'all' ? 'فیلتر برند' : `برند: ${selectedBrand}`}</span>
+              </button>
+
+              {/* Category Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full text-xs no-scrollbar">
                 <button
                   onClick={() => setSelectedCategoryId('all')}
-                  className={`px-2.5 py-1 rounded-md text-[11px] whitespace-nowrap transition ${
+                  className={`px-3 py-1.5 rounded-lg text-xs whitespace-nowrap transition cursor-pointer font-medium ${
                     selectedCategoryId === 'all'
-                      ? 'bg-blue-600 text-white'
+                      ? 'bg-blue-600 text-white shadow-xs'
                       : 'bg-slate-800 text-slate-400 hover:text-slate-200'
                   }`}
                 >
@@ -358,9 +403,9 @@ export const NewOrderModal: React.FC<Props> = ({
                   <button
                     key={c.id}
                     onClick={() => setSelectedCategoryId(c.id)}
-                    className={`px-2.5 py-1 rounded-md text-[11px] whitespace-nowrap transition ${
+                    className={`px-3 py-1.5 rounded-lg text-xs whitespace-nowrap transition cursor-pointer font-medium ${
                       selectedCategoryId === c.id
-                        ? 'bg-blue-600 text-white'
+                        ? 'bg-blue-600 text-white shadow-xs'
                         : 'bg-slate-800 text-slate-400 hover:text-slate-200'
                     }`}
                   >
@@ -370,63 +415,23 @@ export const NewOrderModal: React.FC<Props> = ({
               </div>
             </div>
 
-            {/* Products Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-              {filteredProducts.map((prod) => {
-                const available = prod.stock - prod.reserved_stock;
-                const qty = cart[prod.id] || 0;
-                const isOutOfStock = available <= 0;
-
-                return (
-                  <div
+            {/* Products List rendered via reused ProductRow */}
+            <div className="space-y-2.5 pt-1">
+              {filteredProducts.length === 0 ? (
+                <div className="p-8 text-center text-slate-500 text-xs">
+                  هیچ کالایی مطابق با فیلترهای انتخابی یافت نشد.
+                </div>
+              ) : (
+                filteredProducts.map((prod) => (
+                  <ProductRow
                     key={prod.id}
-                    className={`p-3 rounded-xl border flex flex-col justify-between transition ${
-                      qty > 0
-                        ? 'bg-blue-950/20 border-blue-500/50'
-                        : 'bg-slate-950/50 border-slate-800/80 hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-start gap-2.5">
-                      <img
-                        src={prod.image_url}
-                        alt={prod.name}
-                        className="w-14 h-14 rounded-lg object-cover border border-slate-800 shrink-0"
-                        referrerPolicy="no-referrer"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-semibold text-xs text-slate-100 truncate">{prod.name}</h4>
-                        <p className="text-xs font-bold text-blue-400 mt-1">
-                          {prod.price.toLocaleString('fa-IR')} <span className="text-[10px] font-normal text-slate-400">تومان</span>
-                        </p>
-                        <p className="text-[10px] text-slate-400 mt-0.5">
-                          موجودی قابل سفارش: <span className={available > 0 ? 'text-emerald-400 font-semibold' : 'text-rose-400'}>{available} {prod.unit}</span>
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-3 pt-2 border-t border-slate-800/60 flex items-center justify-between">
-                      <span className="text-[11px] text-slate-400">واحد: {prod.unit}</span>
-                      <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded-lg p-0.5">
-                        <button
-                          onClick={() => updateQuantity(prod.id, -1)}
-                          disabled={qty === 0}
-                          className="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-200 flex items-center justify-center transition"
-                        >
-                          <Minus className="w-3 h-3" />
-                        </button>
-                        <span className="w-6 text-center text-xs font-bold text-slate-100">{qty}</span>
-                        <button
-                          onClick={() => updateQuantity(prod.id, 1)}
-                          disabled={isOutOfStock || qty >= available}
-                          className="w-6 h-6 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-30 text-white flex items-center justify-center transition"
-                        >
-                          <Plus className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+                    product={prod}
+                    quantity={cart[prod.id] || 0}
+                    onChangeQuantity={(newQty) => handleSetQuantity(prod.id, newQty)}
+                    onExceedLimit={handleExceedLimit}
+                  />
+                ))
+              )}
             </div>
           </div>
 
@@ -445,18 +450,18 @@ export const NewOrderModal: React.FC<Props> = ({
               ) : (
                 <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                   {cartItems.map((item) => (
-                    <div key={item.productId} className="p-2 rounded-lg bg-slate-900/80 border border-slate-800/80 text-xs">
+                    <div key={item.productId} className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800/80 text-xs">
                       <div className="flex items-center justify-between">
                         <span className="font-semibold text-slate-200 truncate">{item.name}</span>
-                        <span className="font-bold text-slate-300">{item.total.toLocaleString('fa-IR')} ت</span>
+                        <span className="font-bold text-slate-300">{formatPrice(item.total)} تومان</span>
                       </div>
-                      <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1">
+                      <div className="flex items-center justify-between text-xs text-slate-400 mt-1.5">
                         <span>
-                          {item.quantity} {item.unit} × {item.price.toLocaleString('fa-IR')}
+                          {item.quantity} {item.unit} × {formatPrice(item.price)}
                         </span>
                         <button
-                          onClick={() => updateQuantity(item.productId, -item.quantity)}
-                          className="text-rose-400 hover:text-rose-300"
+                          onClick={() => handleSetQuantity(item.productId, 0)}
+                          className="text-rose-400 hover:text-rose-300 cursor-pointer font-medium"
                         >
                           حذف
                         </button>
@@ -471,14 +476,14 @@ export const NewOrderModal: React.FC<Props> = ({
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-400">جمع کل فاکتور:</span>
                 <span className="text-base font-bold text-emerald-400">
-                  {cartTotalAmount.toLocaleString('fa-IR')} تومان
+                  {formatPrice(cartTotalAmount)} تومان
                 </span>
               </div>
 
               <button
                 disabled={cartItems.length === 0}
                 onClick={handleSubmit}
-                className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-bold text-xs transition shadow-lg shadow-blue-600/20 flex items-center justify-center gap-1.5"
+                className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-bold text-xs transition shadow-lg shadow-blue-600/20 flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <CheckCircle className="w-4 h-4" />
                 <span>ثبت نهایی و رزرو در سردخانه</span>
@@ -487,6 +492,16 @@ export const NewOrderModal: React.FC<Props> = ({
           </div>
         </div>
       </div>
+
+      {/* Brand Filter Sheet */}
+      <FilterSheet
+        isOpen={isFilterSheetOpen}
+        onClose={() => setIsFilterSheetOpen(false)}
+        availableBrands={availableBrandsInCategory.length > 0 ? availableBrandsInCategory : brands}
+        selectedBrand={selectedBrand}
+        onSelectBrand={(b) => setSelectedBrand(b)}
+        onClearFilter={() => setSelectedBrand('all')}
+      />
     </div>
   );
 };

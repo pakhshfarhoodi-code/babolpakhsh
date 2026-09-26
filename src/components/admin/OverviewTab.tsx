@@ -10,6 +10,7 @@ import {
   ShoppingBag,
   Users,
   CheckCircle2,
+  UserCheck,
 } from 'lucide-react';
 import {
   LOW_STOCK_THRESHOLD,
@@ -50,8 +51,14 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
 
   // C. Inactive supermarkets in last 30 days
   const inactiveStores = useMemo(
-    () => supermarkets.filter((s) => isStoreInactiveFor30Days(s.id, orders)),
+    () => supermarkets.filter((s) => s.is_active !== false && isStoreInactiveFor30Days(s.id, orders)),
     [supermarkets, orders]
+  );
+
+  // D. Pending new supermarket registrations waiting for approval
+  const pendingRegistrations = useMemo(
+    () => supermarkets.filter((s) => s.is_active === false),
+    [supermarkets]
   );
 
   // 2. Standard 3 KPIs
@@ -70,7 +77,11 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
     return supermarkets.filter((s) => storeIdsWithOrders.has(s.id)).length;
   }, [orders, supermarkets]);
 
-  const totalActionItems = delegatedOrders.length + lowStockProducts.length + inactiveStores.length;
+  const totalActionItems =
+    delegatedOrders.length +
+    lowStockProducts.length +
+    inactiveStores.length +
+    pendingRegistrations.length;
 
   return (
     <div className="space-y-6">
@@ -140,8 +151,46 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         </span>
       </div>
 
-      {/* 3 Action Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Action Cards Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Action 0: Pending Store Registrations */}
+        <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col justify-between space-y-4 hover:border-amber-500/50 transition shadow-sm">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center border border-amber-500/30">
+                <UserCheck className="w-5 h-5" />
+              </div>
+              <span
+                className={`text-xs px-2 py-0.5 rounded-full font-bold border ${
+                  pendingRegistrations.length > 0
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse'
+                    : 'bg-slate-800 text-slate-400 border-slate-700'
+                }`}
+              >
+                {pendingRegistrations.length} فروشگاه جدید
+              </span>
+            </div>
+
+            <h3 className="font-bold text-sm text-slate-200">درخواست‌های عضویت فروشگاه</h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              فروشگاه‌های ثبت‌نام کرده در سامانه که منتظر تایید ادمین جهت فعال‌سازی دسترسی و ورود به پنل هستند.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onNavigateToTeam}
+            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+              pendingRegistrations.length > 0
+                ? 'bg-amber-500 text-slate-950 hover:bg-amber-400 shadow-md shadow-amber-500/20'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+            }`}
+          >
+            <span>بررسی و تایید مشتریان</span>
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+        </div>
+
         {/* Action 1: Delegated Orders */}
         <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col justify-between space-y-4 hover:border-amber-500/40 transition">
           <div className="space-y-2">

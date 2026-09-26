@@ -13,7 +13,7 @@ interface UseAuthProps {
 export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProps) {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.AUTH_LOGGED_IN);
-    return saved !== null ? saved === 'true' : true;
+    return saved !== null ? saved === 'true' : false;
   });
 
   const [role, setRole] = useState<UserRole>('admin');
@@ -146,6 +146,13 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
         });
 
         if (matchedSm) {
+          if (matchedSm.is_active === false) {
+            return {
+              success: false,
+              message: 'ثبت‌نام شما انجام شده است اما هنوز توسط مدیریت سامانه تایید نگردیده است. لطفاً منتظر تایید ادمین بمانید.',
+            };
+          }
+
           setRole('supermarket');
           setSelectedSupermarketId(matchedSm.id);
           setIsLoggedIn(true);
@@ -393,7 +400,7 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
           phone: trimmedPhone,
           address: trimmedAddress,
           assigned_visitor_id: assignedVisitorId,
-          is_active: true,
+          is_active: false,
         });
 
         if (smError) {
@@ -413,19 +420,15 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
         assigned_visitor_id: assignedVisitorId,
         username: trimmedUsername,
         password: trimmedPassword,
-        is_active: true,
+        is_active: false,
         created_at: new Date().toISOString(),
       };
 
       setSupermarkets((prev) => [newSupermarket, ...prev]);
-      setSelectedSupermarketId(authUserId);
-      setRole('supermarket');
-      setIsLoggedIn(true);
-      localStorage.setItem(STORAGE_KEYS.AUTH_LOGGED_IN, 'true');
 
       return {
         success: true,
-        message: 'حساب کاربری فروشگاه با موفقیت ایجاد شد و وارد شدید.',
+        message: 'ثبت‌نام با موفقیت انجام شد. حساب کاربری پس از تایید مدیریت فعال خواهد شد.',
         supermarket: newSupermarket,
       };
     },

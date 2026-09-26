@@ -27,6 +27,8 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [isSuccessModal, setIsSuccessModal] = useState(false);
+
   // Sync assigned visitor when defaultVisitorId or isOpen changes
   React.useEffect(() => {
     if (defaultVisitorId) {
@@ -82,8 +84,8 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
       });
 
       if (result.success) {
+        setIsSuccessModal(true);
         if (onSuccess) onSuccess();
-        onClose();
       } else {
         setError(result.message);
       }
@@ -94,6 +96,47 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
       setIsSubmitting(false);
     }
   };
+
+  const handleCloseAll = () => {
+    setIsSuccessModal(false);
+    onClose();
+  };
+
+  if (isSuccessModal) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden p-6 text-center space-y-4">
+          <div className="w-14 h-14 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center shadow-inner">
+            <Check className="w-7 h-7 stroke-[3]" />
+          </div>
+
+          <div className="space-y-1.5">
+            <h3 className="text-base font-bold text-slate-100">درخواست عضویت شما با موفقیت ثبت شد</h3>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              اطلاعات فروشگاه <strong className="text-amber-400">«{name}»</strong> جهت بررسی به پنل مدیریت ارسال گردید.
+            </p>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-400 leading-relaxed text-right space-y-1">
+            <p className="text-slate-200 font-semibold flex items-center gap-1.5">
+              <span>📌 مرحله بعدی:</span>
+            </p>
+            <p>
+              به محض اینکه ادمین حساب کاربری شما را تایید کند، می‌توانید با نام کاربری <strong className="text-slate-200 font-mono">{username}</strong> و رمز عبور وارد سامانه سفارش‌گیری شوید.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleCloseAll}
+            className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition cursor-pointer shadow-md shadow-amber-500/20"
+          >
+            متوجه شدم و بستن
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
@@ -271,7 +314,7 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition cursor-pointer shadow-lg shadow-amber-500/20 disabled:opacity-50"
             >
               <Check className="w-4 h-4" />
-              <span>ثبت حساب و ورود به پنل</span>
+              <span>ارسال درخواست عضویت</span>
             </button>
           </div>
         </form>

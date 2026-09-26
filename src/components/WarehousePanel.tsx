@@ -9,12 +9,17 @@ import {
   AlertTriangle,
   Boxes,
   Sparkles,
+  FileSpreadsheet,
+  Upload,
+  Download,
 } from 'lucide-react';
 import { PendingBillCard } from './warehouse/PendingBillCard';
 import { BillHistoryList } from './warehouse/BillHistoryList';
 import { RestockForm } from './warehouse/RestockForm';
 import { LowStockList } from './warehouse/LowStockList';
 import { NewProductModal } from './warehouse/NewProductModal';
+import { ExcelImportModal } from './admin/ExcelImportModal';
+import { ExcelExportModal } from './admin/ExcelExportModal';
 import { LOW_STOCK_THRESHOLD, formatNumber } from './warehouse/helpers';
 
 export type WarehouseTabKey = 'pending' | 'history';
@@ -36,6 +41,7 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({
     approveLoadingBill,
     updateProductStock,
     addNewProduct,
+    bulkUpsertProducts,
   } = useApp();
 
   const [internalTab, setInternalTab] = useState<WarehouseTabKey>('pending');
@@ -47,6 +53,8 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({
   };
 
   const [isNewProductModalOpen, setIsNewProductModalOpen] = useState(false);
+  const [isExcelImportOpen, setIsExcelImportOpen] = useState(false);
+  const [isExcelExportOpen, setIsExcelExportOpen] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
   // Filter pending vs approved bills
@@ -84,6 +92,7 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({
     brand: string;
     category_id: string;
     price: number;
+    visitor_price?: number;
     stock: number;
     unit: string;
     image_url: string;
@@ -93,6 +102,7 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({
       brand: data.brand,
       category_id: data.category_id,
       price: data.price,
+      visitor_price: data.visitor_price,
       stock: data.stock,
       unit: data.unit,
       image_url: data.image_url,
@@ -100,6 +110,14 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({
     });
     setActionFeedback(`کالای جدید «${data.name}» با موجودی ${formatNumber(data.stock)} ${data.unit} در سردخانه تعریف شد.`);
     setTimeout(() => setActionFeedback(null), 5000);
+  };
+
+  const handleBulkImportConfirm = (items: any[]) => {
+    if (bulkUpsertProducts) {
+      const result = bulkUpsertProducts(items);
+      setActionFeedback(result.message);
+      setTimeout(() => setActionFeedback(null), 6000);
+    }
   };
 
   return (
@@ -130,28 +148,49 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({
           </div>
         </div>
 
-        {/* Real KPI Metrics & New Product Button */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-950/70 border border-slate-800 text-xs shadow-inner">
+        {/* Real KPI Metrics & Action Buttons */}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-950/70 border border-slate-800 text-xs shadow-inner">
             <div className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></div>
-            <span className="text-slate-400">برگه‌های در انتظار:</span>
+            <span className="text-slate-400">برگه‌ها:</span>
             <span className="font-black text-indigo-300 font-mono text-xs">
               {formatNumber(pendingBills.length)}
             </span>
           </div>
 
-          <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-950/70 border border-slate-800 text-xs shadow-inner">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-950/70 border border-slate-800 text-xs shadow-inner">
             <div className="w-2 h-2 rounded-full bg-amber-400"></div>
-            <span className="text-slate-400">اقلام کم‌موجود:</span>
+            <span className="text-slate-400">کم‌موجود:</span>
             <span className="font-black text-amber-300 font-mono text-xs">
               {formatNumber(lowStockCount)}
             </span>
           </div>
 
+          {/* Excel Import & Export */}
+          <button
+            type="button"
+            onClick={() => setIsExcelImportOpen(true)}
+            className="px-3 py-2 rounded-xl bg-emerald-950/80 hover:bg-emerald-900/90 text-emerald-300 border border-emerald-700/60 font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer"
+            title="بارگذاری و تطبیق اکسل کالاها و قیمت‌ها"
+          >
+            <Upload className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden sm:inline">ورود با اکسل</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsExcelExportOpen(true)}
+            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer"
+            title="استخراج کاتالوگ و موجودی با اکسل"
+          >
+            <Download className="w-3.5 h-3.5 text-blue-400" />
+            <span className="hidden sm:inline">خروجی اکسل</span>
+          </button>
+
           <button
             type="button"
             onClick={() => setIsNewProductModalOpen(true)}
-            className="min-h-[40px] px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 active:scale-98 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-lg shadow-indigo-600/30 border border-indigo-400/30 cursor-pointer whitespace-nowrap"
+            className="min-h-[38px] px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 active:scale-98 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-lg shadow-indigo-600/30 border border-indigo-400/30 cursor-pointer whitespace-nowrap"
           >
             <Plus className="w-4 h-4" />
             <span>تعریف کالای جدید</span>
@@ -272,6 +311,24 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({
         brands={brands}
         onClose={() => setIsNewProductModalOpen(false)}
         onSubmit={handleCreateProduct}
+      />
+
+      {/* Modal: Excel Import & Column Matching */}
+      <ExcelImportModal
+        isOpen={isExcelImportOpen}
+        onClose={() => setIsExcelImportOpen(false)}
+        categories={categories}
+        existingProducts={products}
+        onImportConfirm={handleBulkImportConfirm}
+      />
+
+      {/* Modal: Excel Export with Category & Brand Filters */}
+      <ExcelExportModal
+        isOpen={isExcelExportOpen}
+        onClose={() => setIsExcelExportOpen(false)}
+        products={products}
+        categories={categories}
+        brands={brands}
       />
     </div>
   );

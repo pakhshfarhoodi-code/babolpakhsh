@@ -19,6 +19,11 @@ import {
   KeyRound,
   AtSign,
   ShieldCheck,
+  Edit2,
+  Trash2,
+  User,
+  Building,
+  Check,
 } from 'lucide-react';
 import { SupermarketRegisterModal } from '../SupermarketRegisterModal';
 
@@ -33,10 +38,39 @@ export const TeamTab: React.FC<TeamTabProps> = ({
   supermarkets,
   orders,
 }) => {
-  const { createStaffAccount } = useApp();
+  const { createStaffAccount, updateSupermarket, deleteSupermarket, toggleSupermarketApproval } = useApp();
   const [selectedVisitorFilter, setSelectedVisitorFilter] = useState<string | null>(null);
   const [storeSearchTerm, setStoreSearchTerm] = useState('');
+  const [storeStatusFilter, setStoreStatusFilter] = useState<'all' | 'pending' | 'approved'>('all');
   const [isRegisterStoreModalOpen, setIsRegisterStoreModalOpen] = useState(false);
+  const [togglingStoreId, setTogglingStoreId] = useState<string | null>(null);
+  const [toastNotification, setToastNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Edit Supermarket State
+  const [editingSupermarket, setEditingSupermarket] = useState<Supermarket | null>(null);
+  const [editForm, setEditForm] = useState<{
+    name: string;
+    owner: string;
+    phone: string;
+    address: string;
+    assigned_visitor_id: string;
+    is_active: boolean;
+  }>({
+    name: '',
+    owner: '',
+    phone: '',
+    address: '',
+    assigned_visitor_id: '',
+    is_active: true,
+  });
+  const [isUpdatingSupermarket, setIsUpdatingSupermarket] = useState(false);
+  const [editSupermarketError, setEditSupermarketError] = useState<string | null>(null);
+  const [editSupermarketSuccess, setEditSupermarketSuccess] = useState<string | null>(null);
+
+  // Delete Supermarket State
+  const [deletingSupermarket, setDeletingSupermarket] = useState<Supermarket | null>(null);
+  const [isDeletingSupermarket, setIsDeletingSupermarket] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Staff Account Creation State
   const [isAddStaffOpen, setIsAddStaffOpen] = useState(false);
@@ -129,10 +163,134 @@ export const TeamTab: React.FC<TeamTabProps> = ({
     }
   };
 
-  // Filtered supermarkets based on visitor click and search term
+  // Open Edit Supermarket Modal
+  const handleOpenEditSupermarket = (shop: Supermarket) => {
+    setEditingSupermarket(shop);
+    setEditForm({
+      name: shop.name,
+      owner: shop.owner,
+      phone: shop.phone,
+      address: shop.address,
+      assigned_visitor_id: shop.assigned_visitor_id || '',
+      is_active: shop.is_active ?? true,
+    });
+    setEditSupermarketError(null);
+    setEditSupermarketSuccess(null);
+  };
+
+  // Submit Edit Supermarket
+  const handleUpdateSupermarketSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSupermarket) return;
+
+    if (!editForm.name.trim()) {
+      setEditSupermarketError('نام فروشگاه الزامی است.');
+      return;
+    }
+    if (!editForm.owner.trim()) {
+      setEditSupermarketError('نام صاحب فروشگاه الزامی است.');
+      return;
+    }
+    if (!editForm.phone.trim()) {
+      setEditSupermarketError('شماره تماس الزامی است.');
+      return;
+    }
+    if (!editForm.address.trim()) {
+      setEditSupermarketError('آدرس فروشگاه الزامی است.');
+      return;
+    }
+
+    setIsUpdatingSupermarket(true);
+    setEditSupermarketError(null);
+    setEditSupermarketSuccess(null);
+
+    try {
+      const res = await updateSupermarket(editingSupermarket.id, {
+        name: editForm.name,
+        owner: editForm.owner,
+        phone: editForm.phone,
+        address: editForm.address,
+        assigned_visitor_id: editForm.assigned_visitor_id,
+        is_active: editForm.is_active,
+      });
+
+      if (res.success) {
+        setEditSupermarketSuccess(res.message);
+        setTimeout(() => {
+          setEditingSupermarket(null);
+          setEditSupermarketSuccess(null);
+        }, 1200);
+      } else {
+        setEditSupermarketError(res.message);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطای ناشناخته در ویرایش مشتری';
+      setEditSupermarketError(msg);
+    } finally {
+      setIsUpdatingSupermarket(false);
+    }
+  };
+
+  // Confirm Delete Supermarket
+  const handleDeleteSupermarketConfirm = async () => {
+    if (!deletingSupermarket) return;
+    setIsDeletingSupermarket(true);
+    setDeleteError(null);
+
+    try {
+      const res = await deleteSupermarket(deletingSupermarket.id);
+      if (res.success) {
+        setDeletingSupermarket(null);
+      } else {
+        setDeleteError(res.message);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطای ناشناخته در حذف مشتری';
+      setDeleteError(msg);
+    } finally {
+      setIsDeletingSupermarket(false);
+    }
+  };
+
+  // Quick Toggle Supermarket Approval / Active Check
+  const handleToggleApproval = async (shop: Supermarket) => {
+    setTogglingStoreId(shop.id);
+    try {
+      const res = await toggleSupermarketApproval(shop.id, shop.is_active !== false);
+      if (res.success) {
+        setToastNotification({
+          type: 'success',
+          message: res.newStatus
+            ? `دسترسی فروشگاه «${shop.name}» تایید شد و می‌تواند وارد سامانه شود.`
+            : `دسترسی فروشگاه «${shop.name}» به سامانه غیرفعال گردید.`,
+        });
+      } else {
+        setToastNotification({
+          type: 'error',
+          message: res.message,
+        });
+      }
+    } catch {
+      setToastNotification({
+        type: 'error',
+        message: 'خطا در تغییر وضعیت تایید فروشگاه.',
+      });
+    } finally {
+      setTogglingStoreId(null);
+      setTimeout(() => setToastNotification(null), 3500);
+    }
+  };
+
+  // Filtered supermarkets based on visitor click, search term, and approval status
   const filteredSupermarkets = useMemo(() => {
     return supermarkets.filter((shop) => {
       if (selectedVisitorFilter && shop.assigned_visitor_id !== selectedVisitorFilter) {
+        return false;
+      }
+      if (storeStatusFilter === 'pending' && shop.is_active !== false) {
+        return false;
+      }
+      if (storeStatusFilter === 'approved' && shop.is_active === false) {
         return false;
       }
       if (storeSearchTerm.trim()) {
@@ -145,7 +303,11 @@ export const TeamTab: React.FC<TeamTabProps> = ({
       }
       return true;
     });
-  }, [supermarkets, selectedVisitorFilter, storeSearchTerm]);
+  }, [supermarkets, selectedVisitorFilter, storeStatusFilter, storeSearchTerm]);
+
+  const pendingApprovalsCount = useMemo(() => {
+    return supermarkets.filter((s) => s.is_active === false).length;
+  }, [supermarkets]);
 
   const activeFilteredVisitor = visitors.find((v) => v.id === selectedVisitorFilter);
 
@@ -278,6 +440,54 @@ export const TeamTab: React.FC<TeamTabProps> = ({
               </button>
             </div>
 
+            {/* Status Filter Tabs (All / Pending Approval / Approved) */}
+            <div className="flex items-center gap-1.5 mt-3 p-1 rounded-xl bg-slate-950 border border-slate-800 text-xs">
+              <button
+                type="button"
+                onClick={() => setStoreStatusFilter('all')}
+                className={`flex-1 py-1.5 rounded-lg font-bold transition cursor-pointer text-center ${
+                  storeStatusFilter === 'all'
+                    ? 'bg-slate-800 text-slate-100 shadow-xs'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                همه ({supermarkets.length})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStoreStatusFilter('pending')}
+                className={`flex-1 py-1.5 rounded-lg font-bold transition cursor-pointer text-center flex items-center justify-center gap-1 ${
+                  storeStatusFilter === 'pending'
+                    ? 'bg-amber-500 text-slate-950 shadow-xs'
+                    : pendingApprovalsCount > 0
+                    ? 'text-amber-400 hover:bg-amber-500/10'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <span>در انتظار تایید</span>
+                {pendingApprovalsCount > 0 && (
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                    storeStatusFilter === 'pending' ? 'bg-slate-950 text-amber-400' : 'bg-amber-400 text-slate-950'
+                  }`}>
+                    {pendingApprovalsCount}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStoreStatusFilter('approved')}
+                className={`flex-1 py-1.5 rounded-lg font-bold transition cursor-pointer text-center ${
+                  storeStatusFilter === 'approved'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                تایید شده ({supermarkets.filter((s) => s.is_active !== false).length})
+              </button>
+            </div>
+
             {/* Filter banner if active */}
             {activeFilteredVisitor && (
               <div className="mt-3 p-2.5 rounded-xl bg-blue-950/60 border border-blue-800/60 text-xs flex items-center justify-between">
@@ -308,6 +518,33 @@ export const TeamTab: React.FC<TeamTabProps> = ({
               />
             </div>
 
+            {/* Toast feedback banner */}
+            {toastNotification && (
+              <div
+                className={`mt-3 p-3 rounded-xl text-xs font-semibold flex items-center justify-between animate-in fade-in duration-200 ${
+                  toastNotification.type === 'success'
+                    ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/80'
+                    : 'bg-rose-950/80 text-rose-300 border border-rose-800/80'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  {toastNotification.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                  )}
+                  <span>{toastNotification.message}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setToastNotification(null)}
+                  className="text-slate-400 hover:text-slate-200 p-0.5 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
             {/* Supermarket Cards List */}
             <div className="space-y-3 mt-3 max-h-[500px] overflow-y-auto pr-1">
               {filteredSupermarkets.length === 0 ? (
@@ -317,51 +554,125 @@ export const TeamTab: React.FC<TeamTabProps> = ({
               ) : (
                 filteredSupermarkets.map((shop) => {
                   const assignedVisitor = visitors.find((v) => v.id === shop.assigned_visitor_id);
+                  const isApproved = shop.is_active !== false;
+                  const isTogglingThis = togglingStoreId === shop.id;
 
                   return (
                     <div
                       key={shop.id}
-                      className="p-3.5 rounded-xl bg-slate-950 border border-slate-800/80 space-y-2 text-xs"
+                      className={`p-3.5 rounded-xl border space-y-2 text-xs transition ${
+                        !isApproved
+                          ? 'bg-amber-950/20 border-amber-500/40 shadow-sm'
+                          : 'bg-slate-950 border-slate-800/80 hover:border-slate-700'
+                      }`}
                     >
+                      {/* Top row: Name with Approval Tick Checkbox + Phone */}
                       <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="font-bold text-sm text-slate-100">{shop.name}</p>
-                          <p className="text-slate-400 mt-0.5">مدیریت: {shop.owner}</p>
+                        <div className="flex items-center gap-2 min-w-0">
+                          {/* Approval Checkbox on Name */}
+                          <button
+                            type="button"
+                            disabled={isTogglingThis}
+                            onClick={() => handleToggleApproval(shop)}
+                            title={
+                              isApproved
+                                ? 'کلیک کنید تا دسترسی فروشگاه غیرفعال شود'
+                                : 'کلیک کنید تا دسترسی فروشگاه تایید و فعال شود'
+                            }
+                            className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 border transition cursor-pointer ${
+                              isApproved
+                                ? 'bg-emerald-600 border-emerald-500 text-white shadow-xs hover:bg-emerald-500'
+                                : 'bg-slate-900 border-amber-500/80 text-amber-400 hover:bg-amber-500/20 animate-pulse'
+                            } ${isTogglingThis ? 'opacity-50 cursor-wait' : ''}`}
+                          >
+                            {isTogglingThis ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Check className={`w-3.5 h-3.5 stroke-[3] ${isApproved ? 'opacity-100' : 'opacity-40'}`} />
+                            )}
+                          </button>
+
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <p className="font-bold text-sm text-slate-100 truncate">{shop.name}</p>
+                              {!isApproved ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-400 text-slate-950 border border-amber-300">
+                                  در انتظار تایید ادمین
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.2 rounded-md text-[10px] font-semibold bg-emerald-950/80 text-emerald-300 border border-emerald-800/50">
+                                  تایید شده
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-slate-400 mt-0.5">مدیریت: {shop.owner}</p>
+                          </div>
                         </div>
-                        <span className="px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-slate-400 font-mono text-xs">
+
+                        <span className="px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-slate-400 font-mono text-xs shrink-0">
                           {shop.phone}
                         </span>
                       </div>
 
+                      {/* Address */}
                       <div className="flex items-start gap-1.5 text-slate-400 pt-1">
                         <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
                         <span className="truncate">{shop.address}</span>
                       </div>
 
-                      {/* Bottom row: Assigned Visitor select + Toggle store */}
+                      {/* Bottom row: Assigned Visitor + Approval Toggle Button + Edit & Delete Actions */}
                       <div className="mt-2.5 pt-2 border-t border-slate-900 flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5">
                           <span className="text-slate-500">ویزیتور:</span>
-                          <select
-                            disabled
-                            title="تغییر مستقیم ویزیتور فروشگاه نیازمند متد reassignSupermarketVisitor در کانتکست است"
-                            value={shop.assigned_visitor_id}
-                            className="bg-slate-900 border border-slate-800 text-slate-300 rounded-lg px-2 py-1 text-xs cursor-not-allowed opacity-80"
-                          >
-                            <option value={shop.assigned_visitor_id}>
-                              {assignedVisitor ? `${assignedVisitor.name} (${assignedVisitor.region})` : 'تعیین نشده'}
-                            </option>
-                          </select>
+                          <span className="bg-slate-900 border border-slate-800 text-slate-300 rounded-lg px-2 py-0.5 text-xs">
+                            {assignedVisitor ? `${assignedVisitor.name} (${assignedVisitor.region})` : 'تعیین نشده'}
+                          </span>
                         </div>
 
-                        <button
-                          type="button"
-                          disabled
-                          title="فعال/غیرفعال‌سازی فروشگاه نیازمند متد setSupermarketActive در کانتکست است"
-                          className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-xs cursor-not-allowed opacity-80"
-                        >
-                          فعال
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          {/* Fast Quick Toggle Button */}
+                          <button
+                            type="button"
+                            disabled={isTogglingThis}
+                            onClick={() => handleToggleApproval(shop)}
+                            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer border ${
+                              isApproved
+                                ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                                : 'bg-amber-500 hover:bg-amber-400 text-slate-950 border-amber-400 shadow-md shadow-amber-500/20'
+                            }`}
+                            title={isApproved ? 'غیرفعال‌سازی دسترسی' : 'تایید عضویت و بازگشایی دسترسی'}
+                          >
+                            {isTogglingThis ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Check className="w-3.5 h-3.5 stroke-[3]" />
+                            )}
+                            <span>{isApproved ? 'دسترسی فعال' : 'تایید و بازگشایی دسترسی'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditSupermarket(shop)}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-blue-400 hover:text-blue-300 border border-slate-800 text-xs font-medium transition cursor-pointer"
+                            title="ویرایش مشخصات مشتری"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                            <span>ویرایش</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDeletingSupermarket(shop);
+                              setDeleteError(null);
+                            }}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-medium transition cursor-pointer"
+                            title="حذف مشتری"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>حذف</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -576,6 +887,264 @@ export const TeamTab: React.FC<TeamTabProps> = ({
           </div>
         </div>
       )}
+
+      {/* Edit Supermarket Modal */}
+      {editingSupermarket && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950/60">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-500/15 text-blue-400 flex items-center justify-center border border-blue-500/30">
+                  <Edit2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-100">ویرایش مشخصات مشتری</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {editingSupermarket.name}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingSupermarket(null);
+                  setEditSupermarketError(null);
+                  setEditSupermarketSuccess(null);
+                }}
+                className="p-1.5 text-slate-400 hover:text-slate-100 rounded-xl hover:bg-slate-800 transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleUpdateSupermarketSubmit} className="p-4 space-y-4 overflow-y-auto">
+              {/* Error Message */}
+              {editSupermarketError && (
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-2 text-rose-400 text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{editSupermarketError}</span>
+                </div>
+              )}
+
+              {/* Success Message */}
+              {editSupermarketSuccess && (
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-start gap-2 text-emerald-400 text-xs">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{editSupermarketSuccess}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    نام فروشگاه / سوپرمارکت <span className="text-rose-400">*</span>
+                  </label>
+                  <div className="relative">
+                    <Building className="w-3.5 h-3.5 absolute right-3 top-2.5 text-slate-500 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={editForm.name}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, name: e.target.value }))}
+                      placeholder="مثال: هایپرمارکت ساحل"
+                      disabled={isUpdatingSupermarket}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    نام مالک یا مدیر <span className="text-rose-400">*</span>
+                  </label>
+                  <div className="relative">
+                    <User className="w-3.5 h-3.5 absolute right-3 top-2.5 text-slate-500 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={editForm.owner}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, owner: e.target.value }))}
+                      placeholder="مثال: علی احمدی"
+                      disabled={isUpdatingSupermarket}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    شماره تماس / همراه <span className="text-rose-400">*</span>
+                  </label>
+                  <div className="relative">
+                    <Phone className="w-3.5 h-3.5 absolute right-3 top-2.5 text-slate-500 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={editForm.phone}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, phone: e.target.value }))}
+                      placeholder="۰۹۱۲..."
+                      disabled={isUpdatingSupermarket}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 font-mono"
+                      dir="ltr"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    ویزیتور اختصاصی
+                  </label>
+                  <select
+                    value={editForm.assigned_visitor_id}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, assigned_visitor_id: e.target.value }))}
+                    disabled={isUpdatingSupermarket}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="">تعیین نشده</option>
+                    {visitors.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.name} ({v.region})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                  آدرس دقیق <span className="text-rose-400">*</span>
+                </label>
+                <div className="relative">
+                  <MapPin className="w-3.5 h-3.5 absolute right-3 top-2.5 text-slate-500 pointer-events-none" />
+                  <textarea
+                    value={editForm.address}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, address: e.target.value }))}
+                    placeholder="شهر، خیابان، پلاک..."
+                    rows={2}
+                    disabled={isUpdatingSupermarket}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-none"
+                  />
+                </div>
+              </div>
+
+              {/* Status Switch */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950 border border-slate-800">
+                <div>
+                  <span className="text-xs font-bold text-slate-200">وضعیت همکاری</span>
+                  <p className="text-[11px] text-slate-400">فعال بودن حساب مشتری برای ثبت سفارشات</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditForm((prev) => ({ ...prev, is_active: !prev.is_active }))}
+                  className={`px-3 py-1 rounded-full text-xs font-medium border transition cursor-pointer ${
+                    editForm.is_active
+                      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                      : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                  }`}
+                >
+                  {editForm.is_active ? 'فعال' : 'غیرفعال'}
+                </button>
+              </div>
+
+              {/* Footer Buttons */}
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingSupermarket(null);
+                    setEditSupermarketError(null);
+                    setEditSupermarketSuccess(null);
+                  }}
+                  disabled={isUpdatingSupermarket}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition cursor-pointer disabled:opacity-50"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingSupermarket}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold transition shadow-md shadow-blue-600/30 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isUpdatingSupermarket ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>در حال ذخیره...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>ذخیره تغییرات</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Supermarket Confirmation Modal */}
+      {deletingSupermarket && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-5 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/15 text-rose-400 flex items-center justify-center shrink-0 border border-rose-500/30">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-slate-100">حذف مشتری / فروشگاه</h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  آیا از حذف فروشگاه <strong className="text-white font-bold">{deletingSupermarket.name}</strong> با مدیریت آقای/خانم {deletingSupermarket.owner} اطمینان دارید؟
+                </p>
+                <p className="text-[11px] text-rose-400/90 pt-1">
+                  این عملیات غیرقابل بازگشت است و رکورد این مشتری حذف خواهد شد.
+                </p>
+              </div>
+            </div>
+
+            {deleteError && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-2 text-rose-400 text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{deleteError}</span>
+              </div>
+            )}
+
+            <div className="pt-2 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeletingSupermarket(null);
+                  setDeleteError(null);
+                }}
+                disabled={isDeletingSupermarket}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition cursor-pointer disabled:opacity-50"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteSupermarketConfirm}
+                disabled={isDeletingSupermarket}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white text-xs font-bold transition shadow-md shadow-rose-600/30 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isDeletingSupermarket ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>در حال حذف...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>تایید و حذف</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

@@ -32,7 +32,8 @@ export interface Product {
   category_id: string;
   brand?: string;
   name: string;
-  price: number;
+  price: number; // Store purchase price (قیمت خرید سوپرمارکت‌ها)
+  visitor_price?: number; // Visitor purchase price from company (قیمت خرید ویزیتور)
   stock: number;
   reserved_stock: number;
   unit: string;
@@ -46,6 +47,8 @@ export interface ProductPriceHistory {
   product_id: string;
   old_price: number;
   new_price: number;
+  old_visitor_price?: number;
+  new_visitor_price?: number;
   changed_by: string;
   changed_at: string;
 }
@@ -169,4 +172,13 @@ export interface CreateStaffAccountResult {
   username?: string;
   role?: 'warehouse' | 'visitor';
   error?: string;
+}
+
+export interface UpdateSupermarketPayload {
+  name: string;
+  owner: string;
+  phone: string;
+  address: string;
+  assigned_visitor_id: string;
+  is_active: boolean;
 }

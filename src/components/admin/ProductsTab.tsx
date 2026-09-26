@@ -14,10 +14,15 @@ import {
   AlertTriangle,
   ToggleLeft,
   ToggleRight,
+  FileSpreadsheet,
+  Upload,
+  Download,
 } from 'lucide-react';
 import { LOW_STOCK_THRESHOLD, formatPrice } from './helpers';
 import { PriceHistoryDrawer } from './PriceHistoryDrawer';
 import { CategorySelectPicker, BrandSelectPicker } from '../CategoryBrandSelectors';
+import { ExcelImportModal } from './ExcelImportModal';
+import { ExcelExportModal } from './ExcelExportModal';
 
 interface ProductsTabProps {
   products: Product[];
@@ -25,8 +30,9 @@ interface ProductsTabProps {
   brands: string[];
   priceHistories: ProductPriceHistory[];
   initialFilterType?: 'lowStock' | 'all';
-  onUpdateProductPrice: (productId: string, newPrice: number) => void;
+  onUpdateProductPrice: (productId: string, newPrice: number, newVisitorPrice?: number) => void;
   onAddNewProduct: (newProd: Omit<Product, 'id'>) => void;
+  onBulkUpsertProducts?: (items: any[]) => { success: boolean; createdCount: number; updatedCount: number; message: string };
   onDeleteProduct: (productId: string) => { success: boolean; message: string };
   onOpenEditCategory: (cat: { id: string; name: string }) => void;
   onOpenEditBrand: (brand: string) => void;
@@ -40,6 +46,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   initialFilterType = 'all',
   onUpdateProductPrice,
   onAddNewProduct,
+  onBulkUpsertProducts,
   onDeleteProduct,
   onOpenEditCategory,
   onOpenEditBrand,
@@ -50,9 +57,15 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   const [onlyLowStock, setOnlyLowStock] = useState(initialFilterType === 'lowStock');
   const [onlyInactive, setOnlyInactive] = useState(false);
 
-  // Quick Inline Price Editing
+  // Quick Inline Price Editing (both store price and visitor price)
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
-  const [tempPrice, setTempPrice] = useState<number>(0);
+  const [tempStorePrice, setTempStorePrice] = useState<number>(0);
+  const [tempVisitorPrice, setTempVisitorPrice] = useState<number>(0);
+
+  // Modals for Excel Import / Export
+  const [isExcelImportOpen, setIsExcelImportOpen] = useState(false);
+  const [isExcelExportOpen, setIsExcelExportOpen] = useState(false);
+  const [excelFeedback, setExcelFeedback] = useState<string | null>(null);
 
   // Price History Drawer state
   const [historyDrawerProduct, setHistoryDrawerProduct] = useState<Product | null>(null);
@@ -63,6 +76,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   const [newProdBrand, setNewProdBrand] = useState('میهن');
   const [newProdCat, setNewProdCat] = useState('cat-1');
   const [newProdPrice, setNewProdPrice] = useState(0);
+  const [newProdVisitorPrice, setNewProdVisitorPrice] = useState(0);
   const [newProdStock, setNewProdStock] = useState(0);
   const [newProdUnit, setNewProdUnit] = useState('عدد');
 
@@ -108,10 +122,18 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   }, [products, onlyLowStock, onlyInactive, selectedCategoryFilter, selectedBrandFilter, searchTerm]);
 
   const handleSavePrice = (productId: string) => {
-    if (tempPrice > 0) {
-      onUpdateProductPrice(productId, tempPrice);
+    if (tempStorePrice > 0) {
+      onUpdateProductPrice(productId, tempStorePrice, tempVisitorPrice > 0 ? tempVisitorPrice : undefined);
     }
     setEditingPriceId(null);
+  };
+
+  const handleBulkImportConfirm = (items: any[]) => {
+    if (onBulkUpsertProducts) {
+      const result = onBulkUpsertProducts(items);
+      setExcelFeedback(result.message);
+      setTimeout(() => setExcelFeedback(null), 5000);
+    }
   };
 
   const getSampleImage = (catId: string) => {
@@ -134,11 +156,14 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
     e.preventDefault();
     if (!newProdName.trim() || newProdPrice <= 0) return;
 
+    const visitorPrice = newProdVisitorPrice > 0 ? newProdVisitorPrice : Math.round(newProdPrice * 0.85);
+
     onAddNewProduct({
       name: newProdName.trim(),
       brand: newProdBrand.trim() || 'متفرقه',
       category_id: newProdCat,
       price: newProdPrice,
+      visitor_price: visitorPrice,
       stock: newProdStock,
       reserved_stock: 0,
       unit: newProdUnit,
@@ -150,6 +175,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
     setNewProdName('');
     setNewProdBrand('میهن');
     setNewProdPrice(0);
+    setNewProdVisitorPrice(0);
     setNewProdStock(0);
   };
 
@@ -213,16 +239,55 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
             )}
           </div>
 
-          {/* Add product button */}
-          <button
-            type="button"
-            onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold transition shadow-md shadow-blue-600/30 cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>تعریف کالای جدید</span>
-          </button>
+          {/* Action Buttons: Excel Import, Excel Export, Add Product */}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsExcelImportOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600/15 hover:bg-emerald-600/25 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition cursor-pointer"
+              title="بارگذاری و تطبیق اکسل کالاها و قیمت‌ها"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>ورود با اکسل</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsExcelExportOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600/15 hover:bg-blue-600/25 text-blue-400 border border-blue-500/30 text-xs font-bold transition cursor-pointer"
+              title="استخراج کاتالوگ یا قیمت‌ها در قالب اکسل"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>خروجی اکسل</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsAddModalOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold transition shadow-md shadow-blue-600/30 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>تعریف کالای جدید</span>
+            </button>
+          </div>
         </div>
+
+        {/* Excel Feedback Banner if active */}
+        {excelFeedback && (
+          <div className="p-3 rounded-xl bg-emerald-950/80 border border-emerald-800/80 text-emerald-300 text-xs font-medium flex items-center justify-between animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>{excelFeedback}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setExcelFeedback(null)}
+              className="text-slate-400 hover:text-slate-200"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* Categories, Brands & Search Inputs */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800/80">
@@ -292,6 +357,8 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                   <th className="py-3 px-4 font-semibold">دسته</th>
                   <th className="py-3 px-4 font-semibold">برند</th>
                   <th className="py-3 px-4 font-semibold">قیمت مصوب فروش</th>
+                  <th className="py-3 px-4 font-semibold text-emerald-400">قیمت فروشگاه</th>
+                  <th className="py-3 px-4 font-semibold text-blue-400">قیمت خرید ویزیتور</th>
                   <th className="py-3 px-4 font-semibold">کل سردخانه</th>
                   <th className="py-3 px-4 font-semibold">رزرو سفارشات</th>
                   <th className="py-3 px-4 font-semibold">موجودی آزاد</th>
@@ -306,6 +373,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                   const isEditing = editingPriceId === product.id;
                   const categoryObj = categories.find((c) => c.id === product.category_id);
                   const isLow = freeStock < LOW_STOCK_THRESHOLD;
+                  const visitorPrice = product.visitor_price || Math.round(product.price * 0.85);
 
                   return (
                     <tr key={product.id} className="hover:bg-slate-800/35 transition">
@@ -336,38 +404,68 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                         </span>
                       </td>
 
-                      {/* Price (Editable Inline) */}
+                      {/* Store Purchase Price (Editable Inline) */}
                       <td className="py-3 px-4">
                         {isEditing ? (
-                          <div className="flex items-center gap-1.5">
+                          <div className="space-y-1">
+                            <span className="text-[10px] text-emerald-400 block font-bold">فروشگاه:</span>
                             <input
                               type="number"
                               min="1000"
-                              value={tempPrice}
-                              onChange={(e) => setTempPrice(Number(e.target.value))}
-                              className="w-24 px-2 py-1 bg-slate-950 border border-blue-500 rounded-lg text-xs text-white"
+                              value={tempStorePrice}
+                              onChange={(e) => setTempStorePrice(Number(e.target.value))}
+                              className="w-24 px-2 py-1 bg-slate-950 border border-emerald-500 rounded-lg text-xs text-emerald-300 font-mono"
                             />
-                            <button
-                              type="button"
-                              onClick={() => handleSavePrice(product.id)}
-                              className="p-1 rounded-md bg-emerald-600 text-white hover:bg-emerald-500 cursor-pointer"
-                            >
-                              <Check className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setEditingPriceId(null)}
-                              className="p-1 rounded-md bg-slate-800 text-slate-400 hover:text-slate-200 cursor-pointer"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
                           </div>
                         ) : (
                           <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-slate-100">
+                            <span className="font-bold font-mono text-emerald-400">
                               {formatPrice(product.price)}
                             </span>
-                            <span className="text-xs text-slate-500">تومان</span>
+                            <span className="text-[11px] text-slate-500">تومان</span>
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Visitor Purchase Price (Editable Inline) */}
+                      <td className="py-3 px-4">
+                        {isEditing ? (
+                          <div className="flex items-center gap-1.5">
+                            <div className="space-y-1">
+                              <span className="text-[10px] text-blue-400 block font-bold">ویزیتور:</span>
+                              <input
+                                type="number"
+                                min="1000"
+                                value={tempVisitorPrice}
+                                onChange={(e) => setTempVisitorPrice(Number(e.target.value))}
+                                className="w-24 px-2 py-1 bg-slate-950 border border-blue-500 rounded-lg text-xs text-blue-300 font-mono"
+                              />
+                            </div>
+                            <div className="flex items-center gap-1 pt-4">
+                              <button
+                                type="button"
+                                onClick={() => handleSavePrice(product.id)}
+                                className="p-1 rounded-md bg-emerald-600 text-white hover:bg-emerald-500 cursor-pointer shadow-xs"
+                                title="ذخیره قیمت‌های جدید"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingPriceId(null)}
+                                className="p-1 rounded-md bg-slate-800 text-slate-400 hover:text-slate-200 cursor-pointer"
+                                title="انصراف"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold font-mono text-blue-400">
+                              {formatPrice(visitorPrice)}
+                            </span>
+                            <span className="text-[11px] text-slate-500">تومان</span>
                           </div>
                         )}
                       </td>
@@ -420,7 +518,8 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                               type="button"
                               onClick={() => {
                                 setEditingPriceId(product.id);
-                                setTempPrice(product.price);
+                                setTempStorePrice(product.price);
+                                setTempVisitorPrice(product.visitor_price || Math.round(product.price * 0.85));
                               }}
                               className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 inline-flex items-center gap-1 cursor-pointer transition"
                               title="تغییر رسمی نرخ"
@@ -513,61 +612,89 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 mb-1 font-medium">
-                    قیمت فروش (تومان)
+                  <label className="block text-slate-300 mb-1 font-semibold flex items-center justify-between">
+                    <span>قیمت خرید فروشگاه (تومان) <span className="text-amber-400">*</span></span>
                   </label>
                   <input
                     type="number"
                     required
                     min="1000"
                     value={newProdPrice || ''}
-                    onChange={(e) => setNewProdPrice(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-slate-100 focus:outline-none focus:border-blue-500"
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setNewProdPrice(val);
+                      if (!newProdVisitorPrice || newProdVisitorPrice === Math.round(newProdPrice * 0.85)) {
+                        setNewProdVisitorPrice(Math.round(val * 0.85));
+                      }
+                    }}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
                     placeholder="مثال: 45000"
                   />
+                  <span className="text-[10px] text-slate-500 mt-0.5 block">نرخ رسمی فروش به مشتریان سوپرمارکت</span>
                 </div>
+
+                <div>
+                  <label className="block text-slate-300 mb-1 font-semibold flex items-center justify-between">
+                    <span>قیمت خرید ویزیتور (تومان)</span>
+                    <span className="text-[10px] text-blue-400">محرمانه</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1000"
+                    value={newProdVisitorPrice || ''}
+                    onChange={(e) => setNewProdVisitorPrice(Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
+                    placeholder="محاسبه خودکار (۸۵٪)"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-0.5 block">نرخ فاکتور حواله ویزیتور به شرکت</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-400 mb-1 font-medium">واحد سنجش</label>
                   <select
                     value={newProdUnit}
                     onChange={(e) => setNewProdUnit(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-slate-100 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-100 focus:outline-none focus:border-blue-500 cursor-pointer"
                   >
                     <option value="عدد">عدد</option>
                     <option value="باکس">باکس</option>
                     <option value="بسته">بسته</option>
                     <option value="کیلوگرم">کیلوگرم</option>
+                    <option value="جعبه">جعبه</option>
+                    <option value="سطل">سطل</option>
                   </select>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-slate-400 mb-1 font-medium">
-                  موجودی اولیه فیزیکی سردخانه
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={newProdStock || ''}
-                  onChange={(e) => setNewProdStock(Number(e.target.value))}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-slate-100 focus:outline-none focus:border-blue-500"
-                  placeholder="0"
-                />
+                <div>
+                  <label className="block text-slate-400 mb-1 font-medium">
+                    موجودی اولیه فیزیکی سردخانه
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={newProdStock || ''}
+                    onChange={(e) => setNewProdStock(Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
+                    placeholder="0"
+                  />
+                </div>
               </div>
 
               <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsAddModalOpen(false)}
-                  className="px-3.5 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700"
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 cursor-pointer"
                 >
                   انصراف
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold transition shadow-md shadow-blue-600/30"
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold transition shadow-md shadow-blue-600/30 cursor-pointer"
                 >
                   ثبت و تعریف کالا
                 </button>
@@ -576,6 +703,24 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
           </div>
         </div>
       )}
+
+      {/* Excel Import Modal */}
+      <ExcelImportModal
+        isOpen={isExcelImportOpen}
+        onClose={() => setIsExcelImportOpen(false)}
+        categories={categories}
+        existingProducts={products}
+        onImportConfirm={handleBulkImportConfirm}
+      />
+
+      {/* Excel Export Modal */}
+      <ExcelExportModal
+        isOpen={isExcelExportOpen}
+        onClose={() => setIsExcelExportOpen(false)}
+        products={products}
+        categories={categories}
+        brands={brands}
+      />
 
       {/* Delete Product Confirmation Modal */}
       {productToDelete && (

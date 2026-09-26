@@ -14,6 +14,7 @@ import {
   ProductPriceHistory,
   CreateStaffAccountPayload,
   CreateStaffAccountResult,
+  UpdateSupermarketPayload,
 } from '../types';
 import {
   INITIAL_CATEGORIES,
@@ -68,10 +69,21 @@ interface AppContextType {
   requestReassignment: (orderId: string, toVisitorId: string | null) => void;
   respondToReassignment: (requestId: string, accept: boolean) => void;
   createLoadingBill: (visitorId: string, orderIds: string[]) => void;
-  approveLoadingBill: (billId: string) => void;
-  updateProductPrice: (productId: string, newPrice: number) => void;
+  updateProductPrice: (productId: string, newPrice: number, newVisitorPrice?: number) => void;
   updateProductStock: (productId: string, additionalStock: number) => void;
   addNewProduct: (product: Omit<Product, 'id' | 'reserved_stock'>) => void;
+  bulkUpsertProducts: (items: Array<{
+    id?: string;
+    name: string;
+    category_id?: string;
+    category_name?: string;
+    brand?: string;
+    price: number;
+    visitor_price?: number;
+    stock?: number;
+    unit?: string;
+    is_active?: boolean;
+  }>) => { success: boolean; createdCount: number; updatedCount: number; message: string };
   deleteProduct: (productId: string) => { success: boolean; message: string };
   addCategory: (name: string, icon?: string) => { success: boolean; message: string; category?: Category };
   updateCategory: (categoryId: string, newName: string) => { success: boolean; message: string };
@@ -88,6 +100,9 @@ interface AppContextType {
     username: string;
     password: string;
   }) => Promise<{ success: boolean; message: string; supermarket?: Supermarket }>;
+  updateSupermarket: (id: string, payload: UpdateSupermarketPayload) => Promise<{ success: boolean; message: string }>;
+  deleteSupermarket: (id: string) => Promise<{ success: boolean; message: string }>;
+  toggleSupermarketApproval: (id: string, currentStatus: boolean) => Promise<{ success: boolean; message: string; newStatus: boolean }>;
   createStaffAccount: (payload: CreateStaffAccountPayload) => Promise<CreateStaffAccountResult>;
   resetToDefaults: () => void;
   isOnlineDb: boolean;
@@ -189,6 +204,106 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSupermarkets(INITIAL_SUPERMARKETS);
   }, [catalog, orders, warehouse]);
 
+  // Update Supermarket information (both local state and Supabase if online)
+  const updateSupermarket = useCallback(async (id: string, payload: UpdateSupermarketPayload): Promise<{ success: boolean; message: string }> => {
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const { error: smError } = await supabase
+          .from('supermarkets')
+          .update({
+            name: payload.name.trim(),
+            owner: payload.owner.trim(),
+            phone: payload.phone.trim(),
+            address: payload.address.trim(),
+            assigned_visitor_id: payload.assigned_visitor_id,
+            is_active: payload.is_active,
+          })
+          .eq('id', id);
+
+        if (smError) {
+          return { success: false, message: `خطا در ویرایش سوپرمارکت در سرور: ${smError.message}` };
+        }
+
+        // Also update profiles table phone and name
+        await supabase
+          .from('profiles')
+          .update({
+            name: payload.name.trim(),
+            phone: payload.phone.trim(),
+          })
+          .eq('id', id);
+      }
+
+      setSupermarkets((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, ...payload } : s))
+      );
+
+      return { success: true, message: 'مشخصات فروشگاه با موفقیت ویرایش شد.' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در ویرایش مشتری';
+      return { success: false, message: msg };
+    }
+  }, [setSupermarkets]);
+
+  // Delete Supermarket (both local and Supabase)
+  const deleteSupermarket = useCallback(async (id: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const { error: smError } = await supabase
+          .from('supermarkets')
+          .delete()
+          .eq('id', id);
+
+        if (smError) {
+          return { success: false, message: `خطا در حذف سوپرمارکت از پایگاه داده: ${smError.message}` };
+        }
+
+        // Also delete profile
+        await supabase
+          .from('profiles')
+          .delete()
+          .eq('id', id);
+      }
+
+      setSupermarkets((prev) => prev.filter((s) => s.id !== id));
+
+      return { success: true, message: 'مشتری با موفقیت حذف گردید.' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در حذف مشتری';
+      return { success: false, message: msg };
+    }
+  }, [setSupermarkets]);
+
+  // Quick toggle approval / active state for Supermarket
+  const toggleSupermarketApproval = useCallback(async (id: string, currentStatus: boolean): Promise<{ success: boolean; message: string; newStatus: boolean }> => {
+    const nextStatus = !currentStatus;
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const { error: smError } = await supabase
+          .from('supermarkets')
+          .update({ is_active: nextStatus })
+          .eq('id', id);
+
+        if (smError) {
+          return { success: false, message: `خطا در تغییر وضعیت تایید فروشگاه: ${smError.message}`, newStatus: currentStatus };
+        }
+      }
+
+      setSupermarkets((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, is_active: nextStatus } : s))
+      );
+
+      const msg = nextStatus
+        ? 'فروشگاه با موفقیت تایید شد و دسترسی ورود به سامانه برای آن فعال گردید.'
+        : 'دسترسی فروشگاه به سامانه غیرفعال گردید.';
+
+      return { success: true, message: msg, newStatus: nextStatus };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در تغییر وضعیت تایید';
+      return { success: false, message: msg, newStatus: currentStatus };
+    }
+  }, [setSupermarkets]);
+
   // Thin wrapper to invoke create-staff-account Edge Function
   const createStaffAccount = useCallback(async (payload: CreateStaffAccountPayload): Promise<CreateStaffAccountResult> => {
     if (!isSupabaseConfigured) {
@@ -265,6 +380,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateProductPrice: catalog.updateProductPrice,
     updateProductStock: warehouse.updateProductStock,
     addNewProduct: catalog.addNewProduct,
+    bulkUpsertProducts: catalog.bulkUpsertProducts,
     deleteProduct: catalog.deleteProduct,
     addCategory: catalog.addCategory,
     updateCategory: catalog.updateCategory,
@@ -273,6 +389,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateBrand: catalog.updateBrand,
     deleteBrand: catalog.deleteBrand,
     registerSupermarket: auth.registerSupermarket,
+    updateSupermarket,
+    deleteSupermarket,
+    toggleSupermarketApproval,
     createStaffAccount,
     resetToDefaults,
     isOnlineDb: isSupabaseConfigured,
@@ -291,6 +410,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     auth.loginWithCredentials,
     auth.logout,
     auth.registerSupermarket,
+    updateSupermarket,
+    deleteSupermarket,
+    toggleSupermarketApproval,
     createStaffAccount,
     catalog.categories,
     catalog.brands,
@@ -298,6 +420,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     catalog.priceHistories,
     catalog.updateProductPrice,
     catalog.addNewProduct,
+    catalog.bulkUpsertProducts,
     catalog.deleteProduct,
     catalog.addCategory,
     catalog.updateCategory,

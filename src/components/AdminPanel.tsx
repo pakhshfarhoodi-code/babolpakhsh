@@ -39,6 +39,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     priceHistories,
     updateProductPrice,
     addNewProduct,
+    bulkUpsertProducts,
     deleteProduct,
     updateOrderStatus,
     requestReassignment,
@@ -65,13 +66,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [newBrandNameInput, setNewBrandNameInput] = useState('');
   const [catBrandFeedback, setCatBrandFeedback] = useState<string | null>(null);
 
-  // Badge count for Overview Tab
+  // Badge count for Overview Tab & Pending approvals
+  const pendingApprovalsCount = useMemo(() => {
+    return supermarkets.filter((s) => s.is_active === false).length;
+  }, [supermarkets]);
+
   const actionItemsCount = useMemo(() => {
     const delegatedCount = orders.filter((o) => o.status === 'delegated').length;
     const lowStockCount = products.filter((p) => p.stock - p.reserved_stock < LOW_STOCK_THRESHOLD).length;
-    const inactiveStoresCount = supermarkets.filter((s) => isStoreInactiveFor30Days(s.id, orders)).length;
-    return delegatedCount + lowStockCount + inactiveStoresCount;
-  }, [orders, products, supermarkets]);
+    const inactiveStoresCount = supermarkets.filter((s) => s.is_active !== false && isStoreInactiveFor30Days(s.id, orders)).length;
+    return delegatedCount + lowStockCount + inactiveStoresCount + pendingApprovalsCount;
+  }, [orders, products, supermarkets, pendingApprovalsCount]);
 
   // Tab Navigation Handlers from Overview Cards
   const handleNavigateToOrders = (statusFilter = 'all') => {
@@ -123,8 +128,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       id: 'team' as const,
       label: 'تیم و مشتریان',
       icon: Users,
-      badge: supermarkets.length,
-      badgeColor: 'bg-slate-800 text-slate-300 font-semibold',
+      badge: pendingApprovalsCount > 0 ? `${pendingApprovalsCount} تایید جدید` : supermarkets.length,
+      badgeColor: pendingApprovalsCount > 0 ? 'bg-amber-400 text-slate-950 font-bold animate-pulse' : 'bg-slate-800 text-slate-300 font-semibold',
       activeStyle:
         'bg-blue-600 text-white shadow-md shadow-blue-600/30 border-blue-500 font-bold',
       inactiveHover: 'hover:text-blue-300 hover:bg-slate-900',
@@ -221,6 +226,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           initialFilterType={productsFilterHint}
           onUpdateProductPrice={updateProductPrice}
           onAddNewProduct={addNewProduct}
+          onBulkUpsertProducts={bulkUpsertProducts}
           onDeleteProduct={deleteProduct}
           onOpenEditCategory={(cat) => {
             setEditingCategoryModal(cat);
@@ -252,6 +258,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           products={products}
           categories={categories}
           visitors={visitors}
+          loadingBills={useApp().loadingBills}
         />
       )}
 

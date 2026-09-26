@@ -13,6 +13,7 @@ interface NewProductModalProps {
     brand: string;
     category_id: string;
     price: number;
+    visitor_price?: number;
     stock: number;
     unit: string;
     image_url: string;
@@ -30,6 +31,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
   const [brand, setBrand] = useState('میهن');
   const [categoryId, setCategoryId] = useState('cat-1');
   const [price, setPrice] = useState<number>(0);
+  const [visitorPrice, setVisitorPrice] = useState<number>(0);
   const [stock, setStock] = useState<number>(50);
   const [unit, setUnit] = useState('عدد');
 
@@ -51,6 +53,13 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
     }
   };
 
+  const handlePriceChange = (val: number) => {
+    setPrice(val);
+    if (!visitorPrice || visitorPrice === Math.round(price * 0.85)) {
+      setVisitorPrice(Math.round(val * 0.85));
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || price <= 0) return;
@@ -60,6 +69,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
       brand: brand.trim() || 'متفرقه',
       category_id: categoryId,
       price,
+      visitor_price: visitorPrice > 0 ? visitorPrice : Math.round(price * 0.85),
       stock,
       unit,
       image_url: getSampleImage(categoryId),
@@ -69,6 +79,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
     setName('');
     setBrand('میهن');
     setPrice(0);
+    setVisitorPrice(0);
     setStock(50);
   };
 
@@ -131,31 +142,51 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-slate-300 mb-1 font-medium">قیمت مصوب (تومان)</label>
-              <input
-                type="number"
-                required
-                min="1000"
-                value={price || ''}
-                onChange={(e) => setPrice(Number(e.target.value))}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition shadow-inner font-mono"
-                placeholder="85000"
-              />
+          {/* Dual Pricing Section */}
+          <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2.5">
+            <span className="text-[11px] font-bold text-slate-300 block">نرخ‌گذاری دوگانه کالا:</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label className="block text-emerald-400 mb-1 font-semibold text-[11px]">
+                  قیمت خرید فروشگاه (تومان)
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="1000"
+                  value={price || ''}
+                  onChange={(e) => handlePriceChange(Number(e.target.value))}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-xs text-emerald-300 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition shadow-inner font-mono font-bold"
+                  placeholder="85000"
+                />
+              </div>
+              <div>
+                <label className="block text-blue-400 mb-1 font-semibold text-[11px]">
+                  قیمت خرید ویزیتور (تومان)
+                </label>
+                <input
+                  type="number"
+                  min="1000"
+                  value={visitorPrice || ''}
+                  onChange={(e) => setVisitorPrice(Number(e.target.value))}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-xs text-blue-300 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition shadow-inner font-mono font-bold"
+                  placeholder="72250"
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-slate-300 mb-1 font-medium">موجودی اولیه فیزیکی</label>
-              <input
-                type="number"
-                min="1"
-                required
-                value={stock || ''}
-                onChange={(e) => setStock(Number(e.target.value))}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition shadow-inner font-mono"
-                placeholder="50"
-              />
-            </div>
+          </div>
+
+          <div>
+            <label className="block text-slate-300 mb-1 font-medium">موجودی اولیه فیزیکی</label>
+            <input
+              type="number"
+              min="1"
+              required
+              value={stock || ''}
+              onChange={(e) => setStock(Number(e.target.value))}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition shadow-inner font-mono"
+              placeholder="50"
+            />
           </div>
 
           <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">

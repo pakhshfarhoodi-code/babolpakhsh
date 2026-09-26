@@ -75,10 +75,13 @@ export function useCatalog() {
     localStorage.setItem(STORAGE_KEYS.PRICE_HISTORIES, JSON.stringify(priceHistories));
   }, [priceHistories]);
 
-  // Update product price
-  const updateProductPrice = useCallback((productId: string, newPrice: number) => {
+  // Update product price (supports both store price and visitor purchase price)
+  const updateProductPrice = useCallback((productId: string, newPrice: number, newVisitorPrice?: number) => {
     const prod = products.find((p) => p.id === productId);
-    if (!prod || prod.price === newPrice) return;
+    if (!prod) return;
+    
+    const targetVisitorPrice = newVisitorPrice !== undefined ? newVisitorPrice : (prod.visitor_price ?? Math.round(newPrice * 0.85));
+    if (prod.price === newPrice && prod.visitor_price === targetVisitorPrice) return;
 
     const nowPersian = new Intl.DateTimeFormat('fa-IR', {
       year: 'numeric',
@@ -93,19 +96,21 @@ export function useCatalog() {
       product_id: productId,
       old_price: prod.price,
       new_price: newPrice,
+      old_visitor_price: prod.visitor_price,
+      new_visitor_price: targetVisitorPrice,
       changed_by: 'مدیریت مرکزی',
       changed_at: nowPersian,
     };
 
     setPriceHistories((prev) => [historyRecord, ...prev]);
     setProducts((prev) =>
-      prev.map((p) => (p.id === productId ? { ...p, price: newPrice } : p))
+      prev.map((p) => (p.id === productId ? { ...p, price: newPrice, visitor_price: targetVisitorPrice } : p))
     );
 
     if (isSupabaseConfigured && supabase) {
       supabase
         .from('products')
-        .update({ price: newPrice })
+        .update({ price: newPrice, visitor_price: targetVisitorPrice })
         .eq('id', productId)
         .then(({ error }) => {
           if (error) console.error('خطا در تغییر قیمت کالا روی Supabase:', error);
@@ -128,11 +133,13 @@ export function useCatalog() {
   // Add new product
   const addNewProduct = useCallback((newProd: Omit<Product, 'id' | 'reserved_stock'>) => {
     const id = `prod-${Date.now().toString().slice(-4)}`;
+    const visitor_price = newProd.visitor_price !== undefined ? newProd.visitor_price : Math.round(newProd.price * 0.85);
     setProducts((prev) => [
       ...prev,
       {
         ...newProd,
         id,
+        visitor_price,
         reserved_stock: 0,
       },
     ]);
@@ -150,6 +157,7 @@ export function useCatalog() {
           category_id: newProd.category_id,
           brand: newProd.brand,
           price: newProd.price,
+          visitor_price,
           stock: newProd.stock,
           reserved_stock: 0,
           unit: newProd.unit,
@@ -161,6 +169,135 @@ export function useCatalog() {
         });
     }
   }, []);
+
+  // Bulk Upsert Products from Excel import
+  const bulkUpsertProducts = useCallback((items: Array<{
+    id?: string;
+    name: string;
+    category_id?: string;
+    category_name?: string;
+    brand?: string;
+    price: number;
+    visitor_price?: number;
+    stock?: number;
+    unit?: string;
+    is_active?: boolean;
+  }>): { success: boolean; createdCount: number; updatedCount: number; message: string } => {
+    if (!items || items.length === 0) {
+      return { success: false, createdCount: 0, updatedCount: 0, message: 'هیچ داده‌ای برای ثبت یافت نشد.' };
+    }
+
+    let createdCount = 0;
+    let updatedCount = 0;
+
+    const newBrandsSet = new Set<string>();
+    const nowPersian = new Intl.DateTimeFormat('fa-IR', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date());
+
+    const newHistories: ProductPriceHistory[] = [];
+
+    setProducts((prev) => {
+      const updatedProducts = [...prev];
+
+      items.forEach((item, index) => {
+        const trimmedName = item.name.trim();
+        const brandName = item.brand?.trim() || 'متفرقه';
+        if (brandName) newBrandsSet.add(brandName);
+
+        // Find match by id or by name (case-insensitive)
+        const matchIndex = updatedProducts.findIndex((p) => {
+          if (item.id && item.id.trim() && p.id.toLowerCase() === item.id.trim().toLowerCase()) {
+            return true;
+          }
+          return p.name.trim().toLowerCase() === trimmedName.toLowerCase();
+        });
+
+        const storePrice = Number(item.price) || 0;
+        const visitorPrice = item.visitor_price !== undefined && item.visitor_price !== null && Number(item.visitor_price) > 0
+          ? Number(item.visitor_price)
+          : Math.round(storePrice * 0.85);
+        const stockQty = item.stock !== undefined ? Math.max(0, Number(item.stock) || 0) : undefined;
+        const unitStr = item.unit?.trim() || 'عدد';
+
+        if (matchIndex >= 0) {
+          // Update existing product
+          const current = updatedProducts[matchIndex];
+          const hasPriceChanged = current.price !== storePrice || current.visitor_price !== visitorPrice;
+
+          if (hasPriceChanged) {
+            newHistories.push({
+              id: `price-hist-${Date.now()}-${index}`,
+              product_id: current.id,
+              old_price: current.price,
+              new_price: storePrice,
+              old_visitor_price: current.visitor_price,
+              new_visitor_price: visitorPrice,
+              changed_by: 'ویرایش اکسل',
+              changed_at: nowPersian,
+            });
+          }
+
+          updatedProducts[matchIndex] = {
+            ...current,
+            name: trimmedName || current.name,
+            brand: brandName || current.brand,
+            category_id: item.category_id || current.category_id,
+            price: storePrice > 0 ? storePrice : current.price,
+            visitor_price: visitorPrice > 0 ? visitorPrice : current.visitor_price,
+            stock: stockQty !== undefined ? stockQty : current.stock,
+            unit: unitStr || current.unit,
+            is_active: item.is_active !== undefined ? item.is_active : current.is_active,
+          };
+          updatedCount++;
+        } else {
+          // Create new product
+          const newId = item.id && item.id.trim() ? item.id.trim() : `prod-${Date.now().toString().slice(-4)}-${index}`;
+          const newCatId = item.category_id || categories[0]?.id || 'cat-1';
+          
+          updatedProducts.push({
+            id: newId,
+            name: trimmedName,
+            brand: brandName,
+            category_id: newCatId,
+            price: storePrice,
+            visitor_price: visitorPrice,
+            stock: stockQty !== undefined ? stockQty : 0,
+            reserved_stock: 0,
+            unit: unitStr,
+            image_url: 'https://images.unsplash.com/photo-1551024601-bec78aea704b?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer',
+            is_active: item.is_active !== undefined ? item.is_active : true,
+            created_at: new Date().toISOString(),
+          });
+          createdCount++;
+        }
+      });
+
+      return updatedProducts;
+    });
+
+    if (newHistories.length > 0) {
+      setPriceHistories((prev) => [...newHistories, ...prev]);
+    }
+
+    if (newBrandsSet.size > 0) {
+      setBrands((prev) => {
+        const combined = new Set([...prev, ...Array.from(newBrandsSet)]);
+        return Array.from(combined);
+      });
+    }
+
+    return {
+      success: true,
+      createdCount,
+      updatedCount,
+      message: `پردازش اکسل با موفقیت انجام شد: ${createdCount} کالای جدید ثبت و ${updatedCount} کالای موجود به‌روزرسانی گردید.`,
+    };
+  }, [categories]);
 
   // Delete product
   const deleteProduct = useCallback((productId: string) => {
@@ -393,6 +530,7 @@ export function useCatalog() {
     setPriceHistories,
     updateProductPrice,
     addNewProduct,
+    bulkUpsertProducts,
     deleteProduct,
     addCategory,
     updateCategory,

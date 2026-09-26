@@ -16,13 +16,13 @@ Deno.serve(async (req: Request) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
-    const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SERVICE_ROLE_KEY');
 
     if (!supabaseUrl || !supabaseServiceRoleKey) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'پیکربندی سرور ناقص است. متغیر SUPABASE_SERVICE_ROLE_KEY تنظیم نشده است.',
+          error: 'پیکربندی سرور ناقص است. کلید دسترسی سیستمی (service_role) یافت نشد.',
         }),
         {
           status: 500,

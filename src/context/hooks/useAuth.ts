@@ -242,15 +242,10 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
             return { success: true };
           }
 
-          const fallbackResult = localLoginFallback(cleanUser, cleanPass, allowedRoles);
-          if (fallbackResult.success) {
-            return fallbackResult;
-          }
-
           return {
             success: false,
             message: authError?.message?.includes('Invalid login credentials')
-              ? 'نام کاربری یا رمز عبور وارد شده نادرست است.'
+              ? 'نام کاربری یا رمز عبور وارد شده در سیستم ثبت نشده یا نادرست است.'
               : (authError?.message || 'خطا در ورود به حساب کاربری.'),
           };
         } catch (err: unknown) {

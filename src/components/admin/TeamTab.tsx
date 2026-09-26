@@ -85,6 +85,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
     phone: string;
     address: string;
     assigned_visitor_id: string;
+    username: string;
     is_active: boolean;
   }>({
     name: '',
@@ -92,6 +93,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
     phone: '',
     address: '',
     assigned_visitor_id: '',
+    username: '',
     is_active: true,
   });
   const [isUpdatingSupermarket, setIsUpdatingSupermarket] = useState(false);
@@ -111,7 +113,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
   const [staffForm, setStaffForm] = useState<{
     name: string;
     phone: string;
-    role: 'warehouse' | 'visitor';
+    role: 'admin' | 'warehouse' | 'visitor';
     region: string;
     username: string;
     password: string;
@@ -203,6 +205,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
       phone: shop.phone,
       address: shop.address,
       assigned_visitor_id: shop.assigned_visitor_id || '',
+      username: shop.username || '',
       is_active: shop.is_active ?? true,
     });
     setEditSupermarketError(null);
@@ -242,6 +245,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
         phone: editForm.phone,
         address: editForm.address,
         assigned_visitor_id: editForm.assigned_visitor_id,
+        username: editForm.username,
         is_active: editForm.is_active,
       });
 
@@ -731,7 +735,14 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                                 </span>
                               )}
                             </div>
-                            <p className="text-slate-400 mt-0.5">مدیریت: {shop.owner}</p>
+                            <div className="flex items-center gap-2 mt-0.5 text-slate-400 flex-wrap">
+                              <span>مدیریت: {shop.owner}</span>
+                              {shop.username && (
+                                <span className="text-amber-300 font-mono text-[11px] bg-slate-900/90 px-2 py-0.5 rounded-md border border-slate-800">
+                                  نام کاربری: {shop.username}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
 
@@ -749,9 +760,13 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                       {/* Bottom row: Assigned Visitor + Approval Toggle Button + Edit & Delete Actions */}
                       <div className="mt-2.5 pt-2 border-t border-slate-900 flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-slate-500">ویزیتور:</span>
+                          <span className="text-slate-500">پشتیبان / ویزیتور:</span>
                           <span className="bg-slate-900 border border-slate-800 text-slate-300 rounded-lg px-2 py-0.5 text-xs">
-                            {assignedVisitor ? `${assignedVisitor.name} (${assignedVisitor.region})` : 'تعیین نشده'}
+                            {shop.assigned_visitor_id === 'direct'
+                              ? 'خرید مستقیم از پخش فرهودی'
+                              : assignedVisitor
+                              ? `${assignedVisitor.name} (${assignedVisitor.region})`
+                              : 'خرید مستقیم از پخش فرهودی'}
                           </span>
                         </div>
 
@@ -874,14 +889,15 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                   onChange={(e) =>
                     setStaffForm((prev) => ({
                       ...prev,
-                      role: e.target.value as 'warehouse' | 'visitor',
+                      role: e.target.value as 'admin' | 'warehouse' | 'visitor',
                     }))
                   }
                   disabled={isSubmittingStaff}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
                 >
-                  <option value="visitor">ویزیتور (پخش و بازاریابی مویرگی)</option>
+                  <option value="admin">مدیر جدید سامانه (ادمین با دسترسی کامل)</option>
                   <option value="warehouse">انباردار (مدیریت سردخانه و موجودی)</option>
+                  <option value="visitor">ویزیتور (پخش و بازاریابی مویرگی)</option>
                 </select>
               </div>
 
@@ -1119,7 +1135,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
 
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                    ویزیتور اختصاصی
+                    پشتیبان / ویزیتور اختصاصی
                   </label>
                   <select
                     value={editForm.assigned_visitor_id}
@@ -1127,13 +1143,31 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                     disabled={isUpdatingSupermarket}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
                   >
-                    <option value="">تعیین نشده</option>
+                    <option value="direct">خرید مستقیم از پخش فرهودی</option>
                     {visitors.map((v) => (
                       <option key={v.id} value={v.id}>
                         {v.name} ({v.region})
                       </option>
                     ))}
                   </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                  نام کاربری جهت ورود به سامانه
+                </label>
+                <div className="relative">
+                  <AtSign className="w-3.5 h-3.5 absolute right-3 top-2.5 text-slate-500 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={editForm.username}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, username: e.target.value.trim() }))}
+                    placeholder="مثال: shop1"
+                    disabled={isUpdatingSupermarket}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 font-mono"
+                    dir="ltr"
+                  />
                 </div>
               </div>
 

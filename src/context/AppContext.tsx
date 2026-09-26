@@ -218,28 +218,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateSupermarket = useCallback(async (id: string, payload: UpdateSupermarketPayload): Promise<{ success: boolean; message: string }> => {
     try {
       if (isSupabaseConfigured && supabase) {
+        const updateData: Record<string, unknown> = {
+          name: payload.name.trim(),
+          owner: payload.owner.trim(),
+          phone: payload.phone.trim(),
+          address: payload.address.trim(),
+          assigned_visitor_id: payload.assigned_visitor_id,
+          is_active: payload.is_active,
+        };
+        if (payload.username) {
+          updateData.username = payload.username.trim();
+        }
+
         const { error: smError } = await supabase
           .from('supermarkets')
-          .update({
-            name: payload.name.trim(),
-            owner: payload.owner.trim(),
-            phone: payload.phone.trim(),
-            address: payload.address.trim(),
-            assigned_visitor_id: payload.assigned_visitor_id,
-            is_active: payload.is_active,
-          })
+          .update(updateData)
           .eq('id', id);
 
         if (smError) {
           return { success: false, message: `خطا در ویرایش سوپرمارکت در سرور: ${smError.message}` };
         }
 
-        // Also update profiles table phone and name
+        // Also update profiles table phone, name, and username
         await supabase
           .from('profiles')
           .update({
             name: payload.name.trim(),
             phone: payload.phone.trim(),
+            ...(payload.username && { username: payload.username.trim() }),
           })
           .eq('id', id);
       }

@@ -161,7 +161,7 @@ export interface InventoryTransaction {
 export interface CreateStaffAccountPayload {
   name: string;
   phone: string;
-  role: 'warehouse' | 'visitor';
+  role: 'admin' | 'warehouse' | 'visitor';
   region?: string;
   username: string;
   password: string;
@@ -170,7 +170,7 @@ export interface CreateStaffAccountPayload {
 export interface CreateStaffAccountResult {
   success: boolean;
   username?: string;
-  role?: 'warehouse' | 'visitor';
+  role?: 'admin' | 'warehouse' | 'visitor';
   error?: string;
 }
 
@@ -180,6 +180,7 @@ export interface UpdateSupermarketPayload {
   phone: string;
   address: string;
   assigned_visitor_id: string;
+  username?: string;
   is_active: boolean;
 }
 

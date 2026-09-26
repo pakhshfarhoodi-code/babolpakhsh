@@ -23,7 +23,7 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
   const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
-  const [assignedVisitorId, setAssignedVisitorId] = useState(defaultVisitorId || visitors[0]?.id || 'vis-1');
+  const [assignedVisitorId, setAssignedVisitorId] = useState(defaultVisitorId || 'direct');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -262,7 +262,7 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
 
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-              ویزیتور مسئول منطقه <span className="text-amber-400">*</span>
+              ویزیتور مسئول یا نحوه خرید <span className="text-slate-400 font-normal">(اختیاری)</span>
             </label>
             <div className="relative">
               <select
@@ -270,6 +270,7 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
                 onChange={(e) => setAssignedVisitorId(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500 transition appearance-none cursor-pointer"
               >
+                <option value="direct">خرید مستقیم از پخش فرهودی</option>
                 {visitors.map((v) => (
                   <option key={v.id} value={v.id}>
                     {v.name} — ({v.region})
@@ -279,7 +280,7 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
               <Truck className="w-4 h-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              سفارشات شما به ویزیتور اختصاص‌داده‌شده این منطقه جهت بارگیری و ارسال ارجاع خواهد شد.
+              در صورت عدم انتخاب ویزیتور، سفارشات شما به‌صورت مستقیم توسط پشتیبانی پخش فرهودی پردازش می‌شود.
             </p>
           </div>
 

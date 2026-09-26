@@ -103,13 +103,18 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
       cleanPass: string,
       allowedRoles?: UserRole[]
     ): { success: boolean; message?: string } => {
+      const userPrefix = cleanUser.includes('@') ? cleanUser.split('@')[0] : cleanUser;
+
       // 1. Search in predefined profiles
       const matchedProfile = INITIAL_PROFILES.find((p) => {
         if (allowedRoles && !allowedRoles.includes(p.role)) return false;
         const u = p.username.toLowerCase();
         const phoneDigits = p.phone.replace(/[^0-9]/g, '');
         const inputDigits = cleanUser.replace(/[^0-9]/g, '');
-        const isUserMatch = u === cleanUser || (inputDigits.length > 5 && phoneDigits === inputDigits);
+        const isUserMatch =
+          u === cleanUser ||
+          u === userPrefix ||
+          (inputDigits.length > 5 && phoneDigits === inputDigits);
         const isPassMatch = (p.password || '123') === cleanPass;
         return isUserMatch && isPassMatch;
       });
@@ -132,7 +137,10 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
           const u = (s.username || s.id).toLowerCase();
           const phoneDigits = s.phone.replace(/[^0-9]/g, '');
           const inputDigits = cleanUser.replace(/[^0-9]/g, '');
-          const isUserMatch = u === cleanUser || (inputDigits.length > 5 && phoneDigits === inputDigits);
+          const isUserMatch =
+            u === cleanUser ||
+            u === userPrefix ||
+            (inputDigits.length > 5 && phoneDigits === inputDigits);
           const isPassMatch = (s.password || '123') === cleanPass;
           return isUserMatch && isPassMatch;
         });
@@ -165,30 +173,38 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
       const cleanPass = inputPass.trim();
 
       if (isSupabaseConfigured && supabase) {
-        let resolvedUsername = cleanUser;
-        const phoneMatchProfile = INITIAL_PROFILES.find((p) => {
-          const pDigits = p.phone.replace(/[^0-9]/g, '');
-          const inDigits = cleanUser.replace(/[^0-9]/g, '');
-          return inDigits.length > 5 && pDigits === inDigits;
-        });
-        if (phoneMatchProfile) {
-          resolvedUsername = phoneMatchProfile.username;
-        } else {
-          const phoneMatchSm = supermarkets.find((s) => {
-            const sDigits = s.phone.replace(/[^0-9]/g, '');
-            const inDigits = cleanUser.replace(/[^0-9]/g, '');
-            return inDigits.length > 5 && sDigits === inDigits;
-          });
-          if (phoneMatchSm?.username) {
-            resolvedUsername = phoneMatchSm.username;
-          }
-        }
+        let authEmail = '';
 
-        const syntheticEmail = toSyntheticEmail(resolvedUsername);
+        if (cleanUser.includes('@')) {
+          // If input contains '@', provide it directly as email to Supabase Auth
+          authEmail = cleanUser;
+        } else {
+          // If no '@', resolve username (check for phone input) and generate ${input}@babolpakhsh.internal
+          let resolvedUsername = cleanUser;
+          const phoneMatchProfile = INITIAL_PROFILES.find((p) => {
+            const pDigits = p.phone.replace(/[^0-9]/g, '');
+            const inDigits = cleanUser.replace(/[^0-9]/g, '');
+            return inDigits.length > 5 && pDigits === inDigits;
+          });
+          if (phoneMatchProfile) {
+            resolvedUsername = phoneMatchProfile.username;
+          } else {
+            const phoneMatchSm = supermarkets.find((s) => {
+              const sDigits = s.phone.replace(/[^0-9]/g, '');
+              const inDigits = cleanUser.replace(/[^0-9]/g, '');
+              return inDigits.length > 5 && sDigits === inDigits;
+            });
+            if (phoneMatchSm?.username) {
+              resolvedUsername = phoneMatchSm.username;
+            }
+          }
+
+          authEmail = toSyntheticEmail(resolvedUsername);
+        }
 
         try {
           const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-            email: syntheticEmail,
+            email: authEmail,
             password: cleanPass,
           });
 

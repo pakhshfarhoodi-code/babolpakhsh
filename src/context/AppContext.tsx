@@ -12,6 +12,8 @@ import {
   InventoryTransaction,
   OrderStatus,
   ProductPriceHistory,
+  CreateStaffAccountPayload,
+  CreateStaffAccountResult,
 } from '../types';
 import {
   INITIAL_CATEGORIES,
@@ -23,7 +25,7 @@ import {
   INITIAL_LOADING_BILLS,
   INITIAL_INVENTORY_TRANSACTIONS,
 } from '../data/initialData';
-import { isSupabaseConfigured } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { STORAGE_KEYS, generateUniqueId, toSyntheticEmail } from './utils';
 import { useAuth } from './hooks/useAuth';
 import { useCatalog } from './hooks/useCatalog';
@@ -86,6 +88,7 @@ interface AppContextType {
     username: string;
     password: string;
   }) => Promise<{ success: boolean; message: string; supermarket?: Supermarket }>;
+  createStaffAccount: (payload: CreateStaffAccountPayload) => Promise<CreateStaffAccountResult>;
   resetToDefaults: () => void;
   isOnlineDb: boolean;
   theme: 'dark' | 'light';
@@ -186,6 +189,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSupermarkets(INITIAL_SUPERMARKETS);
   }, [catalog, orders, warehouse]);
 
+  // Thin wrapper to invoke create-staff-account Edge Function
+  const createStaffAccount = useCallback(async (payload: CreateStaffAccountPayload): Promise<CreateStaffAccountResult> => {
+    if (!isSupabaseConfigured) {
+      return {
+        success: false,
+        error: 'اتصال به پایگاه داده سوپابیس برقرار نیست. لطفاً متغیرهای محیطی را بررسی کنید.',
+      };
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke('create-staff-account', {
+        body: payload,
+      });
+
+      if (error) {
+        let errorMessage = error.message || 'خطا در ارتباط با Edge Function';
+        if (data && typeof data === 'object' && 'error' in data && typeof data.error === 'string') {
+          errorMessage = data.error;
+        } else if ('context' in error && error.context && typeof error.context === 'object') {
+          try {
+            const errorBody = await (error.context as Response).json();
+            if (errorBody?.error) errorMessage = errorBody.error;
+          } catch {
+            // ignore
+          }
+        }
+        return { success: false, error: errorMessage };
+      }
+
+      if (data && data.success === false) {
+        return { success: false, error: data.error || 'خطا در ایجاد حساب' };
+      }
+
+      return {
+        success: true,
+        username: data?.username || payload.username,
+        role: data?.role || payload.role,
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در برقراری ارتباط با سرور';
+      return { success: false, error: msg };
+    }
+  }, []);
+
   // Memoized provider value so child components do not needlessly re-render
   const contextValue: AppContextType = useMemo(() => ({
     role: auth.role,
@@ -226,6 +273,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateBrand: catalog.updateBrand,
     deleteBrand: catalog.deleteBrand,
     registerSupermarket: auth.registerSupermarket,
+    createStaffAccount,
     resetToDefaults,
     isOnlineDb: isSupabaseConfigured,
     theme,
@@ -243,6 +291,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     auth.loginWithCredentials,
     auth.logout,
     auth.registerSupermarket,
+    createStaffAccount,
     catalog.categories,
     catalog.brands,
     catalog.products,

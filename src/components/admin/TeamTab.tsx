@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Visitor, Supermarket, Order } from '../../types';
+import { useApp } from '../../context/AppContext';
 import {
   Truck,
   Users,
@@ -12,6 +13,12 @@ import {
   ArrowRightLeft,
   X,
   UserCheck,
+  Loader2,
+  AlertCircle,
+  CheckCircle2,
+  KeyRound,
+  AtSign,
+  ShieldCheck,
 } from 'lucide-react';
 import { SupermarketRegisterModal } from '../SupermarketRegisterModal';
 
@@ -26,9 +33,101 @@ export const TeamTab: React.FC<TeamTabProps> = ({
   supermarkets,
   orders,
 }) => {
+  const { createStaffAccount } = useApp();
   const [selectedVisitorFilter, setSelectedVisitorFilter] = useState<string | null>(null);
   const [storeSearchTerm, setStoreSearchTerm] = useState('');
   const [isRegisterStoreModalOpen, setIsRegisterStoreModalOpen] = useState(false);
+
+  // Staff Account Creation State
+  const [isAddStaffOpen, setIsAddStaffOpen] = useState(false);
+  const [isSubmittingStaff, setIsSubmittingStaff] = useState(false);
+  const [staffError, setStaffError] = useState<string | null>(null);
+  const [staffSuccess, setStaffSuccess] = useState<string | null>(null);
+  const [staffForm, setStaffForm] = useState<{
+    name: string;
+    phone: string;
+    role: 'warehouse' | 'visitor';
+    region: string;
+    username: string;
+    password: string;
+  }>({
+    name: '',
+    phone: '',
+    role: 'visitor',
+    region: '',
+    username: '',
+    password: '',
+  });
+
+  const handleStaffSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStaffError(null);
+    setStaffSuccess(null);
+
+    const name = staffForm.name.trim();
+    const phone = staffForm.phone.trim();
+    const role = staffForm.role;
+    const region = staffForm.region.trim();
+    const username = staffForm.username.trim();
+    const password = staffForm.password;
+
+    if (!name) {
+      setStaffError('لطفاً نام و نام خانوادگی عضو تیم را وارد کنید.');
+      return;
+    }
+    if (!phone) {
+      setStaffError('لطفاً شماره تماس را وارد کنید.');
+      return;
+    }
+    if (role === 'visitor' && !region) {
+      setStaffError('لطفاً منطقه فعالیت ویزیتور را مشخص کنید.');
+      return;
+    }
+    if (!username) {
+      setStaffError('لطفاً نام کاربری را وارد کنید.');
+      return;
+    }
+    if (password.length < 6) {
+      setStaffError('رمز عبور باید حداقل ۶ کاراکتر باشد.');
+      return;
+    }
+
+    setIsSubmittingStaff(true);
+    try {
+      const res = await createStaffAccount({
+        name,
+        phone,
+        role,
+        region: role === 'visitor' ? region : undefined,
+        username,
+        password,
+      });
+
+      if (!res.success) {
+        setStaffError(res.error || 'خطا در ایجاد حساب کاربری.');
+      } else {
+        const successMsg = `حساب با نام کاربری ${res.username || username} ساخته شد.`;
+        setStaffSuccess(successMsg);
+        setTimeout(() => {
+          setIsAddStaffOpen(false);
+          setStaffForm({
+            name: '',
+            phone: '',
+            role: 'visitor',
+            region: '',
+            username: '',
+            password: '',
+          });
+          setStaffSuccess(null);
+        }, 1500);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در ساخت حساب';
+      setStaffError(msg);
+    } finally {
+      setIsSubmittingStaff(false);
+    }
+  };
 
   // Filtered supermarkets based on visitor click and search term
   const filteredSupermarkets = useMemo(() => {
@@ -67,15 +166,18 @@ export const TeamTab: React.FC<TeamTabProps> = ({
               </div>
             </div>
 
-            {/* Add Visitor Button (Disabled as context doesn't support addVisitor yet) */}
+            {/* Add Team Member Button */}
             <button
               type="button"
-              disabled
-              title="تابع افزودن ویزیتور جدید در آپدیت بعدی AppContext اضافه خواهد شد"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 text-slate-400 border border-slate-700 text-xs font-medium cursor-not-allowed opacity-80"
+              onClick={() => {
+                setStaffError(null);
+                setStaffSuccess(null);
+                setIsAddStaffOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold transition shadow-md shadow-blue-600/30 cursor-pointer"
             >
               <UserPlus className="w-3.5 h-3.5" />
-              <span>+ افزودن ویزیتور (به‌زودی)</span>
+              <span>+ افزودن عضو تیم</span>
             </button>
           </div>
 
@@ -275,6 +377,205 @@ export const TeamTab: React.FC<TeamTabProps> = ({
         isOpen={isRegisterStoreModalOpen}
         onClose={() => setIsRegisterStoreModalOpen(false)}
       />
+
+      {/* Add Staff Account Modal */}
+      {isAddStaffOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950/60">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-500/15 text-blue-400 flex items-center justify-center border border-blue-500/30">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-100">افزودن عضو جدید تیم</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    ایجاد حساب احراز هویت رسمی (ویزیتور یا انباردار)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isSubmittingStaff) {
+                    setIsAddStaffOpen(false);
+                    setStaffError(null);
+                    setStaffSuccess(null);
+                  }
+                }}
+                disabled={isSubmittingStaff}
+                className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition disabled:opacity-50 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <form onSubmit={handleStaffSubmit} className="p-5 space-y-4 overflow-y-auto">
+              {staffSuccess && (
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center gap-2 text-xs text-emerald-400">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>{staffSuccess}</span>
+                </div>
+              )}
+
+              {staffError && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-center gap-2 text-xs text-rose-400">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{staffError}</span>
+                </div>
+              )}
+
+              {/* Role selection */}
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                  نقش سازمانی <span className="text-rose-400">*</span>
+                </label>
+                <select
+                  value={staffForm.role}
+                  onChange={(e) =>
+                    setStaffForm((prev) => ({
+                      ...prev,
+                      role: e.target.value as 'warehouse' | 'visitor',
+                    }))
+                  }
+                  disabled={isSubmittingStaff}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
+                >
+                  <option value="visitor">ویزیتور (پخش و بازاریابی مویرگی)</option>
+                  <option value="warehouse">انباردار (مدیریت سردخانه و موجودی)</option>
+                </select>
+              </div>
+
+              {/* Name & Phone */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    نام و نام خانوادگی <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={staffForm.name}
+                    onChange={(e) => setStaffForm((prev) => ({ ...prev, name: e.target.value }))}
+                    placeholder="مثال: حمید اکبری"
+                    disabled={isSubmittingStaff}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    dir="rtl"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    شماره همراه <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    value={staffForm.phone}
+                    onChange={(e) => setStaffForm((prev) => ({ ...prev, phone: e.target.value }))}
+                    placeholder="۰۹۱۲۳۴۵۶۷۸۹"
+                    disabled={isSubmittingStaff}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 text-left font-mono"
+                    dir="ltr"
+                  />
+                </div>
+              </div>
+
+              {/* Region (Only if role === 'visitor') */}
+              {staffForm.role === 'visitor' && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    منطقه تحت پوشش <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={staffForm.region}
+                    onChange={(e) => setStaffForm((prev) => ({ ...prev, region: e.target.value }))}
+                    placeholder="مثال: منطقه ۱ (شمال شهر / بازار)"
+                    disabled={isSubmittingStaff}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    dir="rtl"
+                  />
+                </div>
+              )}
+
+              {/* Username & Password */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    نام کاربری ورود <span className="text-rose-400">*</span>
+                  </label>
+                  <div className="relative">
+                    <AtSign className="w-3.5 h-3.5 absolute right-3 top-2.5 text-slate-500 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={staffForm.username}
+                      onChange={(e) =>
+                        setStaffForm((prev) => ({ ...prev, username: e.target.value.trim() }))
+                      }
+                      placeholder="visitor4 یا warehouse2"
+                      disabled={isSubmittingStaff}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 text-left font-mono"
+                      dir="ltr"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    رمز عبور <span className="text-rose-400">*</span> (حداقل ۶ کاراکتر)
+                  </label>
+                  <div className="relative">
+                    <KeyRound className="w-3.5 h-3.5 absolute right-3 top-2.5 text-slate-500 pointer-events-none" />
+                    <input
+                      type="password"
+                      value={staffForm.password}
+                      onChange={(e) => setStaffForm((prev) => ({ ...prev, password: e.target.value }))}
+                      placeholder="••••••"
+                      disabled={isSubmittingStaff}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 text-left font-mono"
+                      dir="ltr"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer Buttons */}
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddStaffOpen(false);
+                    setStaffError(null);
+                    setStaffSuccess(null);
+                  }}
+                  disabled={isSubmittingStaff}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition cursor-pointer disabled:opacity-50"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingStaff}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold transition shadow-md shadow-blue-600/30 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmittingStaff ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>در حال ثبت حساب...</span>
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="w-4 h-4" />
+                      <span>ثبت و ساخت حساب</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

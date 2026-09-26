@@ -49,7 +49,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
     setErrorMessage('');
 
     if (!usernameInput.trim()) {
-      setErrorMessage('لطفاً نام کاربری یا شماره همراه خود را وارد کنید.');
+      setErrorMessage('لطفاً نام کاربری، ایمیل یا شماره همراه خود را وارد کنید.');
       return;
     }
     if (!passwordInput.trim()) {
@@ -223,7 +223,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
         <form onSubmit={handleLoginSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5 text-right">
-              نام کاربری یا شماره همراه:
+              نام کاربری، ایمیل یا شماره همراه:
             </label>
             <div className="relative">
               <input

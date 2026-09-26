@@ -24,6 +24,10 @@ export const generateUniqueId = (prefix: string): string => {
 
 // Synthetic email generator for Supabase Auth
 export const toSyntheticEmail = (username: string): string => {
-  const clean = username.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  const trimmed = username.trim().toLowerCase();
+  if (trimmed.includes('@')) {
+    return trimmed;
+  }
+  const clean = trimmed.replace(/[^a-z0-9_-]/g, '');
   return `${clean || 'user'}@babolpakhsh.internal`;
 };

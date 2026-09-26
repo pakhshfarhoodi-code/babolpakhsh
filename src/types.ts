@@ -154,3 +154,19 @@ export interface InventoryTransaction {
   reference_id: string;
   created_at: string;
 }
+
+export interface CreateStaffAccountPayload {
+  name: string;
+  phone: string;
+  role: 'warehouse' | 'visitor';
+  region?: string;
+  username: string;
+  password: string;
+}
+
+export interface CreateStaffAccountResult {
+  success: boolean;
+  username?: string;
+  role?: 'warehouse' | 'visitor';
+  error?: string;
+}

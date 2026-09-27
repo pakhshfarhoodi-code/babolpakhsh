@@ -263,6 +263,7 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({
         success: true,
+        userId: newUserId,
         username: cleanUsername,
         role,
       }),

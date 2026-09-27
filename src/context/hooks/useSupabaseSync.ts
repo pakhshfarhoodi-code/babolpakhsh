@@ -80,6 +80,12 @@ export function useSupabaseSync({
           setReassignmentRequests(reassigns);
         }
 
+        // Fetch profiles to enrich username for supermarkets & visitors
+        const { data: profiles } = await supabase!.from('profiles').select('id, name, role, phone, username');
+        const profileMap = new Map<string, { username?: string; name?: string; phone?: string }>(
+          (profiles || []).map((p) => [p.id, p])
+        );
+
         // 6. Supermarkets
         const { data: sms } = await supabase!.from('supermarkets').select('*');
         if (sms) {
@@ -87,20 +93,30 @@ export function useSupabaseSync({
           setSupermarkets((prev) => {
             return cleanSms.map((sm: Supermarket) => {
               const localMatch = prev.find((p) => p.id === sm.id);
+              const prof = profileMap.get(sm.id);
               return {
                 ...sm,
-                username: localMatch?.username || sm.username,
+                username: prof?.username || localMatch?.username || sm.username || '',
                 password: localMatch?.password || sm.password || '123',
               };
             });
           });
         }
 
-        // 7. Visitors (filter out old seed visitors)
+        // 7. Visitors
         const { data: visData } = await supabase!.from('visitors').select('*');
         if (visData !== null && visData !== undefined) {
           const cleanVis = visData.filter((v: Visitor) => !DUMMY_VISITOR_IDS.has(v.id));
-          setVisitors(cleanVis);
+          setVisitors((prev) => {
+            return cleanVis.map((v: Visitor) => {
+              const localMatch = prev.find((p) => p.id === v.id);
+              const prof = profileMap.get(v.id);
+              return {
+                ...v,
+                username: prof?.username || localMatch?.username || v.username || '',
+              };
+            });
+          });
         }
 
         // 8. Loading Bills (with loading_bill_items fallback join)

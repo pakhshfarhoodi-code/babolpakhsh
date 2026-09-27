@@ -461,6 +461,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return { success: false, error: data.error || 'خطا در ایجاد حساب' };
       }
 
+      if (payload.role === 'visitor') {
+        const createdVisitorId = data?.userId || data?.id || generateUniqueId('vis');
+        const newVis: Visitor = {
+          id: createdVisitorId,
+          name: payload.name.trim(),
+          phone: payload.phone.trim(),
+          region: payload.region?.trim() || 'مرکز استان',
+          username: payload.username.trim(),
+          is_active: true,
+          created_at: new Date().toISOString(),
+        };
+        setVisitors((prev) => {
+          if (prev.some((v) => v.id === createdVisitorId || (v.username && v.username.toLowerCase() === newVis.username?.toLowerCase()))) {
+            return prev.map((v) => (v.id === createdVisitorId || v.username === newVis.username ? { ...v, ...newVis } : v));
+          }
+          return [...prev, newVis];
+        });
+      }
+
       return {
         success: true,
         username: data?.username || payload.username,
@@ -470,7 +489,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در برقراری ارتباط با سرور';
       return { success: false, error: msg };
     }
-  }, []);
+  }, [setVisitors]);
 
   // Memoized provider value so child components do not needlessly re-render
   const contextValue: AppContextType = useMemo(() => ({

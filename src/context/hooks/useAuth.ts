@@ -374,18 +374,28 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
 
         authUserId = signUpData.user.id;
 
-        const { error: profileError } = await supabase.from('profiles').insert({
+        const { error: profileError } = await supabase.from('profiles').upsert({
           id: authUserId,
           name: trimmedName,
           role: 'supermarket',
           phone: trimmedPhone,
+          username: trimmedUsername,
         });
 
         if (profileError) {
-          return {
-            success: false,
-            message: `خطا در ثبت پروفایل سامانه: ${profileError.message}`,
-          };
+          console.warn('Profile insert/upsert warning:', profileError.message);
+        }
+
+        // Validate assigned visitor ID against existing visitors in memory/Supabase
+        let validVisitorId: string | null = null;
+        if (assignedVisitorId && assignedVisitorId !== 'direct') {
+          const match = visitors.find((v) => v.id === assignedVisitorId);
+          if (match) {
+            validVisitorId = match.id;
+          }
+        }
+        if (!validVisitorId && visitors.length > 0) {
+          validVisitorId = visitors[0].id;
         }
 
         const { error: smError } = await supabase.from('supermarkets').insert({
@@ -394,15 +404,28 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
           owner: trimmedOwner,
           phone: trimmedPhone,
           address: trimmedAddress,
-          assigned_visitor_id: assignedVisitorId,
+          assigned_visitor_id: validVisitorId,
           is_active: false,
         });
 
         if (smError) {
-          return {
-            success: false,
-            message: `خطا در ثبت اطلاعات فروشگاه در پایگاه داده: ${smError.message}`,
-          };
+          console.warn('Supermarket insert warning, attempting upsert:', smError.message);
+          const { error: smUpsertError } = await supabase.from('supermarkets').upsert({
+            id: authUserId,
+            name: trimmedName,
+            owner: trimmedOwner,
+            phone: trimmedPhone,
+            address: trimmedAddress,
+            assigned_visitor_id: validVisitorId,
+            is_active: false,
+          });
+
+          if (smUpsertError) {
+            return {
+              success: false,
+              message: `خطا در ثبت اطلاعات فروشگاه در پایگاه داده: ${smUpsertError.message}`,
+            };
+          }
         }
       }
 

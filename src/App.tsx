@@ -8,12 +8,26 @@ import { WarehousePanel } from './components/WarehousePanel';
 import { LoginScreen } from './components/LoginScreen';
 import { UserRole } from './types';
 
+// Helper to detect base path (e.g. '/babolpakhsh' on GitHub Pages or '' for root/ArvanCloud)
+function getBasePath(): string {
+  if (typeof window === 'undefined') return '';
+  const pathname = window.location.pathname.toLowerCase();
+  if (pathname.startsWith('/babolpakhsh')) {
+    return '/babolpakhsh';
+  }
+  const viteBase = import.meta.env.BASE_URL;
+  if (viteBase && viteBase !== './' && viteBase !== '/') {
+    return viteBase.replace(/\/+$/, '');
+  }
+  return '';
+}
+
 // Helper to determine route key from window.location.pathname
 function getNormalizedPath(): string {
   if (typeof window === 'undefined') return '/';
-  const raw = window.location.pathname.toLowerCase();
-  if (raw.startsWith('/admin')) return '/admin';
-  if (raw.startsWith('/visitor')) return '/visitor';
+  const raw = window.location.pathname.toLowerCase().replace(/\/+$/, '');
+  if (raw.endsWith('/admin') || raw === '/admin') return '/admin';
+  if (raw.endsWith('/visitor') || raw === '/visitor') return '/visitor';
   return '/';
 }
 
@@ -25,8 +39,14 @@ export const App: React.FC = () => {
 
   // Synchronize route changes via popstate and custom navigation
   const navigateTo = useCallback((targetPath: string) => {
-    if (typeof window !== 'undefined' && window.location.pathname !== targetPath) {
-      window.history.pushState({}, '', targetPath);
+    if (typeof window !== 'undefined') {
+      const base = getBasePath();
+      const fullPath = targetPath === '/' ? (base ? `${base}/` : '/') : `${base}${targetPath}`;
+      const currentNorm = window.location.pathname.replace(/\/+$/, '');
+      const targetNorm = fullPath.replace(/\/+$/, '');
+      if (currentNorm !== targetNorm) {
+        window.history.pushState({}, '', fullPath);
+      }
     }
     setCurrentPath(targetPath);
   }, []);
@@ -45,13 +65,13 @@ export const App: React.FC = () => {
   // Auto-sync active role based on current URL path
   useEffect(() => {
     if (currentPath === '/admin') {
-      if (role === 'supermarket') {
+      if (isLoggedIn && role === 'supermarket') {
         navigateTo('/');
       } else if (role !== 'admin' && role !== 'warehouse') {
         setRole('admin');
       }
     } else if (currentPath === '/visitor') {
-      if (role === 'supermarket') {
+      if (isLoggedIn && role === 'supermarket') {
         navigateTo('/');
       } else if (role !== 'visitor') {
         setRole('visitor');
@@ -62,7 +82,7 @@ export const App: React.FC = () => {
         setRole('supermarket');
       }
     }
-  }, [currentPath, role, setRole, navigateTo]);
+  }, [currentPath, role, setRole, navigateTo, isLoggedIn]);
 
   // If user is not logged in, show tailored login screen for the route
   if (!isLoggedIn) {

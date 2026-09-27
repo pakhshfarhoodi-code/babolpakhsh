@@ -41,11 +41,15 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_BASE_PATH: /babolpakhsh/
         run: npm run build
 
-      - name: Prepare SPA Fallback & Disable Jekyll
+      - name: Prepare SPA Fallback & Static Routes
         run: |
           cp dist/index.html dist/404.html
+          mkdir -p dist/admin dist/visitor
+          cp dist/index.html dist/admin/index.html
+          cp dist/index.html dist/visitor/index.html
           touch dist/.nojekyll
 
       - name: Setup Pages

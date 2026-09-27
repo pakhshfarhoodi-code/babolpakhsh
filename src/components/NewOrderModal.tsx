@@ -15,6 +15,9 @@ import {
 import { ProductRow } from './shop/ProductRow';
 import { FilterSheet } from './shop/FilterSheet';
 import { formatPrice } from './shop/shopUtils';
+import { Order } from '../types';
+import { OrderInvoiceModal } from './invoice/OrderInvoiceModal';
+import { FileText, Printer } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
@@ -51,6 +54,8 @@ export const NewOrderModal: React.FC<Props> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [cart, setCart] = useState<Record<string, number>>({});
   const [feedback, setFeedback] = useState<{ type: 'error' | 'success'; message: string } | null>(null);
+  const [createdOrder, setCreatedOrder] = useState<Order | null>(null);
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
 
   // Sync selectedSupermarketId if defaultSupermarketId changes
   useEffect(() => {
@@ -191,12 +196,20 @@ export const NewOrderModal: React.FC<Props> = ({
 
     if (res.success) {
       setFeedback({ type: 'success', message: res.message });
-      setTimeout(() => {
-        onClose();
-      }, 1000);
+      if (res.order) {
+        setCreatedOrder(res.order);
+      }
+      setCart({});
     } else {
       setFeedback({ type: 'error', message: res.message });
     }
+  };
+
+  const handleResetForNewOrder = () => {
+    setCreatedOrder(null);
+    setFeedback(null);
+    setCart({});
+    setSearchTerm('');
   };
 
   if (!isOpen) return null;
@@ -219,6 +232,70 @@ export const NewOrderModal: React.FC<Props> = ({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Order Completed / Success View */}
+        {createdOrder ? (
+          <div className="p-6 sm:p-8 flex flex-col items-center justify-center text-center space-y-5 max-w-lg mx-auto">
+            <div className="w-16 h-16 rounded-3xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center shadow-lg shadow-emerald-500/10">
+              <Check className="w-8 h-8 stroke-[3]" />
+            </div>
+
+            <div className="space-y-1.5">
+              <h3 className="text-lg font-bold text-slate-100">سفارش با موفقیت در سامانه ثبت شد</h3>
+              <p className="text-xs text-slate-400">
+                شماره فاکتور:{' '}
+                <span className="font-mono font-bold text-emerald-400 dir-ltr text-sm">{createdOrder.id}</span>
+              </p>
+            </div>
+
+            <div className="w-full bg-slate-950/70 border border-slate-800 rounded-2xl p-4 text-xs space-y-2 text-right">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">سوپرمارکت مقصد:</span>
+                <span className="font-bold text-slate-200">{createdOrder.supermarket_name}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">ویزیتور مسئول:</span>
+                <span className="font-bold text-slate-200">{createdOrder.visitor_name}</span>
+              </div>
+              <div className="flex items-center justify-between pt-2 border-t border-slate-800/80">
+                <span className="text-slate-400">مبلغ کل فاکتور:</span>
+                <span className="font-bold text-emerald-400 text-sm">
+                  {formatPrice(createdOrder.total_amount)} تومان
+                </span>
+              </div>
+            </div>
+
+            <div className="w-full space-y-2.5 pt-2">
+              {/* View / Print / PDF Invoice Button */}
+              <button
+                type="button"
+                onClick={() => setIsInvoiceModalOpen(true)}
+                className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 transition cursor-pointer"
+              >
+                <FileText className="w-4 h-4" />
+                <span>مشاهده، چاپ کاغذی و دریافت فایل PDF فاکتور</span>
+              </button>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={handleResetForNewOrder}
+                  className="py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs transition cursor-pointer"
+                >
+                  ثبت سفارش دیگر
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="py-2.5 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-400 hover:text-slate-200 font-medium text-xs transition cursor-pointer"
+                >
+                  بستن پنجره
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
 
         {/* Store & Visitor Selector */}
         <div className="p-4 bg-slate-950/30 border-b border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
@@ -491,6 +568,8 @@ export const NewOrderModal: React.FC<Props> = ({
             </div>
           </div>
         </div>
+        </>
+        )}
       </div>
 
       {/* Brand Filter Sheet */}
@@ -501,6 +580,15 @@ export const NewOrderModal: React.FC<Props> = ({
         selectedBrand={selectedBrand}
         onSelectBrand={(b) => setSelectedBrand(b)}
         onClearFilter={() => setSelectedBrand('all')}
+      />
+
+      {/* Official B2B Order Invoice Modal with PDF & Print */}
+      <OrderInvoiceModal
+        isOpen={isInvoiceModalOpen}
+        onClose={() => setIsInvoiceModalOpen(false)}
+        order={createdOrder}
+        supermarket={currentSupermarket}
+        visitor={currentVisitor}
       />
     </div>
   );

@@ -490,7 +490,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
             <div className="p-6 overflow-y-auto space-y-5 bg-white text-slate-900 print:p-0">
               <div className="border-b-2 border-slate-800 pb-3 flex items-center justify-between">
                 <div>
-                  <h2 className="text-base font-bold text-slate-900">سامانه پخش مویرگی البرز</h2>
+                  <h2 className="text-base font-bold text-slate-900">بارفروش | شبکه پخش عمده فرهودی</h2>
                   <p className="text-xs text-slate-600">گزارش عملکرد ویزیتور و فروشگاه‌ها</p>
                 </div>
                 <div className="text-left text-xs text-slate-700">

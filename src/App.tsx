@@ -141,7 +141,7 @@ export const App: React.FC = () => {
 
       <footer className="border-t border-slate-900 bg-slate-950/80 py-4 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-wrap items-center justify-between gap-2">
-          <span>سامانه مدیریت سفارش و پخش مویرگی البرز — نسخه سازمانی توزیع زنجیره سرد</span>
+          <span>بارفروش | شبکه پخش عمده فرهودی — سامانه جامع مدیریت سفارش و توزیع</span>
           {role !== 'supermarket' && (
             <div className="flex items-center gap-3 text-xs font-mono">
               <button

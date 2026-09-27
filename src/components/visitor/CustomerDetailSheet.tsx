@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Supermarket, Order } from '../../types';
 import {
   X,
@@ -13,8 +13,10 @@ import {
   CheckCircle2,
   Clock,
   XCircle,
+  FileText,
 } from 'lucide-react';
 import { formatPrice } from './helpers';
+import { OrderInvoiceModal } from '../invoice/OrderInvoiceModal';
 
 interface CustomerDetailSheetProps {
   customer: Supermarket | null;
@@ -31,6 +33,8 @@ export const CustomerDetailSheet: React.FC<CustomerDetailSheetProps> = ({
   onClose,
   onNewOrder,
 }) => {
+  const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState<Order | null>(null);
+
   if (!isOpen || !customer) return null;
 
   const customerOrders = orders.filter((o) => o.supermarket_id === customer.id);
@@ -160,7 +164,16 @@ export const CustomerDetailSheet: React.FC<CustomerDetailSheetProps> = ({
                       </div>
                     )}
 
-                    <div className="pt-1.5 border-t border-slate-900 flex justify-end">
+                    <div className="pt-2 border-t border-slate-900 flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedInvoiceOrder(ord)}
+                        className="px-2.5 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/30 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>فاکتور و چاپ / PDF</span>
+                      </button>
+
                       <span className="font-bold text-slate-200 text-xs">
                         {formatPrice(ord.total_amount)} تومان
                       </span>
@@ -187,6 +200,14 @@ export const CustomerDetailSheet: React.FC<CustomerDetailSheetProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Official B2B Order Invoice Modal with PDF & Print */}
+      <OrderInvoiceModal
+        isOpen={!!selectedInvoiceOrder}
+        onClose={() => setSelectedInvoiceOrder(null)}
+        order={selectedInvoiceOrder}
+        supermarket={customer}
+      />
     </div>
   );
 };

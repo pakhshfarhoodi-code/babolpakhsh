@@ -62,8 +62,11 @@ export const Header: React.FC<HeaderProps> = () => {
                   <Store className="w-4 h-4" />
                 </div>
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-sm font-bold text-slate-100 truncate max-w-[170px] sm:max-w-[280px]">
+                  <span className="text-sm font-bold text-slate-100 truncate max-w-[140px] sm:max-w-[220px]">
                     {currentStore?.name || 'فروشگاه طرف قرارداد'}
+                  </span>
+                  <span className="text-[11px] text-amber-400/90 bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-800/40 shrink-0 hidden sm:inline-block font-medium">
+                    بارفروش | پخش فرهودی
                   </span>
                   <span className="text-xs text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-800/40 shrink-0">
                     پروفایل
@@ -125,11 +128,14 @@ export const Header: React.FC<HeaderProps> = () => {
                 <Truck className="w-4 h-4" />
               </div>
               <div className="flex items-center gap-2 min-w-0">
-                <span className="text-sm font-bold text-slate-100 truncate max-w-[150px] sm:max-w-[240px]">
+                <span className="text-sm font-bold text-slate-100 truncate max-w-[130px] sm:max-w-[200px]">
                   {currentVisitor.name}
                 </span>
                 <span className="text-xs font-semibold text-blue-300 bg-blue-950/80 px-2 py-0.5 rounded-full border border-blue-800/50 shrink-0">
                   {currentVisitor.region}
+                </span>
+                <span className="text-[11px] text-amber-400/90 bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-800/40 shrink-0 hidden sm:inline-block font-medium">
+                  بارفروش | پخش فرهودی
                 </span>
               </div>
             </div>
@@ -168,12 +174,15 @@ export const Header: React.FC<HeaderProps> = () => {
           {/* Right Section: Identity Icon + Name + Role Switcher Pill */}
           <div className="flex items-center gap-2 min-w-0">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600/30 to-indigo-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0 shadow-inner">
-              <ThermometerSnowflake className="w-4 h-4 text-blue-400" />
+              <Truck className="w-4 h-4 text-blue-400" />
             </div>
 
             <div className="flex items-center gap-1.5 min-w-0">
-              <span className="text-sm font-bold text-slate-100 truncate max-w-[140px] sm:max-w-[200px]">
+              <span className="text-sm font-bold text-slate-100 truncate max-w-[130px] sm:max-w-[180px]">
                 {currentUser.name}
+              </span>
+              <span className="text-[11px] text-amber-400/90 bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-800/40 shrink-0 hidden md:inline-block font-medium">
+                بارفروش | پخش فرهودی
               </span>
 
               {/* Role Toggle Pill right beside user name */}

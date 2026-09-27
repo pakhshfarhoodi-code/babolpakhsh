@@ -4,6 +4,7 @@ import {
   Search,
   Plus,
   Edit2,
+  Edit3,
   Check,
   X,
   History,
@@ -17,12 +18,20 @@ import {
   FileSpreadsheet,
   Upload,
   Download,
+  Percent,
+  Scale,
+  CheckSquare,
+  Square,
+  Loader2,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { LOW_STOCK_THRESHOLD, formatPrice } from './helpers';
 import { PriceHistoryDrawer } from './PriceHistoryDrawer';
 import { CategorySelectPicker, BrandSelectPicker } from '../CategoryBrandSelectors';
 import { ExcelImportModal } from './ExcelImportModal';
 import { ExcelExportModal } from './ExcelExportModal';
+
+const STANDARD_UNITS = ['عدد', 'باکس', 'کارتن', 'کیلوگرم', 'بسته', 'بطری', 'دبه', 'کیسه', 'شانه', 'قوطی'];
 
 interface ProductsTabProps {
   products: Product[];
@@ -32,8 +41,20 @@ interface ProductsTabProps {
   initialFilterType?: 'lowStock' | 'all';
   onUpdateProductPrice: (productId: string, newPrice: number, newVisitorPrice?: number) => void;
   onAddNewProduct: (newProd: Omit<Product, 'id'>) => void;
-  onBulkUpsertProducts?: (items: any[]) => { success: boolean; createdCount: number; updatedCount: number; message: string };
+  onBulkUpsertProducts?: (items: any[]) => Promise<{ success: boolean; createdCount: number; updatedCount: number; message: string }> | { success: boolean; createdCount: number; updatedCount: number; message: string };
   onDeleteProduct: (productId: string) => { success: boolean; message: string };
+  onBulkDeleteProducts?: (productIds: string[]) => Promise<{ success: boolean; message: string; count: number }>;
+  onBulkUpdateProducts?: (
+    productIds: string[],
+    updates: {
+      category_id?: string;
+      brand?: string;
+      unit?: string;
+      priceAdjustmentPercent?: number;
+      fixedPrice?: number;
+      is_active?: boolean;
+    }
+  ) => Promise<{ success: boolean; message: string; count: number }>;
   onOpenEditCategory: (cat: { id: string; name: string }) => void;
   onOpenEditBrand: (brand: string) => void;
 }
@@ -48,6 +69,8 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   onAddNewProduct,
   onBulkUpsertProducts,
   onDeleteProduct,
+  onBulkDeleteProducts,
+  onBulkUpdateProducts,
   onOpenEditCategory,
   onOpenEditBrand,
 }) => {
@@ -83,6 +106,101 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   // Delete product confirmation
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [deleteFeedback, setDeleteFeedback] = useState<string | null>(null);
+
+  // Bulk selection and actions state
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
+  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
+  const [isBulkProcessing, setIsBulkProcessing] = useState(false);
+  const [bulkFeedback, setBulkFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Bulk Edit Form state
+  const [bulkCatId, setBulkCatId] = useState<string>('');
+  const [bulkBrandName, setBulkBrandName] = useState<string>('');
+  const [bulkUnitName, setBulkUnitName] = useState<string>('');
+  const [bulkPriceChangeType, setBulkPriceChangeType] = useState<'none' | 'percent' | 'fixed'>('none');
+  const [bulkPriceValue, setBulkPriceValue] = useState<number>(0);
+  const [bulkActiveStatus, setBulkActiveStatus] = useState<'keep' | 'active' | 'inactive'>('keep');
+
+  const toggleSelectAll = () => {
+    if (selectedProductIds.length === filteredProducts.length && filteredProducts.length > 0) {
+      setSelectedProductIds([]);
+    } else {
+      setSelectedProductIds(filteredProducts.map((p) => p.id));
+    }
+  };
+
+  const toggleSelectProduct = (id: string) => {
+    setSelectedProductIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleExecuteBulkDelete = async () => {
+    if (!onBulkDeleteProducts || selectedProductIds.length === 0) return;
+    setIsBulkProcessing(true);
+    setBulkFeedback(null);
+    try {
+      const res = await onBulkDeleteProducts(selectedProductIds);
+      if (res.success) {
+        setSelectedProductIds([]);
+        setIsBulkDeleteOpen(false);
+        setExcelFeedback(res.message);
+        setTimeout(() => setExcelFeedback(null), 5000);
+      } else {
+        setBulkFeedback({ type: 'error', message: res.message });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطا در حذف گروهی کالاها';
+      setBulkFeedback({ type: 'error', message: msg });
+    } finally {
+      setIsBulkProcessing(false);
+    }
+  };
+
+  const handleExecuteBulkEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!onBulkUpdateProducts || selectedProductIds.length === 0) return;
+    setIsBulkProcessing(true);
+    setBulkFeedback(null);
+
+    const updates: {
+      category_id?: string;
+      brand?: string;
+      unit?: string;
+      priceAdjustmentPercent?: number;
+      fixedPrice?: number;
+      is_active?: boolean;
+    } = {};
+
+    if (bulkCatId) updates.category_id = bulkCatId;
+    if (bulkBrandName.trim()) updates.brand = bulkBrandName.trim();
+    if (bulkUnitName) updates.unit = bulkUnitName;
+    if (bulkPriceChangeType === 'percent' && bulkPriceValue !== 0) {
+      updates.priceAdjustmentPercent = bulkPriceValue;
+    } else if (bulkPriceChangeType === 'fixed' && bulkPriceValue > 0) {
+      updates.fixedPrice = bulkPriceValue;
+    }
+    if (bulkActiveStatus === 'active') updates.is_active = true;
+    if (bulkActiveStatus === 'inactive') updates.is_active = false;
+
+    try {
+      const res = await onBulkUpdateProducts(selectedProductIds, updates);
+      if (res.success) {
+        setIsBulkEditOpen(false);
+        setSelectedProductIds([]);
+        setExcelFeedback(res.message);
+        setTimeout(() => setExcelFeedback(null), 5000);
+      } else {
+        setBulkFeedback({ type: 'error', message: res.message });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطا در ویرایش گروهی کالاها';
+      setBulkFeedback({ type: 'error', message: msg });
+    } finally {
+      setIsBulkProcessing(false);
+    }
+  };
 
   // Filtered Products
   const filteredProducts = useMemo(() => {
@@ -336,12 +454,69 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
         </div>
       </div>
 
+      {/* Bulk Action Toolbar if items are selected */}
+      {selectedProductIds.length > 0 && (
+        <div className="p-3 bg-blue-950/70 border border-blue-800/80 rounded-2xl flex flex-wrap items-center justify-between gap-3 animate-in fade-in shadow-md">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-2.5 w-2.5 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
+            </span>
+            <span className="text-xs font-bold text-blue-200">
+              {selectedProductIds.length} کالا انتخاب شده است
+            </span>
+            <span className="text-[11px] text-blue-400/80">
+              (از کل {filteredProducts.length} کالای فیلتر شده)
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setBulkFeedback(null);
+                setIsBulkEditOpen(true);
+              }}
+              className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span>ویرایش گروهی</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setBulkFeedback(null);
+                setIsBulkDeleteOpen(true);
+              }}
+              className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>حذف گروهی</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedProductIds([])}
+              className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition cursor-pointer"
+            >
+              لغو انتخاب
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Products Table */}
       <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-sm">
         <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-          <h3 className="font-bold text-sm text-slate-100">
-            فهرست کالاها، قیمت مصوب و مدیریت موجودی
-          </h3>
+          <div className="flex items-center gap-3">
+            <h3 className="font-bold text-sm text-slate-100">
+              فهرست کالاها، قیمت مصوب و مدیریت موجودی
+            </h3>
+            {selectedProductIds.length > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 text-[11px] font-bold">
+                {selectedProductIds.length} مورد انتخابی
+              </span>
+            )}
+          </div>
           <span className="text-xs text-slate-400">{filteredProducts.length} کالا</span>
         </div>
 
@@ -354,6 +529,20 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
             <table className="w-full text-right text-xs">
               <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800">
                 <tr>
+                  <th className="py-3 px-3 text-center w-10">
+                    <button
+                      type="button"
+                      onClick={toggleSelectAll}
+                      title={selectedProductIds.length === filteredProducts.length && filteredProducts.length > 0 ? 'لغو انتخاب همه' : 'انتخاب همه کالاهای نمایش داده شده'}
+                      className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-blue-400 transition cursor-pointer"
+                    >
+                      {selectedProductIds.length === filteredProducts.length && filteredProducts.length > 0 ? (
+                        <CheckSquare className="w-4 h-4 text-blue-400" />
+                      ) : (
+                        <Square className="w-4 h-4" />
+                      )}
+                    </button>
+                  </th>
                   <th className="py-3 px-4 font-semibold">نام و مشخصات کالا</th>
                   <th className="py-3 px-4 font-semibold">دسته</th>
                   <th className="py-3 px-4 font-semibold">برند</th>
@@ -375,9 +564,24 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                   const categoryObj = categories.find((c) => c.id === product.category_id);
                   const isLow = freeStock < LOW_STOCK_THRESHOLD;
                   const visitorPrice = product.visitor_price || Math.round(product.price * 0.85);
+                  const isSelected = selectedProductIds.includes(product.id);
 
                   return (
-                    <tr key={product.id} className="hover:bg-slate-800/35 transition">
+                    <tr key={product.id} className={`transition ${isSelected ? 'bg-blue-950/30' : 'hover:bg-slate-800/35'}`}>
+                      {/* Checkbox */}
+                      <td className="py-3 px-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => toggleSelectProduct(product.id)}
+                          className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-blue-400 transition cursor-pointer"
+                        >
+                          {isSelected ? (
+                            <CheckSquare className="w-4 h-4 text-blue-400" />
+                          ) : (
+                            <Square className="w-4 h-4" />
+                          )}
+                        </button>
+                      </td>
                       {/* Name & Image */}
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2.5">
@@ -753,6 +957,307 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                 className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition shadow-md shadow-rose-600/30"
               >
                 تایید حذف
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Edit Modal */}
+      {isBulkEditOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-in fade-in overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-5 shadow-2xl space-y-4 my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="w-4 h-4 text-blue-400" />
+                <h3 className="font-bold text-sm text-slate-100">
+                  ویرایش گروهی ({selectedProductIds.length} کالا)
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBulkEditOpen(false)}
+                className="text-slate-400 hover:text-slate-200 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {bulkFeedback && (
+              <div
+                className={`p-3 rounded-xl text-xs font-medium ${
+                  bulkFeedback.type === 'error'
+                    ? 'bg-rose-500/15 border border-rose-500/30 text-rose-300'
+                    : 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
+                }`}
+              >
+                {bulkFeedback.message}
+              </div>
+            )}
+
+            <form onSubmit={handleExecuteBulkEdit} className="space-y-4">
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                فیلدهایی را که مایل به تغییر دسته‌جمعی آنها هستید مشخص نمایید. مواردی که روی «بدون تغییر» باشند به همان شکل قبلی حفظ خواهند شد.
+              </p>
+
+              {/* Category Change */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-300 block">
+                  تغییر دسته‌بندی:
+                </label>
+                <select
+                  value={bulkCatId}
+                  onChange={(e) => setBulkCatId(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
+                >
+                  <option value="">(بدون تغییر در دسته‌بندی کالاها)</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Brand Change */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-300 block">
+                  تغییر برند / کارخانه سازنده:
+                </label>
+                <div className="flex gap-2">
+                  <select
+                    value={brands.includes(bulkBrandName) ? bulkBrandName : bulkBrandName ? 'custom' : ''}
+                    onChange={(e) => {
+                      if (e.target.value !== 'custom') {
+                        setBulkBrandName(e.target.value);
+                      }
+                    }}
+                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
+                  >
+                    <option value="">(بدون تغییر در برند کالاها)</option>
+                    {brands.map((b) => (
+                      <option key={b} value={b}>
+                        {b}
+                      </option>
+                    ))}
+                    <option value="custom">برند دلخواه دیگر...</option>
+                  </select>
+                  <input
+                    type="text"
+                    value={bulkBrandName}
+                    onChange={(e) => setBulkBrandName(e.target.value)}
+                    placeholder="یا وارد کردن نام برند..."
+                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500 placeholder-slate-600"
+                  />
+                </div>
+              </div>
+
+              {/* Unit Change */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-300 block">
+                  تغییر واحد شمارش:
+                </label>
+                <select
+                  value={bulkUnitName}
+                  onChange={(e) => setBulkUnitName(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
+                >
+                  <option value="">(بدون تغییر در واحد کالاها)</option>
+                  {STANDARD_UNITS.map((u) => (
+                    <option key={u} value={u}>
+                      {u}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Price adjustment */}
+              <div className="space-y-2 p-3 bg-slate-950/60 border border-slate-800/80 rounded-xl">
+                <label className="text-xs font-semibold text-slate-300 block">
+                  تنظیم قیمت فروشگاه:
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBulkPriceChangeType('none');
+                      setBulkPriceValue(0);
+                    }}
+                    className={`p-2 rounded-xl border text-xs font-semibold transition cursor-pointer ${
+                      bulkPriceChangeType === 'none'
+                        ? 'bg-blue-600/20 border-blue-500 text-blue-300'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    بدون تغییر
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBulkPriceChangeType('percent');
+                      setBulkPriceValue(bulkPriceValue || 10);
+                    }}
+                    className={`p-2 rounded-xl border text-xs font-semibold transition cursor-pointer ${
+                      bulkPriceChangeType === 'percent'
+                        ? 'bg-blue-600/20 border-blue-500 text-blue-300'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    تغییر درصدی (±%)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBulkPriceChangeType('fixed');
+                      setBulkPriceValue(bulkPriceValue || 50000);
+                    }}
+                    className={`p-2 rounded-xl border text-xs font-semibold transition cursor-pointer ${
+                      bulkPriceChangeType === 'fixed'
+                        ? 'bg-blue-600/20 border-blue-500 text-blue-300'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    قیمت ثابت (تومان)
+                  </button>
+                </div>
+
+                {bulkPriceChangeType === 'percent' && (
+                  <div className="pt-2 flex items-center gap-2">
+                    <span className="text-xs text-slate-400">درصد تغییر:</span>
+                    <input
+                      type="number"
+                      step="1"
+                      value={bulkPriceValue}
+                      onChange={(e) => setBulkPriceValue(Number(e.target.value))}
+                      placeholder="مثلاً 10 برای +۱۰٪ یا -5 برای ۵٪ تخفیف"
+                      className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-100 font-mono text-center"
+                    />
+                    <span className="text-xs text-slate-400">%</span>
+                  </div>
+                )}
+
+                {bulkPriceChangeType === 'fixed' && (
+                  <div className="pt-2 flex items-center gap-2">
+                    <span className="text-xs text-slate-400">مبلغ جدید:</span>
+                    <input
+                      type="number"
+                      min="100"
+                      step="500"
+                      value={bulkPriceValue}
+                      onChange={(e) => setBulkPriceValue(Number(e.target.value))}
+                      placeholder="قیمت به تومان"
+                      className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-100 font-mono text-center"
+                    />
+                    <span className="text-xs text-slate-400">تومان</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Status Change */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-300 block">
+                  وضعیت نمایش / فعالیت:
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setBulkActiveStatus('keep')}
+                    className={`p-2 rounded-xl border text-xs font-semibold transition cursor-pointer ${
+                      bulkActiveStatus === 'keep'
+                        ? 'bg-blue-600/20 border-blue-500 text-blue-300'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    بدون تغییر
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBulkActiveStatus('active')}
+                    className={`p-2 rounded-xl border text-xs font-semibold transition cursor-pointer ${
+                      bulkActiveStatus === 'active'
+                        ? 'bg-emerald-600/20 border-emerald-500 text-emerald-300'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    فعال‌سازی همه
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBulkActiveStatus('inactive')}
+                    className={`p-2 rounded-xl border text-xs font-semibold transition cursor-pointer ${
+                      bulkActiveStatus === 'inactive'
+                        ? 'bg-rose-600/20 border-rose-500 text-rose-300'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    غیرفعال‌سازی همه
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsBulkEditOpen(false)}
+                  disabled={isBulkProcessing}
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-semibold cursor-pointer"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="submit"
+                  disabled={isBulkProcessing}
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-md shadow-blue-600/30 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isBulkProcessing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>اعمال ویرایش گروهی</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {isBulkDeleteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-5 shadow-2xl space-y-4">
+            <div className="flex items-center gap-2 text-rose-400">
+              <AlertTriangle className="w-5 h-5 shrink-0" />
+              <h3 className="font-bold text-sm text-slate-100">حذف گروهی کالاها</h3>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              آیا از حذف دائم <span className="text-rose-400 font-bold">{selectedProductIds.length}</span> کالای انتخاب‌شده از پایگاه داده و سامانه اطمینان دارید؟
+            </p>
+
+            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[11px] leading-relaxed">
+              ⚠️ توجه: کالاهایی که در سفارشات فعال ثبت شده باشند، به دلیل رزرو سردخانه حذف نخواهند شد.
+            </div>
+
+            {bulkFeedback && (
+              <div className="p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs">
+                {bulkFeedback.message}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsBulkDeleteOpen(false)}
+                disabled={isBulkProcessing}
+                className="px-3.5 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-semibold cursor-pointer"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteBulkDelete}
+                disabled={isBulkProcessing}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition shadow-md shadow-rose-600/30 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isBulkProcessing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>تایید حذف {selectedProductIds.length} کالا</span>
               </button>
             </div>
           </div>

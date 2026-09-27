@@ -145,8 +145,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
           <div className="w-14 h-14 rounded-2xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400 mb-3 shadow-lg shadow-blue-500/10">
             <ThermometerSnowflake className="w-7 h-7 text-blue-400" />
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-100 tracking-tight">
-            سامانه پخش مویرگی البرز
+          <h1 className="text-lg sm:text-xl font-black text-slate-100 tracking-tight text-center leading-relaxed">
+            بارفروش | شبکه پخش عمده فرهودی
           </h1>
         </div>
 
@@ -360,7 +360,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
       </div>
 
       <div className="text-xs text-slate-500 mt-6 text-center">
-        سامانه مدیریت توزیع و زنجیره سرد البرز
+        بارفروش | شبکه پخش عمده فرهودی
       </div>
 
       {/* Supermarket Registration Modal */}

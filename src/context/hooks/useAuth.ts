@@ -18,7 +18,7 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
 
   const [role, setRole] = useState<UserRole>('admin');
   const [selectedVisitorId, setSelectedVisitorId] = useState<string>('vis-1');
-  const [selectedSupermarketId, setSelectedSupermarketId] = useState<string>('shop-1');
+  const [selectedSupermarketId, setSelectedSupermarketId] = useState<string>(() => supermarkets[0]?.id || '');
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.AUTH_LOGGED_IN, String(isLoggedIn));
@@ -47,7 +47,7 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
     if (role === 'admin') {
       return {
         id: 'admin-1',
-        name: 'مدیریت مرکزی البرز',
+        name: 'مدیریت مرکزی فرهودی (بارفروش)',
         username: 'admin',
         role: 'admin',
         roleTitle: 'مدیر ارشد',
@@ -57,10 +57,10 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
     if (role === 'warehouse') {
       return {
         id: 'wh-1',
-        name: 'انباردار سردخانه البرز',
+        name: 'انباردار مرکزی فرهودی',
         username: 'warehouse',
         role: 'warehouse',
-        roleTitle: 'انباردار سردخانه',
+        roleTitle: 'انباردار مرکزی',
         phone: '۰۹۱۲۱۱۱۰۰۰۰',
       };
     }
@@ -78,17 +78,17 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
     if (role === 'supermarket') {
       const s = supermarkets.find((sm) => sm.id === selectedSupermarketId) || supermarkets[0];
       return {
-        id: s?.id || 'shop-1',
-        name: s?.name || 'سوپرمارکت بهاران',
-        username: s?.username || 'shop1',
+        id: s?.id || '',
+        name: s?.name || 'فروشگاه طرف قرارداد',
+        username: s?.username || 'supermarket',
         role: 'supermarket',
         roleTitle: `فروشگاه (${s?.owner || 'مدیریت'})`,
-        phone: s?.phone || '۰۹۱۲۱۱۱۱۱۱۱',
+        phone: s?.phone || '',
       };
     }
     return {
       id: 'admin-1',
-      name: 'مدیریت مرکزی البرز',
+      name: 'مدیریت مرکزی فرهودی (بارفروش)',
       username: 'admin',
       role: 'admin',
       roleTitle: 'مدیر ارشد',

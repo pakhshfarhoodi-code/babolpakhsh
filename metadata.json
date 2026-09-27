@@ -1,6 +1,6 @@
 {
   "name": "مدیریت سفارش و پخش مویرگی",
-  "description": "سامانه یکپارچه مدیریت سفارشات سوپرمارکت، پورتال ویزیتورها و پنل مدیریت پخش مویرگی",
+  "description": "بارفروش | شبکه پخش عمده فرهودی — سامانه یکپارچه مدیریت سفارشات سوپرمارکت، پورتال ویزیتورها و انبارداری",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

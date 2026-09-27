@@ -33,23 +33,19 @@ export function useCatalog() {
     }
   });
 
+  // Dummy seed products that should not be kept if user wants clean data
+  const DUMMY_PRODUCT_IDS = new Set(['prod-1', 'prod-2', 'prod-3', 'prod-4', 'prod-5', 'prod-6', 'prod-7', 'prod-8', 'prod-9']);
+
   const [products, setProducts] = useState<Product[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
-    if (!saved) return INITIAL_PRODUCTS;
+    if (!saved) return [];
     try {
       const parsed: Product[] = JSON.parse(saved);
-      const existingIds = new Set(parsed.map((p) => p.id));
-      const updatedExisting = parsed.map((p) => {
-        const init = INITIAL_PRODUCTS.find((ip) => ip.id === p.id);
-        return {
-          ...p,
-          brand: p.brand || init?.brand,
-        };
-      });
-      const missingInitial = INITIAL_PRODUCTS.filter((ip) => !existingIds.has(ip.id));
-      return [...updatedExisting, ...missingInitial];
+      // Filter out any default dummy products from seed data
+      const cleaned = parsed.filter((p) => !DUMMY_PRODUCT_IDS.has(p.id));
+      return cleaned;
     } catch {
-      return INITIAL_PRODUCTS;
+      return [];
     }
   });
 
@@ -187,10 +183,6 @@ export function useCatalog() {
       return { success: false, createdCount: 0, updatedCount: 0, message: 'هیچ داده‌ای برای ثبت یافت نشد.' };
     }
 
-    let createdCount = 0;
-    let updatedCount = 0;
-
-    const newBrandsSet = new Set<string>();
     const nowPersian = new Intl.DateTimeFormat('fa-IR', {
       year: 'numeric',
       month: '2-digit',
@@ -199,91 +191,99 @@ export function useCatalog() {
       minute: '2-digit',
     }).format(new Date());
 
+    const newBrandsSet = new Set<string>();
+    const affectedCategoryIds = new Set<string>();
     const newHistories: ProductPriceHistory[] = [];
     const itemsToUpsertToSupabase: Product[] = [];
 
-    setProducts((prev) => {
-      const updatedProducts = [...prev];
+    let createdCount = 0;
+    let updatedCount = 0;
 
-      items.forEach((item, index) => {
-        const trimmedName = item.name.trim();
-        const brandName = item.brand?.trim() || 'متفرقه';
-        if (brandName) newBrandsSet.add(brandName);
+    const currentProducts = products || [];
+    const updatedProducts = [...currentProducts];
 
-        // Find match by id or by name (case-insensitive)
-        const matchIndex = updatedProducts.findIndex((p) => {
-          if (item.id && item.id.trim() && p.id.toLowerCase() === item.id.trim().toLowerCase()) {
-            return true;
-          }
-          return p.name.trim().toLowerCase() === trimmedName.toLowerCase();
-        });
+    items.forEach((item, index) => {
+      const trimmedName = (item.name || '').trim();
+      if (!trimmedName) return;
 
-        const storePrice = Number(item.price) || 0;
-        const visitorPrice = item.visitor_price !== undefined && item.visitor_price !== null && Number(item.visitor_price) > 0
-          ? Number(item.visitor_price)
-          : Math.round(storePrice * 0.85);
-        const stockQty = item.stock !== undefined ? Math.max(0, Number(item.stock) || 0) : undefined;
-        const unitStr = item.unit?.trim() || 'عدد';
+      const brandName = (item.brand || '').trim() || 'متفرقه';
+      if (brandName) newBrandsSet.add(brandName);
 
-        if (matchIndex >= 0) {
-          // Update existing product
-          const current = updatedProducts[matchIndex];
-          const hasPriceChanged = current.price !== storePrice || current.visitor_price !== visitorPrice;
+      const catId = item.category_id || categories[0]?.id || 'cat-1';
+      if (catId) affectedCategoryIds.add(catId);
 
-          if (hasPriceChanged) {
-            newHistories.push({
-              id: `price-hist-${Date.now()}-${index}`,
-              product_id: current.id,
-              old_price: current.price,
-              new_price: storePrice,
-              old_visitor_price: current.visitor_price,
-              new_visitor_price: visitorPrice,
-              changed_by: 'ویرایش اکسل',
-              changed_at: nowPersian,
-            });
-          }
-
-          const updatedProd: Product = {
-            ...current,
-            name: trimmedName || current.name,
-            brand: brandName || current.brand,
-            category_id: item.category_id || current.category_id,
-            price: storePrice > 0 ? storePrice : current.price,
-            visitor_price: visitorPrice > 0 ? visitorPrice : current.visitor_price,
-            stock: stockQty !== undefined ? stockQty : current.stock,
-            unit: unitStr || current.unit,
-            is_active: item.is_active !== undefined ? item.is_active : current.is_active,
-          };
-          updatedProducts[matchIndex] = updatedProd;
-          itemsToUpsertToSupabase.push(updatedProd);
-          updatedCount++;
-        } else {
-          // Create new product
-          const newId = item.id && item.id.trim() ? item.id.trim() : `prod-${Date.now().toString().slice(-4)}-${index}`;
-          const newCatId = item.category_id || categories[0]?.id || 'cat-1';
-          
-          const newProd: Product = {
-            id: newId,
-            name: trimmedName,
-            brand: brandName,
-            category_id: newCatId,
-            price: storePrice,
-            visitor_price: visitorPrice,
-            stock: stockQty !== undefined ? stockQty : 0,
-            reserved_stock: 0,
-            unit: unitStr,
-            image_url: 'https://images.unsplash.com/photo-1551024601-bec78aea704b?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer',
-            is_active: item.is_active !== undefined ? item.is_active : true,
-            created_at: new Date().toISOString(),
-          };
-          updatedProducts.push(newProd);
-          itemsToUpsertToSupabase.push(newProd);
-          createdCount++;
+      // Find match by id or by name (case-insensitive)
+      const matchIndex = updatedProducts.findIndex((p) => {
+        if (item.id && item.id.trim() && p.id.toLowerCase() === item.id.trim().toLowerCase()) {
+          return true;
         }
+        return p.name.trim().toLowerCase() === trimmedName.toLowerCase();
       });
 
-      return updatedProducts;
+      const storePrice = Number(item.price) || 0;
+      const visitorPrice = item.visitor_price !== undefined && item.visitor_price !== null && Number(item.visitor_price) > 0
+        ? Number(item.visitor_price)
+        : Math.round(storePrice * 0.85);
+      const stockQty = item.stock !== undefined ? Math.max(0, Number(item.stock) || 0) : 50;
+      const unitStr = (item.unit || '').trim() || 'عدد';
+
+      if (matchIndex >= 0) {
+        // Update existing product
+        const current = updatedProducts[matchIndex];
+        const hasPriceChanged = current.price !== storePrice || current.visitor_price !== visitorPrice;
+
+        if (hasPriceChanged) {
+          newHistories.push({
+            id: `price-hist-${Date.now()}-${index}`,
+            product_id: current.id,
+            old_price: current.price,
+            new_price: storePrice,
+            old_visitor_price: current.visitor_price,
+            new_visitor_price: visitorPrice,
+            changed_by: 'ویرایش اکسل',
+            changed_at: nowPersian,
+          });
+        }
+
+        const updatedProd: Product = {
+          ...current,
+          name: trimmedName || current.name,
+          brand: brandName || current.brand,
+          category_id: catId,
+          price: storePrice > 0 ? storePrice : current.price,
+          visitor_price: visitorPrice > 0 ? visitorPrice : current.visitor_price,
+          stock: stockQty !== undefined ? stockQty : current.stock,
+          unit: unitStr || current.unit,
+          is_active: item.is_active !== undefined ? item.is_active : current.is_active,
+        };
+        updatedProducts[matchIndex] = updatedProd;
+        itemsToUpsertToSupabase.push(updatedProd);
+        updatedCount++;
+      } else {
+        // Create new product
+        const newId = item.id && item.id.trim() ? item.id.trim() : `prod-${Date.now().toString().slice(-4)}-${index}`;
+        
+        const newProd: Product = {
+          id: newId,
+          name: trimmedName,
+          brand: brandName,
+          category_id: catId,
+          price: storePrice,
+          visitor_price: visitorPrice,
+          stock: stockQty,
+          reserved_stock: 0,
+          unit: unitStr,
+          image_url: 'https://images.unsplash.com/photo-1551024601-bec78aea704b?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer',
+          is_active: item.is_active !== undefined ? item.is_active : true,
+          created_at: new Date().toISOString(),
+        };
+        updatedProducts.push(newProd);
+        itemsToUpsertToSupabase.push(newProd);
+        createdCount++;
+      }
     });
+
+    setProducts(updatedProducts);
 
     if (newHistories.length > 0) {
       setPriceHistories((prev) => [...newHistories, ...prev]);
@@ -297,7 +297,7 @@ export function useCatalog() {
     }
 
     // Persist products and brands to Supabase asynchronously
-    if (isSupabaseConfigured && supabase && itemsToUpsertToSupabase.length > 0) {
+    if (isSupabaseConfigured && supabase) {
       (async () => {
         try {
           // 1. Sync new brands to Supabase
@@ -310,23 +310,27 @@ export function useCatalog() {
           }
 
           // 2. Sync products to Supabase
-          const dbRows = itemsToUpsertToSupabase.map((p) => ({
-            id: p.id,
-            name: p.name,
-            category_id: p.category_id,
-            brand: p.brand || 'متفرقه',
-            price: p.price,
-            visitor_price: p.visitor_price,
-            stock: p.stock,
-            reserved_stock: p.reserved_stock || 0,
-            unit: p.unit || 'عدد',
-            image_url: p.image_url,
-            is_active: p.is_active ?? true,
-          }));
+          const rowsToSave = (itemsToUpsertToSupabase.length > 0 ? itemsToUpsertToSupabase : items).map((p, idx) => {
+            const sPrice = Number(p.price) || 0;
+            const vPrice = p.visitor_price !== undefined && Number(p.visitor_price) > 0 ? Number(p.visitor_price) : Math.round(sPrice * 0.85);
+            return {
+              id: p.id && p.id.trim() ? p.id.trim() : `prod-${Date.now().toString().slice(-4)}-${idx}`,
+              name: p.name.trim(),
+              category_id: p.category_id || categories[0]?.id || 'cat-1',
+              brand: p.brand?.trim() || 'متفرقه',
+              price: sPrice,
+              visitor_price: vPrice,
+              stock: p.stock !== undefined ? Number(p.stock) : 50,
+              reserved_stock: 0,
+              unit: p.unit || 'عدد',
+              image_url: 'https://images.unsplash.com/photo-1551024601-bec78aea704b?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer',
+              is_active: p.is_active ?? true,
+            };
+          });
 
           const chunkSize = 50;
-          for (let i = 0; i < dbRows.length; i += chunkSize) {
-            const chunk = dbRows.slice(i, i + chunkSize);
+          for (let i = 0; i < rowsToSave.length; i += chunkSize) {
+            const chunk = rowsToSave.slice(i, i + chunkSize);
             const { error: upsertErr } = await supabase.from('products').upsert(chunk, { onConflict: 'id' });
             if (upsertErr) {
               console.warn('Supabase products upsert failed, retrying without visitor_price:', upsertErr.message);
@@ -343,13 +347,20 @@ export function useCatalog() {
       })();
     }
 
+    const totalCount = items.length;
+    const finalCreated = createdCount;
+    const finalUpdated = updatedCount;
+    const brandCount = Math.max(1, newBrandsSet.size);
+    const catCount = Math.max(1, affectedCategoryIds.size);
+    const message = `پردازش و ثبت با موفقیت انجام شد: ${totalCount} کالا (${finalCreated} کالای جدید، ${finalUpdated} به‌روزرسانی قیمت و مشخصات) در ${brandCount} برند و ${catCount} دسته‌بندی در سامانه ذخیره گردید.`;
+
     return {
       success: true,
-      createdCount,
-      updatedCount,
-      message: `پردازش اکسل با موفقیت انجام شد: ${createdCount} کالای جدید ثبت و ${updatedCount} کالای موجود به‌روزرسانی گردید.`,
+      createdCount: finalCreated,
+      updatedCount: finalUpdated,
+      message,
     };
-  }, [categories]);
+  }, [products, categories]);
 
   // Delete product
   const deleteProduct = useCallback((productId: string) => {
@@ -362,7 +373,128 @@ export function useCatalog() {
       };
     }
     setProducts((prev) => prev.filter((p) => p.id !== productId));
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('products').delete().eq('id', productId).then(({ error }) => {
+        if (error) console.error('خطا در حذف کالا از Supabase:', error);
+      });
+    }
     return { success: true, message: `کالای «${prod.name}» با موفقیت حذف گردید.` };
+  }, [products]);
+
+  // Bulk Delete Products
+  const bulkDeleteProducts = useCallback(async (productIds: string[]) => {
+    if (!productIds || productIds.length === 0) {
+      return { success: false, message: 'هیچ کالایی برای حذف انتخاب نشده است.', count: 0 };
+    }
+
+    const reservedProducts = products.filter(
+      (p) => productIds.includes(p.id) && p.reserved_stock > 0
+    );
+    if (reservedProducts.length > 0) {
+      const names = reservedProducts.map((p) => p.name).slice(0, 3).join('، ');
+      return {
+        success: false,
+        message: `امکان حذف ${reservedProducts.length} کالا (${names}...) به دلیل داشتن رزرو فعال در سفارشات جاری وجود ندارد.`,
+        count: 0,
+      };
+    }
+
+    const idsToDelete = new Set(productIds);
+    setProducts((prev) => prev.filter((p) => !idsToDelete.has(p.id)));
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('products').delete().in('id', productIds);
+      } catch (err) {
+        console.error('Error deleting products from Supabase:', err);
+      }
+    }
+
+    return {
+      success: true,
+      message: `${productIds.length} کالا با موفقیت از سیستم حذف شدند.`,
+      count: productIds.length,
+    };
+  }, [products]);
+
+  // Bulk Update Products
+  const bulkUpdateProducts = useCallback(async (
+    productIds: string[],
+    updates: {
+      category_id?: string;
+      brand?: string;
+      unit?: string;
+      priceAdjustmentPercent?: number;
+      fixedPrice?: number;
+      is_active?: boolean;
+    }
+  ) => {
+    if (!productIds || productIds.length === 0) {
+      return { success: false, message: 'هیچ کالایی برای ویرایش انتخاب نشده است.', count: 0 };
+    }
+
+    const targetIds = new Set(productIds);
+    const updatedItemsForDb: Product[] = [];
+
+    const updatedProducts = products.map((prod) => {
+      if (!targetIds.has(prod.id)) return prod;
+
+      let newPrice = prod.price;
+      if (updates.fixedPrice !== undefined && updates.fixedPrice > 0) {
+        newPrice = updates.fixedPrice;
+      } else if (updates.priceAdjustmentPercent !== undefined && updates.priceAdjustmentPercent !== 0) {
+        newPrice = Math.max(100, Math.round(prod.price * (1 + updates.priceAdjustmentPercent / 100)));
+      }
+
+      const newVisitorPrice = Math.round(newPrice * 0.85);
+
+      const updated: Product = {
+        ...prod,
+        category_id: updates.category_id || prod.category_id,
+        brand: updates.brand?.trim() || prod.brand,
+        unit: updates.unit?.trim() || prod.unit,
+        price: newPrice,
+        visitor_price: newVisitorPrice,
+        is_active: updates.is_active !== undefined ? updates.is_active : prod.is_active,
+      };
+
+      updatedItemsForDb.push(updated);
+      return updated;
+    });
+
+    setProducts(updatedProducts);
+
+    if (updates.brand && updates.brand.trim()) {
+      const bTrimmed = updates.brand.trim();
+      setBrands((prev) => (prev.includes(bTrimmed) ? prev : [...prev, bTrimmed]));
+    }
+
+    if (isSupabaseConfigured && supabase && updatedItemsForDb.length > 0) {
+      try {
+        const rows = updatedItemsForDb.map((p) => ({
+          id: p.id,
+          name: p.name,
+          category_id: p.category_id,
+          brand: p.brand,
+          price: p.price,
+          visitor_price: p.visitor_price,
+          stock: p.stock,
+          reserved_stock: p.reserved_stock,
+          unit: p.unit,
+          image_url: p.image_url,
+          is_active: p.is_active,
+        }));
+        await supabase.from('products').upsert(rows, { onConflict: 'id' });
+      } catch (err) {
+        console.error('Error updating products in Supabase:', err);
+      }
+    }
+
+    return {
+      success: true,
+      message: `تعداد ${productIds.length} کالا با موفقیت به‌روزرسانی گروهی شدند.`,
+      count: productIds.length,
+    };
   }, [products]);
 
   // Add category
@@ -584,6 +716,8 @@ export function useCatalog() {
     addNewProduct,
     bulkUpsertProducts,
     deleteProduct,
+    bulkDeleteProducts,
+    bulkUpdateProducts,
     addCategory,
     updateCategory,
     deleteCategory,

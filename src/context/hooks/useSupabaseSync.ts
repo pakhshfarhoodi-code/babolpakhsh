@@ -34,18 +34,26 @@ export function useSupabaseSync({
   setLoadingBills,
   setInventoryTransactions,
 }: UseSupabaseSyncProps) {
+  const DUMMY_PRODUCT_IDS = new Set(['prod-1', 'prod-2', 'prod-3', 'prod-4', 'prod-5', 'prod-6', 'prod-7', 'prod-8', 'prod-9']);
+  const DUMMY_SUPERMARKET_IDS = new Set(['shop-1', 'shop-2', 'shop-3', 'shop-4', 'shop-5']);
+
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return;
+
+    // Proactively clean up any legacy seed mock data from Supabase
+    supabase.from('products').delete().in('id', Array.from(DUMMY_PRODUCT_IDS)).then(() => {});
+    supabase.from('supermarkets').delete().in('id', Array.from(DUMMY_SUPERMARKET_IDS)).then(() => {});
 
     async function loadFromSupabase() {
       try {
         // 1. Products
         const { data: prods } = await supabase!.from('products').select('*');
-        if (prods && prods.length > 0) {
+        if (prods) {
+          const cleanProds = prods.filter((p: Product) => !DUMMY_PRODUCT_IDS.has(p.id));
           setProducts((prev) => {
-            const serverIds = new Set(prods.map((p: Product) => p.id));
-            const localOnly = prev.filter((p) => !serverIds.has(p.id));
-            return [...prods, ...localOnly];
+            const serverIds = new Set(cleanProds.map((p: Product) => p.id));
+            const localOnly = prev.filter((p) => !serverIds.has(p.id) && !DUMMY_PRODUCT_IDS.has(p.id));
+            return [...cleanProds, ...localOnly];
           });
         }
 
@@ -79,9 +87,10 @@ export function useSupabaseSync({
 
         // 6. Supermarkets
         const { data: sms } = await supabase!.from('supermarkets').select('*');
-        if (sms && sms.length > 0) {
+        if (sms) {
+          const cleanSms = sms.filter((sm: Supermarket) => !DUMMY_SUPERMARKET_IDS.has(sm.id));
           setSupermarkets((prev) => {
-            return sms.map((sm: Supermarket) => {
+            return cleanSms.map((sm: Supermarket) => {
               const localMatch = prev.find((p) => p.id === sm.id);
               return {
                 ...sm,

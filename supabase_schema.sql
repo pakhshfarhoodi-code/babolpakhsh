@@ -1,4 +1,4 @@
--- SQL Schema for سامانه پخش مویرگی البرز (Alborz Cold-Chain Distribution System)
+-- SQL Schema for بارفروش | شبکه پخش عمده فرهودی (Barforoosh - Farhoodi Distribution System)
 -- Optimized for MVP: Supabase / PostgreSQL with Reserved Stock & Audited Workflows
 
 -- 1. Enable UUID Extension
@@ -381,8 +381,8 @@ INSERT INTO profiles (id, name, role, phone) VALUES
 ('shop-3', 'هایپرمارکت تک', 'supermarket', '۰۹۱۲۳۳۳۳۳۳۳'),
 ('shop-4', 'سوپرمارکت یاس', 'supermarket', '۰۹۱۲۴۴۴۴۴۴۴'),
 ('shop-5', 'سوپرمارکت خلیج فارس', 'supermarket', '۰۹۱۲۵۵۵۵۵۵۵'),
-('admin-1', 'مدیریت البرز', 'admin', '09120000000'),
-('wh-1', 'انباردار سردخانه', 'warehouse', '09121110000')
+('admin-1', 'مدیریت مرکزی فرهودی (بارفروش)', 'admin', '09120000000'),
+('wh-1', 'انباردار مرکزی فرهودی', 'warehouse', '09121110000')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO categories (id, name, icon, sort_order) VALUES
@@ -393,28 +393,9 @@ INSERT INTO categories (id, name, icon, sort_order) VALUES
 ('cat-5', 'کیک و تنقلات', 'Cookie', 5)
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO products (id, category_id, name, price, stock, reserved_stock, unit, image_url, is_active) VALUES
-('prod-1', 'cat-1', 'بستنی مگنوم شکلاتی میهن', 25000, 120, 0, 'عدد', 'https://images.unsplash.com/photo-1579954115545-a95591f28bfc?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer', true),
-('prod-2', 'cat-1', 'بستنی عروسکی دومینو', 12000, 350, 0, 'عدد', 'https://images.unsplash.com/photo-1551024601-bec78aea704b?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer', true),
-('prod-3', 'cat-1', 'بستنی سالار شاه‌توت کاله', 28000, 85, 0, 'عدد', 'https://images.unsplash.com/photo-1563805042-7684c019e1cb?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer', true),
-('prod-4', 'cat-1', 'بستنی لیتری وانیلی پاک', 75000, 40, 0, 'باکس', 'https://images.unsplash.com/photo-1501443762994-82bd5dace89a?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer', true),
-('prod-5', 'cat-2', 'سوسیس کوکتل ۸۰٪ دمس (۱ کیلوگرم)', 220000, 60, 0, 'بسته', 'https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer', true),
-('prod-6', 'cat-2', 'کالباس ژامبون مرغ ۹۰٪ سولیکو', 290000, 35, 0, 'کیلوگرم', 'https://images.unsplash.com/photo-1624246380751-64e748d562f0?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer', true),
-('prod-7', 'cat-2', 'همبرگر ۹۰٪ ممتاز کاله (بسته ۴ عددی)', 185000, 110, 0, 'بسته', 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer', true),
-('prod-8', 'cat-2', 'ناگت مرغ ۷۰٪ ب آ (۹۰۰ گرمی)', 145000, 95, 0, 'بسته', 'https://images.unsplash.com/photo-1562967914-608f82629710?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer', true),
-('prod-9', 'cat-2', 'فیله مرغ سوخاری پامچال', 198000, 0, 0, 'بسته', 'https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer', false)
-ON CONFLICT (id) DO NOTHING;
-
 INSERT INTO visitors (id, name, phone, region, is_active) VALUES
 ('vis-1', 'علیرضا رضایی', '۰۹۱۲۳۴۵۶۷۸۹', 'منطقه ۱ (شمال تهران)', true),
 ('vis-2', 'مریم حسینی', '۰۹۱۹۸۷۶۵۴۳۲', 'منطقه ۲ (غرب تهران)', true),
 ('vis-3', 'محمد کریمی', '۰۹۱۸۲۲۲۳۳۴۴', 'منطقه ۳ (شرق تهران)', true)
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO supermarkets (id, name, owner, phone, address, assigned_visitor_id, is_active) VALUES
-('shop-1', 'سوپرمارکت بهاران', 'آقای احمدی', '۰۹۱۲۱۱۱۱۱۱۱', 'خیابان ولیعصر، نرسیده به میدان ونک، پلاک ۲۴', 'vis-1', true),
-('shop-2', 'سوپرمارکت ستاره شهر', 'آقای کرمی', '۰۹۱۲۲۲۲۲۲۲۲', 'خیابان شریعتی، بالاتر از میرداماد، کوچه ستاره، پلاک ۵', 'vis-1', true),
-('shop-3', 'هایپرمارکت تک', 'خانم رستمی', '۰۹۱۲۳۳۳۳۳۳۳', 'سعادت‌آباد، سرو غربی، بعد از چهارراه شهرداری، پاساژ تک', 'vis-2', true),
-('shop-4', 'سوپرمارکت یاس', 'آقای محمدی', '۰۹۱۲۴۴۴۴۴۴۴', 'تهرانپارس، فلکه سوم، خیابان ۱۹۶ شرقی، پلاک ۱۱۰', 'vis-3', true),
-('shop-5', 'سوپرمارکت خلیج فارس', 'آقای مرادی', '۰۹۱۲۵۵۵۵۵۵۵', 'پونک، بلوار همیلا، نبش کوچه پارک، پلاک ۸', 'vis-2', true)
-ON CONFLICT (id) DO NOTHING;

@@ -79,7 +79,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
       .format(new Date())
       .replace(/[\/\\]/g, '-');
 
-    const fileName = `گزارش_کالاهای_البرز_${sheetName}_${dateStr}.xlsx`;
+    const fileName = `گزارش_کالاهای_بارفروش_فرهودی_${sheetName}_${dateStr}.xlsx`;
     XLSX.writeFile(wb, fileName);
     onClose();
   };

@@ -304,8 +304,8 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         return p.name.trim().toLowerCase() === rawName.toLowerCase();
       });
 
-      const isValid = storePrice > 0;
-      const error = !isValid ? 'قیمت فروشگاه باید بزرگتر از صفر باشد' : undefined;
+      const isValid = rawName.length > 0 && storePrice >= 0;
+      const error = !rawName ? 'نام کالا الزامی است' : storePrice < 0 ? 'قیمت نمی‌تواند منفی باشد' : undefined;
 
       rows.push({
         id: rawId,
@@ -463,7 +463,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     const ws = XLSX.utils.json_to_sheet(sampleData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'کالاها');
-    XLSX.writeFile(wb, 'قالب_استاندارد_کالاهای_البرز.xlsx');
+    XLSX.writeFile(wb, 'قالب_استاندارد_کالاهای_بارفروش_فرهودی.xlsx');
   };
 
   return (

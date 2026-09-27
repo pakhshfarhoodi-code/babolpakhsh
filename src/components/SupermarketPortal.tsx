@@ -7,6 +7,7 @@ import { CartBar } from './shop/CartBar';
 import { CartSheet } from './shop/CartSheet';
 import { ReorderCard } from './shop/ReorderCard';
 import { OrderCard } from './shop/OrderCard';
+import { OrderInvoiceModal } from './invoice/OrderInvoiceModal';
 import {
   getTopPurchasedProducts,
   buildCartFromOrder,
@@ -22,6 +23,8 @@ import {
   Layers,
   ArrowLeft,
   RotateCcw,
+  FileText,
+  Printer,
 } from 'lucide-react';
 
 export const SupermarketPortal: React.FC = () => {
@@ -55,6 +58,8 @@ export const SupermarketPortal: React.FC = () => {
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
   const [placedOrderId, setPlacedOrderId] = useState<string | null>(null);
+  const [placedOrderObject, setPlacedOrderObject] = useState<Order | null>(null);
+  const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState<Order | null>(null);
 
   // Toast / Short notice message
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -288,6 +293,9 @@ export const SupermarketPortal: React.FC = () => {
         setCart({});
         setIsMobileCartOpen(false);
         setPlacedOrderId(res.orderId || 'ORD-NEW');
+        if (res.order) {
+          setPlacedOrderObject(res.order);
+        }
       } else {
         setOrderError(res.message || 'خطا در ثبت سفارش. لطفاً موجودی را بررسی کنید.');
       }
@@ -336,21 +344,41 @@ export const SupermarketPortal: React.FC = () => {
             </p>
 
             <div className="space-y-2 pt-2">
+              {/* Immediate Print / PDF Invoice Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  const target =
+                    placedOrderObject || orders.find((o) => o.id === placedOrderId);
+                  if (target) {
+                    setSelectedInvoiceOrder(target);
+                  }
+                }}
+                className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-blue-600/25 transition cursor-pointer"
+              >
+                <FileText className="w-4 h-4" />
+                <span>مشاهده، چاپ و دریافت PDF فاکتور</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => {
                   setPlacedOrderId(null);
+                  setPlacedOrderObject(null);
                   setActiveTab('orders');
                 }}
-                className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 transition cursor-pointer"
+                className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/30 transition cursor-pointer"
               >
                 پیگیری سفارش در «سفارش‌های من»
               </button>
 
               <button
                 type="button"
-                onClick={() => setPlacedOrderId(null)}
-                className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs transition cursor-pointer"
+                onClick={() => {
+                  setPlacedOrderId(null);
+                  setPlacedOrderObject(null);
+                }}
+                className="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs transition cursor-pointer"
               >
                 بازگشت به کاتالوگ
               </button>
@@ -568,6 +596,7 @@ export const SupermarketPortal: React.FC = () => {
                 order={order}
                 assignedVisitor={assignedVisitor}
                 onReorder={handleReorder}
+                onViewInvoice={(ord) => setSelectedInvoiceOrder(ord)}
               />
             ))
           )}
@@ -604,6 +633,15 @@ export const SupermarketPortal: React.FC = () => {
         isSubmitting={isSubmittingOrder}
         errorMessage={orderError}
         onExceedLimit={handleExceedLimit}
+      />
+
+      {/* Official B2B Order Invoice Modal with PDF & Print */}
+      <OrderInvoiceModal
+        isOpen={!!selectedInvoiceOrder}
+        onClose={() => setSelectedInvoiceOrder(null)}
+        order={selectedInvoiceOrder}
+        supermarket={currentStore}
+        visitor={assignedVisitor}
       />
     </div>
   );

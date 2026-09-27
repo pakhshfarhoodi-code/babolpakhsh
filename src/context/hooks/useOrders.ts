@@ -161,7 +161,12 @@ export function useOrders({
           });
       }
 
-      return { success: true, message: `سفارش با شماره ${orderId} با موفقیت ثبت و موجودی رزرو شد.`, orderId };
+      return {
+        success: true,
+        message: `سفارش با شماره ${orderId} با موفقیت ثبت و موجودی رزرو شد.`,
+        orderId,
+        order: newOrder,
+      };
     },
     [supermarkets, visitors, products, setProducts, addInventoryTransactions]
   );

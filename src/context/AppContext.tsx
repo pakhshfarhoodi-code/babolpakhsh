@@ -65,7 +65,7 @@ interface AppContextType {
   inventoryTransactions: InventoryTransaction[];
   priceHistories: ProductPriceHistory[];
 
-  createOrder: (payload: CreateOrderPayload) => { success: boolean; message: string; orderId?: string };
+  createOrder: (payload: CreateOrderPayload) => { success: boolean; message: string; orderId?: string; order?: Order };
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
   requestReassignment: (orderId: string, toVisitorId: string | null) => void;
   respondToReassignment: (requestId: string, accept: boolean) => void;
@@ -86,6 +86,18 @@ interface AppContextType {
     is_active?: boolean;
   }>) => { success: boolean; createdCount: number; updatedCount: number; message: string } | Promise<{ success: boolean; createdCount: number; updatedCount: number; message: string }>;
   deleteProduct: (productId: string) => { success: boolean; message: string };
+  bulkDeleteProducts: (productIds: string[]) => Promise<{ success: boolean; message: string; count: number }>;
+  bulkUpdateProducts: (
+    productIds: string[],
+    updates: {
+      category_id?: string;
+      brand?: string;
+      unit?: string;
+      priceAdjustmentPercent?: number;
+      fixedPrice?: number;
+      is_active?: boolean;
+    }
+  ) => Promise<{ success: boolean; message: string; count: number }>;
   addCategory: (name: string, icon?: string) => { success: boolean; message: string; category?: Category };
   updateCategory: (categoryId: string, newName: string) => { success: boolean; message: string };
   deleteCategory: (categoryId: string) => { success: boolean; message: string };
@@ -152,9 +164,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(STORAGE_KEYS.VISITORS, JSON.stringify(visitors));
   }, [visitors]);
 
+  const DUMMY_SUPERMARKET_IDS = new Set(['shop-1', 'shop-2', 'shop-3', 'shop-4', 'shop-5']);
+
   const [supermarkets, setSupermarkets] = useState<Supermarket[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.SUPERMARKETS);
-    return saved ? JSON.parse(saved) : INITIAL_SUPERMARKETS;
+    if (!saved) return [];
+    try {
+      const parsed: Supermarket[] = JSON.parse(saved);
+      return parsed.filter((s) => !DUMMY_SUPERMARKET_IDS.has(s.id));
+    } catch {
+      return [];
+    }
   });
 
   useEffect(() => {
@@ -474,6 +494,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addNewProduct: catalog.addNewProduct,
     bulkUpsertProducts: catalog.bulkUpsertProducts,
     deleteProduct: catalog.deleteProduct,
+    bulkDeleteProducts: catalog.bulkDeleteProducts,
+    bulkUpdateProducts: catalog.bulkUpdateProducts,
     addCategory: catalog.addCategory,
     updateCategory: catalog.updateCategory,
     deleteCategory: catalog.deleteCategory,
@@ -518,6 +540,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     catalog.addNewProduct,
     catalog.bulkUpsertProducts,
     catalog.deleteProduct,
+    catalog.bulkDeleteProducts,
+    catalog.bulkUpdateProducts,
     catalog.addCategory,
     catalog.updateCategory,
     catalog.deleteCategory,

@@ -10,9 +10,12 @@ import {
   ShieldAlert,
   Calendar,
   Filter,
+  FileText,
+  Printer,
 } from 'lucide-react';
 import { isToday, isWithinDays, formatPrice, formatOrderDate } from './helpers';
 import { OrderOverrideModal } from './OrderOverrideModal';
+import { OrderInvoiceModal } from '../invoice/OrderInvoiceModal';
 
 interface OrdersTabProps {
   orders: Order[];
@@ -40,6 +43,9 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
   // Reassignment Modal state
   const [reassignModalOrder, setReassignModalOrder] = useState<Order | null>(null);
   const [selectedTargetVisitor, setSelectedTargetVisitor] = useState('');
+
+  // Invoice view / print modal state
+  const [invoiceModalOrder, setInvoiceModalOrder] = useState<Order | null>(null);
 
   // Status Chip config
   const statusChips = [
@@ -251,6 +257,17 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                       </td>
                       <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                          {/* Invoice View & Print / PDF Button */}
+                          <button
+                            type="button"
+                            onClick={() => setInvoiceModalOrder(order)}
+                            className="px-2.5 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/30 text-xs font-semibold transition cursor-pointer flex items-center gap-1"
+                            title="مشاهده فاکتور، چاپ کاغذی و خروجی PDF"
+                          >
+                            <FileText className="w-3 h-3" />
+                            <span>فاکتور / PDF</span>
+                          </button>
+
                           {/* Deliver button (only if not delivered) */}
                           {order.status !== 'delivered' && (
                             <button
@@ -377,6 +394,18 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
           </div>
         </div>
       )}
+
+      {/* Official B2B Order Invoice Modal with PDF & Print */}
+      <OrderInvoiceModal
+        isOpen={Boolean(invoiceModalOrder)}
+        onClose={() => setInvoiceModalOrder(null)}
+        order={invoiceModalOrder}
+        visitor={
+          invoiceModalOrder
+            ? visitors.find((v) => v.id === invoiceModalOrder.assigned_visitor_id) || null
+            : null
+        }
+      />
     </div>
   );
 };

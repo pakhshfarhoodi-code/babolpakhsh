@@ -41,6 +41,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     addNewProduct,
     bulkUpsertProducts,
     deleteProduct,
+    bulkDeleteProducts,
+    bulkUpdateProducts,
     updateOrderStatus,
     requestReassignment,
     updateCategory,
@@ -228,6 +230,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           onAddNewProduct={addNewProduct}
           onBulkUpsertProducts={bulkUpsertProducts}
           onDeleteProduct={deleteProduct}
+          onBulkDeleteProducts={bulkDeleteProducts}
+          onBulkUpdateProducts={bulkUpdateProducts}
           onOpenEditCategory={(cat) => {
             setEditingCategoryModal(cat);
             setNewCatNameInput(cat.name);

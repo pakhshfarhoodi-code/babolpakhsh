@@ -21,8 +21,10 @@ import {
   MapPin,
   Sparkles,
   Info,
+  Printer,
 } from 'lucide-react';
 import { isToday, formatPrice } from './helpers';
+import { OrderInvoiceModal } from '../invoice/OrderInvoiceModal';
 
 interface TodayTabProps {
   currentVisitor: Visitor;
@@ -51,6 +53,7 @@ export const TodayTab: React.FC<TodayTabProps> = ({
 }) => {
   // Active menu dropdown state for card actions
   const [activeMenuOrderId, setActiveMenuOrderId] = useState<string | null>(null);
+  const [invoiceOrder, setInvoiceOrder] = useState<Order | null>(null);
 
   // Loading Bill accordion & selection
   const [isBillSectionOpen, setIsBillSectionOpen] = useState(false);
@@ -335,6 +338,16 @@ export const TodayTab: React.FC<TodayTabProps> = ({
                       </a>
                     )}
 
+                    {/* Quick Invoice & Print Button */}
+                    <button
+                      type="button"
+                      onClick={() => setInvoiceOrder(order)}
+                      title="مشاهده فاکتور، چاپ کاغذی و دانلود PDF"
+                      className="p-2 sm:px-2.5 sm:py-2 rounded-xl bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/30 transition flex items-center justify-center cursor-pointer shrink-0"
+                    >
+                      <FileText className="w-4 h-4" />
+                    </button>
+
                     {/* 3-Dot Menu Toggle */}
                     <div className="relative">
                       <button
@@ -364,9 +377,20 @@ export const TodayTab: React.FC<TodayTabProps> = ({
                               type="button"
                               onClick={() => {
                                 setActiveMenuOrderId(null);
+                                setInvoiceOrder(order);
+                              }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-blue-400 hover:bg-slate-800 transition cursor-pointer text-right"
+                            >
+                              <FileText className="w-3.5 h-3.5" />
+                              <span>مشاهده و چاپ فاکتور</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveMenuOrderId(null);
                                 onOpenDelegateModal(order);
                               }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-amber-400 hover:bg-slate-800 transition cursor-pointer text-right"
+                              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-amber-400 hover:bg-slate-800 transition cursor-pointer text-right border-t border-slate-800/80"
                             >
                               <ArrowRightLeft className="w-3.5 h-3.5" />
                               <span>واگذاری به همکار</span>
@@ -499,6 +523,19 @@ export const TodayTab: React.FC<TodayTabProps> = ({
           )}
         </div>
       )}
+
+      {/* Official B2B Order Invoice Modal with PDF & Print */}
+      <OrderInvoiceModal
+        isOpen={!!invoiceOrder}
+        onClose={() => setInvoiceOrder(null)}
+        order={invoiceOrder}
+        supermarket={
+          invoiceOrder
+            ? supermarketMap.get(invoiceOrder.supermarket_id) || null
+            : null
+        }
+        visitor={currentVisitor}
+      />
     </div>
   );
 };

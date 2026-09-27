@@ -10,18 +10,22 @@ import {
   Truck,
   XCircle,
   Package,
+  FileText,
+  Printer,
 } from 'lucide-react';
 
 interface OrderCardProps {
   order: Order;
   assignedVisitor?: { name: string; phone: string };
   onReorder: (order: Order) => void;
+  onViewInvoice?: (order: Order) => void;
 }
 
 export const OrderCard: React.FC<OrderCardProps> = ({
   order,
   assignedVisitor,
   onReorder,
+  onViewInvoice,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const statusInfo = getOrderStatusLabel(order.status);
@@ -121,6 +125,19 @@ export const OrderCard: React.FC<OrderCardProps> = ({
               <Phone className="w-3.5 h-3.5" />
               <span>تماس با ویزیتور</span>
             </a>
+          )}
+
+          {/* View Invoice & Print / PDF Button */}
+          {onViewInvoice && (
+            <button
+              type="button"
+              onClick={() => onViewInvoice(order)}
+              className="px-2.5 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/30 font-bold text-xs transition flex items-center gap-1 cursor-pointer"
+              title="مشاهده فاکتور رسمی، چاپ و دریافت PDF"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>فاکتور / PDF</span>
+            </button>
           )}
 
           {/* Reorder Button */}

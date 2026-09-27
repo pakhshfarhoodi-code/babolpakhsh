@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Category } from '../../types';
 import { CategorySelectPicker, BrandSelectPicker } from '../CategoryBrandSelectors';
-import { PackagePlus, X } from 'lucide-react';
+import { PackagePlus, X, DollarSign, Warehouse, Package } from 'lucide-react';
 
 interface NewProductModalProps {
   isOpen: boolean;
@@ -14,6 +14,7 @@ interface NewProductModalProps {
     category_id: string;
     price: number;
     visitor_price?: number;
+    consumer_price?: number;
     stock: number;
     unit: string;
     image_url: string;
@@ -32,6 +33,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
   const [categoryId, setCategoryId] = useState(() => categories[0]?.id || '');
   const [price, setPrice] = useState<number>(0);
   const [visitorPrice, setVisitorPrice] = useState<number>(0);
+  const [consumerPrice, setConsumerPrice] = useState<number>(0);
   const [stock, setStock] = useState<number>(50);
   const [unit, setUnit] = useState('عدد');
 
@@ -70,6 +72,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
       category_id: categoryId,
       price,
       visitor_price: visitorPrice > 0 ? visitorPrice : Math.round(price * 0.85),
+      consumer_price: consumerPrice > 0 ? consumerPrice : undefined,
       stock,
       unit,
       image_url: getSampleImage(categoryId),
@@ -77,78 +80,78 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
 
     onClose();
     setName('');
-    setBrand('میهن');
     setPrice(0);
     setVisitorPrice(0);
+    setConsumerPrice(0);
     setStock(50);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-5 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-indigo-600/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30">
-              <PackagePlus className="w-4 h-4" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 sm:p-6 overflow-y-auto">
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-2xl p-6 shadow-2xl space-y-5 my-auto animate-in fade-in zoom-in-95 duration-150">
+        <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30">
+              <PackagePlus className="w-5 h-5" />
             </div>
-            <h3 className="font-bold text-sm text-slate-100">تعریف کالای جدید در سردخانه</h3>
+            <div>
+              <h3 className="font-bold text-base text-slate-100">تعریف کالای جدید در انبار و سردخانه</h3>
+              <p className="text-xs text-slate-400">اطلاعات کالا، نرخ‌ها و موجودی ورودی به انبار را ثبت کنید</p>
+            </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-200 p-1 rounded-lg hover:bg-slate-800 transition cursor-pointer"
+            className="text-slate-400 hover:text-slate-100 p-2 rounded-xl hover:bg-slate-800 transition cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
-          <div>
-            <label className="block text-slate-300 mb-1 font-medium">نام کالا</label>
-            <input
-              type="text"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition shadow-inner"
-              placeholder="مثال: بستنی دبل چاکلت میهن"
-            />
+        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+          {/* Basic Info */}
+          <div className="space-y-3 p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800/80">
+            <span className="text-xs font-bold text-indigo-400 flex items-center gap-1.5">
+              <Package className="w-3.5 h-3.5" />
+              شناسه کالا
+            </span>
+
+            <div>
+              <label className="block text-slate-200 mb-1 font-semibold">
+                نام کامل کالا <span className="text-amber-400">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <CategorySelectPicker
+                selectedCategoryId={categoryId}
+                onSelectCategory={setCategoryId}
+              />
+              <BrandSelectPicker
+                selectedBrand={brand}
+                onSelectBrand={setBrand}
+              />
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <CategorySelectPicker
-              selectedCategoryId={categoryId}
-              onSelectCategory={setCategoryId}
-            />
-            <BrandSelectPicker
-              selectedBrand={brand}
-              onSelectBrand={setBrand}
-            />
-          </div>
+          {/* Pricing Section */}
+          <div className="space-y-3 p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800/80">
+            <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+              <DollarSign className="w-3.5 h-3.5" />
+              نرخ‌گذاری کالا (تومان)
+            </span>
 
-          <div>
-            <label className="block text-slate-300 mb-1 font-medium">واحد سنجش</label>
-            <select
-              value={unit}
-              onChange={(e) => setUnit(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 transition cursor-pointer"
-            >
-              <option value="عدد">عدد</option>
-              <option value="باکس">باکس</option>
-              <option value="بسته">بسته</option>
-              <option value="کیلوگرم">کیلوگرم</option>
-              <option value="سطل">سطل</option>
-              <option value="جعبه">جعبه</option>
-            </select>
-          </div>
-
-          {/* Dual Pricing Section */}
-          <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2.5">
-            <span className="text-[11px] font-bold text-slate-300 block">نرخ‌گذاری دوگانه کالا:</span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-emerald-400 mb-1 font-semibold text-[11px]">
-                  قیمت خرید فروشگاه (تومان)
+                <label className="block text-emerald-400 mb-1 font-semibold">
+                  خرید فروشگاه <span className="text-amber-400">*</span>
                 </label>
                 <input
                   type="number"
@@ -156,52 +159,92 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
                   min="1000"
                   value={price || ''}
                   onChange={(e) => handlePriceChange(Number(e.target.value))}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-xs text-emerald-300 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition shadow-inner font-mono font-bold"
-                  placeholder="85000"
+                  className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-emerald-300 focus:outline-none focus:border-emerald-500 font-mono font-bold"
                 />
               </div>
+
               <div>
-                <label className="block text-blue-400 mb-1 font-semibold text-[11px]">
-                  قیمت خرید ویزیتور (تومان)
+                <label className="block text-blue-400 mb-1 font-semibold flex items-center justify-between">
+                  <span>خرید ویزیتور</span>
+                  <span className="text-[10px] text-blue-400">محرمانه</span>
                 </label>
                 <input
                   type="number"
                   min="1000"
                   value={visitorPrice || ''}
                   onChange={(e) => setVisitorPrice(Number(e.target.value))}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-xs text-blue-300 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition shadow-inner font-mono font-bold"
-                  placeholder="72250"
+                  className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-blue-300 focus:outline-none focus:border-blue-500 font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-amber-400 mb-1 font-semibold flex items-center justify-between">
+                  <span>قیمت مصرف‌کننده</span>
+                  <span className="text-[10px] text-slate-400">اختیاری</span>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={consumerPrice || ''}
+                  onChange={(e) => setConsumerPrice(Number(e.target.value))}
+                  className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-amber-300 focus:outline-none focus:border-amber-500 font-mono font-bold"
                 />
               </div>
             </div>
           </div>
 
-          <div>
-            <label className="block text-slate-300 mb-1 font-medium">موجودی اولیه فیزیکی</label>
-            <input
-              type="number"
-              min="1"
-              required
-              value={stock || ''}
-              onChange={(e) => setStock(Number(e.target.value))}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition shadow-inner font-mono"
-              placeholder="50"
-            />
+          {/* Inventory & Unit */}
+          <div className="space-y-3 p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800/80">
+            <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+              <Warehouse className="w-3.5 h-3.5" />
+              موجودی و واحد سنجش
+            </span>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-slate-300 mb-1 font-medium">واحد سنجش</label>
+                <select
+                  value={unit}
+                  onChange={(e) => setUnit(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition cursor-pointer"
+                >
+                  <option value="عدد">عدد</option>
+                  <option value="باکس">باکس</option>
+                  <option value="بسته">بسته</option>
+                  <option value="کیلوگرم">کیلوگرم</option>
+                  <option value="سطل">سطل</option>
+                  <option value="جعبه">جعبه</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 mb-1 font-medium">موجودی اولیه فیزیکی انبار</label>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  value={stock || ''}
+                  onChange={(e) => setStock(Number(e.target.value))}
+                  className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition font-mono"
+                />
+              </div>
+            </div>
           </div>
 
-          <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
+          <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="min-h-[40px] px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-semibold cursor-pointer transition"
+              className="px-5 py-2.5 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-bold transition cursor-pointer"
             >
               انصراف
             </button>
             <button
               type="submit"
-              className="min-h-[40px] px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs cursor-pointer transition shadow-md shadow-indigo-600/25"
+              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-bold text-xs transition shadow-lg shadow-indigo-600/30 cursor-pointer flex items-center gap-1.5"
             >
-              ثبت کالا در سردخانه
+              <PackagePlus className="w-4 h-4" />
+              <span>ثبت کالا در سردخانه</span>
             </button>
           </div>
         </form>

@@ -32,43 +32,21 @@
 
   html.theme-light, .theme-light {
     color-scheme: light;
-    --color-slate-950: #f8fafc;
-    --color-slate-900: #ffffff;
-    --color-slate-800: #e2e8f0;
-    --color-slate-700: #cbd5e1;
-    --color-slate-600: #94a3b8;
-    --color-slate-500: #64748b;
-    --color-slate-400: #475569;
-    --color-slate-300: #334155;
-    --color-slate-200: #1e293b;
-    --color-slate-100: #0f172a;
-    --color-slate-50: #020617;
-
-    --color-blue-950: #eff6ff;
-    --color-blue-900: #dbeafe;
-    --color-blue-800: #bfdbfe;
-
-    --color-emerald-950: #ecfdf5;
-    --color-emerald-900: #d1fae5;
-    --color-emerald-800: #a7f3d0;
-
-    --color-indigo-950: #eef2ff;
-    --color-indigo-900: #e0e7ff;
-    --color-indigo-800: #c7d2fe;
-
-    --color-amber-950: #fffbeb;
-    --color-amber-900: #fef3c7;
-    --color-amber-800: #fde68a;
   }
   
   body {
     font-family: var(--font-vazirmatn);
     direction: rtl;
     text-align: right;
-    background-color: var(--color-slate-950, #0b1329);
-    color: var(--color-slate-100, #f1f5f9);
+    background-color: #0b1329;
+    color: #f1f5f9;
     -webkit-tap-highlight-color: transparent;
     transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  html.theme-light body, .theme-light body {
+    background-color: #f8fafc;
+    color: #0f172a;
   }
 }
 

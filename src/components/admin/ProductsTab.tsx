@@ -24,6 +24,10 @@ import {
   Square,
   Loader2,
   SlidersHorizontal,
+  PackagePlus,
+  Package,
+  DollarSign,
+  Warehouse,
 } from 'lucide-react';
 import { LOW_STOCK_THRESHOLD, formatPrice } from './helpers';
 import { PriceHistoryDrawer } from './PriceHistoryDrawer';
@@ -100,6 +104,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   const [newProdCat, setNewProdCat] = useState(() => categories[0]?.id || '');
   const [newProdPrice, setNewProdPrice] = useState(0);
   const [newProdVisitorPrice, setNewProdVisitorPrice] = useState(0);
+  const [newProdConsumerPrice, setNewProdConsumerPrice] = useState(0);
   const [newProdStock, setNewProdStock] = useState(0);
   const [newProdUnit, setNewProdUnit] = useState('عدد');
 
@@ -283,6 +288,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
       category_id: newProdCat,
       price: newProdPrice,
       visitor_price: visitorPrice,
+      consumer_price: newProdConsumerPrice > 0 ? newProdConsumerPrice : undefined,
       stock: newProdStock,
       reserved_stock: 0,
       unit: newProdUnit,
@@ -292,9 +298,9 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
 
     setIsAddModalOpen(false);
     setNewProdName('');
-    setNewProdBrand('میهن');
     setNewProdPrice(0);
     setNewProdVisitorPrice(0);
+    setNewProdConsumerPrice(0);
     setNewProdStock(0);
   };
 
@@ -778,130 +784,177 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
 
       {/* Modal: Define New Product */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-in fade-in">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <h3 className="font-bold text-sm text-slate-100">تعریف کالای جدید در سامانه</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 sm:p-6 animate-in fade-in overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-2xl p-6 shadow-2xl space-y-5 my-auto">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                  <PackagePlus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-100">تعریف کالای جدید در سامانه</h3>
+                  <p className="text-xs text-slate-400">اطلاعات کالا، دسته‌بندی، قیمت‌ها و موجودی انبار را وارد کنید</p>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => setIsAddModalOpen(false)}
-                className="text-slate-400 hover:text-slate-200"
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition cursor-pointer"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateProductSubmit} className="space-y-3.5 text-xs">
-              <div>
-                <label className="block text-slate-400 mb-1 font-medium">نام کالا</label>
-                <input
-                  type="text"
-                  required
-                  value={newProdName}
-                  onChange={(e) => setNewProdName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-100 focus:outline-none focus:border-blue-500"
-                  placeholder="مثال: بستنی مگنوم دابل شکلات"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <CategorySelectPicker
-                  selectedCategoryId={newProdCat}
-                  onSelectCategory={setNewProdCat}
-                  onEditCategoryClick={onOpenEditCategory}
-                />
-                <BrandSelectPicker
-                  selectedBrand={newProdBrand}
-                  onSelectBrand={setNewProdBrand}
-                  onEditBrandClick={onOpenEditBrand}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <form onSubmit={handleCreateProductSubmit} className="space-y-4 text-xs">
+              {/* Section 1: Basic Info */}
+              <div className="space-y-3 p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800/80">
+                <span className="text-xs font-bold text-blue-400 flex items-center gap-1.5">
+                  <Package className="w-3.5 h-3.5" />
+                  اطلاعات شناسه کالا
+                </span>
+                
                 <div>
-                  <label className="block text-slate-300 mb-1 font-semibold flex items-center justify-between">
-                    <span>قیمت خرید فروشگاه (تومان) <span className="text-amber-400">*</span></span>
+                  <label className="block text-slate-300 mb-1 font-semibold">
+                    نام کامل کالا <span className="text-amber-400">*</span>
                   </label>
                   <input
-                    type="number"
+                    type="text"
                     required
-                    min="1000"
-                    value={newProdPrice || ''}
-                    onChange={(e) => {
-                      const val = Number(e.target.value);
-                      setNewProdPrice(val);
-                      if (!newProdVisitorPrice || newProdVisitorPrice === Math.round(newProdPrice * 0.85)) {
-                        setNewProdVisitorPrice(Math.round(val * 0.85));
-                      }
-                    }}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
-                    placeholder="مثال: 45000"
+                    value={newProdName}
+                    onChange={(e) => setNewProdName(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-blue-500 transition"
                   />
-                  <span className="text-[10px] text-slate-500 mt-0.5 block">نرخ رسمی فروش به مشتریان سوپرمارکت</span>
                 </div>
 
-                <div>
-                  <label className="block text-slate-300 mb-1 font-semibold flex items-center justify-between">
-                    <span>قیمت خرید ویزیتور (تومان)</span>
-                    <span className="text-[10px] text-blue-400">محرمانه</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="1000"
-                    value={newProdVisitorPrice || ''}
-                    onChange={(e) => setNewProdVisitorPrice(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
-                    placeholder="محاسبه خودکار (۸۵٪)"
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <CategorySelectPicker
+                    selectedCategoryId={newProdCat}
+                    onSelectCategory={setNewProdCat}
+                    onEditCategoryClick={onOpenEditCategory}
                   />
-                  <span className="text-[10px] text-slate-500 mt-0.5 block">نرخ فاکتور حواله ویزیتور به شرکت</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-400 mb-1 font-medium">واحد سنجش</label>
-                  <select
-                    value={newProdUnit}
-                    onChange={(e) => setNewProdUnit(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-100 focus:outline-none focus:border-blue-500 cursor-pointer"
-                  >
-                    <option value="عدد">عدد</option>
-                    <option value="باکس">باکس</option>
-                    <option value="بسته">بسته</option>
-                    <option value="کیلوگرم">کیلوگرم</option>
-                    <option value="جعبه">جعبه</option>
-                    <option value="سطل">سطل</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-slate-400 mb-1 font-medium">
-                    موجودی اولیه فیزیکی سردخانه
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={newProdStock || ''}
-                    onChange={(e) => setNewProdStock(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
-                    placeholder="0"
+                  <BrandSelectPicker
+                    selectedBrand={newProdBrand}
+                    onSelectBrand={setNewProdBrand}
+                    onEditBrandClick={onOpenEditBrand}
                   />
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
+              {/* Section 2: Pricing Structure */}
+              <div className="space-y-3 p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800/80">
+                <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                  <DollarSign className="w-3.5 h-3.5" />
+                  ساختار قیمت‌گذاری (تومان)
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-slate-200 mb-1 font-semibold">
+                      خرید فروشگاه <span className="text-amber-400">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="1000"
+                      value={newProdPrice || ''}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setNewProdPrice(val);
+                        if (!newProdVisitorPrice || newProdVisitorPrice === Math.round(newProdPrice * 0.85)) {
+                          setNewProdVisitorPrice(Math.round(val * 0.85));
+                        }
+                      }}
+                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-amber-500 font-mono"
+                    />
+                    <span className="text-[10px] text-slate-400 mt-1 block">نرخ فروش به سوپرمارکت</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-200 mb-1 font-semibold flex items-center justify-between">
+                      <span>خرید ویزیتور</span>
+                      <span className="text-[10px] text-blue-400">محرمانه</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="1000"
+                      value={newProdVisitorPrice || ''}
+                      onChange={(e) => setNewProdVisitorPrice(Number(e.target.value))}
+                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
+                    />
+                    <span className="text-[10px] text-slate-400 mt-1 block">نرخ حواله شرکت به ویزیتور</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-200 mb-1 font-semibold flex items-center justify-between">
+                      <span>قیمت مصرف‌کننده</span>
+                      <span className="text-[10px] text-emerald-400">اختیاری</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={newProdConsumerPrice || ''}
+                      onChange={(e) => setNewProdConsumerPrice(Number(e.target.value))}
+                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500 font-mono"
+                    />
+                    <span className="text-[10px] text-slate-400 mt-1 block">درج روی جلد کالا (در صورت وجود)</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 3: Inventory & Unit */}
+              <div className="space-y-3 p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800/80">
+                <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                  <Warehouse className="w-3.5 h-3.5" />
+                  موجودی و واحد سنجش
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-300 mb-1 font-medium">واحد سنجش</label>
+                    <select
+                      value={newProdUnit}
+                      onChange={(e) => setNewProdUnit(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                    >
+                      <option value="عدد">عدد</option>
+                      <option value="باکس">باکس</option>
+                      <option value="بسته">بسته</option>
+                      <option value="کیلوگرم">کیلوگرم</option>
+                      <option value="جعبه">جعبه</option>
+                      <option value="سطل">سطل</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 mb-1 font-medium">
+                      موجودی اولیه فیزیکی سردخانه
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={newProdStock || ''}
+                      onChange={(e) => setNewProdStock(Number(e.target.value))}
+                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500 font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setIsAddModalOpen(false)}
-                  className="px-3.5 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 cursor-pointer"
+                  className="px-5 py-2.5 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-bold transition cursor-pointer"
                 >
                   انصراف
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold transition shadow-md shadow-blue-600/30 cursor-pointer"
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs transition shadow-lg shadow-blue-600/30 cursor-pointer flex items-center gap-1.5"
                 >
-                  ثبت و تعریف کالا
+                  <PackagePlus className="w-4 h-4" />
+                  <span>ثبت و تعریف کالا</span>
                 </button>
               </div>
             </form>

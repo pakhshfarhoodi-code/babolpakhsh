@@ -13,6 +13,7 @@ import {
   Phone,
 } from 'lucide-react';
 import { StoreProfileSheet } from './shop/StoreProfileSheet';
+import appLogo from '../assets/images/farhoodi_b2b_logo_1790548040455.jpg';
 
 interface HeaderProps {
   currentPath?: string;
@@ -79,7 +80,12 @@ export const Header: React.FC<HeaderProps> = () => {
       <>
         <header className="border-b border-slate-800/80 bg-slate-900/90 sticky top-0 z-40 backdrop-blur-xl shadow-lg shadow-black/20">
           <div className="max-w-7xl mx-auto px-3 sm:px-5 py-2">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              {/* Top-Right Official Logo Badge */}
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-amber-500 p-0.5 shadow-md shadow-blue-500/20 shrink-0 overflow-hidden">
+                <img src={appLogo} alt="لوگوی پخش فرهودی" className="w-full h-full object-cover rounded-[10px]" />
+              </div>
+
               <button
                 type="button"
                 onClick={() => setIsStoreProfileOpen(true)}
@@ -152,8 +158,8 @@ export const Header: React.FC<HeaderProps> = () => {
         <div className="max-w-7xl mx-auto px-3 sm:px-5 py-2">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600/30 to-cyan-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0 shadow-inner">
-                <Truck className="w-4 h-4" />
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-amber-500 p-0.5 shadow-md shadow-blue-500/20 shrink-0 overflow-hidden">
+                <img src={appLogo} alt="لوگوی پخش فرهودی" className="w-full h-full object-cover rounded-[10px]" />
               </div>
               <div className="flex items-center gap-2 min-w-0">
                 <span className="text-sm font-bold text-slate-100 truncate max-w-[130px] sm:max-w-[200px]">
@@ -201,8 +207,8 @@ export const Header: React.FC<HeaderProps> = () => {
           
           {/* Right Section: Identity Icon + Name + Role Switcher Pill */}
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600/30 to-indigo-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0 shadow-inner">
-              <Truck className="w-4 h-4 text-blue-400" />
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-amber-500 p-0.5 shadow-md shadow-blue-500/20 shrink-0 overflow-hidden">
+              <img src={appLogo} alt="لوگوی پخش فرهودی" className="w-full h-full object-cover rounded-[10px]" />
             </div>
 
             <div className="flex items-center gap-1.5 min-w-0">

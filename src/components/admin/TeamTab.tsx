@@ -911,9 +911,9 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                     type="text"
                     value={staffForm.name}
                     onChange={(e) => setStaffForm((prev) => ({ ...prev, name: e.target.value }))}
-                    placeholder="مثال: حمید اکبری"
+                    placeholder=""
                     disabled={isSubmittingStaff}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
                     dir="rtl"
                   />
                 </div>
@@ -926,9 +926,9 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                     type="tel"
                     value={staffForm.phone}
                     onChange={(e) => setStaffForm((prev) => ({ ...prev, phone: e.target.value }))}
-                    placeholder="۰۹۱۲۳۴۵۶۷۸۹"
+                    placeholder=""
                     disabled={isSubmittingStaff}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 text-left font-mono"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 text-left font-mono"
                     dir="ltr"
                   />
                 </div>
@@ -944,9 +944,9 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                     type="text"
                     value={staffForm.region}
                     onChange={(e) => setStaffForm((prev) => ({ ...prev, region: e.target.value }))}
-                    placeholder="مثال: منطقه ۱ (شمال شهر / بازار)"
+                    placeholder=""
                     disabled={isSubmittingStaff}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
                     dir="rtl"
                   />
                 </div>
@@ -966,9 +966,9 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                       onChange={(e) =>
                         setStaffForm((prev) => ({ ...prev, username: e.target.value.trim() }))
                       }
-                      placeholder="visitor4 یا warehouse2"
+                      placeholder=""
                       disabled={isSubmittingStaff}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 text-left font-mono"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 text-left font-mono"
                       dir="ltr"
                     />
                   </div>
@@ -984,9 +984,9 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                       type="password"
                       value={staffForm.password}
                       onChange={(e) => setStaffForm((prev) => ({ ...prev, password: e.target.value }))}
-                      placeholder="••••••"
+                      placeholder=""
                       disabled={isSubmittingStaff}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 text-left font-mono"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 text-left font-mono"
                       dir="ltr"
                     />
                   </div>
@@ -1089,9 +1089,9 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                       type="text"
                       value={editForm.name}
                       onChange={(e) => setEditForm((prev) => ({ ...prev, name: e.target.value }))}
-                      placeholder="مثال: هایپرمارکت ساحل"
+                      placeholder=""
                       disabled={isUpdatingSupermarket}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
                     />
                   </div>
                 </div>
@@ -1106,9 +1106,9 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                       type="text"
                       value={editForm.owner}
                       onChange={(e) => setEditForm((prev) => ({ ...prev, owner: e.target.value }))}
-                      placeholder="مثال: علی احمدی"
+                      placeholder=""
                       disabled={isUpdatingSupermarket}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
                     />
                   </div>
                 </div>
@@ -1125,9 +1125,9 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                       type="text"
                       value={editForm.phone}
                       onChange={(e) => setEditForm((prev) => ({ ...prev, phone: e.target.value }))}
-                      placeholder="۰۹۱۲..."
+                      placeholder=""
                       disabled={isUpdatingSupermarket}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 font-mono"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
                       dir="ltr"
                     />
                   </div>
@@ -1163,9 +1163,9 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                     type="text"
                     value={editForm.username}
                     onChange={(e) => setEditForm((prev) => ({ ...prev, username: e.target.value.trim() }))}
-                    placeholder="مثال: shop1"
+                    placeholder=""
                     disabled={isUpdatingSupermarket}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 font-mono"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
                     dir="ltr"
                   />
                 </div>
@@ -1180,10 +1180,10 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                   <textarea
                     value={editForm.address}
                     onChange={(e) => setEditForm((prev) => ({ ...prev, address: e.target.value }))}
-                    placeholder="شهر، خیابان، پلاک..."
+                    placeholder=""
                     rows={2}
                     disabled={isUpdatingSupermarket}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-none"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 resize-none"
                   />
                 </div>
               </div>

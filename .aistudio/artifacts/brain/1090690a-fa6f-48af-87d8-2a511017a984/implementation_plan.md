@@ -1,69 +1,46 @@
-# برنامه پیاده‌سازی سیستم شماره‌گذاری اختصاصی فاکتورها و سربرگ چاپی رسمی
+# Brand Logo Design & Multi-Surface Integration Plan
 
-این سند مشخصات فنی و مراحل پیاده‌سازی فرمول شماره‌گذاری تفکیک‌شده برای فاکتورهای ویزیتوری و فروشگاهی، همراه با بازطراحی ساختار سربرگ فاکتورهای چاپی و خروجی PDF را تشریح می‌کند.
-
----
-
-## ۱. ساختار و منطق شماره‌گذاری فاکتورها
-
-شماره‌گذاری فاکتورها به صورت کامپوزیت و اختصاصی بر مبنای کانال ثبت سفارش تفکیک می‌شود (مبنای شروع شمارنده سراسری کانال‌ها: ۱۰۰۰):
-
-### ۱.۱. فاکتورهای ثبت شده توسط ویزیتور (`VS`):
-* **فرمت:** `VS{کد_ویزیتور}-{شمارنده_کل_ویزیتوری}-{شمارنده_اختصاصی_این_ویزیتور}`
-* **الگوریتم:**
-  - `کد_ویزیتور`: به عنوان مثال `04`
-  - `شمارنده_کل_ویزیتوری`: تعداد کل سفارش‌های ویزیتوری ثبت شده در سیستم + ۱۰۰۰ (مثال: `3359`)
-  - `شمارنده_اختصاصی_این_ویزیتور`: تعداد سفارش‌هایی که این ویزیتور تا کنون ثبت کرده است (مثال: `17`)
-* **نمونه شماره فاکتور:** `VS04-3359-17`
-
-### ۱.۲. فاکتورهای سفارش مستقیم فروشگاه (`SP`):
-* **فرمت:** `SP{کد_فروشگاه}-{شمارنده_کل_فروشگاهی}-{شمارنده_اختصاصی_این_فروشگاه}`
-* **الگوریتم:**
-  - `کد_فروشگاه`: شماره شناسایی یا کد مشتری فروشگاه (مثال: `247`)
-  - `شمارنده_کل_فروشگاهی`: تعداد کل سفارش‌های مستقیم فروشگاه‌ها در سیستم + ۱۰۰۰ (مثال: `5488`)
-  - `شمارنده_اختصاصی_این_فروشگاه`: چندمین سفارش مستقیم این فروشگاه (مثال: `39`)
-* **نمونه شماره فاکتور:** `SP247-5488-39`
+A plan for generating a custom, modern B2B logo for **Farhoodi Wholesale Distribution (بارفروش)** and integrating it across three key surfaces:
+1. **Login Screen**: Replacing generic icons with the new branded logo badge.
+2. **Top-Right Header (App Shell)**: Embedding the logo inside a glassmorphic badge on the top right of the application header.
+3. **Browser Favicon (`index.html`)**: Setting the logo image as the site favicon and apple-touch-icon so it displays in browser tabs.
 
 ---
 
-## ۲. طراحی سربرگ و فاکتور چاپی (رسمی مویرگی)
+## Confirmed Choices from Phase 1
 
-### ۲.۱. سربرگ (Header)
-* نشان تجاری و عنوان سازمانی: **«بارفروش | شبکه سراسری پخش و توزیع مویرگی فرهودی»**
-* عنوان سند: **«فاکتور رسمی فروش و حواله خروج کالا»**
-* شناسه بارکد میله‌ای سفارش (Code128 / SVG Barcode) در گوشه سربرگ به همراه تاریخ شمسی و ساعت ثبت.
-* نمایش خوانا و برجسته **شماره اختصاصی فاکتور** (با تفکیک برچسب ویزیتوری / فروشگاهی).
-
-### ۲.۲. مشخصات طرفین معامله (فروشنده و خریدار)
-* **فروشنده:** شرکت پخش و توزیع فرهودی، کد اقتصادی/شناسه توزیع، تلفن مرکز پخش و آدرس انبار مرکزی.
-* **خریدار:** نام فروشگاه / سوپرمارکت، نام و نام‌خانوادگی مدیریت، شماره تماس، آدرس دقیق، کد اشتراک فروشگاه، و نام و کد ویزیتور ثبت‌کننده / متصدی سفارش.
-
-### ۲.۳. بدنه و اقلام سفارش (Body & Items)
-* جدول با استایل رسمی: ردیف، کد کالا، شرح کالا / برند، تعداد کارتن/بسته، تعداد در کارتن، جمع جزء کالا، قیمت مصرف‌کننده، قیمت فروش عمده (تومان)، تخفیف/آفر، و قیمت نهایی کل.
-* جدول خلاصه ارقام: جمع کل قبل از تخفیف، کل تخفیفات، مبلغ قابل پرداخت نهایی.
-* درج **مبلغ کل فاکتور به حروف فارسی** در کادر اختصاصی.
-
-### ۲.۴. تنظیمات چاپ و دانلود PDF (Print / PDF)
-* حذف بخش‌های زائد و غیرضروری و بهینه‌سازی صفحه‌بندی برای سایز استاندارد کاغذ A4 و A5 بدون برش لبه‌ها.
-* فعال بودن دکمه پرینت مستقیم (`window.print` با استایل چاپی بهینه) و خروجی فایل PDF با کیفیت بالا.
+- **Logo Aesthetic**: Modern emblem combining cold-chain wholesale logistics (snowflake / frost star / distribution vector) with a premium royal blue and gold palette (`#1e3a8a`, `#3b82f6`, `#f59e0b`).
+- **Header Placement**: Positioned on the top right of the application header inside a glassmorphic elevated badge with brand title "فرهودی | پخش عمده".
+- **Browser Tab Favicon**: Linked in `index.html` via `<link rel="icon">` and `<link rel="apple-touch-icon">`.
 
 ---
 
-## ۳. مراحل اجرایی در کدبیس
+## 1. Logo Asset Generation
 
-1. **مدل‌سازی داده‌ها و توابع سازنده شماره فاکتور (`src/utils/invoiceNumber.ts` و `useOrders.ts`):**
-   - پیاده‌سازی تابع تولید شماره فاکتور بر اساس نوع سفارش (ویزیتوری / سوپرمارکتی) با احتساب مبنای ۱۰۰۰ و شمارنده‌های تفکیک‌شده.
-   - ذخیره شماره فاکتور رسمی تولید شده در آبجکت `Order` به عنوان فیلد ثابت `invoiceNumber`.
-   - به‌روزرسانی سفارش‌های موجود برای پشتیبانی از فرمت جدید.
+- **Tool Call**: `generate_image`
+- **Filename**: `farhoodi_b2b_logo` (`.png` / `.jpg`)
+- **Aspect Ratio**: `1:1`
+- **Prompt**:
+  > Modern minimalist vector logo icon for "Farhoodi B2B Food Wholesale Distribution". Features a sleek stylized snowflake emblem fused with a fast logistics delivery arrow, vibrant dark blue gradient background with glowing gold accents, clean sharp geometric lines, premium 3D glassmorphic badge look, isolated on a square dark background, 8k commercial brand icon quality.
 
-2. **به‌روزرسانی سربرگ و رندرینگ بارکد در `OrderInvoiceModal.tsx` و `pdfExport.ts`:**
-   - اضافه کردن کامپوننت بارکد خطی گرافیکی (SVG / Canvas Barcode) متناظر با شماره فاکتور.
-   - اصلاح سربرگ و اطلاعات فروشنده/خریدار و استانداردسازی جدول مبالغ و اعداد به حروف.
+---
 
-3. **یکپارچه‌سازی در پورتال‌ها:**
-   - نمایش شماره فاکتور جدید در پنل مدیریت، لیست سفارشات پورتال سوپرمارکت، و تبلت ویزیتور.
+## 2. Interface Integration Strategy
 
-4. **تست جامع و بررسی بیلد نهایی:**
-   - تست ثبت سفارش تستی از دید ویزیتور و تأیید فرمت `VS04-3359-17`.
-   - تست ثبت سفارش تستی از دید فروشگاه و تأیید فرمت `SP247-5488-39`.
-   - بررسی خروجی پرینت و PDF.
+### A. Login Screen (`src/components/LoginScreen.tsx`)
+- Replace the icon box in the app header with the generated logo image in a rounded badge.
+- Preserve light/dark mode contrast and glassmorphism.
+
+### B. Application Header (`src/components/Header.tsx` or `src/components/Layout.tsx`)
+- Embed the logo image inside a glassmorphic badge on the top right (RTL layout: right side).
+- Display next to the brand title "پخش عمده فرهودی | بارفروش".
+
+### C. Browser Tab Favicon & Meta (`index.html`)
+- Add `<link rel="icon" type="image/png" href="..." />` pointing to the logo asset.
+- Update `<title>` to "بارفروش | شبکه پخش عمده فرهودی".
+
+---
+
+## 3. Technical Verification & Compilation
+- Run `lint_applet` and `compile_applet`.
+- Restart dev server to verify image asset loading in browser tab and headers.

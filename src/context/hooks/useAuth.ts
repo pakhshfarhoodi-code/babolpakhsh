@@ -146,13 +146,6 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
         });
 
         if (matchedSm) {
-          if (matchedSm.is_active === false) {
-            return {
-              success: false,
-              message: 'ثبت‌نام شما انجام شده است اما هنوز توسط مدیریت سامانه تایید نگردیده است. لطفاً منتظر تایید ادمین بمانید.',
-            };
-          }
-
           setRole('supermarket');
           setSelectedSupermarketId(matchedSm.id);
           setIsLoggedIn(true);
@@ -405,7 +398,7 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
           phone: trimmedPhone,
           address: trimmedAddress,
           assigned_visitor_id: validVisitorId,
-          is_active: false,
+          is_active: true,
         });
 
         if (smError) {
@@ -417,7 +410,7 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
             phone: trimmedPhone,
             address: trimmedAddress,
             assigned_visitor_id: validVisitorId,
-            is_active: false,
+            is_active: true,
           });
 
           if (smUpsertError) {
@@ -438,7 +431,7 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
         assigned_visitor_id: assignedVisitorId,
         username: trimmedUsername,
         password: trimmedPassword,
-        is_active: false,
+        is_active: true,
         created_at: new Date().toISOString(),
       };
 
@@ -446,7 +439,7 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
 
       return {
         success: true,
-        message: 'ثبت‌نام با موفقیت انجام شد. حساب کاربری پس از تایید مدیریت فعال خواهد شد.',
+        message: 'ثبت‌نام با موفقیت انجام شد. اکنون می‌توانید مستقیماً وارد حساب کاربری خود شوید.',
         supermarket: newSupermarket,
       };
     },

@@ -34,6 +34,7 @@ export interface Product {
   name: string;
   price: number; // Store purchase price (قیمت خرید سوپرمارکت‌ها)
   visitor_price?: number; // Visitor purchase price from company (قیمت خرید ویزیتور)
+  consumer_price?: number; // Optional Consumer Price (قیمت مصرف‌کننده)
   stock: number;
   reserved_stock: number;
   unit: string;

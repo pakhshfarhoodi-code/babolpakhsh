@@ -166,10 +166,10 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
             <div className="relative">
               <input
                 type="text"
-                placeholder="نام فروشگاه"
+                placeholder=""
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500 transition"
               />
               <Store className="w-4 h-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
             </div>
@@ -183,10 +183,10 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="نام مدیریت"
+                  placeholder=""
                   value={owner}
                   onChange={(e) => setOwner(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500 transition"
                 />
                 <User className="w-4 h-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
               </div>
@@ -200,10 +200,10 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
                 <input
                   type="text"
                   dir="ltr"
-                  placeholder="شماره تلفن همراه"
+                  placeholder=""
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 font-mono text-left transition"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500 font-mono text-left transition"
                 />
                 <Phone className="w-4 h-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
               </div>
@@ -220,10 +220,10 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
                   type="text"
                   dir="ltr"
                   required
-                  placeholder="نام کاربری"
+                  placeholder=""
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 font-mono text-left transition"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500 font-mono text-left transition"
                 />
                 <AtSign className="w-4 h-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
               </div>
@@ -238,10 +238,10 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
                   type="password"
                   dir="ltr"
                   required
-                  placeholder="رمز عبور"
+                  placeholder=""
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 font-mono text-left transition"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500 font-mono text-left transition"
                 />
                 <KeyRound className="w-4 h-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
               </div>
@@ -276,10 +276,10 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
             <div className="relative">
               <textarea
                 rows={2}
-                placeholder="آدرس دقیق فروشگاه"
+                placeholder=""
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition resize-none"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500 transition resize-none"
               />
               <MapPin className="w-4 h-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
             </div>

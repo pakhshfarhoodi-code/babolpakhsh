@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 import { UserRole } from '../types';
 import { SupermarketRegisterModal } from './SupermarketRegisterModal';
+import bgHero from '../assets/images/b2b_frozen_food_showcase_1790547579230.jpg';
+import appLogo from '../assets/images/farhoodi_b2b_logo_1790548040455.jpg';
 
 interface LoginScreenProps {
   initialRole?: UserRole;
@@ -112,14 +114,27 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
   const currentTheme = getRoleTheme(activeTab);
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden">
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden selection:bg-blue-500 selection:text-white">
+      {/* Background Logistics & Food Distribution Hero Image */}
+      <div 
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-all duration-700 scale-105"
+        style={{ backgroundImage: `url(${bgHero})` }}
+      />
+      {/* Dark Vignette & Atmospheric Overlay */}
+      <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/70 to-slate-950/60 backdrop-blur-[2px]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-950/30 via-slate-950/60 to-slate-950/90" />
+
       {/* Theme Toggle Button (Day / Night mode) */}
       <button
         id="login-theme-toggle-btn"
         type="button"
         onClick={toggleTheme}
         title={theme === 'dark' ? 'تغییر به حالت روز (روشن)' : 'تغییر به حالت شب (تاریک)'}
-        className="absolute top-4 left-4 p-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-slate-100 transition shadow-lg cursor-pointer z-20 flex items-center gap-2 text-xs font-medium backdrop-blur-sm"
+        className={`absolute top-4 left-4 p-2.5 rounded-2xl border transition shadow-xl cursor-pointer z-20 flex items-center gap-2 text-xs font-semibold backdrop-blur-md ${
+          theme === 'light'
+            ? 'bg-white/90 hover:bg-white border-slate-300 text-slate-900 shadow-slate-300/50'
+            : 'bg-slate-900/80 hover:bg-slate-800/90 border-slate-800 text-slate-300 hover:text-slate-100'
+        }`}
       >
         {theme === 'dark' ? (
           <>
@@ -128,24 +143,37 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
           </>
         ) : (
           <>
-            <Moon className="w-4 h-4 text-indigo-400" />
+            <Moon className="w-4 h-4 text-indigo-600" />
             <span className="hidden sm:inline">حالت شب</span>
           </>
         )}
       </button>
 
-      {/* Background ambient lighting */}
-      <div className="absolute top-1/4 -right-20 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 -left-20 w-96 h-96 bg-cyan-600/10 rounded-full blur-3xl pointer-events-none" />
+      {/* Main Login Card with Glassmorphism */}
+      <div
+        className={`w-full max-w-md rounded-3xl p-6 sm:p-8 backdrop-blur-2xl shadow-2xl relative z-10 overflow-hidden transition-colors duration-300 ${
+          theme === 'light'
+            ? 'bg-white/95 border border-slate-200 shadow-2xl shadow-slate-900/15 text-slate-900'
+            : 'bg-slate-900/90 border border-slate-800/90 shadow-2xl shadow-black/80 text-slate-100'
+        }`}
+      >
+        {/* Glowing Top Accent Line */}
+        <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-blue-500 via-cyan-400 to-amber-500" />
 
-      {/* Main Login Card */}
-      <div className="w-full max-w-md bg-slate-900/90 border border-slate-800 rounded-2xl p-6 sm:p-8 backdrop-blur-xl shadow-2xl relative z-10">
         {/* App Header */}
-        <div className="flex flex-col items-center text-center mb-6">
-          <div className="w-14 h-14 rounded-2xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400 mb-3 shadow-lg shadow-blue-500/10">
-            <ThermometerSnowflake className="w-7 h-7 text-blue-400" />
+        <div className="flex flex-col items-center text-center mb-6 pt-1">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-amber-500 p-0.5 shadow-xl shadow-blue-500/25 mb-3.5 overflow-hidden">
+            <img
+              src={appLogo}
+              alt="لوگوی شبکه پخش عمده فرهودی"
+              className="w-full h-full object-cover rounded-[14px]"
+            />
           </div>
-          <h1 className="text-lg sm:text-xl font-black text-slate-100 tracking-tight text-center leading-relaxed">
+          <h1
+            className={`text-lg sm:text-xl font-black tracking-tight text-center leading-relaxed ${
+              theme === 'light' ? 'text-slate-900' : 'text-slate-50'
+            }`}
+          >
             بارفروش | شبکه پخش عمده فرهودی
           </h1>
         </div>
@@ -162,11 +190,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
                 }}
                 className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-xs font-semibold transition cursor-pointer ${
                   activeTab === 'admin'
-                    ? 'bg-blue-600/20 border-blue-500 text-blue-400 font-bold shadow-md'
-                    : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                    ? theme === 'light'
+                      ? 'bg-blue-100/90 border-blue-600 text-blue-900 font-extrabold shadow-sm'
+                      : 'bg-blue-600/20 border-blue-500 text-blue-400 font-bold shadow-md shadow-blue-500/10'
+                    : theme === 'light'
+                      ? 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200 hover:text-slate-950'
+                      : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
                 }`}
               >
-                <ShieldCheck className="w-4 h-4 text-blue-400" />
+                <ShieldCheck className="w-4 h-4 text-blue-600" />
                 <span>مدیر ارشد</span>
               </button>
             )}
@@ -180,11 +212,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
                 }}
                 className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-xs font-semibold transition cursor-pointer ${
                   activeTab === 'warehouse'
-                    ? 'bg-indigo-600/20 border-indigo-500 text-indigo-400 font-bold shadow-md'
-                    : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                    ? theme === 'light'
+                      ? 'bg-indigo-100/90 border-indigo-600 text-indigo-900 font-extrabold shadow-sm'
+                      : 'bg-indigo-600/20 border-indigo-500 text-indigo-400 font-bold shadow-md shadow-indigo-500/10'
+                    : theme === 'light'
+                      ? 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200 hover:text-slate-950'
+                      : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
                 }`}
               >
-                <Warehouse className="w-4 h-4 text-indigo-400" />
+                <Warehouse className="w-4 h-4 text-indigo-600" />
                 <span>انبار و سردخانه</span>
               </button>
             )}
@@ -198,11 +234,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
                 }}
                 className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-xs font-semibold transition cursor-pointer ${
                   activeTab === 'visitor'
-                    ? 'bg-emerald-600/20 border-emerald-500 text-emerald-400 font-bold shadow-md'
-                    : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                    ? theme === 'light'
+                      ? 'bg-emerald-100/90 border-emerald-600 text-emerald-900 font-extrabold shadow-sm'
+                      : 'bg-emerald-600/20 border-emerald-500 text-emerald-400 font-bold shadow-md shadow-emerald-500/10'
+                    : theme === 'light'
+                      ? 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200 hover:text-slate-950'
+                      : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
                 }`}
               >
-                <Truck className="w-4 h-4 text-emerald-400" />
+                <Truck className="w-4 h-4 text-emerald-600" />
                 <span>ویزیتورها</span>
               </button>
             )}
@@ -216,11 +256,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
                 }}
                 className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-xs font-semibold transition cursor-pointer ${
                   activeTab === 'supermarket'
-                    ? 'bg-amber-600/20 border-amber-500 text-amber-400 font-bold shadow-md'
-                    : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                    ? theme === 'light'
+                      ? 'bg-amber-100/90 border-amber-600 text-amber-950 font-extrabold shadow-sm'
+                      : 'bg-amber-600/20 border-amber-500 text-amber-400 font-bold shadow-md shadow-amber-500/10'
+                    : theme === 'light'
+                      ? 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200 hover:text-slate-950'
+                      : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
                 }`}
               >
-                <Store className="w-4 h-4 text-amber-400" />
+                <Store className="w-4 h-4 text-amber-600" />
                 <span>فروشگاه‌ها</span>
               </button>
             )}
@@ -228,7 +272,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
         )}
 
         {/* Section Identity Header - Centered */}
-        <div className="flex items-center justify-center gap-2 mb-5 pb-3 border-b border-slate-800/80 text-sm font-bold text-center text-slate-100">
+        <div
+          className={`flex items-center justify-center gap-2 mb-5 pb-3 border-b text-sm font-extrabold text-center ${
+            theme === 'light' ? 'text-slate-900 border-slate-200' : 'text-slate-100 border-slate-800/80'
+          }`}
+        >
           {currentTheme.icon}
           <span>{currentTheme.headerTitle}</span>
         </div>
@@ -236,7 +284,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
         {/* Login Form */}
         <form onSubmit={handleLoginSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5 text-right">
+            <label
+              className={`block text-xs font-extrabold mb-1.5 text-right ${
+                theme === 'light' ? 'text-slate-900' : 'text-slate-300'
+              }`}
+            >
               نام کاربری:
             </label>
             <div className="relative">
@@ -245,20 +297,32 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
                 type="text"
                 autoComplete="username"
                 dir="ltr"
-                placeholder="نام کاربری"
+                placeholder=""
                 value={usernameInput}
                 onChange={(e) => {
                   setUsernameInput(e.target.value);
                   setErrorMessage('');
                 }}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 pl-10 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition font-mono text-left"
+                className={`w-full border rounded-xl px-3.5 py-2.5 pl-10 text-sm focus:outline-none transition font-mono text-left font-medium ${
+                  theme === 'light'
+                    ? 'bg-white border-slate-300 text-slate-900 focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20 shadow-sm'
+                    : 'bg-slate-950/90 border-slate-800 text-slate-100 focus:border-blue-500'
+                }`}
               />
-              <User className="w-4 h-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
+              <User
+                className={`w-4 h-4 absolute left-3 top-3 pointer-events-none ${
+                  theme === 'light' ? 'text-slate-500' : 'text-slate-500'
+                }`}
+              />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5 text-right">
+            <label
+              className={`block text-xs font-extrabold mb-1.5 text-right ${
+                theme === 'light' ? 'text-slate-900' : 'text-slate-300'
+              }`}
+            >
               رمز عبور:
             </label>
             <div className="relative">
@@ -267,21 +331,29 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
                 type="password"
                 autoComplete="current-password"
                 dir="ltr"
-                placeholder="رمز عبور"
+                placeholder=""
                 value={passwordInput}
                 onChange={(e) => {
                   setPasswordInput(e.target.value);
                   setErrorMessage('');
                 }}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 pl-10 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition font-mono text-left"
+                className={`w-full border rounded-xl px-3.5 py-2.5 pl-10 text-sm focus:outline-none transition font-mono text-left font-medium ${
+                  theme === 'light'
+                    ? 'bg-white border-slate-300 text-slate-900 focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20 shadow-sm'
+                    : 'bg-slate-950/90 border-slate-800 text-slate-100 focus:border-blue-500'
+                }`}
               />
-              <KeyRound className="w-4 h-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
+              <KeyRound
+                className={`w-4 h-4 absolute left-3 top-3 pointer-events-none ${
+                  theme === 'light' ? 'text-slate-500' : 'text-slate-500'
+                }`}
+              />
             </div>
           </div>
 
           {errorMessage && (
-            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-500 text-xs flex items-center gap-2 font-medium">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
               <span>{errorMessage}</span>
             </div>
           )}
@@ -290,7 +362,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
             id="login-submit-btn"
             type="submit"
             disabled={isSubmitting}
-            className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-blue-600 hover:bg-blue-500 active:scale-[0.99] text-white rounded-xl text-sm font-bold transition cursor-pointer shadow-lg shadow-blue-600/25 disabled:opacity-50 mt-2"
+            className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-[0.99] text-white rounded-xl text-sm font-bold transition cursor-pointer shadow-lg shadow-blue-600/25 disabled:opacity-50 mt-2"
           >
             <LogIn className="w-4 h-4" />
             <span>ورود به سامانه</span>
@@ -299,7 +371,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
 
         {/* Supermarket registration card if on supermarket role (Compact & Sleek) */}
         {activeTab === 'supermarket' && (
-          <div className="mt-4 pt-3.5 border-t border-slate-800/80">
+          <div
+            className={`mt-4 pt-3.5 border-t ${
+              theme === 'light' ? 'border-slate-200' : 'border-slate-800/80'
+            }`}
+          >
             <button
               id="register-supermarket-bottom-btn"
               type="button"
@@ -359,9 +435,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
         )}
       </div>
 
-      <div className="text-xs text-slate-500 mt-6 text-center">
-        بارفروش | شبکه پخش عمده فرهودی
-      </div>
 
       {/* Supermarket Registration Modal */}
       <SupermarketRegisterModal

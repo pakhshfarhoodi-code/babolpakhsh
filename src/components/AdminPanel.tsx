@@ -77,8 +77,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const delegatedCount = orders.filter((o) => o.status === 'delegated').length;
     const lowStockCount = products.filter((p) => p.stock - p.reserved_stock < LOW_STOCK_THRESHOLD).length;
     const inactiveStoresCount = supermarkets.filter((s) => s.is_active !== false && isStoreInactiveFor30Days(s.id, orders)).length;
-    return delegatedCount + lowStockCount + inactiveStoresCount + pendingApprovalsCount;
-  }, [orders, products, supermarkets, pendingApprovalsCount]);
+    return delegatedCount + lowStockCount + inactiveStoresCount;
+  }, [orders, products, supermarkets]);
 
   // Tab Navigation Handlers from Overview Cards
   const handleNavigateToOrders = (statusFilter = 'all') => {

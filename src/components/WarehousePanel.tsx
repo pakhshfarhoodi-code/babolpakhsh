@@ -112,11 +112,12 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({
     setTimeout(() => setActionFeedback(null), 5000);
   };
 
-  const handleBulkImportConfirm = (items: any[]) => {
+  const handleBulkImportConfirm = async (items: any[]) => {
     if (bulkUpsertProducts) {
-      const result = bulkUpsertProducts(items);
+      const result = await bulkUpsertProducts(items);
       setActionFeedback(result.message);
       setTimeout(() => setActionFeedback(null), 6000);
+      return result;
     }
   };
 
@@ -318,6 +319,7 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({
         isOpen={isExcelImportOpen}
         onClose={() => setIsExcelImportOpen(false)}
         categories={categories}
+        brands={brands}
         existingProducts={products}
         onImportConfirm={handleBulkImportConfirm}
       />

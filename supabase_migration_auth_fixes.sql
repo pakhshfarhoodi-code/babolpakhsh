@@ -9,8 +9,9 @@ ALTER TABLE orders ADD CONSTRAINT orders_status_check
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS loading_bill_id TEXT REFERENCES loading_bills(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_orders_loading_bill ON orders(loading_bill_id);
 
--- 2. Add brand support
+-- 2. Add brand and visitor_price support
 ALTER TABLE products ADD COLUMN IF NOT EXISTS brand TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS visitor_price NUMERIC;
 
 CREATE TABLE IF NOT EXISTS brands (
   id TEXT PRIMARY KEY,

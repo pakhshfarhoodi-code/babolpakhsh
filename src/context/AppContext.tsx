@@ -84,7 +84,7 @@ interface AppContextType {
     stock?: number;
     unit?: string;
     is_active?: boolean;
-  }>) => { success: boolean; createdCount: number; updatedCount: number; message: string };
+  }>) => { success: boolean; createdCount: number; updatedCount: number; message: string } | Promise<{ success: boolean; createdCount: number; updatedCount: number; message: string }>;
   deleteProduct: (productId: string) => { success: boolean; message: string };
   addCategory: (name: string, icon?: string) => { success: boolean; message: string; category?: Category };
   updateCategory: (categoryId: string, newName: string) => { success: boolean; message: string };

@@ -128,11 +128,12 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
     setEditingPriceId(null);
   };
 
-  const handleBulkImportConfirm = (items: any[]) => {
+  const handleBulkImportConfirm = async (items: any[]) => {
     if (onBulkUpsertProducts) {
-      const result = onBulkUpsertProducts(items);
+      const result = await onBulkUpsertProducts(items);
       setExcelFeedback(result.message);
-      setTimeout(() => setExcelFeedback(null), 5000);
+      setTimeout(() => setExcelFeedback(null), 6000);
+      return result;
     }
   };
 
@@ -709,6 +710,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
         isOpen={isExcelImportOpen}
         onClose={() => setIsExcelImportOpen(false)}
         categories={categories}
+        brands={brands}
         existingProducts={products}
         onImportConfirm={handleBulkImportConfirm}
       />

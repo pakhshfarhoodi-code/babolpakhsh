@@ -148,9 +148,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
           <h1 className="text-xl sm:text-2xl font-bold text-slate-100 tracking-tight">
             سامانه پخش مویرگی البرز
           </h1>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            ورود به حساب کاربری اختصاصی
-          </p>
         </div>
 
         {/* Role Category Tabs (if more than 1 role allowed) */}
@@ -240,7 +237,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
         <form onSubmit={handleLoginSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5 text-right">
-              نام کاربری، ایمیل یا شماره همراه:
+              نام کاربری:
             </label>
             <div className="relative">
               <input
@@ -248,7 +245,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
                 type="text"
                 autoComplete="username"
                 dir="ltr"
-                placeholder="نام کاربری یا شماره همراه"
+                placeholder="نام کاربری"
                 value={usernameInput}
                 onChange={(e) => {
                   setUsernameInput(e.target.value);
@@ -335,31 +332,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
 
                   {/* Text content */}
                   <div className="min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span
-                        className={`text-xs sm:text-sm font-black tracking-tight transition-colors ${
-                          theme === 'light' ? 'text-[#451a03]' : 'text-amber-300 group-hover:text-amber-200'
-                        }`}
-                      >
-                        ثبت‌نام و عضویت فروشگاه
-                      </span>
-                      <span
-                        className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
-                          theme === 'light'
-                            ? 'bg-amber-200 text-[#78350f] border border-amber-300'
-                            : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                        }`}
-                      >
-                        رایگان
-                      </span>
-                    </div>
-                    <p
-                      className={`text-[11px] leading-tight font-medium mt-0.5 truncate max-w-[210px] sm:max-w-xs ${
-                        theme === 'light' ? 'text-[#78350f]' : 'text-slate-300'
+                    <span
+                      className={`text-xs sm:text-sm font-black tracking-tight transition-colors ${
+                        theme === 'light' ? 'text-[#451a03]' : 'text-amber-300 group-hover:text-amber-200'
                       }`}
                     >
-                      سفارش مستقیم کالا با تحویل در محل
-                    </p>
+                      ثبت‌نام و عضویت فروشگاه
+                    </span>
                   </div>
                 </div>
 
@@ -381,7 +360,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
       </div>
 
       <div className="text-xs text-slate-500 mt-6 text-center">
-        سامانه مدیریت توزیع و زنجیره سرد البرز — احراز هویت با نام کاربری و کلمه عبور
+        سامانه مدیریت توزیع و زنجیره سرد البرز
       </div>
 
       {/* Supermarket Registration Modal */}

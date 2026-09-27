@@ -113,16 +113,7 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
           <div className="space-y-1.5">
             <h3 className="text-base font-bold text-slate-100">درخواست عضویت شما با موفقیت ثبت شد</h3>
             <p className="text-xs text-slate-300 leading-relaxed">
-              اطلاعات فروشگاه <strong className="text-amber-400">«{name}»</strong> جهت بررسی به پنل مدیریت ارسال گردید.
-            </p>
-          </div>
-
-          <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-400 leading-relaxed text-right space-y-1">
-            <p className="text-slate-200 font-semibold flex items-center gap-1.5">
-              <span>📌 مرحله بعدی:</span>
-            </p>
-            <p>
-              به محض اینکه ادمین حساب کاربری شما را تایید کند، می‌توانید با نام کاربری <strong className="text-slate-200 font-mono">{username}</strong> و رمز عبور وارد سامانه سفارش‌گیری شوید.
+              اطلاعات فروشگاه <strong className="text-amber-400">«{name}»</strong> جهت بررسی ارسال گردید.
             </p>
           </div>
 
@@ -148,8 +139,7 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
               <Store className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-100">ثبت‌نام و عضویت فروشگاه جدید</h2>
-              <p className="text-xs text-slate-400 mt-0.5">پیوستن به شبکه توزیع و زنجیره سرد البرز</p>
+              <h2 className="text-base font-bold text-slate-100">ثبت‌نام و عضویت فروشگاه</h2>
             </div>
           </div>
           <button
@@ -176,7 +166,7 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
             <div className="relative">
               <input
                 type="text"
-                placeholder="مثال: سوپرمارکت صدف"
+                placeholder="نام فروشگاه"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition"
@@ -193,7 +183,7 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="مثال: آقای مرادی"
+                  placeholder="نام مدیریت"
                   value={owner}
                   onChange={(e) => setOwner(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition"
@@ -210,7 +200,7 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
                 <input
                   type="text"
                   dir="ltr"
-                  placeholder="۰۹۱۲۳۴۵۶۷۸۹"
+                  placeholder="شماره تلفن همراه"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 font-mono text-left transition"
@@ -230,14 +220,13 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
                   type="text"
                   dir="ltr"
                   required
-                  placeholder="مثال: shop_alborz"
+                  placeholder="نام کاربری"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 font-mono text-left transition"
                 />
                 <AtSign className="w-4 h-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
               </div>
-              <p className="text-xs text-slate-500 mt-1">از این نام کاربری برای ورود به پنل فروشگاه استفاده خواهید کرد.</p>
             </div>
 
             <div>
@@ -249,14 +238,13 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
                   type="password"
                   dir="ltr"
                   required
-                  placeholder="حداقل ۳ کاراکتر..."
+                  placeholder="رمز عبور"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 font-mono text-left transition"
                 />
                 <KeyRound className="w-4 h-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
               </div>
-              <p className="text-xs text-slate-500 mt-1">رمز عبور اختصاصی جهت امنیت حساب کاربری شما</p>
             </div>
           </div>
 
@@ -279,9 +267,6 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
               </select>
               <Truck className="w-4 h-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
             </div>
-            <p className="text-xs text-slate-500 mt-1">
-              در صورت عدم انتخاب ویزیتور، سفارشات شما به‌صورت مستقیم توسط پشتیبانی پخش فرهودی پردازش می‌شود.
-            </p>
           </div>
 
           <div>
@@ -291,7 +276,7 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
             <div className="relative">
               <textarea
                 rows={2}
-                placeholder="آدرس، پلاک، طبقه یا نشانی دقیق..."
+                placeholder="آدرس دقیق فروشگاه"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition resize-none"

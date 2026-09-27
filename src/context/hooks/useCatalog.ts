@@ -200,6 +200,7 @@ export function useCatalog() {
     }).format(new Date());
 
     const newHistories: ProductPriceHistory[] = [];
+    const itemsToUpsertToSupabase: Product[] = [];
 
     setProducts((prev) => {
       const updatedProducts = [...prev];
@@ -242,7 +243,7 @@ export function useCatalog() {
             });
           }
 
-          updatedProducts[matchIndex] = {
+          const updatedProd: Product = {
             ...current,
             name: trimmedName || current.name,
             brand: brandName || current.brand,
@@ -253,13 +254,15 @@ export function useCatalog() {
             unit: unitStr || current.unit,
             is_active: item.is_active !== undefined ? item.is_active : current.is_active,
           };
+          updatedProducts[matchIndex] = updatedProd;
+          itemsToUpsertToSupabase.push(updatedProd);
           updatedCount++;
         } else {
           // Create new product
           const newId = item.id && item.id.trim() ? item.id.trim() : `prod-${Date.now().toString().slice(-4)}-${index}`;
           const newCatId = item.category_id || categories[0]?.id || 'cat-1';
           
-          updatedProducts.push({
+          const newProd: Product = {
             id: newId,
             name: trimmedName,
             brand: brandName,
@@ -272,7 +275,9 @@ export function useCatalog() {
             image_url: 'https://images.unsplash.com/photo-1551024601-bec78aea704b?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer',
             is_active: item.is_active !== undefined ? item.is_active : true,
             created_at: new Date().toISOString(),
-          });
+          };
+          updatedProducts.push(newProd);
+          itemsToUpsertToSupabase.push(newProd);
           createdCount++;
         }
       });
@@ -289,6 +294,53 @@ export function useCatalog() {
         const combined = new Set([...prev, ...Array.from(newBrandsSet)]);
         return Array.from(combined);
       });
+    }
+
+    // Persist products and brands to Supabase asynchronously
+    if (isSupabaseConfigured && supabase && itemsToUpsertToSupabase.length > 0) {
+      (async () => {
+        try {
+          // 1. Sync new brands to Supabase
+          if (newBrandsSet.size > 0) {
+            const brandRows = Array.from(newBrandsSet).map((b) => ({
+              id: `b-${Date.now().toString().slice(-4)}-${Math.random().toString(36).substring(2, 6)}`,
+              name: b,
+            }));
+            await supabase.from('brands').upsert(brandRows, { onConflict: 'name' });
+          }
+
+          // 2. Sync products to Supabase
+          const dbRows = itemsToUpsertToSupabase.map((p) => ({
+            id: p.id,
+            name: p.name,
+            category_id: p.category_id,
+            brand: p.brand || 'متفرقه',
+            price: p.price,
+            visitor_price: p.visitor_price,
+            stock: p.stock,
+            reserved_stock: p.reserved_stock || 0,
+            unit: p.unit || 'عدد',
+            image_url: p.image_url,
+            is_active: p.is_active ?? true,
+          }));
+
+          const chunkSize = 50;
+          for (let i = 0; i < dbRows.length; i += chunkSize) {
+            const chunk = dbRows.slice(i, i + chunkSize);
+            const { error: upsertErr } = await supabase.from('products').upsert(chunk, { onConflict: 'id' });
+            if (upsertErr) {
+              console.warn('Supabase products upsert failed, retrying without visitor_price:', upsertErr.message);
+              const fallbackChunk = chunk.map(({ visitor_price, ...rest }) => rest);
+              const { error: fallbackErr } = await supabase.from('products').upsert(fallbackChunk, { onConflict: 'id' });
+              if (fallbackErr) {
+                console.error('Supabase fallback upsert failed:', fallbackErr.message);
+              }
+            }
+          }
+        } catch (err) {
+          console.error('خطای غیرمنتظره در ثبت کالاهای اکسل روی Supabase:', err);
+        }
+      })();
     }
 
     return {

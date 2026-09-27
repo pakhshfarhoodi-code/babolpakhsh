@@ -42,7 +42,11 @@ export function useSupabaseSync({
         // 1. Products
         const { data: prods } = await supabase!.from('products').select('*');
         if (prods && prods.length > 0) {
-          setProducts(prods);
+          setProducts((prev) => {
+            const serverIds = new Set(prods.map((p: Product) => p.id));
+            const localOnly = prev.filter((p) => !serverIds.has(p.id));
+            return [...prods, ...localOnly];
+          });
         }
 
         // 2. Orders (includes loading_bill_id & status='loading')

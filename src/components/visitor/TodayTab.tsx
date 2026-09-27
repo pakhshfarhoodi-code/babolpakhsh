@@ -69,14 +69,14 @@ export const TodayTab: React.FC<TodayTabProps> = ({
 
   // Orders eligible for new loading bill (strictly status === 'assigned' and not yet in a loading bill)
   const pendingOrders = useMemo(
-    () => orders.filter((o) => o.assigned_visitor_id === currentVisitor.id && o.status === 'assigned' && !o.loading_bill_id),
-    [orders, currentVisitor.id]
+    () => orders.filter((o) => o.assigned_visitor_id === (currentVisitor?.id || '') && o.status === 'assigned' && !o.loading_bill_id),
+    [orders, currentVisitor?.id]
   );
 
   // Active delivery orders (both assigned and loading, ready for delivery or undelivered actions)
   const activeDeliveryOrders = useMemo(
-    () => orders.filter((o) => o.assigned_visitor_id === currentVisitor.id && (o.status === 'assigned' || o.status === 'loading')),
-    [orders, currentVisitor.id]
+    () => orders.filter((o) => o.assigned_visitor_id === (currentVisitor?.id || '') && (o.status === 'assigned' || o.status === 'loading')),
+    [orders, currentVisitor?.id]
   );
 
   // Today delivered total amount (only orders with order_date today & status delivered)
@@ -84,21 +84,21 @@ export const TodayTab: React.FC<TodayTabProps> = ({
     return orders
       .filter(
         (o) =>
-          o.assigned_visitor_id === currentVisitor.id &&
+          o.assigned_visitor_id === (currentVisitor?.id || '') &&
           o.status === 'delivered' &&
           isToday(o.order_date)
       )
       .reduce((sum, o) => sum + o.total_amount, 0);
-  }, [orders, currentVisitor.id]);
+  }, [orders, currentVisitor?.id]);
 
   const todayDeliveredCount = useMemo(() => {
     return orders.filter(
       (o) =>
-        o.assigned_visitor_id === currentVisitor.id &&
+        o.assigned_visitor_id === (currentVisitor?.id || '') &&
         o.status === 'delivered' &&
         isToday(o.order_date)
     ).length;
-  }, [orders, currentVisitor.id]);
+  }, [orders, currentVisitor?.id]);
 
   // Loading bill handler
   const handleGenerateBill = () => {
@@ -110,7 +110,7 @@ export const TodayTab: React.FC<TodayTabProps> = ({
 
     if (targetOrderIds.length === 0) return;
 
-    onCreateLoadingBill(currentVisitor.id, targetOrderIds);
+    onCreateLoadingBill(currentVisitor?.id || '', targetOrderIds);
     setSelectedOrdersForBill([]);
     setBillSuccessMessage(`برگه بارگیری شامل ${targetOrderIds.length} سفارش برای سردخانه صادر شد.`);
     setTimeout(() => setBillSuccessMessage(null), 4500);

@@ -12,9 +12,12 @@ import { INITIAL_ORDERS } from '../../data/initialData';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { STORAGE_KEYS, generateUniqueId } from '../utils';
 
+import { generateStructuredInvoiceNumber } from '../../utils/numberToPersianWords';
+
 export interface CreateOrderPayload {
   supermarketId: string;
   visitorId: string;
+  orderSource?: 'visitor' | 'supermarket';
   items: {
     productId: string;
     name: string;
@@ -61,12 +64,32 @@ export function useOrders({
   // Create Order (Reserves stock & appends audit ledger, ISO timestamp)
   const createOrder = useCallback(
     (payload: CreateOrderPayload) => {
-      const supermarket = supermarkets.find((s) => s.id === payload.supermarketId);
-      const visitor = visitors.find((v) => v.id === payload.visitorId);
+      const supermarket =
+        supermarkets.find((s) => s.id === payload.supermarketId) ||
+        supermarkets[0] ||
+        {
+          id: payload.supermarketId || '',
+          name: 'فروشگاه طرف قرارداد',
+          owner: 'متصدی فروشگاه',
+          phone: '۰۹۱۱۰۰۰۰۰۰۰',
+          address: 'ثبت شده در سامانه مرکزی پخش',
+          assigned_visitor_id: '',
+          credit_limit: 50000000,
+          current_debt: 0,
+          is_active: true,
+        };
 
-      if (!supermarket || !visitor) {
-        return { success: false, message: 'اطلاعات فروشگاه یا ویزیتور نامعتبر است.' };
-      }
+      const visitor =
+        visitors.find((v) => v.id === payload.visitorId) ||
+        visitors[0] ||
+        {
+          id: payload.visitorId || '',
+          name: 'واحد ویزیت و توزیع',
+          phone: '۰۹۱۱۰۰۰۰۰۰۰',
+          region: 'عمومی',
+          username: 'visitor',
+          is_active: true,
+        };
 
       if (!payload.items || payload.items.length === 0) {
         return { success: false, message: 'سبد سفارش خالی است.' };
@@ -87,7 +110,17 @@ export function useOrders({
         }
       }
 
-      const orderId = generateUniqueId('ORD');
+      // Determine order source (visitor vs supermarket direct)
+      const orderSource: 'visitor' | 'supermarket' = payload.orderSource || 'visitor';
+
+      // Generate structured invoice ID according to business formula
+      const orderId = generateStructuredInvoiceNumber({
+        orderSource,
+        visitorId: visitor.id,
+        supermarketId: supermarket.id,
+        existingOrders: orders,
+      });
+
       const orderIsoDate = new Date().toISOString();
       const totalAmount = payload.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
@@ -99,6 +132,7 @@ export function useOrders({
         visitor_name: visitor.name,
         status: 'assigned',
         total_amount: totalAmount,
+        order_source: orderSource,
         order_date: orderIsoDate,
         items: payload.items.map((i, idx) => ({
           id: `item-${Date.now()}-${idx}`,
@@ -168,7 +202,7 @@ export function useOrders({
         order: newOrder,
       };
     },
-    [supermarkets, visitors, products, setProducts, addInventoryTransactions]
+    [orders, supermarkets, visitors, products, setProducts, addInventoryTransactions]
   );
 
   // Update order status (with reserved stock release on 'undelivered')

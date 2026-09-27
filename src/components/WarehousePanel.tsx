@@ -286,7 +286,7 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({
 
             {/* Sub-Tab 2: Approved History (Accordion) */}
             {activeTab === 'history' && (
-              <BillHistoryList approvedBills={approvedBills} />
+              <BillHistoryList bills={approvedBills} products={products} />
             )}
           </div>
         </div>
@@ -296,7 +296,7 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({
           {/* Quick Restock Inbound Form */}
           <RestockForm
             products={products}
-            onRestockSubmit={handleRestockSubmit}
+            onSubmitRestock={handleRestockSubmit}
             onOpenNewProductModal={() => setIsNewProductModalOpen(true)}
           />
 
@@ -311,7 +311,7 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({
         categories={categories}
         brands={brands}
         onClose={() => setIsNewProductModalOpen(false)}
-        onSubmit={handleCreateProduct}
+        onCreateProduct={handleCreateProduct}
       />
 
       {/* Modal: Excel Import & Column Matching */}

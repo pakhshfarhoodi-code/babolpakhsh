@@ -15,11 +15,13 @@ import {
 interface CategorySelectPickerProps {
   selectedCategoryId: string;
   onSelectCategory: (id: string) => void;
+  onEditCategoryClick?: (cat: { id: string; name: string }) => void;
 }
 
 export const CategorySelectPicker: React.FC<CategorySelectPickerProps> = ({
   selectedCategoryId,
   onSelectCategory,
+  onEditCategoryClick,
 }) => {
   const { categories, addCategory, updateCategory, deleteCategory, products } = useApp();
   const [isOpen, setIsOpen] = useState(false);
@@ -349,11 +351,13 @@ export const CategorySelectPicker: React.FC<CategorySelectPickerProps> = ({
 interface BrandSelectPickerProps {
   selectedBrand: string;
   onSelectBrand: (brand: string) => void;
+  onEditBrandClick?: (brand: string) => void;
 }
 
 export const BrandSelectPicker: React.FC<BrandSelectPickerProps> = ({
   selectedBrand,
   onSelectBrand,
+  onEditBrandClick,
 }) => {
   const { brands, addBrand, updateBrand, deleteBrand, products } = useApp();
   const [isOpen, setIsOpen] = useState(false);

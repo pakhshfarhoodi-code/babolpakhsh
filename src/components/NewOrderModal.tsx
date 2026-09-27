@@ -15,7 +15,7 @@ import {
 import { ProductRow } from './shop/ProductRow';
 import { FilterSheet } from './shop/FilterSheet';
 import { formatPrice } from './shop/shopUtils';
-import { Order } from '../types';
+import { Order, Supermarket, Visitor } from '../types';
 import { OrderInvoiceModal } from './invoice/OrderInvoiceModal';
 import { FileText, Printer } from 'lucide-react';
 
@@ -101,8 +101,36 @@ export const NewOrderModal: React.FC<Props> = ({
     }
   }, [selectedCategoryId, availableBrandsInCategory, selectedBrand]);
 
-  const currentSupermarket = supermarkets.find((s) => s.id === selectedSupermarketId);
-  const currentVisitor = visitors.find((v) => v.id === (defaultVisitorId || currentSupermarket?.assigned_visitor_id));
+  const defaultFallbackStore: Supermarket = useMemo(() => ({
+    id: 'sm-default',
+    name: 'فروشگاه طرف قرارداد',
+    owner: 'متصدی فروشگاه',
+    phone: '',
+    address: 'ثبت شده در سامانه مرکزی پخش',
+    assigned_visitor_id: '',
+    credit_limit: 50000000,
+    current_debt: 0,
+    is_active: true,
+  }), []);
+
+  const defaultFallbackVisitor: Visitor = useMemo(() => ({
+    id: '',
+    name: 'واحد توزیع و ویزیت',
+    phone: '',
+    region: 'عمومی',
+    username: 'visitor',
+    is_active: true,
+  }), []);
+
+  const currentSupermarket =
+    supermarkets.find((s) => s.id === selectedSupermarketId) ||
+    supermarkets[0] ||
+    defaultFallbackStore;
+
+  const currentVisitor =
+    visitors.find((v) => v.id === (defaultVisitorId || currentSupermarket?.assigned_visitor_id)) ||
+    visitors[0] ||
+    defaultFallbackVisitor;
 
   // Filter supermarkets by search term
   const filteredSupermarkets = supermarkets.filter((s) => {
@@ -173,7 +201,7 @@ export const NewOrderModal: React.FC<Props> = ({
   }, [cartItems]);
 
   const handleSubmit = () => {
-    if (!currentSupermarket || !currentVisitor) {
+    if (!currentSupermarket?.id || !currentVisitor?.id) {
       setFeedback({ type: 'error', message: 'لطفاً سوپرمارکت و ویزیتور را مشخص کنید.' });
       return;
     }
@@ -186,6 +214,7 @@ export const NewOrderModal: React.FC<Props> = ({
     const res = createOrder({
       supermarketId: currentSupermarket.id,
       visitorId: currentVisitor.id,
+      orderSource: 'visitor',
       items: cartItems.map((c) => ({
         productId: c.productId,
         name: c.name,

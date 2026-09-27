@@ -7,29 +7,23 @@ import { STORAGE_KEYS, generateUniqueId } from '../utils';
 export function useCatalog() {
   const [categories, setCategories] = useState<Category[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
-    if (!saved) return INITIAL_CATEGORIES;
+    if (!saved) return [];
     try {
-      const parsed: Category[] = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
-      return INITIAL_CATEGORIES;
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : [];
     } catch {
-      return INITIAL_CATEGORIES;
+      return [];
     }
   });
 
   const [brands, setBrands] = useState<string[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.BRANDS);
-    if (!saved) return INITIAL_BRANDS;
+    if (!saved) return [];
     try {
-      const parsed: string[] = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
-      return INITIAL_BRANDS;
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : [];
     } catch {
-      return INITIAL_BRANDS;
+      return [];
     }
   });
 
@@ -209,7 +203,7 @@ export function useCatalog() {
       const brandName = (item.brand || '').trim() || 'متفرقه';
       if (brandName) newBrandsSet.add(brandName);
 
-      const catId = item.category_id || categories[0]?.id || 'cat-1';
+      const catId = item.category_id || categories[0]?.id || '';
       if (catId) affectedCategoryIds.add(catId);
 
       // Find match by id or by name (case-insensitive)
@@ -316,7 +310,7 @@ export function useCatalog() {
             return {
               id: p.id && p.id.trim() ? p.id.trim() : `prod-${Date.now().toString().slice(-4)}-${idx}`,
               name: p.name.trim(),
-              category_id: p.category_id || categories[0]?.id || 'cat-1',
+              category_id: p.category_id || categories[0]?.id || '',
               brand: p.brand?.trim() || 'متفرقه',
               price: sPrice,
               visitor_price: vPrice,
@@ -570,7 +564,7 @@ export function useCatalog() {
       return { success: false, message: 'دسته‌بندی یافت نشد.' };
     }
     const remainingCats = categories.filter((c) => c.id !== categoryId);
-    const fallbackCatId = remainingCats.length > 0 ? remainingCats[0].id : 'cat-1';
+    const fallbackCatId = remainingCats.length > 0 ? remainingCats[0].id : '';
 
     setProducts((prev) =>
       prev.map((p) => (p.category_id === categoryId ? { ...p, category_id: fallbackCatId } : p))

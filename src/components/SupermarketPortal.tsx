@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
-import { Product, Order } from '../types';
+import { Product, Order, Supermarket } from '../types';
 import { ProductRow } from './shop/ProductRow';
 import { FilterSheet } from './shop/FilterSheet';
 import { CartBar } from './shop/CartBar';
@@ -38,8 +38,23 @@ export const SupermarketPortal: React.FC = () => {
     createOrder,
   } = useApp();
 
+  const defaultFallbackStore: Supermarket = useMemo(() => ({
+    id: 'sm-default',
+    name: 'فروشگاه طرف قرارداد',
+    owner: 'متصدی فروشگاه',
+    phone: '۰۹۱۱۰۰۰۰۰۰۰',
+    address: 'ثبت شده در سامانه مرکزی پخش',
+    assigned_visitor_id: '',
+    credit_limit: 50000000,
+    current_debt: 0,
+    is_active: true,
+  }), []);
+
   const currentStore =
-    supermarkets.find((s) => s.id === selectedSupermarketId) || supermarkets[0];
+    supermarkets.find((s) => s.id === selectedSupermarketId) ||
+    supermarkets[0] ||
+    defaultFallbackStore;
+
   const assignedVisitor = visitors.find(
     (v) => v.id === currentStore?.assigned_visitor_id
   );
@@ -72,7 +87,8 @@ export const SupermarketPortal: React.FC = () => {
   }, []);
 
   // Cart state persisted per supermarket: alborz_cart_{storeId}
-  const storageKey = `alborz_cart_${currentStore.id}`;
+  const storeId = currentStore?.id || 'sm-default';
+  const storageKey = `alborz_cart_${storeId}`;
 
   const [cart, setCart] = useState<Record<string, number>>(() => {
     if (typeof window === 'undefined') return {};
@@ -118,10 +134,10 @@ export const SupermarketPortal: React.FC = () => {
   // Store's orders (newest first)
   const storeOrders = useMemo(() => {
     return orders
-      .filter((o) => o.supermarket_id === currentStore.id)
+      .filter((o) => o.supermarket_id === storeId)
       .slice()
       .reverse();
-  }, [orders, currentStore.id]);
+  }, [orders, storeId]);
 
   // Active pending orders count for tab badge (only 'assigned' and 'delegated')
   const activePendingOrdersCount = useMemo(() => {
@@ -132,8 +148,8 @@ export const SupermarketPortal: React.FC = () => {
 
   // Top purchased products
   const topProducts = useMemo(() => {
-    return getTopPurchasedProducts(orders, products, currentStore.id, 5);
-  }, [orders, products, currentStore.id]);
+    return getTopPurchasedProducts(orders, products, storeId, 5);
+  }, [orders, products, storeId]);
 
   // Brands available in currently selected category (only active products)
   const availableBrandsInCategory = useMemo(() => {
@@ -284,8 +300,9 @@ export const SupermarketPortal: React.FC = () => {
 
     try {
       const res = createOrder({
-        supermarketId: currentStore.id,
-        visitorId: assignedVisitor?.id || visitors[0]?.id || 'vis-1',
+        supermarketId: currentStore?.id || '',
+        visitorId: assignedVisitor?.id || visitors[0]?.id || '',
+        orderSource: 'supermarket',
         items,
       });
 

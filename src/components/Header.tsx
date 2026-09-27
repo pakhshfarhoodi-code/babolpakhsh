@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   ThermometerSnowflake,
@@ -35,9 +35,37 @@ export const Header: React.FC<HeaderProps> = () => {
     logout,
   } = useApp();
 
-  const currentStore = supermarkets.find((s) => s.id === selectedSupermarketId) || supermarkets[0];
+  const defaultStore = useMemo(() => ({
+    id: 'sm-default',
+    name: 'فروشگاه طرف قرارداد',
+    owner: 'متصدی فروشگاه',
+    phone: '۰۹۱۱۰۰۰۰۰۰۰',
+    address: 'ثبت شده در سامانه مرکزی پخش',
+    assigned_visitor_id: '',
+    credit_limit: 50000000,
+    current_debt: 0,
+    is_active: true,
+  }), []);
+
+  const defaultVisitor = useMemo(() => ({
+    id: '',
+    name: 'واحد ویزیت و توزیع',
+    phone: '',
+    region: 'عمومی',
+    username: 'visitor',
+    is_active: true,
+  }), []);
+
+  const currentStore =
+    supermarkets.find((s) => s.id === selectedSupermarketId) ||
+    supermarkets[0] ||
+    defaultStore;
+
   const assignedVisitor = visitors.find((v) => v.id === currentStore?.assigned_visitor_id);
-  const currentVisitor = visitors.find((v) => v.id === selectedVisitorId) || visitors[0];
+  const currentVisitor =
+    visitors.find((v) => v.id === selectedVisitorId) ||
+    visitors[0] ||
+    defaultVisitor;
 
   const [isStoreProfileOpen, setIsStoreProfileOpen] = useState(false);
 
@@ -129,10 +157,10 @@ export const Header: React.FC<HeaderProps> = () => {
               </div>
               <div className="flex items-center gap-2 min-w-0">
                 <span className="text-sm font-bold text-slate-100 truncate max-w-[130px] sm:max-w-[200px]">
-                  {currentVisitor.name}
+                  {currentVisitor?.name || 'واحد ویزیت و توزیع'}
                 </span>
                 <span className="text-xs font-semibold text-blue-300 bg-blue-950/80 px-2 py-0.5 rounded-full border border-blue-800/50 shrink-0">
-                  {currentVisitor.region}
+                  {currentVisitor?.region || 'عمومی'}
                 </span>
                 <span className="text-[11px] text-amber-400/90 bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-800/40 shrink-0 hidden sm:inline-block font-medium">
                   بارفروش | پخش فرهودی

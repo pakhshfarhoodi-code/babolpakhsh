@@ -10,13 +10,12 @@ import {
   Clock,
   Truck,
   Store,
-  MapPin,
-  Phone,
-  User,
+  Building2,
   ShieldCheck,
   AlertCircle,
   PackageCheck,
-  Building2,
+  QrCode,
+  Layers,
 } from 'lucide-react';
 
 interface OrderInvoiceModalProps {
@@ -26,6 +25,70 @@ interface OrderInvoiceModalProps {
   supermarket?: Supermarket | null;
   visitor?: Visitor | null;
 }
+
+/**
+ * Pure SVG Barcode Generator (Code 128 / Barcode 39 style clean vector)
+ */
+const BarcodeSvg: React.FC<{ value: string }> = ({ value }) => {
+  // Generate deterministic bar widths based on char codes
+  const bars: { width: number; isSpace: boolean }[] = [];
+  bars.push({ width: 2, isSpace: false });
+  bars.push({ width: 1, isSpace: true });
+  bars.push({ width: 2, isSpace: false });
+  bars.push({ width: 2, isSpace: true });
+
+  for (let i = 0; i < value.length; i++) {
+    const charCode = value.charCodeAt(i);
+    const pattern = (charCode * 7 + 13) % 16;
+    for (let bit = 0; bit < 4; bit++) {
+      const isBar = ((pattern >> bit) & 1) === 1;
+      bars.push({
+        width: (bit % 2 === 0 ? 2 : 1),
+        isSpace: !isBar,
+      });
+    }
+    bars.push({ width: 1, isSpace: true });
+  }
+
+  bars.push({ width: 2, isSpace: false });
+  bars.push({ width: 2, isSpace: true });
+  bars.push({ width: 3, isSpace: false });
+
+  let totalWidth = 0;
+  bars.forEach((b) => (totalWidth += b.width));
+
+  let currentX = 0;
+
+  return (
+    <div className="flex flex-col items-center select-none">
+      <svg
+        width="140"
+        height="32"
+        viewBox={`0 0 ${totalWidth} 32`}
+        className="shape-rendering-crispEdges"
+      >
+        {bars.map((bar, idx) => {
+          const x = currentX;
+          currentX += bar.width;
+          if (bar.isSpace) return null;
+          return (
+            <rect
+              key={idx}
+              x={x}
+              y={0}
+              width={bar.width}
+              height={32}
+              fill="#0f172a"
+            />
+          );
+        })}
+      </svg>
+      <span className="font-mono font-bold text-[10px] tracking-widest text-slate-800 mt-0.5 dir-ltr">
+        *{value}*
+      </span>
+    </div>
+  );
+};
 
 export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
   isOpen,
@@ -47,6 +110,10 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
   const formatCurrency = (amount: number) => {
     return (amount || 0).toLocaleString('fa-IR');
   };
+
+  // Determine invoice type tag
+  const isVisitorOrder =
+    order.order_source === 'visitor' || (order.id && order.id.startsWith('VS'));
 
   // Status badge config
   const getStatusBadge = (status: Order['status']) => {
@@ -78,7 +145,7 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
       case 'assigned':
       default:
         return {
-          label: 'آماده ارسال و توزیع',
+          label: 'آماده توزیع مویرگی',
           bg: 'bg-blue-50 text-blue-700 border-blue-300',
           icon: Truck,
         };
@@ -122,7 +189,7 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
   };
 
   const handlePrint = () => {
-    printInvoiceDocument();
+    printInvoiceDocument(printRef.current);
   };
 
   // Format order date display
@@ -149,7 +216,7 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
   const buyerOwner = supermarket?.owner || 'متصدی فروشگاه';
   const buyerPhone = supermarket?.phone || '---';
   const buyerAddress = supermarket?.address || 'ثبت شده در سامانه مرکزی پخش';
-  const sellerVisitor = order.visitor_name || visitor?.name || 'واحد توزیع و لجستیک';
+  const sellerVisitor = order.visitor_name || visitor?.name || 'واحد توزیع مویرگی';
   const visitorPhone = visitor?.phone || '---';
 
   return (
@@ -163,44 +230,30 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
             </div>
             <div>
               <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-                <span>پیش‌نمایش فاکتور رسمی سفارش</span>
-                <span className="font-mono text-xs bg-slate-800 px-2 py-0.5 rounded text-blue-400 border border-slate-700">
+                <span>پیش‌نمایش فاکتور رسمی پخش مویرگی</span>
+                <span className="font-mono text-xs bg-slate-800 px-2.5 py-0.5 rounded-lg text-blue-400 border border-slate-700 font-bold tracking-wider dir-ltr">
                   {order.id}
+                </span>
+                <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                  isVisitorOrder
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                    : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                }`}>
+                  {isVisitorOrder ? 'ویزیتوری (VS)' : 'سفارش مستقیم فروشگاه (SP)'}
                 </span>
               </h2>
               <p className="text-xs text-slate-400">
-                امکان استخراج نسخه دیجیتال PDF و چاپ بر روی انواع چاپگرها (A4 / A5)
+                طراحی فاکتور چاپی طبق استاندارد سربرگ مویرگی با بارکد و تفکیک دو ستونه خریدار/فروشنده
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Download PDF Button */}
-            <button
-              type="button"
-              onClick={handleExportPdf}
-              disabled={isExportingPdf}
-              className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-lg shadow-blue-600/20 cursor-pointer disabled:opacity-50"
-            >
-              <FileDown className="w-4 h-4" />
-              <span>{isExportingPdf ? 'در حال ایجاد PDF...' : 'دریافت فایل PDF'}</span>
-            </button>
-
-            {/* Paper Print Button */}
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-lg shadow-emerald-600/20 cursor-pointer"
-            >
-              <Printer className="w-4 h-4" />
-              <span>چاپ کاغذی (پرینت)</span>
-            </button>
-
             {/* Close Button */}
             <button
               type="button"
               onClick={onClose}
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition cursor-pointer"
+              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer flex items-center gap-1 text-xs"
               title="بستن پنجره فاکتور"
             >
               <X className="w-5 h-5" />
@@ -235,58 +288,59 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
             className="invoice-paper bg-white text-slate-900 rounded-2xl p-6 sm:p-8 max-w-3xl mx-auto shadow-xl border border-slate-200 print:border-none print:shadow-none print:p-4 print:max-w-none print:rounded-none"
             style={{ direction: 'rtl' }}
           >
-            {/* 1. Official Header */}
-            <div className="border-b-2 border-slate-900 pb-4 mb-5">
+            {/* 1. Official Distribution Header with Logo, Identity, Barcode & Meta */}
+            <div className="border-b-2 border-slate-900 pb-4 mb-4">
               <div className="flex items-start justify-between gap-4 flex-wrap sm:flex-nowrap">
                 {/* Brand & Identity */}
                 <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-blue-700 text-white flex items-center justify-center font-black text-sm">
+                  <div className="flex items-center gap-2.5">
+                    {/* Official Company Emblem */}
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-700 to-indigo-900 text-white flex items-center justify-center font-black text-lg shadow-sm border border-blue-950">
                       ب
                     </div>
                     <div>
-                      <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
-                        بارفروش | شبکه پخش عمده فرهودی
+                      <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                        <span>بارفروش</span>
+                        <span className="text-slate-400 font-light text-base">|</span>
+                        <span className="text-blue-900">شبکه پخش عمده فرهودی</span>
                       </h1>
-                      <p className="text-[11px] font-semibold text-slate-600">
-                        سامانه جامع سفارش‌گیری و توزیع زنجیره سرد مواد غذایی و پروتئینی
+                      <p className="text-[11px] font-bold text-slate-600">
+                        سامانه جامع سفارش‌گیری و توزیع مویرگی زنجیره سرد مواد غذایی و پروتئینی
                       </p>
                     </div>
                   </div>
                 </div>
 
-                {/* Factor Meta Info */}
-                <div className="bg-slate-50 border border-slate-300 rounded-xl p-3 min-w-[210px] text-xs space-y-1.5 shrink-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-slate-600 font-medium">شماره صورت‌حساب:</span>
-                    <span className="font-mono font-bold text-slate-950 dir-ltr text-sm">
+                {/* Barcode & Factor Meta Box */}
+                <div className="flex flex-col items-end sm:items-end gap-1.5 shrink-0">
+                  {/* Scannable Vector Barcode */}
+                  <div className="bg-white border border-slate-300 rounded-xl p-2 shadow-xs">
+                    <BarcodeSvg value={order.id} />
+                  </div>
+
+                  {/* Meta Chips */}
+                  <div className="flex items-center gap-2 text-[11px]">
+                    <div className="bg-slate-100 border border-slate-300 px-2 py-0.5 rounded font-mono font-bold text-slate-900 dir-ltr">
                       {order.id}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-slate-600 font-medium">تاریخ و زمان:</span>
-                    <span className="font-bold text-slate-900">{formattedDate}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-200">
-                    <span className="text-slate-600 font-medium">وضعیت سفارش:</span>
-                    <span
-                      className={`px-2 py-0.5 rounded-md text-[11px] font-bold border inline-flex items-center gap-1 ${statusBadge.bg}`}
-                    >
-                      <StatusIcon className="w-3 h-3" />
-                      <span>{statusBadge.label}</span>
-                    </span>
+                    </div>
+                    <div className="bg-slate-100 border border-slate-300 px-2 py-0.5 rounded font-medium text-slate-700">
+                      {formattedDate}
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Title Ribbon */}
-              <div className="mt-3 text-center bg-slate-900 text-white py-1.5 px-4 rounded-lg font-bold text-xs tracking-wider">
-                صورت‌حساب فروش کالا و خدمات (فاکتور رسمی توزیع)
+              {/* Title Ribbon & Distribution Tag */}
+              <div className="mt-3 bg-slate-900 text-white py-1.5 px-4 rounded-lg font-bold text-xs flex items-center justify-between tracking-wide">
+                <span>صورت‌حساب فروش و تحویل کالا (فاکتور رسمی پخش مویرگی)</span>
+                <span className="text-[11px] font-mono text-slate-300">
+                  {isVisitorOrder ? 'سفارش ویزیتوری' : 'سفارش مستقیم سوپرمارکت'}
+                </span>
               </div>
             </div>
 
             {/* 2. Two-Column Seller & Buyer Info Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4 text-xs">
               {/* Seller Information */}
               <div className="border border-slate-300 rounded-xl p-3.5 bg-slate-50/70 space-y-2">
                 <div className="flex items-center gap-1.5 font-bold text-slate-900 border-b border-slate-200 pb-1.5">
@@ -300,14 +354,14 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
                   </p>
                   <p>
                     <span className="text-slate-500 font-medium">دفتر مرکزی و انبار:</span>{' '}
-                    <span>مرکز توزیع و زنجیره سرد استان</span>
+                    <span>مرکز لجستیک و زنجیره سرد</span>
                   </p>
                   <p>
-                    <span className="text-slate-500 font-medium">تلفن پشتیبانی و سفارشات:</span>{' '}
+                    <span className="text-slate-500 font-medium">تلفن هماهنگی و توزیع:</span>{' '}
                     <span className="font-mono text-slate-900">۰۹۱۲۳۴۵۶۷۸۹ - ۰۱۱۳۳۲۲۱۱۰۰</span>
                   </p>
                   <p>
-                    <span className="text-slate-500 font-medium">ویزیتور / مسئول فاکتور:</span>{' '}
+                    <span className="text-slate-500 font-medium">ویزیتور / مسئول توزیع:</span>{' '}
                     <strong className="text-slate-900">{sellerVisitor}</strong>{' '}
                     {visitorPhone !== '---' && (
                       <span className="text-slate-500 font-mono text-[11px]">({visitorPhone})</span>
@@ -344,7 +398,7 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
             </div>
 
             {/* 3. Items Table */}
-            <div className="border border-slate-900 rounded-xl overflow-hidden mb-5">
+            <div className="border border-slate-900 rounded-xl overflow-hidden mb-4">
               <table className="w-full text-right text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-900 text-white font-bold">
@@ -365,20 +419,20 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
                           key={item.id || index}
                           className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50/80'}
                         >
-                          <td className="py-2.5 px-3 border-l border-slate-200 text-center font-bold text-slate-600">
+                          <td className="py-2 px-3 border-l border-slate-200 text-center font-bold text-slate-600">
                             {(index + 1).toLocaleString('fa-IR')}
                           </td>
-                          <td className="py-2.5 px-3 border-l border-slate-200 font-semibold text-slate-900">
+                          <td className="py-2 px-3 border-l border-slate-200 font-semibold text-slate-900">
                             {itemName}
                           </td>
-                          <td className="py-2.5 px-3 border-l border-slate-200 text-center font-bold text-slate-800">
+                          <td className="py-2 px-3 border-l border-slate-200 text-center font-bold text-slate-800">
                             {(Number(item.quantity) || 0).toLocaleString('fa-IR')}{' '}
                             <span className="text-[10px] text-slate-500 font-normal">عدد/بسته</span>
                           </td>
-                          <td className="py-2.5 px-3 border-l border-slate-200 text-left font-mono font-medium text-slate-800">
+                          <td className="py-2 px-3 border-l border-slate-200 text-left font-mono font-medium text-slate-800">
                             {formatCurrency(item.price)}
                           </td>
-                          <td className="py-2.5 px-3 text-left font-mono font-bold text-slate-950">
+                          <td className="py-2 px-3 text-left font-mono font-bold text-slate-950">
                             {formatCurrency(rowTotal)}
                           </td>
                         </tr>
@@ -395,33 +449,23 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
               </table>
             </div>
 
-            {/* 4. Totals and Financial Summary */}
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 mb-5 text-xs">
-              {/* Words Amount and Conditions */}
-              <div className="sm:col-span-7 border border-slate-300 rounded-xl p-3.5 bg-slate-50 space-y-2 flex flex-col justify-between">
-                <div>
-                  <span className="text-slate-500 font-medium block mb-1">مبلغ کل به حروف فارسی:</span>
-                  <p className="font-bold text-slate-900 bg-white p-2 rounded-lg border border-slate-200 leading-relaxed text-[13px]">
-                    {priceInWords}
-                  </p>
-                </div>
-                <div className="pt-2 border-t border-slate-200 text-[11px] text-slate-600 space-y-0.5">
-                  <p>• فاکتور فوق پس از رویت و شمارش اقلام توسط خریدار تسویه می‌گردد.</p>
-                  <p>• هرگونه مغایرت باید حداکثر تا ۲۴ ساعت پس از تحویل به پشتیبانی اعلام شود.</p>
-                </div>
+            {/* 4. Totals and Financial Summary (Clean table without bank account/conditions as requested) */}
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 mb-2 text-xs">
+              {/* Words Amount Display */}
+              <div className="sm:col-span-7 border border-slate-300 rounded-xl p-3.5 bg-slate-50 flex flex-col justify-center">
+                <span className="text-slate-500 font-medium block mb-1">مبلغ کل به حروف فارسی:</span>
+                <p className="font-bold text-slate-900 bg-white p-2.5 rounded-lg border border-slate-200 leading-relaxed text-[13px]">
+                  {priceInWords}
+                </p>
               </div>
 
               {/* Numerical Calculation Box */}
               <div className="sm:col-span-5 border border-slate-900 rounded-xl overflow-hidden divide-y divide-slate-200">
                 <div className="flex items-center justify-between p-2.5 bg-slate-50">
-                  <span className="text-slate-600 font-medium">تعداد کل اقلام:</span>
+                  <span className="text-slate-600 font-medium">تعداد کل اقلام فاکتور:</span>
                   <span className="font-bold text-slate-900">
                     {totalItemsCount.toLocaleString('fa-IR')} عدد / کارتن
                   </span>
-                </div>
-                <div className="flex items-center justify-between p-2.5 bg-slate-50">
-                  <span className="text-slate-600 font-medium">تخفیف / آفر توزیع:</span>
-                  <span className="font-bold text-slate-600">۰ تومان</span>
                 </div>
                 <div className="flex items-center justify-between p-3 bg-slate-900 text-white font-black text-sm">
                   <span>مبلغ قابل پرداخت:</span>
@@ -432,34 +476,14 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
                 </div>
               </div>
             </div>
-
-            {/* 5. Signatures and Official Stamp Boxes */}
-            <div className="grid grid-cols-2 gap-4 pt-3 border-t-2 border-slate-300 text-xs">
-              <div className="border border-dashed border-slate-300 rounded-xl p-3 text-center h-28 flex flex-col justify-between">
-                <span className="font-bold text-slate-700">مهر و امضای متصدی فروشگاه (تحویل‌گیرنده):</span>
-                <span className="text-[10px] text-slate-400">صحت سفارش و اقلام مورد تایید است</span>
-              </div>
-
-              <div className="border border-dashed border-slate-300 rounded-xl p-3 text-center h-28 flex flex-col justify-between">
-                <span className="font-bold text-slate-700">مهر و امضای شرکت پخش فرهودی (تحویل‌دهنده):</span>
-                <div className="text-[10px] text-slate-500 font-medium">
-                  شبکه پخش عمده فرهودی (بارفروش)
-                </div>
-              </div>
-            </div>
-
-            {/* Footer Watermark */}
-            <div className="mt-4 pt-2 border-t border-slate-200 text-center text-[10px] text-slate-400">
-              صادر شده توسط سامانه یکپارچه بارفروش | نسخه چاپی معتبر فاکتور فروش
-            </div>
           </div>
         </div>
 
         {/* Bottom Bar Controls for Mobile/Desktop convenience */}
         <div className="no-print p-3 border-t border-slate-800 bg-slate-950/90 flex items-center justify-between gap-3 text-xs">
-          <div className="text-slate-400 flex items-center gap-1">
-            <span className="hidden sm:inline">شماره پیگیری فاکتور:</span>
-            <span className="font-mono text-slate-200 font-bold">{order.id}</span>
+          <div className="text-slate-400 flex items-center gap-1.5">
+            <span className="hidden sm:inline">شماره فاکتور:</span>
+            <span className="font-mono text-slate-200 font-bold dir-ltr">{order.id}</span>
           </div>
 
           <div className="flex items-center gap-2">

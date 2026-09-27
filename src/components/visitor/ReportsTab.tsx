@@ -495,7 +495,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
                 </div>
                 <div className="text-left text-xs text-slate-700">
                   <p>
-                    <strong>ویزیتور:</strong> {currentVisitor.name} ({currentVisitor.region})
+                    <strong>ویزیتور:</strong> {currentVisitor?.name || 'عمومی'} {currentVisitor?.region ? `(${currentVisitor.region})` : ''}
                   </p>
                 </div>
               </div>

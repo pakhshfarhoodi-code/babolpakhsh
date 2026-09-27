@@ -112,45 +112,52 @@
 }
 
 /* Print stylesheets for standard invoices */
+/* Print stylesheets for standard invoices */
 @media print {
   @page {
     size: A4 portrait;
-    margin: 10mm;
+    margin: 8mm;
   }
 
-  body {
+  html, body {
     background-color: #ffffff !important;
+    background: #ffffff !important;
     color: #000000 !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    height: auto !important;
+    overflow: visible !important;
   }
 
-  /* Hide everything on page except printable-invoice when printing */
-  .no-print,
-  nav,
-  header,
-  footer,
-  aside {
-    display: none !important;
+  /* Hide everything by default when printing */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Only make invoice paper visible and positioned at top-left */
+  .invoice-paper,
+  .invoice-paper *,
+  #printable-invoice,
+  #printable-invoice * {
+    visibility: visible !important;
   }
 
   #printable-invoice {
-    display: block !important;
-    visibility: visible !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
     width: 100% !important;
     max-width: none !important;
     margin: 0 !important;
     padding: 0 !important;
     border: none !important;
     box-shadow: none !important;
-    background: white !important;
-    color: black !important;
+    background: #ffffff !important;
+    color: #000000 !important;
   }
 
-  .invoice-paper {
-    border: none !important;
-    box-shadow: none !important;
-    padding: 0 !important;
-    margin: 0 !important;
+  .no-print {
+    display: none !important;
+    visibility: hidden !important;
   }
 }

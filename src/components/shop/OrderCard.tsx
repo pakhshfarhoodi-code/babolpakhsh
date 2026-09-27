@@ -181,7 +181,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
               <div key={idx} className="pt-1.5 first:pt-0 flex items-center justify-between">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <Package className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                  <span className="text-slate-200 truncate">{item.product_name}</span>
+                  <span className="text-slate-200 truncate">{item.name || 'کالا'}</span>
                   <span className="text-slate-500">× {item.quantity.toLocaleString('fa-IR')}</span>
                 </div>
                 <span className="text-slate-300 font-bold">

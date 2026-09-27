@@ -96,8 +96,8 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   // Add Product Modal state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newProdName, setNewProdName] = useState('');
-  const [newProdBrand, setNewProdBrand] = useState('میهن');
-  const [newProdCat, setNewProdCat] = useState('cat-1');
+  const [newProdBrand, setNewProdBrand] = useState(() => brands[0] || '');
+  const [newProdCat, setNewProdCat] = useState(() => categories[0]?.id || '');
   const [newProdPrice, setNewProdPrice] = useState(0);
   const [newProdVisitorPrice, setNewProdVisitorPrice] = useState(0);
   const [newProdStock, setNewProdStock] = useState(0);

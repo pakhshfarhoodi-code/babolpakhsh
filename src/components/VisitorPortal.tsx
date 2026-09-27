@@ -7,7 +7,7 @@ import { CustomersTab } from './visitor/CustomersTab';
 import { ReportsTab } from './visitor/ReportsTab';
 import { UndeliveredModal } from './visitor/UndeliveredModal';
 import { DelegateModal } from './visitor/DelegateModal';
-import { Order, Supermarket } from '../types';
+import { Order, Supermarket, Visitor } from '../types';
 import {
   Truck,
   Users,
@@ -29,7 +29,21 @@ export const VisitorPortal: React.FC = () => {
     createLoadingBill,
   } = useApp();
 
-  const currentVisitor = visitors.find((v) => v.id === selectedVisitorId) || visitors[0];
+  const defaultFallbackVisitor: Visitor = useMemo(() => ({
+    id: '',
+    name: 'واحد ویزیت و توزیع',
+    phone: '',
+    region: 'عمومی',
+    username: 'visitor',
+    is_active: true,
+  }), []);
+
+  const currentVisitor =
+    visitors.find((v) => v.id === selectedVisitorId) ||
+    visitors[0] ||
+    defaultFallbackVisitor;
+
+  const visitorId = currentVisitor?.id || '';
 
   // Tab State: 'today' (default) | 'customers' | 'reports'
   const [activeTab, setActiveTab] = useState<'today' | 'customers' | 'reports'>('today');
@@ -45,13 +59,13 @@ export const VisitorPortal: React.FC = () => {
 
   // Filtered data for current visitor
   const mySupermarkets = useMemo(
-    () => supermarkets.filter((s) => s.assigned_visitor_id === currentVisitor.id),
-    [supermarkets, currentVisitor.id]
+    () => supermarkets.filter((s) => s.assigned_visitor_id === visitorId),
+    [supermarkets, visitorId]
   );
 
   const myOrders = useMemo(
-    () => orders.filter((o) => o.assigned_visitor_id === currentVisitor.id),
-    [orders, currentVisitor.id]
+    () => orders.filter((o) => o.assigned_visitor_id === visitorId),
+    [orders, visitorId]
   );
 
   // Incoming handover proposals to this visitor (or broadcast)
@@ -60,19 +74,19 @@ export const VisitorPortal: React.FC = () => {
       reassignmentRequests.filter(
         (r) =>
           r.status === 'pending' &&
-          r.from_visitor_id !== currentVisitor.id &&
-          (!r.to_visitor_id || r.to_visitor_id === currentVisitor.id)
+          r.from_visitor_id !== (currentVisitor?.id || '') &&
+          (!r.to_visitor_id || r.to_visitor_id === (currentVisitor?.id || ''))
       ),
-    [reassignmentRequests, currentVisitor.id]
+    [reassignmentRequests, currentVisitor?.id]
   );
 
   // Outgoing handover proposals from this visitor
   const outgoingHandovers = useMemo(
     () =>
       reassignmentRequests.filter(
-        (r) => r.from_visitor_id === currentVisitor.id && r.status === 'pending'
+        (r) => r.from_visitor_id === (currentVisitor?.id || '') && r.status === 'pending'
       ),
-    [reassignmentRequests, currentVisitor.id]
+    [reassignmentRequests, currentVisitor?.id]
   );
 
   const pendingDeliveryOrders = useMemo(
@@ -271,7 +285,7 @@ export const VisitorPortal: React.FC = () => {
       <DelegateModal
         order={selectedOrderForDelegate}
         visitors={visitors}
-        currentVisitorId={currentVisitor.id}
+        currentVisitorId={currentVisitor?.id || ''}
         isOpen={Boolean(selectedOrderForDelegate)}
         onClose={() => setSelectedOrderForDelegate(null)}
         onSubmit={handleDelegateSubmit}
@@ -282,14 +296,14 @@ export const VisitorPortal: React.FC = () => {
         isOpen={isOrderModalOpen}
         onClose={() => setIsOrderModalOpen(false)}
         defaultSupermarketId={selectedSupermarketForOrder}
-        defaultVisitorId={currentVisitor.id}
+        defaultVisitorId={currentVisitor?.id || ''}
       />
 
       {/* Register Supermarket Modal */}
       <SupermarketRegisterModal
         isOpen={isRegisterStoreModalOpen}
         onClose={() => setIsRegisterStoreModalOpen(false)}
-        defaultVisitorId={currentVisitor.id}
+        defaultVisitorId={currentVisitor?.id || ''}
       />
     </div>
   );

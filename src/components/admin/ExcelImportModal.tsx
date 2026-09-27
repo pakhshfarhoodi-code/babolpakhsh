@@ -80,7 +80,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
   });
 
   // Manual fallback and bulk assignment controls
-  const [defaultCategoryId, setDefaultCategoryId] = useState<string>(() => categories[0]?.id || 'cat-1');
+  const [defaultCategoryId, setDefaultCategoryId] = useState<string>(() => categories[0]?.id || '');
   const [applyCategoryToAll, setApplyCategoryToAll] = useState<boolean>(false);
 
   const [defaultBrand, setDefaultBrand] = useState<string>(() => brands[0] || 'متفرقه');
@@ -273,7 +273,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
           matchedCat = categories.find((c) => c.id === defaultCategoryId);
         }
       }
-      const category_id = matchedCat?.id || categories[0]?.id || 'cat-1';
+      const category_id = matchedCat?.id || categories[0]?.id || '';
       const category_name = matchedCat?.name || categories[0]?.name || 'عمومی';
 
       // 2. Brand Assignment:

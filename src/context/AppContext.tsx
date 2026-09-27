@@ -70,6 +70,7 @@ interface AppContextType {
   requestReassignment: (orderId: string, toVisitorId: string | null) => void;
   respondToReassignment: (requestId: string, accept: boolean) => void;
   createLoadingBill: (visitorId: string, orderIds: string[]) => void;
+  approveLoadingBill: (billId: string) => void;
   updateProductPrice: (productId: string, newPrice: number, newVisitorPrice?: number) => void;
   updateProductStock: (productId: string, additionalStock: number) => void;
   addNewProduct: (product: Omit<Product, 'id' | 'reserved_stock'>) => void;
@@ -154,10 +155,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
   }, []);
 
+  const DUMMY_VISITOR_IDS = new Set(['vis-1', 'vis-2', 'vis-3']);
+
   // Visitors & Supermarkets
   const [visitors, setVisitors] = useState<Visitor[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.VISITORS);
-    return saved ? JSON.parse(saved) : INITIAL_VISITORS;
+    if (!saved) return [];
+    try {
+      const parsed: Visitor[] = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed.filter((v) => !DUMMY_VISITOR_IDS.has(v.id)) : [];
+    } catch {
+      return [];
+    }
   });
 
   useEffect(() => {
@@ -390,7 +399,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteVisitor = useCallback(async (id: string): Promise<{ success: boolean; message: string }> => {
     try {
       if (isSupabaseConfigured && supabase) {
-        await supabase.from('visitors').delete().eq('id', id);
+        const { error: visError } = await supabase.from('visitors').delete().eq('id', id);
+        if (visError) {
+          return { success: false, message: `خطا در حذف ویزیتور از دیتابیس: این ویزیتور دارای سفارش یا مشتری متصل است (${visError.message})` };
+        }
         await supabase.from('profiles').delete().eq('id', id);
       }
 

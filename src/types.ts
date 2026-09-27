@@ -96,6 +96,7 @@ export interface Order {
   visitor_name: string;
   status: OrderStatus;
   total_amount: number;
+  order_source?: 'visitor' | 'supermarket';
   reassignment_id?: string | null;
   loading_bill_id?: string | null;
   order_date: string;

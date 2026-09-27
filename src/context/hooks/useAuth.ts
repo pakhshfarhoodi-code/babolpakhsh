@@ -17,7 +17,7 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
   });
 
   const [role, setRole] = useState<UserRole>('admin');
-  const [selectedVisitorId, setSelectedVisitorId] = useState<string>('vis-1');
+  const [selectedVisitorId, setSelectedVisitorId] = useState<string>(() => visitors[0]?.id || '');
   const [selectedSupermarketId, setSelectedSupermarketId] = useState<string>(() => supermarkets[0]?.id || '');
 
   useEffect(() => {
@@ -67,12 +67,12 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
     if (role === 'visitor') {
       const v = visitors.find((vis) => vis.id === selectedVisitorId) || visitors[0];
       return {
-        id: v?.id || 'vis-1',
-        name: v?.name || 'علیرضا رضایی',
-        username: v?.username || 'visitor1',
+        id: v?.id || '',
+        name: v?.name || 'ویزیتور',
+        username: v?.username || 'visitor',
         role: 'visitor',
         roleTitle: `ویزیتور (${v?.region || 'منطقه توزیع'})`,
-        phone: v?.phone || '۰۹۱۲۳۴۵۶۷۸۹',
+        phone: v?.phone || '',
       };
     }
     if (role === 'supermarket') {
@@ -304,7 +304,7 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
       const trimmedOwner = data.owner.trim() || 'مدیر فروشگاه';
       const trimmedPhone = data.phone.trim();
       const trimmedAddress = data.address.trim() || 'تهران - منطقه توزیع زنجیره سرد';
-      const assignedVisitorId = data.assigned_visitor_id || 'vis-1';
+      const assignedVisitorId = data.assigned_visitor_id || visitors[0]?.id || '';
       const trimmedUsername = data.username.trim();
       const trimmedPassword = data.password.trim();
 

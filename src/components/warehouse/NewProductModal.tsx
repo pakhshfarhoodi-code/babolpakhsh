@@ -28,8 +28,8 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
   onCreateProduct,
 }) => {
   const [name, setName] = useState('');
-  const [brand, setBrand] = useState('میهن');
-  const [categoryId, setCategoryId] = useState('cat-1');
+  const [brand, setBrand] = useState(() => brands[0] || '');
+  const [categoryId, setCategoryId] = useState(() => categories[0]?.id || '');
   const [price, setPrice] = useState<number>(0);
   const [visitorPrice, setVisitorPrice] = useState<number>(0);
   const [stock, setStock] = useState<number>(50);

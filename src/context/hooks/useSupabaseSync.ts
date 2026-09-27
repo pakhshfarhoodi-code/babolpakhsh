@@ -111,7 +111,7 @@ export function useSupabaseSync({
               phone: prof.phone || '',
               address: prof.address || 'ثبت نام آنلاین',
               assigned_visitor_id: prof.assigned_visitor_id || '',
-              is_active: prof.is_active ?? false,
+              is_active: prof.is_active ?? true,
               username: prof.username || '',
             };
             cleanSms.push(restoredSm);

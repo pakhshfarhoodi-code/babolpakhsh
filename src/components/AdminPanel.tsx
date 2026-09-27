@@ -130,8 +130,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       id: 'team' as const,
       label: 'تیم و مشتریان',
       icon: Users,
-      badge: pendingApprovalsCount > 0 ? `${pendingApprovalsCount} تایید جدید` : supermarkets.length,
-      badgeColor: pendingApprovalsCount > 0 ? 'bg-amber-400 text-slate-950 font-bold animate-pulse' : 'bg-slate-800 text-slate-300 font-semibold',
+      badge: supermarkets.length,
+      badgeColor: 'bg-slate-800 text-slate-300 font-semibold',
       activeStyle:
         'bg-blue-600 text-white shadow-md shadow-blue-600/30 border-blue-500 font-bold',
       inactiveHover: 'hover:text-blue-300 hover:bg-slate-900',

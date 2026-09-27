@@ -80,8 +80,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   const totalActionItems =
     delegatedOrders.length +
     lowStockProducts.length +
-    inactiveStores.length +
-    pendingRegistrations.length;
+    inactiveStores.length;
 
   return (
     <div className="space-y-6">
@@ -153,41 +152,31 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
 
       {/* Action Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Action 0: Pending Store Registrations */}
-        <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col justify-between space-y-4 hover:border-amber-500/50 transition shadow-sm">
+        {/* Action 0: Supermarkets List */}
+        <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col justify-between space-y-4 hover:border-purple-500/50 transition shadow-sm">
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center border border-amber-500/30">
+              <div className="w-9 h-9 rounded-xl bg-purple-500/15 text-purple-400 flex items-center justify-center border border-purple-500/30">
                 <UserCheck className="w-5 h-5" />
               </div>
-              <span
-                className={`text-xs px-2 py-0.5 rounded-full font-bold border ${
-                  pendingRegistrations.length > 0
-                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse'
-                    : 'bg-slate-800 text-slate-400 border-slate-700'
-                }`}
-              >
-                {pendingRegistrations.length} فروشگاه جدید
+              <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-slate-800 text-purple-300 border border-slate-700">
+                {supermarkets.length}
               </span>
             </div>
 
-            <h3 className="font-bold text-sm text-slate-200">درخواست‌های عضویت فروشگاه</h3>
+            <h3 className="font-bold text-sm text-slate-200">شبکه مشتریان و فروشگاه‌ها</h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              فروشگاه‌های ثبت‌نام کرده در سامانه که منتظر تایید ادمین جهت فعال‌سازی دسترسی و ورود به پنل هستند.
+              فهرست کامل فروشگاه‌ها و سوپرمارکت‌های طرف قرارداد. تمام ثبت‌نام‌های جدید بلافاصله فعال شده و امکان سفارش‌دهی دارند.
             </p>
           </div>
 
           <button
             type="button"
             onClick={onNavigateToTeam}
-            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-              pendingRegistrations.length > 0
-                ? 'bg-amber-500 text-slate-950 hover:bg-amber-400 shadow-md shadow-amber-500/20'
-                : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
-            }`}
+            className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 transition cursor-pointer"
           >
-            <span>بررسی و تایید مشتریان</span>
-            <ArrowLeft className="w-4 h-4" />
+            <span>مدیریت فروشگاه‌ها و ویزیتورها</span>
+            <ArrowLeft className="w-4 h-4 text-purple-400" />
           </button>
         </div>
 

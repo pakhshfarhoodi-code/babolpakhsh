@@ -48,7 +48,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
   } = useApp();
   const [selectedVisitorFilter, setSelectedVisitorFilter] = useState<string | null>(null);
   const [storeSearchTerm, setStoreSearchTerm] = useState('');
-  const [storeStatusFilter, setStoreStatusFilter] = useState<'all' | 'pending' | 'approved'>('all');
+  const [storeStatusFilter, setStoreStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [isRegisterStoreModalOpen, setIsRegisterStoreModalOpen] = useState(false);
   const [togglingStoreId, setTogglingStoreId] = useState<string | null>(null);
   const [toastNotification, setToastNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -401,10 +401,10 @@ export const TeamTab: React.FC<TeamTabProps> = ({
       if (selectedVisitorFilter && shop.assigned_visitor_id !== selectedVisitorFilter) {
         return false;
       }
-      if (storeStatusFilter === 'pending' && shop.is_active !== false) {
+      if (storeStatusFilter === 'inactive' && shop.is_active !== false) {
         return false;
       }
-      if (storeStatusFilter === 'approved' && shop.is_active === false) {
+      if (storeStatusFilter === 'active' && shop.is_active === false) {
         return false;
       }
       if (storeSearchTerm.trim()) {
@@ -570,7 +570,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
               </button>
             </div>
 
-            {/* Status Filter Tabs (All / Pending Approval / Approved) */}
+            {/* Status Filter Tabs (All / Active / Inactive) */}
             <div className="flex items-center gap-1.5 mt-3 p-1 rounded-xl bg-slate-950 border border-slate-800 text-xs">
               <button
                 type="button"
@@ -586,35 +586,26 @@ export const TeamTab: React.FC<TeamTabProps> = ({
 
               <button
                 type="button"
-                onClick={() => setStoreStatusFilter('pending')}
-                className={`flex-1 py-1.5 rounded-lg font-bold transition cursor-pointer text-center flex items-center justify-center gap-1 ${
-                  storeStatusFilter === 'pending'
-                    ? 'bg-amber-500 text-slate-950 shadow-xs'
-                    : pendingApprovalsCount > 0
-                    ? 'text-amber-400 hover:bg-amber-500/10'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <span>در انتظار تایید</span>
-                {pendingApprovalsCount > 0 && (
-                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                    storeStatusFilter === 'pending' ? 'bg-slate-950 text-amber-400' : 'bg-amber-400 text-slate-950'
-                  }`}>
-                    {pendingApprovalsCount}
-                  </span>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setStoreStatusFilter('approved')}
+                onClick={() => setStoreStatusFilter('active')}
                 className={`flex-1 py-1.5 rounded-lg font-bold transition cursor-pointer text-center ${
-                  storeStatusFilter === 'approved'
+                  storeStatusFilter === 'active'
                     ? 'bg-emerald-600 text-white shadow-xs'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                تایید شده ({supermarkets.filter((s) => s.is_active !== false).length})
+                دسترسی فعال ({supermarkets.filter((s) => s.is_active !== false).length})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStoreStatusFilter('inactive')}
+                className={`flex-1 py-1.5 rounded-lg font-bold transition cursor-pointer text-center ${
+                  storeStatusFilter === 'inactive'
+                    ? 'bg-rose-600 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                غیرفعال ({supermarkets.filter((s) => s.is_active === false).length})
               </button>
             </div>
 
@@ -726,12 +717,12 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <p className="font-bold text-sm text-slate-100 truncate">{shop.name}</p>
                               {!isApproved ? (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-400 text-slate-950 border border-amber-300">
-                                  در انتظار تایید ادمین
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-950/80 text-rose-300 border border-rose-800/50">
+                                  غیرفعال
                                 </span>
                               ) : (
                                 <span className="px-1.5 py-0.2 rounded-md text-[10px] font-semibold bg-emerald-950/80 text-emerald-300 border border-emerald-800/50">
-                                  تایید شده
+                                  دسترسی فعال
                                 </span>
                               )}
                             </div>
@@ -781,14 +772,14 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                                 ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
                                 : 'bg-amber-500 hover:bg-amber-400 text-slate-950 border-amber-400 shadow-md shadow-amber-500/20'
                             }`}
-                            title={isApproved ? 'غیرفعال‌سازی دسترسی' : 'تایید عضویت و بازگشایی دسترسی'}
+                            title={isApproved ? 'غیرفعال‌سازی دسترسی' : 'فعال‌سازی دسترسی'}
                           >
                             {isTogglingThis ? (
                               <Loader2 className="w-3.5 h-3.5 animate-spin" />
                             ) : (
                               <Check className="w-3.5 h-3.5 stroke-[3]" />
                             )}
-                            <span>{isApproved ? 'دسترسی فعال' : 'تایید و بازگشایی دسترسی'}</span>
+                            <span>{isApproved ? 'دسترسی فعال' : 'فعال‌سازی دسترسی'}</span>
                           </button>
 
                           <button

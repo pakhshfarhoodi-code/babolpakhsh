@@ -49,8 +49,11 @@ export const CategorySelectPicker: React.FC<CategorySelectPickerProps> = ({
 
   const selectedCategory = categories.find((c) => c.id === selectedCategoryId) || categories[0];
 
-  const handleAddSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAddSubmit = (e?: React.SyntheticEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (!newCatName.trim()) return;
 
     const res = addCategory(newCatName.trim());
@@ -67,8 +70,11 @@ export const CategorySelectPicker: React.FC<CategorySelectPickerProps> = ({
     }
   };
 
-  const handleEditSubmit = (e?: React.FormEvent, catId?: string) => {
-    if (e) e.preventDefault();
+  const handleEditSubmit = (e?: React.SyntheticEvent, catId?: string) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     const idToEdit = catId || editingCatId;
     if (!idToEdit || !editingCatName.trim()) return;
 
@@ -122,7 +128,8 @@ export const CategorySelectPicker: React.FC<CategorySelectPickerProps> = ({
         <label className="block text-slate-400 font-medium text-xs">دسته‌بندی کالا</label>
         <button
           type="button"
-          onClick={() => {
+          onClick={(e) => {
+            e.stopPropagation();
             setIsAdding(!isAdding);
             if (!isOpen) setIsOpen(true);
           }}
@@ -146,14 +153,17 @@ export const CategorySelectPicker: React.FC<CategorySelectPickerProps> = ({
         </div>
       )}
 
-      {/* Inline Add Category Form */}
+      {/* Inline Add Category (NOT a nested form) */}
       {isAdding && (
-        <form onSubmit={handleAddSubmit} className="mb-2 p-2.5 bg-blue-950/70 border border-blue-800/80 rounded-xl space-y-2">
+        <div className="mb-2 p-2.5 bg-blue-950/70 border border-blue-800/80 rounded-xl space-y-2">
           <div className="flex items-center justify-between text-xs text-blue-300 font-semibold">
             <span>نام دسته‌بندی جدید:</span>
             <button
               type="button"
-              onClick={() => setIsAdding(false)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsAdding(false);
+              }}
               className="text-slate-400 hover:text-slate-200 cursor-pointer"
             >
               <X className="w-3.5 h-3.5" />
@@ -162,21 +172,32 @@ export const CategorySelectPicker: React.FC<CategorySelectPickerProps> = ({
           <div className="flex items-center gap-1.5">
             <input
               type="text"
-              required
               autoFocus
               value={newCatName}
               onChange={(e) => setNewCatName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleAddSubmit(e);
+                }
+              }}
               placeholder="مثلاً: سس‌ها و ترشیجات..."
               className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
             />
             <button
-              type="submit"
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleAddSubmit(e);
+              }}
               className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xs cursor-pointer shadow-sm transition"
             >
               ثبت
             </button>
           </div>
-        </form>
+        </div>
       )}
 
       {/* Main Select Trigger */}
@@ -383,8 +404,11 @@ export const BrandSelectPicker: React.FC<BrandSelectPickerProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleAddSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAddSubmit = (e?: React.SyntheticEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (!newBrandName.trim()) return;
 
     const trimmed = newBrandName.trim();
@@ -402,8 +426,11 @@ export const BrandSelectPicker: React.FC<BrandSelectPickerProps> = ({
     }
   };
 
-  const handleEditSubmit = (e?: React.FormEvent, oldBrand?: string) => {
-    if (e) e.preventDefault();
+  const handleEditSubmit = (e?: React.SyntheticEvent, oldBrand?: string) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     const targetBrand = oldBrand || editingBrandName;
     if (!targetBrand || !editingBrandVal.trim()) return;
 
@@ -461,7 +488,8 @@ export const BrandSelectPicker: React.FC<BrandSelectPickerProps> = ({
         <label className="block text-slate-400 font-medium text-xs">برند / شرکت تولیدکننده</label>
         <button
           type="button"
-          onClick={() => {
+          onClick={(e) => {
+            e.stopPropagation();
             setIsAdding(!isAdding);
             if (!isOpen) setIsOpen(true);
           }}
@@ -485,14 +513,17 @@ export const BrandSelectPicker: React.FC<BrandSelectPickerProps> = ({
         </div>
       )}
 
-      {/* Inline Add Brand Form */}
+      {/* Inline Add Brand (NOT a nested form) */}
       {isAdding && (
-        <form onSubmit={handleAddSubmit} className="mb-2 p-2.5 bg-amber-950/70 border border-amber-800/80 rounded-xl space-y-2">
+        <div className="mb-2 p-2.5 bg-amber-950/70 border border-amber-800/80 rounded-xl space-y-2">
           <div className="flex items-center justify-between text-xs text-amber-300 font-semibold">
             <span>نام برند یا کارخانه جدید:</span>
             <button
               type="button"
-              onClick={() => setIsAdding(false)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsAdding(false);
+              }}
               className="text-slate-400 hover:text-slate-200 cursor-pointer"
             >
               <X className="w-3.5 h-3.5" />
@@ -501,21 +532,32 @@ export const BrandSelectPicker: React.FC<BrandSelectPickerProps> = ({
           <div className="flex items-center gap-1.5">
             <input
               type="text"
-              required
               autoFocus
               value={newBrandName}
               onChange={(e) => setNewBrandName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleAddSubmit(e);
+                }
+              }}
               placeholder="مثلاً: پگاه، چوپان، فرمند..."
               className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-100 focus:outline-none focus:border-amber-500"
             />
             <button
-              type="submit"
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleAddSubmit(e);
+              }}
               className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs cursor-pointer shadow-sm transition"
             >
               ثبت
             </button>
           </div>
-        </form>
+        </div>
       )}
 
       {/* Main Select Trigger */}

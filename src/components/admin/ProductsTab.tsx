@@ -107,6 +107,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   const [newProdConsumerPrice, setNewProdConsumerPrice] = useState(0);
   const [newProdStock, setNewProdStock] = useState(0);
   const [newProdUnit, setNewProdUnit] = useState('عدد');
+  const [addModalError, setAddModalError] = useState<string | null>(null);
 
   // Delete product confirmation
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
@@ -276,9 +277,21 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
     }
   };
 
-  const handleCreateProductSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newProdName.trim() || newProdPrice <= 0) return;
+  const handleCreateProductSubmit = (e?: React.SyntheticEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    setAddModalError(null);
+
+    if (!newProdName.trim()) {
+      setAddModalError('لطفاً نام کامل کالا را وارد نمایید.');
+      return;
+    }
+    if (!newProdPrice || newProdPrice <= 0) {
+      setAddModalError('لطفاً قیمت معتبر فروش به فروشگاه را وارد نمایید.');
+      return;
+    }
 
     const visitorPrice = newProdVisitorPrice > 0 ? newProdVisitorPrice : Math.round(newProdPrice * 0.85);
 
@@ -302,6 +315,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
     setNewProdVisitorPrice(0);
     setNewProdConsumerPrice(0);
     setNewProdStock(0);
+    setAddModalError(null);
   };
 
   const handleDeleteConfirm = () => {
@@ -805,7 +819,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleCreateProductSubmit} className="space-y-4 text-xs">
+            <div className="space-y-4 text-xs">
               {/* Section 1: Basic Info */}
               <div className="space-y-3 p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800/80">
                 <span className="text-xs font-bold text-blue-400 flex items-center gap-1.5">
@@ -940,24 +954,35 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                 </div>
               </div>
 
+              {addModalError && (
+                <div className="p-3 bg-rose-500/15 border border-rose-500/30 rounded-xl text-rose-300 text-xs font-medium flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>{addModalError}</span>
+                </div>
+              )}
+
               {/* Submit Buttons */}
               <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setIsAddModalOpen(false)}
+                  onClick={() => {
+                    setIsAddModalOpen(false);
+                    setAddModalError(null);
+                  }}
                   className="px-5 py-2.5 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-bold transition cursor-pointer"
                 >
                   انصراف
                 </button>
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={handleCreateProductSubmit}
                   className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs transition shadow-lg shadow-blue-600/30 cursor-pointer flex items-center gap-1.5"
                 >
                   <PackagePlus className="w-4 h-4" />
                   <span>ثبت و تعریف کالا</span>
                 </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}

@@ -86,3 +86,30 @@ BEGIN
   UPDATE orders SET status = 'undelivered' WHERE id = p_order_id;
 END;
 $$ LANGUAGE plpgsql;
+
+-- 5. Product Catalog Columns & Public RLS Permissions
+-- Guarantees that Excel imports and inline definitions never get rejected by foreign keys or RLS
+ALTER TABLE products ADD COLUMN IF NOT EXISTS consumer_price NUMERIC;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS brand TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS visitor_price NUMERIC;
+ALTER TABLE products ALTER COLUMN category_id DROP NOT NULL;
+
+-- Enable open read/write on products, categories, and brands for both anon and authenticated users
+ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public read products" ON products;
+CREATE POLICY "Public read products" ON products FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Public write products" ON products;
+CREATE POLICY "Public write products" ON products FOR ALL USING (true) WITH CHECK (true);
+
+ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public read categories" ON categories;
+CREATE POLICY "Public read categories" ON categories FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Public write categories" ON categories;
+CREATE POLICY "Public write categories" ON categories FOR ALL USING (true) WITH CHECK (true);
+
+ALTER TABLE brands ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public read brands" ON brands;
+CREATE POLICY "Public read brands" ON brands FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Public write brands" ON brands;
+CREATE POLICY "Public write brands" ON brands FOR ALL USING (true) WITH CHECK (true);
+

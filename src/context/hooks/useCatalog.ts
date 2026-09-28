@@ -29,17 +29,12 @@ export function useCatalog() {
     }
   });
 
-  // Dummy seed products that should not be kept if user wants clean data
-  const DUMMY_PRODUCT_IDS = new Set(['prod-1', 'prod-2', 'prod-3', 'prod-4', 'prod-5', 'prod-6', 'prod-7', 'prod-8', 'prod-9']);
-
   const [products, setProducts] = useState<Product[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
     if (!saved) return [];
     try {
       const parsed: Product[] = JSON.parse(saved);
-      // Filter out any default dummy products from seed data
-      const cleaned = parsed.filter((p) => !DUMMY_PRODUCT_IDS.has(p.id));
-      return cleaned;
+      return Array.isArray(parsed) ? parsed : [];
     } catch {
       return [];
     }
@@ -126,15 +121,26 @@ export function useCatalog() {
   const addNewProduct = useCallback((newProd: Omit<Product, 'id' | 'reserved_stock'>) => {
     const id = `prod-${Date.now().toString().slice(-4)}`;
     const visitor_price = newProd.visitor_price !== undefined ? newProd.visitor_price : Math.round(newProd.price * 0.85);
-    setProducts((prev) => [
-      ...prev,
-      {
-        ...newProd,
-        id,
-        visitor_price,
-        reserved_stock: 0,
-      },
-    ]);
+    const validCatId = newProd.category_id && newProd.category_id.trim() ? newProd.category_id.trim() : null;
+
+    const productToAdd: Product = {
+      ...newProd,
+      id,
+      category_id: validCatId || '',
+      visitor_price,
+      reserved_stock: 0,
+    };
+
+    setProducts((prev) => {
+      const next = [...prev, productToAdd];
+      try {
+        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(next));
+      } catch {
+        // storage quota fallback
+      }
+      return next;
+    });
+
     if (newProd.brand && newProd.brand.trim()) {
       const bTrimmed = newProd.brand.trim();
       setBrands((prev) => (prev.includes(bTrimmed) ? prev : [...prev, bTrimmed]));
@@ -142,46 +148,62 @@ export function useCatalog() {
 
     if (isSupabaseConfigured && supabase) {
       (async () => {
+        // Ensure category exists in categories table if provided
+        if (validCatId) {
+          const matchedCategory = categories.find((c) => c.id === validCatId);
+          if (matchedCategory) {
+            await supabase.from('categories').upsert({
+              id: matchedCategory.id,
+              name: matchedCategory.name,
+              icon: matchedCategory.icon || 'Layers',
+            }, { onConflict: 'id' });
+          }
+        }
+
         const row = {
           id,
-          name: newProd.name,
-          category_id: newProd.category_id,
-          brand: newProd.brand,
+          name: newProd.name.trim(),
+          category_id: validCatId,
+          brand: newProd.brand?.trim() || 'متفرقه',
           price: newProd.price,
           visitor_price,
           consumer_price: newProd.consumer_price !== undefined ? newProd.consumer_price : null,
           stock: newProd.stock,
           reserved_stock: 0,
-          unit: newProd.unit,
+          unit: newProd.unit || 'عدد',
           image_url: newProd.image_url,
-          is_active: newProd.is_active,
+          is_active: newProd.is_active ?? true,
         };
 
+        // Try 1: Full insert
         const { error: err1 } = await supabase.from('products').insert(row);
         if (!err1) return;
 
-        console.warn('Supabase product insert failed, retrying without consumer_price:', err1.message);
-        const { consumer_price, ...row2 } = row;
-        const { error: err2 } = await supabase.from('products').insert(row2);
+        console.warn('Supabase product insert failed, retrying with category_id = null fallback:', err1.message);
+        
+        // Try 2: With category_id = null (avoids foreign key constraint violation)
+        const rowNoFK = { ...row, category_id: null };
+        const { error: err2 } = await supabase.from('products').insert(rowNoFK);
         if (!err2) return;
 
-        console.warn('Supabase fallback insert failed, retrying without visitor_price:', err2.message);
-        const { visitor_price: vp, ...row3 } = row2;
+        console.warn('Supabase fallback insert failed, retrying without consumer_price:', err2.message);
+        const { consumer_price, ...row3 } = rowNoFK;
         const { error: err3 } = await supabase.from('products').insert(row3);
         if (!err3) return;
 
-        console.warn('Supabase fallback insert failed, retrying without brand:', err3.message);
-        const { brand: b, ...row4 } = row3;
+        console.warn('Supabase fallback insert failed, retrying without visitor_price:', err3.message);
+        const { visitor_price: vp, ...row4 } = row3;
         const { error: err4 } = await supabase.from('products').insert(row4);
-        if (err4) {
-          console.error('All inserts failed:', err4.message);
-        }
+        if (!err4) return;
+
+        const { brand: b, ...row5 } = row4;
+        await supabase.from('products').insert(row5);
       })();
     }
-  }, []);
+  }, [categories]);
 
   // Bulk Upsert Products from Excel import
-  const bulkUpsertProducts = useCallback((items: Array<{
+  const bulkUpsertProducts = useCallback(async (items: Array<{
     id?: string;
     name: string;
     category_id?: string;
@@ -193,7 +215,7 @@ export function useCatalog() {
     stock?: number;
     unit?: string;
     is_active?: boolean;
-  }>): { success: boolean; createdCount: number; updatedCount: number; message: string } => {
+  }>): Promise<{ success: boolean; createdCount: number; updatedCount: number; message: string }> => {
     if (!items || items.length === 0) {
       return { success: false, createdCount: 0, updatedCount: 0, message: 'هیچ داده‌ای برای ثبت یافت نشد.' };
     }
@@ -224,7 +246,7 @@ export function useCatalog() {
       const brandName = (item.brand || '').trim() || 'متفرقه';
       if (brandName) newBrandsSet.add(brandName);
 
-      const catId = item.category_id || categories[0]?.id || '';
+      const catId = (item.category_id || categories[0]?.id || '').trim();
       if (catId) affectedCategoryIds.add(catId);
 
       // Find match by id or by name (case-insensitive)
@@ -277,7 +299,7 @@ export function useCatalog() {
         updatedCount++;
       } else {
         // Create new product
-        const newId = item.id && item.id.trim() ? item.id.trim() : `prod-${Date.now().toString().slice(-4)}-${index}`;
+        const newId = item.id && item.id.trim() ? item.id.trim() : generateUniqueId('prod');
         
         const newProd: Product = {
           id: newId,
@@ -302,85 +324,116 @@ export function useCatalog() {
 
     setProducts(updatedProducts);
 
+    // Save immediately to local storage so even if refreshed instantly, products are never lost!
+    try {
+      localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(updatedProducts));
+    } catch {
+      // ignore quota
+    }
+
     if (newHistories.length > 0) {
-      setPriceHistories((prev) => [...newHistories, ...prev]);
+      setPriceHistories((prev) => {
+        const next = [...newHistories, ...prev];
+        try {
+          localStorage.setItem(STORAGE_KEYS.PRICE_HISTORIES, JSON.stringify(next));
+        } catch {}
+        return next;
+      });
     }
 
     if (newBrandsSet.size > 0) {
       setBrands((prev) => {
-        const combined = new Set([...prev, ...Array.from(newBrandsSet)]);
-        return Array.from(combined);
+        const combined = Array.from(new Set([...prev, ...Array.from(newBrandsSet)]));
+        try {
+          localStorage.setItem(STORAGE_KEYS.BRANDS, JSON.stringify(combined));
+        } catch {}
+        return combined;
       });
     }
 
-    // Persist products and brands to Supabase asynchronously
+    // Persist products, categories, and brands to Supabase
     if (isSupabaseConfigured && supabase) {
-      (async () => {
-        try {
-          // 1. Sync new brands to Supabase
-          if (newBrandsSet.size > 0) {
-            const brandRows = Array.from(newBrandsSet).map((b) => ({
-              id: `b-${Date.now().toString().slice(-4)}-${Math.random().toString(36).substring(2, 6)}`,
-              name: b,
-            }));
-            await supabase.from('brands').upsert(brandRows, { onConflict: 'name' });
-          }
-
-          // 2. Sync products to Supabase
-          const rowsToSave = (itemsToUpsertToSupabase.length > 0 ? itemsToUpsertToSupabase : items).map((p, idx) => {
-            const sPrice = Number(p.price) || 0;
-            const vPrice = p.visitor_price !== undefined && Number(p.visitor_price) > 0 ? Number(p.visitor_price) : Math.round(sPrice * 0.85);
-            return {
-              id: p.id && p.id.trim() ? p.id.trim() : `prod-${Date.now().toString().slice(-4)}-${idx}`,
-              name: p.name.trim(),
-              category_id: p.category_id || categories[0]?.id || '',
-              brand: p.brand?.trim() || 'متفرقه',
-              price: sPrice,
-              visitor_price: vPrice,
-              consumer_price: p.consumer_price !== undefined && p.consumer_price !== null ? Number(p.consumer_price) : null,
-              stock: p.stock !== undefined ? Number(p.stock) : 50,
-              reserved_stock: 0,
-              unit: p.unit || 'عدد',
-              image_url: 'https://images.unsplash.com/photo-1551024601-bec78aea704b?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer',
-              is_active: p.is_active ?? true,
-            };
-          });
-
-          const chunkSize = 50;
-          for (let i = 0; i < rowsToSave.length; i += chunkSize) {
-            const chunk = rowsToSave.slice(i, i + chunkSize);
-            
-            // Try 1: Full upsert
-            const { error: err1 } = await supabase.from('products').upsert(chunk, { onConflict: 'id' });
-            if (!err1) continue;
-
-            console.warn('Supabase products upsert failed with full fields, retrying without consumer_price:', err1.message);
-            
-            // Try 2: Strip consumer_price
-            const chunk2 = chunk.map(({ consumer_price, ...rest }) => rest);
-            const { error: err2 } = await supabase.from('products').upsert(chunk2, { onConflict: 'id' });
-            if (!err2) continue;
-
-            console.warn('Supabase products upsert failed without consumer_price, retrying without visitor_price:', err2.message);
-
-            // Try 3: Strip consumer_price & visitor_price
-            const chunk3 = chunk.map(({ consumer_price, visitor_price, ...rest }) => rest);
-            const { error: err3 } = await supabase.from('products').upsert(chunk3, { onConflict: 'id' });
-            if (!err3) continue;
-
-            console.warn('Supabase products upsert failed without visitor_price, retrying without brand:', err3.message);
-
-            // Try 4: Strip consumer_price, visitor_price, and brand
-            const chunk4 = chunk.map(({ consumer_price, visitor_price, brand, ...rest }) => rest);
-            const { error: err4 } = await supabase.from('products').upsert(chunk4, { onConflict: 'id' });
-            if (err4) {
-              console.error('All progressive fallbacks failed on Supabase for products chunk:', err4.message);
-            }
-          }
-        } catch (err) {
-          console.error('خطای غیرمنتظره در ثبت کالاهای اکسل روی Supabase:', err);
+      try {
+        // 0. Sync categories first so Foreign Key constraint (category_id -> categories.id) is satisfied!
+        if (categories.length > 0) {
+          const catRows = categories.map((c, i) => ({
+            id: c.id,
+            name: c.name,
+            icon: c.icon || 'Layers',
+            sort_order: i + 1,
+          }));
+          await supabase.from('categories').upsert(catRows, { onConflict: 'id' });
         }
-      })();
+
+        // 1. Sync new brands to Supabase
+        if (newBrandsSet.size > 0) {
+          const brandRows = Array.from(newBrandsSet).map((b) => ({
+            id: `b-${Date.now().toString().slice(-4)}-${Math.random().toString(36).substring(2, 6)}`,
+            name: b,
+          }));
+          await supabase.from('brands').upsert(brandRows, { onConflict: 'name' });
+        }
+
+        // 2. Sync products to Supabase
+        const rowsToSave = (itemsToUpsertToSupabase.length > 0 ? itemsToUpsertToSupabase : items).map((p, idx) => {
+          const sPrice = Number(p.price) || 0;
+          const vPrice = p.visitor_price !== undefined && Number(p.visitor_price) > 0 ? Number(p.visitor_price) : Math.round(sPrice * 0.85);
+          const validCatId = p.category_id && p.category_id.trim() ? p.category_id.trim() : null;
+          return {
+            id: p.id && p.id.trim() ? p.id.trim() : generateUniqueId('prod'),
+            name: p.name.trim(),
+            category_id: validCatId,
+            brand: p.brand?.trim() || 'متفرقه',
+            price: sPrice,
+            visitor_price: vPrice,
+            consumer_price: p.consumer_price !== undefined && p.consumer_price !== null ? Number(p.consumer_price) : null,
+            stock: p.stock !== undefined ? Number(p.stock) : 50,
+            reserved_stock: 0,
+            unit: p.unit || 'عدد',
+            image_url: 'https://images.unsplash.com/photo-1551024601-bec78aea704b?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer',
+            is_active: p.is_active ?? true,
+          };
+        });
+
+        const chunkSize = 50;
+        for (let i = 0; i < rowsToSave.length; i += chunkSize) {
+          const chunk = rowsToSave.slice(i, i + chunkSize);
+          
+          // Try 1: Full upsert
+          const { error: err1 } = await supabase.from('products').upsert(chunk, { onConflict: 'id' });
+          if (!err1) continue;
+
+          console.warn('Supabase products upsert failed, retrying with category_id = null fallback:', err1.message);
+
+          // Try 2: With category_id = null (removes FK dependency)
+          const chunkNoFK = chunk.map((item) => ({ ...item, category_id: null }));
+          const { error: err2 } = await supabase.from('products').upsert(chunkNoFK, { onConflict: 'id' });
+          if (!err2) continue;
+
+          console.warn('Supabase products upsert failed, retrying without consumer_price:', err2.message);
+          
+          // Try 3: Strip consumer_price & category_id
+          const chunk3 = chunkNoFK.map(({ consumer_price, ...rest }) => rest);
+          const { error: err3 } = await supabase.from('products').upsert(chunk3, { onConflict: 'id' });
+          if (!err3) continue;
+
+          console.warn('Supabase products upsert failed, retrying without visitor_price:', err3.message);
+
+          // Try 4: Strip consumer_price, visitor_price & category_id
+          const chunk4 = chunk3.map(({ visitor_price, ...rest }) => rest);
+          const { error: err4 } = await supabase.from('products').upsert(chunk4, { onConflict: 'id' });
+          if (!err4) continue;
+
+          // Try 5: Strip brand
+          const chunk5 = chunk4.map(({ brand, ...rest }) => rest);
+          const { error: err5 } = await supabase.from('products').upsert(chunk5, { onConflict: 'id' });
+          if (err5) {
+            console.error('All progressive fallbacks failed on Supabase for products chunk:', err5.message);
+          }
+        }
+      } catch (err) {
+        console.error('خطای غیرمنتظره در ثبت کالاهای اکسل روی Supabase:', err);
+      }
     }
 
     const totalCount = items.length;
@@ -563,7 +616,13 @@ export function useCatalog() {
       sort_order: categories.length + 1,
       created_at: new Date().toISOString(),
     };
-    setCategories((prev) => [...prev, newCat]);
+    setCategories((prev) => {
+      const next = [...prev, newCat];
+      try {
+        localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
 
     if (isSupabaseConfigured && supabase) {
       supabase
@@ -594,9 +653,13 @@ export function useCatalog() {
     if (exists) {
       return { success: false, message: 'دسته‌بندی دیگری با این نام از قبل وجود دارد.' };
     }
-    setCategories((prev) =>
-      prev.map((c) => (c.id === categoryId ? { ...c, name: trimmed } : c))
-    );
+    setCategories((prev) => {
+      const next = prev.map((c) => (c.id === categoryId ? { ...c, name: trimmed } : c));
+      try {
+        localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
 
     if (isSupabaseConfigured && supabase) {
       supabase
@@ -654,7 +717,13 @@ export function useCatalog() {
     if (exists) {
       return { success: false, message: 'این برند قبلاً در فهرست برندها تعریف شده است.' };
     }
-    setBrands((prev) => [...prev, trimmed]);
+    setBrands((prev) => {
+      const next = [...prev, trimmed];
+      try {
+        localStorage.setItem(STORAGE_KEYS.BRANDS, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
 
     if (isSupabaseConfigured && supabase) {
       const brandId = generateUniqueId('brand');

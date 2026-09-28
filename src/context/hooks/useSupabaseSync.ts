@@ -34,7 +34,6 @@ export function useSupabaseSync({
   setLoadingBills,
   setInventoryTransactions,
 }: UseSupabaseSyncProps) {
-  const DUMMY_PRODUCT_IDS = new Set(['prod-1', 'prod-2', 'prod-3', 'prod-4', 'prod-5', 'prod-6', 'prod-7', 'prod-8', 'prod-9']);
   const DUMMY_SUPERMARKET_IDS = new Set(['shop-1', 'shop-2', 'shop-3', 'shop-4', 'shop-5']);
   const DUMMY_VISITOR_IDS = new Set(['vis-1', 'vis-2', 'vis-3']);
 
@@ -43,39 +42,77 @@ export function useSupabaseSync({
 
     const PRESET_CAT_IDS = new Set(['cat-1', 'cat-2', 'cat-3', 'cat-4', 'cat-5']);
 
-    // Proactively clean up any legacy seed mock data from Supabase
-    supabase.from('products').delete().in('id', Array.from(DUMMY_PRODUCT_IDS)).then(() => {});
+    // Proactively clean up legacy dummy mock accounts if any
     supabase.from('supermarkets').delete().in('id', Array.from(DUMMY_SUPERMARKET_IDS)).then(() => {});
     supabase.from('visitors').delete().in('id', Array.from(DUMMY_VISITOR_IDS)).then(() => {});
     supabase.from('profiles').delete().in('id', Array.from(DUMMY_VISITOR_IDS)).then(() => {});
-    supabase.from('categories').delete().in('id', Array.from(PRESET_CAT_IDS)).then(() => {});
 
     async function loadFromSupabase() {
       try {
-        // 1. Products
-        const { data: prods } = await supabase!.from('products').select('*');
-        if (prods) {
-          const cleanProds = prods.filter((p: Product) => !DUMMY_PRODUCT_IDS.has(p.id));
-          setProducts(cleanProds);
+        // 1. Products - Merge with local state so newly imported items are never wiped out
+        const { data: prods, error: prodsErr } = await supabase!.from('products').select('*');
+        if (!prodsErr && prods !== null) {
+          setProducts((prev) => {
+            const dbMap = new Map((prods || []).map((p: Product) => [p.id, p]));
+            const merged: Product[] = [...(prods || [])];
+            const localOnlyItems: Product[] = [];
+            prev.forEach((localP) => {
+              if (!dbMap.has(localP.id)) {
+                merged.push(localP);
+                localOnlyItems.push(localP);
+              }
+            });
+
+            // If local products exist that aren't yet in Supabase (e.g. after refresh or offline import), auto-sync them up!
+            if (localOnlyItems.length > 0 && isSupabaseConfigured && supabase) {
+              const rows = localOnlyItems.map((p) => ({
+                id: p.id,
+                name: p.name,
+                category_id: p.category_id || null,
+                brand: p.brand || 'متفرقه',
+                price: Number(p.price) || 0,
+                visitor_price: p.visitor_price || Math.round(Number(p.price) * 0.85),
+                consumer_price: p.consumer_price || null,
+                stock: p.stock ?? 50,
+                reserved_stock: p.reserved_stock ?? 0,
+                unit: p.unit || 'عدد',
+                image_url: p.image_url || 'https://images.unsplash.com/photo-1551024601-bec78aea704b?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer',
+                is_active: p.is_active ?? true,
+              }));
+              supabase.from('products').upsert(rows, { onConflict: 'id' }).then(({ error }) => {
+                if (error) {
+                  // Fallback without optional columns if schema is older
+                  const rowsSafe = rows.map(({ consumer_price, visitor_price, ...rest }) => rest);
+                  supabase.from('products').upsert(rowsSafe, { onConflict: 'id' }).then(() => {});
+                }
+              });
+            }
+
+            return merged;
+          });
         }
 
         // 2. Orders (includes loading_bill_id & status='loading')
         const { data: ords } = await supabase!.from('orders').select('*, items:order_items(*)');
-        if (ords) {
+        if (ords && ords.length > 0) {
           setOrders(ords);
         }
 
-        // 3. Categories (reflect exact database state, even if empty)
-        const { data: cats } = await supabase!.from('categories').select('*').order('sort_order', { ascending: true });
-        if (cats !== null && cats !== undefined) {
-          const cleanCats = cats.filter((c: Category) => !PRESET_CAT_IDS.has(c.id));
-          setCategories(cleanCats);
+        // 3. Categories - Defensive merge
+        const { data: cats, error: catsErr } = await supabase!.from('categories').select('*').order('sort_order', { ascending: true });
+        if (!catsErr && cats && cats.length > 0) {
+          setCategories((prev) => {
+            const dbIds = new Set(cats.map((c: Category) => c.id));
+            const localOnly = prev.filter((c) => !dbIds.has(c.id));
+            return [...cats, ...localOnly];
+          });
         }
 
-        // 4. Brands (reflect exact database state, even if empty)
-        const { data: brs } = await supabase!.from('brands').select('name');
-        if (brs !== null && brs !== undefined) {
-          setBrands(brs.map((b: { name: string }) => b.name));
+        // 4. Brands - Defensive merge
+        const { data: brs, error: brsErr } = await supabase!.from('brands').select('name');
+        if (!brsErr && brs && brs.length > 0) {
+          const dbBrandNames = brs.map((b: { name: string }) => b.name);
+          setBrands((prev) => Array.from(new Set([...dbBrandNames, ...prev])));
         }
 
         // 5. Reassignment Requests

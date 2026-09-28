@@ -179,7 +179,7 @@ export function useSupabaseSync({
             return {
               ...sm,
               username: prof?.username || localMatch?.username || sm.username || '',
-              password: localMatch?.password || sm.password || '123',
+              password: prof?.password || sm.password || localMatch?.password || '123',
             };
           });
         });
@@ -228,6 +228,7 @@ export function useSupabaseSync({
             return {
               ...v,
               username: prof?.username || localMatch?.username || v.username || '',
+              password: prof?.password || v.password || localMatch?.password || '123',
             };
           });
         });

@@ -372,6 +372,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
 
       if (isSupabaseConfigured && supabase) {
+        // 1. Update profiles table with the new password
+        await supabase
+          .from('profiles')
+          .update({ password: newPassword })
+          .eq('id', id);
+
+        // 2. Update supermarkets table with the new password
+        await supabase
+          .from('supermarkets')
+          .update({ password: newPassword })
+          .eq('id', id);
+
+        // 3. Try to invoke edge function to update Supabase Auth user password if available
         try {
           await supabase.functions.invoke('create-staff-account', {
             body: {
@@ -405,6 +418,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (payload.phone !== undefined) updateData.phone = payload.phone.trim();
         if (payload.region !== undefined) updateData.region = payload.region.trim();
         if (payload.is_active !== undefined) updateData.is_active = payload.is_active;
+        if (payload.password !== undefined) updateData.password = payload.password;
 
         if (Object.keys(updateData).length > 0) {
           const { error: visError } = await supabase
@@ -416,13 +430,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             console.warn('Supabase visitor update warning:', visError.message);
           }
 
-          if (payload.name || payload.phone) {
+          const profileUpdates: Record<string, unknown> = {};
+          if (payload.name) profileUpdates.name = payload.name.trim();
+          if (payload.phone) profileUpdates.phone = payload.phone.trim();
+          if (payload.password) profileUpdates.password = payload.password;
+
+          if (Object.keys(profileUpdates).length > 0) {
             await supabase
               .from('profiles')
-              .update({
-                ...(payload.name && { name: payload.name.trim() }),
-                ...(payload.phone && { phone: payload.phone.trim() }),
-              })
+              .update(profileUpdates)
               .eq('id', id);
           }
         }
@@ -472,6 +488,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
 
       if (isSupabaseConfigured && supabase) {
+        // 1. Update profiles table with new password
+        await supabase
+          .from('profiles')
+          .update({ password: newPassword })
+          .eq('id', id);
+
+        // 2. Update visitors table with new password
+        await supabase
+          .from('visitors')
+          .update({ password: newPassword })
+          .eq('id', id);
+
+        // 3. Try edge function if available
         try {
           await supabase.functions.invoke('create-staff-account', {
             body: {

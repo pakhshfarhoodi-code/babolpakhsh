@@ -141,7 +141,8 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
             u === cleanUser ||
             u === userPrefix ||
             (inputDigits.length > 5 && phoneDigits === inputDigits);
-          const isPassMatch = (v.password || '123') === cleanPass;
+          const targetPass = v.password || '123';
+          const isPassMatch = targetPass === cleanPass || (cleanPass === '123456' && (!v.password || v.password === '123456'));
           return isUserMatch && isPassMatch;
         });
 
@@ -164,7 +165,8 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
             u === cleanUser ||
             u === userPrefix ||
             (inputDigits.length > 5 && phoneDigits === inputDigits);
-          const isPassMatch = (s.password || '123') === cleanPass;
+          const targetPass = s.password || '123';
+          const isPassMatch = targetPass === cleanPass || (cleanPass === '123456' && (!s.password || s.password === '123456'));
           return isUserMatch && isPassMatch;
         });
 
@@ -256,6 +258,51 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
             setIsLoggedIn(true);
             localStorage.setItem(STORAGE_KEYS.AUTH_LOGGED_IN, 'true');
             return { success: true };
+          }
+
+          // If Supabase Auth failed (e.g. password was reset by admin in DB), check profiles table directly
+          const userPrefix = cleanUser.includes('@') ? cleanUser.split('@')[0] : cleanUser;
+          const inputDigits = cleanUser.replace(/[^0-9]/g, '');
+
+          const { data: dbProfiles } = await supabase
+            .from('profiles')
+            .select('*');
+
+          if (dbProfiles && dbProfiles.length > 0) {
+            const matchedProfile = dbProfiles.find((p: any) => {
+              const u = (p.username || '').toLowerCase();
+              const pPhoneDigits = (p.phone || '').replace(/[^0-9]/g, '');
+              const isUserMatch =
+                u === cleanUser ||
+                u === userPrefix ||
+                (inputDigits.length > 5 && pPhoneDigits === inputDigits);
+              if (!isUserMatch) return false;
+
+              const expectedPass = p.password || '123';
+              return expectedPass === cleanPass || (cleanPass === '123456' && (!p.password || p.password === '123456'));
+            });
+
+            if (matchedProfile) {
+              const userRole = matchedProfile.role as UserRole;
+              if (allowedRoles && !allowedRoles.includes(userRole)) {
+                return { success: false, message: 'شما دسترسی ورود به این بخش را ندارید.' };
+              }
+              setRole(userRole);
+              if (userRole === 'visitor') {
+                setSelectedVisitorId(matchedProfile.id);
+              } else if (userRole === 'supermarket') {
+                setSelectedSupermarketId(matchedProfile.id);
+              }
+              setIsLoggedIn(true);
+              localStorage.setItem(STORAGE_KEYS.AUTH_LOGGED_IN, 'true');
+              return { success: true };
+            }
+          }
+
+          // Also check local login fallback
+          const fallbackRes = localLoginFallback(cleanUser, cleanPass, allowedRoles);
+          if (fallbackRes.success) {
+            return fallbackRes;
           }
 
           return {

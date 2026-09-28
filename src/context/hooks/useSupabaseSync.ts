@@ -10,6 +10,7 @@ import {
   InventoryTransaction,
 } from '../../types';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { LEGACY_MOCK_NAMES } from './useCatalog';
 
 interface UseSupabaseSyncProps {
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
@@ -42,22 +43,24 @@ export function useSupabaseSync({
 
     const PRESET_CAT_IDS = new Set(['cat-1', 'cat-2', 'cat-3', 'cat-4', 'cat-5']);
 
-    // Proactively clean up legacy dummy mock accounts if any
+    // Proactively clean up legacy dummy mock accounts and mock products if any
     supabase.from('supermarkets').delete().in('id', Array.from(DUMMY_SUPERMARKET_IDS)).then(() => {});
     supabase.from('visitors').delete().in('id', Array.from(DUMMY_VISITOR_IDS)).then(() => {});
     supabase.from('profiles').delete().in('id', Array.from(DUMMY_VISITOR_IDS)).then(() => {});
+    supabase.from('products').delete().in('name', Array.from(LEGACY_MOCK_NAMES)).then(() => {});
 
     async function loadFromSupabase() {
       try {
         // 1. Products - Merge with local state so newly imported items are never wiped out
         const { data: prods, error: prodsErr } = await supabase!.from('products').select('*');
         if (!prodsErr && prods !== null) {
+          const validProds = (prods || []).filter((p: Product) => !LEGACY_MOCK_NAMES.has(p.name?.trim()));
           setProducts((prev) => {
-            const dbMap = new Map((prods || []).map((p: Product) => [p.id, p]));
-            const merged: Product[] = [...(prods || [])];
+            const dbMap = new Map(validProds.map((p: Product) => [p.id, p]));
+            const merged: Product[] = [...validProds];
             const localOnlyItems: Product[] = [];
             prev.forEach((localP) => {
-              if (!dbMap.has(localP.id)) {
+              if (!LEGACY_MOCK_NAMES.has(localP.name?.trim()) && !dbMap.has(localP.id)) {
                 merged.push(localP);
                 localOnlyItems.push(localP);
               }
@@ -95,7 +98,8 @@ export function useSupabaseSync({
         // 2. Orders (includes loading_bill_id & status='loading')
         const { data: ords } = await supabase!.from('orders').select('*, items:order_items(*)');
         if (ords && ords.length > 0) {
-          setOrders(ords);
+          const cleanOrds = ords.filter((o: Order) => !o.items?.some((it) => LEGACY_MOCK_NAMES.has(it.name?.trim())));
+          setOrders(cleanOrds);
         }
 
         // 3. Categories - Defensive merge

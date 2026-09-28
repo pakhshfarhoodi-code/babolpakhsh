@@ -11,6 +11,7 @@ import {
 import { INITIAL_ORDERS } from '../../data/initialData';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { STORAGE_KEYS, generateUniqueId } from '../utils';
+import { LEGACY_MOCK_NAMES } from './useCatalog';
 
 import { generateStructuredInvoiceNumber } from '../../utils/numberToPersianWords';
 
@@ -45,7 +46,16 @@ export function useOrders({
 }: UseOrdersProps) {
   const [orders, setOrders] = useState<Order[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.ORDERS);
-    return saved ? JSON.parse(saved) : INITIAL_ORDERS;
+    if (!saved) return [];
+    try {
+      const parsed: Order[] = JSON.parse(saved);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter(
+        (o) => !o.items?.some((it) => LEGACY_MOCK_NAMES.has(it.name?.trim()))
+      );
+    } catch {
+      return [];
+    }
   });
 
   const [reassignmentRequests, setReassignmentRequests] = useState<ReassignmentRequest[]>(() => {

@@ -4,6 +4,21 @@ import { INITIAL_CATEGORIES, INITIAL_BRANDS, INITIAL_PRODUCTS } from '../../data
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { STORAGE_KEYS, generateUniqueId } from '../utils';
 
+export const LEGACY_MOCK_NAMES = new Set([
+  'بستنی مگنوم شکلاتی میهن',
+  'بستنی عروسکی دومینو',
+  'بستنی سالار شاهتوت کاله',
+  'بستنی لیتری وانیلی پاک',
+  'سوسیس کوکتل ۸۰٪ دمس (۱ کیلوگرم)',
+  'سوسیس کوکتل ۸۰٪ دمس',
+  'کالباس ژامبون مرغ ۹۰٪ سولیکو',
+  'همبرگر ۹۰٪ ممتاز کاله (بسته ۴ عددی)',
+  'همبرگر ۹۰٪ ممتاز کاله',
+  'ناگت مرغ ۷۰٪ ب آ (۹۰۰ گرمی)',
+  'ناگت مرغ ۷۰٪ ب آ',
+  'فیله مرغ سوخاری پامچال',
+]);
+
 export function useCatalog() {
   const PRESET_CAT_IDS = new Set(['cat-1', 'cat-2', 'cat-3', 'cat-4', 'cat-5']);
 
@@ -34,7 +49,8 @@ export function useCatalog() {
     if (!saved) return [];
     try {
       const parsed: Product[] = JSON.parse(saved);
-      return Array.isArray(parsed) ? parsed : [];
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((p) => !LEGACY_MOCK_NAMES.has(p.name?.trim()));
     } catch {
       return [];
     }
@@ -451,41 +467,27 @@ export function useCatalog() {
     };
   }, [products, categories]);
 
-  // Delete product
+  // Delete product (Admin full authority: cleans up product and associated references)
   const deleteProduct = useCallback((productId: string) => {
     const prod = products.find((p) => p.id === productId);
     if (!prod) return { success: false, message: 'کالای مورد نظر یافت نشد.' };
-    if (prod.reserved_stock > 0) {
-      return {
-        success: false,
-        message: `امکان حذف کالا وجود ندارد زیرا ${prod.reserved_stock} واحد از آن در سفارشات جاری رزرو است.`,
-      };
-    }
+
     setProducts((prev) => prev.filter((p) => p.id !== productId));
     if (isSupabaseConfigured && supabase) {
-      supabase.from('products').delete().eq('id', productId).then(({ error }) => {
-        if (error) console.error('خطا در حذف کالا از Supabase:', error);
+      // First clean up any order items referencing this product to satisfy foreign keys
+      supabase.from('order_items').delete().eq('product_id', productId).then(() => {
+        supabase.from('products').delete().eq('id', productId).then(({ error }) => {
+          if (error) console.error('خطا در حذف کالا از Supabase:', error);
+        });
       });
     }
     return { success: true, message: `کالای «${prod.name}» با موفقیت حذف گردید.` };
   }, [products]);
 
-  // Bulk Delete Products
+  // Bulk Delete Products (Admin full authority)
   const bulkDeleteProducts = useCallback(async (productIds: string[]) => {
     if (!productIds || productIds.length === 0) {
       return { success: false, message: 'هیچ کالایی برای حذف انتخاب نشده است.', count: 0 };
-    }
-
-    const reservedProducts = products.filter(
-      (p) => productIds.includes(p.id) && p.reserved_stock > 0
-    );
-    if (reservedProducts.length > 0) {
-      const names = reservedProducts.map((p) => p.name).slice(0, 3).join('، ');
-      return {
-        success: false,
-        message: `امکان حذف ${reservedProducts.length} کالا (${names}...) به دلیل داشتن رزرو فعال در سفارشات جاری وجود ندارد.`,
-        count: 0,
-      };
     }
 
     const idsToDelete = new Set(productIds);
@@ -493,6 +495,7 @@ export function useCatalog() {
 
     if (isSupabaseConfigured && supabase) {
       try {
+        await supabase.from('order_items').delete().in('product_id', productIds);
         await supabase.from('products').delete().in('id', productIds);
       } catch (err) {
         console.error('Error deleting products from Supabase:', err);

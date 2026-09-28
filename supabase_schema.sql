@@ -10,6 +10,8 @@ CREATE TABLE profiles (
   name TEXT NOT NULL,
   role TEXT NOT NULL CHECK (role IN ('admin', 'warehouse', 'visitor', 'supermarket')),
   phone TEXT UNIQUE,
+  username TEXT,
+  password TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

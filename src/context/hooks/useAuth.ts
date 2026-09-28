@@ -323,16 +323,102 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
 
       if (isSupabaseConfigured && supabase) {
         try {
-          // Step 1: Direct Database Profiles lookup
-          const { data: dbProfiles, error: profErr } = await supabase
-            .from('profiles')
-            .select('*');
+          // 1. If logging in as supermarket, check supermarkets table directly for freshest password
+          if (!allowedRoles || allowedRoles.includes('supermarket')) {
+            const { data: dbSupermarkets } = await supabase.from('supermarkets').select('*');
+            if (dbSupermarkets && dbSupermarkets.length > 0) {
+              const matchedSm = dbSupermarkets.find((s: any) => {
+                const u = s.username ? normalizeDigits(s.username).toLowerCase() : '';
+                const sPhoneDigits = normalizeDigits(s.phone || '').replace(/[^0-9]/g, '');
+                return (
+                  (u && u === normalizedUser) ||
+                  (u && u === userPrefix) ||
+                  (rawDigits.length >= 7 && sPhoneDigits.includes(rawDigits)) ||
+                  (rawDigits.length >= 7 && rawDigits.includes(sPhoneDigits) && sPhoneDigits.length >= 7)
+                );
+              });
 
-          if (!profErr && dbProfiles && dbProfiles.length > 0) {
+              if (matchedSm) {
+                if (!verifyPassword(cleanPass, matchedSm.password)) {
+                  return { success: false, message: 'رمز عبور وارد شده نادرست است.' };
+                }
+                if (matchedSm.is_active === false) {
+                  return {
+                    success: false,
+                    message: 'حساب کاربری فروشگاه شما غیرفعال است. جهت فعال‌سازی با مدیریت تماس بگیرید.',
+                  };
+                }
+
+                const localSm = supermarkets.find(
+                  (s) =>
+                    s.id === matchedSm.id ||
+                    (s.username && matchedSm.username && s.username.toLowerCase() === matchedSm.username.toLowerCase()) ||
+                    (s.phone && matchedSm.phone && s.phone === matchedSm.phone)
+                );
+                const resolvedSmId = localSm ? localSm.id : matchedSm.id;
+
+                setRole('supermarket');
+                setAuthProfile({
+                  id: resolvedSmId,
+                  name: localSm?.name || matchedSm.name,
+                  username: localSm?.username || matchedSm.username || matchedSm.id,
+                  phone: localSm?.phone || matchedSm.phone,
+                });
+                setSelectedSupermarketId(resolvedSmId);
+                setIsLoggedIn(true);
+                return { success: true };
+              }
+            }
+          }
+
+          // 2. If logging in as visitor, check visitors table directly for freshest password
+          if (!allowedRoles || allowedRoles.includes('visitor')) {
+            const { data: dbVisitors } = await supabase.from('visitors').select('*');
+            if (dbVisitors && dbVisitors.length > 0) {
+              const matchedVis = dbVisitors.find((v: any) => {
+                const u = v.username ? normalizeDigits(v.username).toLowerCase() : '';
+                const vPhoneDigits = normalizeDigits(v.phone || '').replace(/[^0-9]/g, '');
+                return (
+                  (u && u === normalizedUser) ||
+                  (u && u === userPrefix) ||
+                  (rawDigits.length >= 7 && vPhoneDigits.includes(rawDigits)) ||
+                  (rawDigits.length >= 7 && rawDigits.includes(vPhoneDigits) && vPhoneDigits.length >= 7)
+                );
+              });
+
+              if (matchedVis) {
+                if (!verifyPassword(cleanPass, matchedVis.password)) {
+                  return { success: false, message: 'رمز عبور وارد شده نادرست است.' };
+                }
+
+                const localVis = visitors.find(
+                  (v) =>
+                    v.id === matchedVis.id ||
+                    (v.username && matchedVis.username && v.username.toLowerCase() === matchedVis.username.toLowerCase()) ||
+                    (v.phone && matchedVis.phone && v.phone === matchedVis.phone)
+                );
+                const resolvedVisId = localVis ? localVis.id : matchedVis.id;
+
+                setRole('visitor');
+                setAuthProfile({
+                  id: resolvedVisId,
+                  name: localVis?.name || matchedVis.name,
+                  username: localVis?.username || matchedVis.username || matchedVis.id,
+                  phone: localVis?.phone || matchedVis.phone,
+                });
+                setSelectedVisitorId(resolvedVisId);
+                setIsLoggedIn(true);
+                return { success: true };
+              }
+            }
+          }
+
+          // 3. Fallback to profiles table for admin / warehouse / general logins
+          const { data: dbProfiles } = await supabase.from('profiles').select('*');
+          if (dbProfiles && dbProfiles.length > 0) {
             const matchedProfile = dbProfiles.find((p: any) => {
               const u = p.username ? normalizeDigits(p.username).toLowerCase() : '';
               const pPhoneDigits = normalizeDigits(p.phone || '').replace(/[^0-9]/g, '');
-
               return (
                 (u && u === normalizedUser) ||
                 (u && u === userPrefix) ||
@@ -343,11 +429,9 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
 
             if (matchedProfile) {
               const userRole = matchedProfile.role as UserRole;
-
               if (!verifyPassword(cleanPass, matchedProfile.password)) {
                 return { success: false, message: 'رمز عبور وارد شده نادرست است.' };
               }
-
               if (allowedRoles && !allowedRoles.includes(userRole)) {
                 return {
                   success: false,
@@ -355,103 +439,18 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
                 };
               }
 
-              if (userRole === 'supermarket' && matchedProfile.is_active === false) {
-                return {
-                  success: false,
-                  message: 'حساب کاربری فروشگاه شما غیرفعال است. جهت فعال‌سازی با مدیریت تماس بگیرید.',
-                };
-              }
-
               setRole(userRole);
-              if (userRole === 'visitor') {
-                const localVis = visitors.find(
-                  (v) =>
-                    v.id === matchedProfile.id ||
-                    (v.username && matchedProfile.username && v.username.toLowerCase() === matchedProfile.username.toLowerCase()) ||
-                    (v.phone && matchedProfile.phone && v.phone === matchedProfile.phone)
-                );
-                const resolvedVisId = localVis ? localVis.id : matchedProfile.id;
-                setAuthProfile({
-                  id: resolvedVisId,
-                  name: localVis?.name || matchedProfile.name,
-                  username: localVis?.username || matchedProfile.username,
-                  phone: localVis?.phone || matchedProfile.phone,
-                });
-                setSelectedVisitorId(resolvedVisId);
-              } else if (userRole === 'supermarket') {
-                const localSm = supermarkets.find(
-                  (s) =>
-                    s.id === matchedProfile.id ||
-                    (s.username && matchedProfile.username && s.username.toLowerCase() === matchedProfile.username.toLowerCase()) ||
-                    (s.phone && matchedProfile.phone && s.phone === matchedProfile.phone)
-                );
-                const resolvedSmId = localSm ? localSm.id : matchedProfile.id;
-                setAuthProfile({
-                  id: resolvedSmId,
-                  name: localSm?.name || matchedProfile.name,
-                  username: localSm?.username || matchedProfile.username,
-                  phone: localSm?.phone || matchedProfile.phone,
-                });
-                setSelectedSupermarketId(resolvedSmId);
-              }
-              setIsLoggedIn(true);
-              return { success: true };
-            }
-          }
-
-          // Step 2: Check supermarkets table directly
-          const { data: dbSupermarkets } = await supabase
-            .from('supermarkets')
-            .select('*');
-
-          if (dbSupermarkets && dbSupermarkets.length > 0) {
-            const matchedSm = dbSupermarkets.find((s: any) => {
-              const u = s.username ? normalizeDigits(s.username).toLowerCase() : '';
-              const sPhoneDigits = normalizeDigits(s.phone || '').replace(/[^0-9]/g, '');
-
-              return (
-                (u && u === normalizedUser) ||
-                (u && u === userPrefix) ||
-                (rawDigits.length >= 7 && sPhoneDigits.includes(rawDigits)) ||
-                (rawDigits.length >= 7 && rawDigits.includes(sPhoneDigits) && sPhoneDigits.length >= 7)
-              );
-            });
-
-            if (matchedSm) {
-              if (!verifyPassword(cleanPass, matchedSm.password)) {
-                return { success: false, message: 'رمز عبور وارد شده نادرست است.' };
-              }
-
-              if (allowedRoles && !allowedRoles.includes('supermarket')) {
-                return {
-                  success: false,
-                  message: `این حساب دارای نقش «${ROLE_LABELS['supermarket']}» می‌باشد. لطفاً از زبانه اختصاصی فروشگاه‌ها وارد شوید.`,
-                };
-              }
-
-              if (matchedSm.is_active === false) {
-                return {
-                  success: false,
-                  message: 'حساب کاربری فروشگاه شما غیرفعال است. جهت فعال‌سازی با مدیریت تماس بگیرید.',
-                };
-              }
-
-              const localSm = supermarkets.find(
-                (s) =>
-                  s.id === matchedSm.id ||
-                  (s.username && matchedSm.username && s.username.toLowerCase() === matchedSm.username.toLowerCase()) ||
-                  (s.phone && matchedSm.phone && s.phone === matchedSm.phone)
-              );
-              const resolvedSmId = localSm ? localSm.id : matchedSm.id;
-
-              setRole('supermarket');
               setAuthProfile({
-                id: resolvedSmId,
-                name: localSm?.name || matchedSm.name,
-                username: localSm?.username || matchedSm.username || matchedSm.id,
-                phone: localSm?.phone || matchedSm.phone,
+                id: matchedProfile.id,
+                name: matchedProfile.name,
+                username: matchedProfile.username,
+                phone: matchedProfile.phone,
               });
-              setSelectedSupermarketId(resolvedSmId);
+              if (userRole === 'visitor') {
+                setSelectedVisitorId(matchedProfile.id);
+              } else if (userRole === 'supermarket') {
+                setSelectedSupermarketId(matchedProfile.id);
+              }
               setIsLoggedIn(true);
               return { success: true };
             }

@@ -1,7 +1,11 @@
 -- Migration: Supabase Auth, Catalog & Synchronization Fixes
 -- Safe, clean and idempotent: NO default brands or products are inserted
 
--- 1. Enable 'loading' status and loading_bill_id on orders
+-- 1. Ensure profiles table has username and password columns
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS username TEXT;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS password TEXT;
+
+-- 2. Enable 'loading' status and loading_bill_id on orders
 ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_check;
 ALTER TABLE orders ADD CONSTRAINT orders_status_check 
   CHECK (status IN ('assigned', 'loading', 'delegated', 'delivered', 'undelivered'));

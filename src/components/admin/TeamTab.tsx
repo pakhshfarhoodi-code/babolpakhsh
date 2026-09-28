@@ -45,6 +45,8 @@ export const TeamTab: React.FC<TeamTabProps> = ({
     toggleSupermarketApproval,
     updateVisitor,
     deleteVisitor,
+    resetSupermarketPassword,
+    resetVisitorPassword,
   } = useApp();
   const [selectedVisitorFilter, setSelectedVisitorFilter] = useState<string | null>(null);
   const [storeSearchTerm, setStoreSearchTerm] = useState('');
@@ -52,6 +54,43 @@ export const TeamTab: React.FC<TeamTabProps> = ({
   const [isRegisterStoreModalOpen, setIsRegisterStoreModalOpen] = useState(false);
   const [togglingStoreId, setTogglingStoreId] = useState<string | null>(null);
   const [toastNotification, setToastNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Password Reset State
+  const [resettingPerson, setResettingPerson] = useState<{
+    id: string;
+    name: string;
+    type: 'supermarket' | 'visitor';
+    username?: string;
+  } | null>(null);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [resetPasswordError, setResetPasswordError] = useState<string | null>(null);
+
+  const handleConfirmResetPassword = async () => {
+    if (!resettingPerson) return;
+    setIsResettingPassword(true);
+    setResetPasswordError(null);
+    try {
+      const res = resettingPerson.type === 'supermarket'
+        ? await resetSupermarketPassword(resettingPerson.id, '123456')
+        : await resetVisitorPassword(resettingPerson.id, '123456');
+
+      if (res.success) {
+        const personName = resettingPerson.name;
+        setResettingPerson(null);
+        setToastNotification({
+          type: 'success',
+          message: `رمز عبور «${personName}» با موفقیت به 123456 تغییر یافت.`,
+        });
+      } else {
+        setResetPasswordError(res.message || 'خطا در بازنشانی رمز عبور');
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطای غیرمنتظره در بازنشانی رمز عبور';
+      setResetPasswordError(msg);
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
 
   // Edit Visitor State
   const [editingVisitor, setEditingVisitor] = useState<Visitor | null>(null);
@@ -515,8 +554,26 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                     <div className="flex items-center gap-1.5">
                       <button
                         type="button"
+                        onClick={() => {
+                          setResettingPerson({
+                            id: visitor.id,
+                            name: visitor.name,
+                            type: 'visitor',
+                            username: visitor.username,
+                          });
+                          setResetPasswordError(null);
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition flex items-center gap-1 cursor-pointer"
+                        title="بازیابی رمز عبور ویزیتور به 123456"
+                      >
+                        <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                        <span>بازیابی رمز</span>
+                      </button>
+
+                      <button
+                        type="button"
                         onClick={() => handleStartEditVisitor(visitor)}
-                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 transition flex items-center gap-1 cursor-pointer"
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 transition flex items-center gap-1 cursor-pointer"
                         title="ویرایش مشخصات ویزیتور"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
@@ -762,6 +819,25 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                         </div>
 
                         <div className="flex items-center gap-1.5">
+                          {/* Password Reset Button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setResettingPerson({
+                                id: shop.id,
+                                name: shop.name,
+                                type: 'supermarket',
+                                username: shop.username,
+                              });
+                              setResetPasswordError(null);
+                            }}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-medium transition cursor-pointer"
+                            title="بازیابی و تغییر رمز عبور مشتری به 123456"
+                          >
+                            <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                            <span>بازیابی رمز</span>
+                          </button>
+
                           {/* Fast Quick Toggle Button */}
                           <button
                             type="button"
@@ -1485,6 +1561,82 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                   <>
                     <Trash2 className="w-4 h-4" />
                     <span>تایید و حذف ویزیتور</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Password Confirmation Modal */}
+      {resettingPerson && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-5 space-y-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30">
+                <KeyRound className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-slate-100">بازیابی رمز عبور</h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  آیا از تغییر رمز عبور {resettingPerson.type === 'supermarket' ? 'فروشگاه / مشتری' : 'ویزیتور'}{' '}
+                  <strong className="text-white font-bold">«{resettingPerson.name}»</strong> به رمز پیش‌فرض زیر اطمینان دارید؟
+                </p>
+              </div>
+            </div>
+
+            {/* New Password Box Display */}
+            <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5 text-center">
+              <span className="text-[11px] text-slate-400 block font-medium">رمز عبور جدید:</span>
+              <div className="font-mono text-base font-black text-amber-400 tracking-wider">
+                123456
+              </div>
+              {resettingPerson.username && (
+                <div className="text-[11px] text-slate-500 pt-1 border-t border-slate-900">
+                  نام کاربری: <span className="text-slate-300 font-mono font-semibold">{resettingPerson.username}</span>
+                </div>
+              )}
+            </div>
+
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              پس از تایید، کاربر می‌تواند با نام کاربری خود و رمز عبور <strong className="text-amber-300 font-mono">123456</strong> وارد سامانه شود.
+            </p>
+
+            {resetPasswordError && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-2 text-rose-400 text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{resetPasswordError}</span>
+              </div>
+            )}
+
+            <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-800/80">
+              <button
+                type="button"
+                onClick={() => {
+                  setResettingPerson(null);
+                  setResetPasswordError(null);
+                }}
+                disabled={isResettingPassword}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition cursor-pointer disabled:opacity-50"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmResetPassword}
+                disabled={isResettingPassword}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 active:scale-95 text-slate-950 font-black text-xs transition shadow-md shadow-amber-600/30 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isResettingPassword ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                    <span>در حال تغییر رمز...</span>
+                  </>
+                ) : (
+                  <>
+                    <KeyRound className="w-4 h-4 text-slate-950" />
+                    <span>تایید و تغییر رمز به 123456</span>
                   </>
                 )}
               </button>

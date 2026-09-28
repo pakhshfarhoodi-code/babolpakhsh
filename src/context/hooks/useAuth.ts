@@ -131,7 +131,30 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
         return { success: true };
       }
 
-      // 2. Search in registered supermarkets
+      // 2. Search in registered visitors
+      if (!allowedRoles || allowedRoles.includes('visitor')) {
+        const matchedVis = visitors.find((v) => {
+          const u = (v.username || v.id).toLowerCase();
+          const phoneDigits = v.phone.replace(/[^0-9]/g, '');
+          const inputDigits = cleanUser.replace(/[^0-9]/g, '');
+          const isUserMatch =
+            u === cleanUser ||
+            u === userPrefix ||
+            (inputDigits.length > 5 && phoneDigits === inputDigits);
+          const isPassMatch = (v.password || '123') === cleanPass;
+          return isUserMatch && isPassMatch;
+        });
+
+        if (matchedVis) {
+          setRole('visitor');
+          setSelectedVisitorId(matchedVis.id);
+          setIsLoggedIn(true);
+          localStorage.setItem(STORAGE_KEYS.AUTH_LOGGED_IN, 'true');
+          return { success: true };
+        }
+      }
+
+      // 3. Search in registered supermarkets
       if (!allowedRoles || allowedRoles.includes('supermarket')) {
         const matchedSm = supermarkets.find((s) => {
           const u = (s.username || s.id).toLowerCase();
@@ -159,7 +182,7 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
         message: 'نام کاربری یا رمز عبور وارد شده نادرست است.',
       };
     },
-    [supermarkets]
+    [supermarkets, visitors]
   );
 
   // Supabase Auth SignIn with fallback to local demo credentials

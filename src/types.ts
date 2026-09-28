@@ -60,6 +60,7 @@ export interface Visitor {
   phone: string;
   region: string;
   username?: string;
+  password?: string;
   is_active: boolean;
   created_at?: string;
 }
@@ -183,6 +184,7 @@ export interface UpdateSupermarketPayload {
   address: string;
   assigned_visitor_id: string;
   username?: string;
+  password?: string;
   is_active: boolean;
 }
 
@@ -191,6 +193,7 @@ export interface UpdateVisitorPayload {
   phone?: string;
   region?: string;
   username?: string;
+  password?: string;
   is_active?: boolean;
 }
 

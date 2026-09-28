@@ -117,8 +117,10 @@ interface AppContextType {
   updateSupermarket: (id: string, payload: UpdateSupermarketPayload) => Promise<{ success: boolean; message: string }>;
   deleteSupermarket: (id: string) => Promise<{ success: boolean; message: string }>;
   toggleSupermarketApproval: (id: string, currentStatus: boolean) => Promise<{ success: boolean; message: string; newStatus: boolean }>;
+  resetSupermarketPassword: (id: string, newPassword?: string) => Promise<{ success: boolean; message: string }>;
   updateVisitor: (id: string, payload: UpdateVisitorPayload) => Promise<{ success: boolean; message: string }>;
   deleteVisitor: (id: string) => Promise<{ success: boolean; message: string }>;
+  resetVisitorPassword: (id: string, newPassword?: string) => Promise<{ success: boolean; message: string }>;
   createStaffAccount: (payload: CreateStaffAccountPayload) => Promise<CreateStaffAccountResult>;
   resetToDefaults: () => void;
   isOnlineDb: boolean;
@@ -356,6 +358,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [setSupermarkets]);
 
+  // Reset Supermarket Password (defaults to 123456 as requested)
+  const resetSupermarketPassword = useCallback(async (id: string, newPassword: string = '123456'): Promise<{ success: boolean; message: string }> => {
+    try {
+      const target = supermarkets.find((s) => s.id === id);
+      if (!target) {
+        return { success: false, message: 'مشتری مورد نظر یافت نشد.' };
+      }
+
+      setSupermarkets((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, password: newPassword } : s))
+      );
+
+      if (isSupabaseConfigured && supabase) {
+        try {
+          await supabase.functions.invoke('create-staff-account', {
+            body: {
+              action: 'reset_password',
+              userId: id,
+              username: target.username,
+              password: newPassword,
+            },
+          });
+        } catch (fnErr) {
+          console.warn('Supabase password reset function invocation note:', fnErr);
+        }
+      }
+
+      return {
+        success: true,
+        message: `رمز عبور فروشگاه «${target.name}» با موفقیت به ${newPassword} تغییر یافت.`,
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در بازیابی رمز عبور';
+      return { success: false, message: msg };
+    }
+  }, [supermarkets, setSupermarkets]);
+
   // Update Visitor information
   const updateVisitor = useCallback(async (id: string, payload: UpdateVisitorPayload): Promise<{ success: boolean; message: string }> => {
     try {
@@ -418,6 +457,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, message: msg };
     }
   }, [setVisitors]);
+
+  // Reset Visitor Password (defaults to 123456 as requested)
+  const resetVisitorPassword = useCallback(async (id: string, newPassword: string = '123456'): Promise<{ success: boolean; message: string }> => {
+    try {
+      const target = visitors.find((v) => v.id === id);
+      if (!target) {
+        return { success: false, message: 'ویزیتور مورد نظر یافت نشد.' };
+      }
+
+      setVisitors((prev) =>
+        prev.map((v) => (v.id === id ? { ...v, password: newPassword } : v))
+      );
+
+      if (isSupabaseConfigured && supabase) {
+        try {
+          await supabase.functions.invoke('create-staff-account', {
+            body: {
+              action: 'reset_password',
+              userId: id,
+              username: target.username,
+              password: newPassword,
+            },
+          });
+        } catch (fnErr) {
+          console.warn('Supabase password reset function invocation note:', fnErr);
+        }
+      }
+
+      return {
+        success: true,
+        message: `رمز عبور ویزیتور «${target.name}» با موفقیت به ${newPassword} تغییر یافت.`,
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در بازیابی رمز عبور';
+      return { success: false, message: msg };
+    }
+  }, [visitors, setVisitors]);
 
   // Thin wrapper to invoke create-staff-account Edge Function
   const createStaffAccount = useCallback(async (payload: CreateStaffAccountPayload): Promise<CreateStaffAccountResult> => {
@@ -541,8 +617,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateSupermarket,
     deleteSupermarket,
     toggleSupermarketApproval,
+    resetSupermarketPassword,
     updateVisitor,
     deleteVisitor,
+    resetVisitorPassword,
     createStaffAccount,
     resetToDefaults,
     isOnlineDb: isSupabaseConfigured,
@@ -564,8 +642,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateSupermarket,
     deleteSupermarket,
     toggleSupermarketApproval,
+    resetSupermarketPassword,
     updateVisitor,
     deleteVisitor,
+    resetVisitorPassword,
     createStaffAccount,
     catalog.categories,
     catalog.brands,

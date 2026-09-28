@@ -72,6 +72,7 @@ interface AppContextType {
   createLoadingBill: (visitorId: string, orderIds: string[]) => void;
   approveLoadingBill: (billId: string) => void;
   updateProductPrice: (productId: string, newPrice: number, newVisitorPrice?: number, newConsumerPrice?: number) => void;
+  updateProduct: (productId: string, updates: Partial<Omit<Product, 'id' | 'reserved_stock'>>) => { success: boolean; message: string };
   updateProductStock: (productId: string, additionalStock: number) => void;
   addNewProduct: (product: Omit<Product, 'id' | 'reserved_stock'>) => void;
   bulkUpsertProducts: (items: Array<{
@@ -601,6 +602,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     createLoadingBill: warehouse.createLoadingBill,
     approveLoadingBill: warehouse.approveLoadingBill,
     updateProductPrice: catalog.updateProductPrice,
+    updateProduct: catalog.updateProduct,
     updateProductStock: warehouse.updateProductStock,
     addNewProduct: catalog.addNewProduct,
     bulkUpsertProducts: catalog.bulkUpsertProducts,

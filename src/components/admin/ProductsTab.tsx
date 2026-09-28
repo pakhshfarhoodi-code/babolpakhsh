@@ -29,6 +29,7 @@ import {
   DollarSign,
   Warehouse,
   Image as ImageIcon,
+  Camera,
 } from 'lucide-react';
 import { LOW_STOCK_THRESHOLD, formatPrice } from './helpers';
 import { PriceHistoryDrawer } from './PriceHistoryDrawer';
@@ -45,6 +46,7 @@ interface ProductsTabProps {
   priceHistories: ProductPriceHistory[];
   initialFilterType?: 'lowStock' | 'all';
   onUpdateProductPrice: (productId: string, newPrice: number, newVisitorPrice?: number, newConsumerPrice?: number) => void;
+  onUpdateProduct?: (productId: string, updates: Partial<Omit<Product, 'id' | 'reserved_stock'>>) => { success: boolean; message: string };
   onAddNewProduct: (newProd: Omit<Product, 'id'>) => void;
   onBulkUpsertProducts?: (items: any[]) => Promise<{ success: boolean; createdCount: number; updatedCount: number; message: string }> | { success: boolean; createdCount: number; updatedCount: number; message: string };
   onDeleteProduct: (productId: string) => { success: boolean; message: string };
@@ -71,6 +73,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   priceHistories,
   initialFilterType = 'all',
   onUpdateProductPrice,
+  onUpdateProduct,
   onAddNewProduct,
   onBulkUpsertProducts,
   onDeleteProduct,
@@ -126,6 +129,101 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
       }
     };
     reader.readAsDataURL(file);
+  };
+
+  // Full Edit Product Modal State
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editProdName, setEditProdName] = useState('');
+  const [editProdBrand, setEditProdBrand] = useState('');
+  const [editProdCat, setEditProdCat] = useState('');
+  const [editProdPrice, setEditProdPrice] = useState(0);
+  const [editProdVisitorPrice, setEditProdVisitorPrice] = useState(0);
+  const [editProdConsumerPrice, setEditProdConsumerPrice] = useState(0);
+  const [editProdStock, setEditProdStock] = useState(0);
+  const [editProdUnit, setEditProdUnit] = useState('عدد');
+  const [editProdImage, setEditProdImage] = useState('');
+  const [editProdIsActive, setEditProdIsActive] = useState(true);
+  const [editModalError, setEditModalError] = useState<string | null>(null);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  const handleOpenEditProduct = (prod: Product) => {
+    setEditingProduct(prod);
+    setEditProdName(prod.name);
+    setEditProdBrand(prod.brand || brands[0] || 'متفرقه');
+    setEditProdCat(prod.category_id || categories[0]?.id || '');
+    setEditProdPrice(prod.price);
+    setEditProdVisitorPrice(prod.visitor_price || Math.round(prod.price * 0.85));
+    setEditProdConsumerPrice(prod.consumer_price || 0);
+    setEditProdStock(prod.stock);
+    setEditProdUnit(prod.unit || 'عدد');
+    setEditProdImage(prod.image_url || '');
+    setEditProdIsActive(prod.is_active !== false);
+    setEditModalError(null);
+  };
+
+  const handleEditImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 3 * 1024 * 1024) {
+      setEditModalError('حجم تصویر نباید بیشتر از ۳ مگابایت باشد.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (typeof event.target?.result === 'string') {
+        setEditProdImage(event.target.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveFullProduct = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProduct) return;
+    if (!editProdName.trim()) {
+      setEditModalError('نام کالا نمی‌تواند خالی باشد.');
+      return;
+    }
+    if (!editProdPrice || editProdPrice <= 0) {
+      setEditModalError('قیمت خرید فروشگاه باید معتبر باشد.');
+      return;
+    }
+
+    setIsSavingEdit(true);
+    try {
+      const finalImage = editProdImage.trim() || editingProduct.image_url || getSampleImage(editProdCat);
+      const visitorPrice = editProdVisitorPrice > 0 ? editProdVisitorPrice : Math.round(editProdPrice * 0.85);
+
+      if (onUpdateProduct) {
+        onUpdateProduct(editingProduct.id, {
+          name: editProdName.trim(),
+          brand: editProdBrand.trim() || 'متفرقه',
+          category_id: editProdCat,
+          price: editProdPrice,
+          visitor_price: visitorPrice,
+          consumer_price: editProdConsumerPrice > 0 ? editProdConsumerPrice : undefined,
+          stock: editProdStock,
+          unit: editProdUnit,
+          image_url: finalImage,
+          is_active: editProdIsActive,
+        });
+      } else {
+        onUpdateProductPrice(
+          editingProduct.id,
+          editProdPrice,
+          visitorPrice,
+          editProdConsumerPrice > 0 ? editProdConsumerPrice : undefined
+        );
+      }
+
+      setEditingProduct(null);
+      setEditModalError(null);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطا در ذخیره کالا';
+      setEditModalError(msg);
+    } finally {
+      setIsSavingEdit(false);
+    }
   };
 
   // Delete product confirmation
@@ -627,16 +725,31 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                           )}
                         </button>
                       </td>
-                      {/* Name & Image */}
+                      {/* Name & Image with Direct Click-to-Edit Photo */}
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2.5">
-                          <img
-                            src={product.image_url}
-                            alt={product.name}
-                            className="w-9 h-9 rounded-xl object-cover border border-slate-800 shrink-0"
-                            referrerPolicy="no-referrer"
-                          />
-                          <span className="font-semibold text-slate-100">{product.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditProduct(product)}
+                            className="relative group w-10 h-10 rounded-xl overflow-hidden border border-slate-700/80 bg-slate-950 shrink-0 cursor-pointer shadow-xs hover:border-blue-500 transition"
+                            title="برای تغییر، آپلود یا ویرایش عکس این کالا کلیک کنید"
+                          >
+                            <img
+                              src={product.image_url}
+                              alt={product.name}
+                              className="w-full h-full object-cover transition duration-200 group-hover:scale-110"
+                              referrerPolicy="no-referrer"
+                            />
+                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition text-white">
+                              <Camera className="w-4 h-4 text-blue-300" />
+                            </div>
+                          </button>
+                          <div className="min-w-0">
+                            <span className="font-semibold text-slate-100 block truncate">{product.name}</span>
+                            {product.brand && (
+                              <span className="text-[11px] text-slate-400 font-normal">{product.brand}</span>
+                            )}
+                          </div>
                         </div>
                       </td>
 
@@ -768,16 +881,20 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                       </td>
                       <td className="py-3 px-4 text-slate-400">{product.unit}</td>
 
-                      {/* Active Status Toggle (with tooltip since context updater is proposed) */}
+                      {/* Active Status Toggle */}
                       <td className="py-3 px-4 text-center">
                         <button
                           type="button"
-                          disabled
-                          title="قابلیت فعال/غیرفعال‌سازی در آپدیت بعدی AppContext اضافه می‌شود"
-                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium border opacity-80 cursor-not-allowed ${
+                          onClick={() => {
+                            if (onUpdateProduct) {
+                              onUpdateProduct(product.id, { is_active: !product.is_active });
+                            }
+                          }}
+                          title={product.is_active ? 'کلیک کنید تا کالا غیرفعال شود' : 'کلیک کنید تا کالا فعال شود'}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border transition cursor-pointer ${
                             product.is_active
-                              ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                              : 'bg-slate-800 text-slate-400 border-slate-700'
+                              ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border-emerald-500/30'
+                              : 'bg-slate-800 hover:bg-slate-700 text-slate-400 border-slate-700'
                           }`}
                         >
                           <span>{product.is_active ? 'فعال' : 'غیرفعال'}</span>
@@ -787,7 +904,18 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                       {/* Actions */}
                       <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-1.5">
-                          {/* Price Change Button */}
+                          {/* Main Full Edit Button (Opens Modal with Image Upload, Name, Category, Prices, etc.) */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditProduct(product)}
+                            className="px-2.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-xs shadow-blue-600/25 transition active:scale-95 shrink-0"
+                            title="ویرایش کامل مشخصات، نام، دسته‌بندی، قیمت و آپلود عکس کالا"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                            <span>ویرایش کالا</span>
+                          </button>
+
+                          {/* Quick Inline Price Change Button */}
                           {!isEditing && (
                             <button
                               type="button"
@@ -797,10 +925,10 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                                 setTempStorePrice(product.price);
                                 setTempConsumerPrice(product.consumer_price || 0);
                               }}
-                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 inline-flex items-center gap-1 cursor-pointer transition"
-                              title="تغییر رسمی نرخ"
+                              className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 inline-flex items-center gap-1 cursor-pointer transition shrink-0"
+                              title="تغییر سریع نرخ"
                             >
-                              <Edit2 className="w-3 h-3 text-blue-400" />
+                              <Tag className="w-3.5 h-3.5 text-emerald-400" />
                               <span className="text-xs">تغییر نرخ</span>
                             </button>
                           )}
@@ -809,11 +937,10 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                           <button
                             type="button"
                             onClick={() => setHistoryDrawerProduct(product)}
-                            className="p-1.5 rounded-lg bg-blue-600/15 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 inline-flex items-center gap-1 cursor-pointer transition"
+                            className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 inline-flex items-center gap-1 cursor-pointer transition shrink-0"
                             title="مشاهده تاریخچه تغییرات نرخ"
                           >
-                            <History className="w-3 h-3 text-blue-400" />
-                            <span className="text-xs">تاریخچه</span>
+                            <History className="w-3.5 h-3.5 text-blue-400" />
                           </button>
 
                           {/* Delete Product */}
@@ -823,10 +950,10 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                               setDeleteFeedback(null);
                               setProductToDelete(product);
                             }}
-                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 border border-slate-700 cursor-pointer transition"
+                            className="p-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 cursor-pointer transition shrink-0"
                             title="حذف کالا از سیستم"
                           >
-                            <Trash2 className="w-3 h-3" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </td>
@@ -1091,6 +1218,303 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full Edit Product & Image Modal */}
+      {editingProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 sm:p-6 overflow-y-auto animate-in fade-in duration-150">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl space-y-4 my-auto">
+            {/* Header */}
+            <div className="p-5 border-b border-slate-800 bg-slate-950/70 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-blue-600/20 text-blue-400 flex items-center justify-center border border-blue-500/30">
+                  <Edit2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-base text-slate-100">ویرایش مشخصات و تصویر کالا</h3>
+                    <span className="font-mono text-xs text-blue-400 bg-slate-900 border border-slate-800 px-2 py-0.5 rounded-lg">
+                      {editingProduct.id}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    تغییر عکس، نام، دسته‌بندی، نرخ‌های مصوب و موجودی کالا
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingProduct(null);
+                  setEditModalError(null);
+                }}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Form Body */}
+            <form onSubmit={handleSaveFullProduct} className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+              {/* Section 1: Product Image Upload & Link (Top Priority) */}
+              <div className="space-y-3 p-4 rounded-2xl bg-slate-950/70 border border-slate-800">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-indigo-400 flex items-center gap-1.5">
+                    <ImageIcon className="w-4 h-4" />
+                    تصویر و عکس اختصاصی کالا
+                  </span>
+                  <span className="text-[11px] text-slate-400">نمایش در کاتالوگ فروشگاه و ویزیتور</span>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-4 items-start pt-1">
+                  {/* Image Preview Box with Hover Actions */}
+                  <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-slate-900 border border-slate-700 flex items-center justify-center shrink-0 overflow-hidden relative group shadow-md">
+                    <img
+                      src={editProdImage || getSampleImage(editProdCat)}
+                      alt="پیش‌نمایش تصویر کالا"
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-1 transition text-white text-[10px]">
+                      <Camera className="w-5 h-5 text-blue-300" />
+                      <span>تغییر تصویر</span>
+                    </div>
+                  </div>
+
+                  {/* Upload Controls & URL Input */}
+                  <div className="flex-1 space-y-2.5 w-full">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-md shadow-indigo-600/30 cursor-pointer active:scale-95">
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>انتخاب فایل عکس از کامپیوتر یا گوشی...</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleEditImageFileChange}
+                          className="hidden"
+                        />
+                      </label>
+
+                      {editProdImage && (
+                        <button
+                          type="button"
+                          onClick={() => setEditProdImage('')}
+                          className="px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-rose-950/40 text-slate-300 hover:text-rose-300 border border-slate-700 text-xs font-medium transition cursor-pointer"
+                          title="استفاده مجدد از تصویر پیش‌فرض دسته‌بندی"
+                        >
+                          بازنشانی به پیش‌فرض
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-[11px] text-slate-400 font-medium">
+                        یا لینک مستقیم تصویر (از هاست اختصاصی، یوپلود، آروان و...):
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://your-host.ir/images/product.jpg"
+                        value={editProdImage.startsWith('data:') ? '' : editProdImage}
+                        onChange={(e) => setEditProdImage(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 dir-ltr text-left font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 2: Product Name, Category & Brand */}
+              <div className="space-y-3 p-4 rounded-2xl bg-slate-950/70 border border-slate-800">
+                <span className="text-xs font-bold text-blue-400 flex items-center gap-1.5">
+                  <Tag className="w-3.5 h-3.5" />
+                  مشخصات هویتی کالا
+                </span>
+
+                <div>
+                  <label className="block text-slate-200 mb-1 font-semibold text-xs">
+                    نام کامل کالا <span className="text-amber-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editProdName}
+                    onChange={(e) => setEditProdName(e.target.value)}
+                    placeholder="نام کالا را وارد نمایید..."
+                    className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-blue-500 transition font-semibold"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <CategorySelectPicker
+                    selectedCategoryId={editProdCat}
+                    onSelectCategory={setEditProdCat}
+                    onEditCategoryClick={onOpenEditCategory}
+                  />
+                  <BrandSelectPicker
+                    selectedBrand={editProdBrand}
+                    onSelectBrand={setEditProdBrand}
+                    onEditBrandClick={onOpenEditBrand}
+                  />
+                </div>
+              </div>
+
+              {/* Section 3: Pricing Structure */}
+              <div className="space-y-3 p-4 rounded-2xl bg-slate-950/70 border border-slate-800">
+                <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                  <DollarSign className="w-3.5 h-3.5" />
+                  نرخ‌گذاری و قیمت‌های مصوب (تومان)
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-slate-200 mb-1 font-semibold text-xs flex items-center justify-between">
+                      <span>خرید ویزیتور</span>
+                      <span className="text-[10px] text-blue-400">محرمانه</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editProdVisitorPrice || ''}
+                      onChange={(e) => setEditProdVisitorPrice(Number(e.target.value))}
+                      placeholder="نرخ حواله ویزیتور"
+                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500 font-mono font-bold"
+                    />
+                    <span className="text-[10px] text-slate-400 mt-1 block">نرخ تحویل به ویزیتور</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-200 mb-1 font-semibold text-xs">
+                      خرید فروشگاه (اصلی) <span className="text-amber-400">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="1000"
+                      value={editProdPrice || ''}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setEditProdPrice(val);
+                        if (!editProdVisitorPrice || editProdVisitorPrice === Math.round(editProdPrice * 0.85)) {
+                          setEditProdVisitorPrice(Math.round(val * 0.85));
+                        }
+                      }}
+                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-emerald-400 focus:outline-none focus:border-emerald-500 font-mono font-bold"
+                    />
+                    <span className="text-[10px] text-slate-400 mt-1 block">مبنای فاکتور سوپرمارکت</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-200 mb-1 font-semibold text-xs flex items-center justify-between">
+                      <span>مصرف‌کننده</span>
+                      <span className="text-[10px] text-slate-500">اختیاری</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editProdConsumerPrice || ''}
+                      onChange={(e) => setEditProdConsumerPrice(Number(e.target.value))}
+                      placeholder="قیمت درج شده رو جلد"
+                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-amber-300 focus:outline-none focus:border-amber-500 font-mono font-bold"
+                    />
+                    <span className="text-[10px] text-slate-400 mt-1 block">قیمت روی جلد کالا</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 4: Inventory & Unit & Active Status */}
+              <div className="space-y-3 p-4 rounded-2xl bg-slate-950/70 border border-slate-800">
+                <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                  <Warehouse className="w-3.5 h-3.5" />
+                  موجودی سردخانه و وضعیت فعال بودن
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                  <div>
+                    <label className="block text-slate-300 mb-1 font-medium text-xs">واحد سنجش</label>
+                    <select
+                      value={editProdUnit}
+                      onChange={(e) => setEditProdUnit(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                    >
+                      {STANDARD_UNITS.map((u) => (
+                        <option key={u} value={u}>{u}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 mb-1 font-medium text-xs">
+                      کل موجودی فیزیکی سردخانه
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editProdStock}
+                      onChange={(e) => setEditProdStock(Number(e.target.value))}
+                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500 font-mono font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 mb-1 font-medium text-xs">وضعیت عرضه کالا</label>
+                    <button
+                      type="button"
+                      onClick={() => setEditProdIsActive(!editProdIsActive)}
+                      className={`w-full py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
+                        editProdIsActive
+                          ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-600/30'
+                          : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'
+                      }`}
+                    >
+                      <Check className={`w-4 h-4 ${editProdIsActive ? 'opacity-100' : 'opacity-40'}`} />
+                      <span>{editProdIsActive ? 'کالای فعال (قابل سفارش)' : 'کالای غیرفعال'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {editModalError && (
+                <div className="p-3 bg-rose-500/15 border border-rose-500/30 rounded-xl text-rose-300 text-xs font-medium flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>{editModalError}</span>
+                </div>
+              )}
+
+              {/* Submit Buttons */}
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingProduct(null);
+                    setEditModalError(null);
+                  }}
+                  disabled={isSavingEdit}
+                  className="px-5 py-2.5 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-bold transition cursor-pointer disabled:opacity-50"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingEdit}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs transition shadow-lg shadow-blue-600/30 cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSavingEdit ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>در حال ذخیره تغییرات...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>ذخیره تغییرات کالا</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

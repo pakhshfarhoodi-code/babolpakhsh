@@ -228,6 +228,96 @@ export function useCatalog() {
     }
   }, [categories]);
 
+  // Update a single product (Name, Brand, Category, Image, Prices, Stock, Unit, is_active)
+  const updateProduct = useCallback((
+    productId: string,
+    updates: Partial<Omit<Product, 'id' | 'reserved_stock'>>
+  ): { success: boolean; message: string } => {
+    const prod = products.find((p) => p.id === productId);
+    if (!prod) {
+      return { success: false, message: 'کالای مورد نظر یافت نشد.' };
+    }
+
+    const targetPrice = updates.price !== undefined ? updates.price : prod.price;
+    const targetVisitorPrice = updates.visitor_price !== undefined
+      ? updates.visitor_price
+      : (prod.visitor_price ?? Math.round(targetPrice * 0.85));
+    const targetConsumerPrice = updates.consumer_price !== undefined ? updates.consumer_price : prod.consumer_price;
+
+    const updatedProd: Product = {
+      ...prod,
+      ...updates,
+      name: updates.name !== undefined ? updates.name.trim() : prod.name,
+      brand: updates.brand !== undefined ? updates.brand.trim() || 'متفرقه' : prod.brand,
+      category_id: updates.category_id !== undefined ? updates.category_id : prod.category_id,
+      image_url: updates.image_url !== undefined ? updates.image_url : prod.image_url,
+      unit: updates.unit !== undefined ? updates.unit : prod.unit,
+      stock: updates.stock !== undefined ? updates.stock : prod.stock,
+      price: targetPrice,
+      visitor_price: targetVisitorPrice,
+      consumer_price: targetConsumerPrice,
+      is_active: updates.is_active !== undefined ? updates.is_active : (prod.is_active ?? true),
+    };
+
+    if (updates.brand && updates.brand.trim()) {
+      const bTrimmed = updates.brand.trim();
+      setBrands((prev) => (prev.includes(bTrimmed) ? prev : [...prev, bTrimmed]));
+    }
+
+    // Price history record if prices changed
+    if (
+      (updates.price !== undefined && updates.price !== prod.price) ||
+      (updates.visitor_price !== undefined && updates.visitor_price !== prod.visitor_price)
+    ) {
+      const nowPersian = new Intl.DateTimeFormat('fa-IR', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(new Date());
+
+      const historyRecord: ProductPriceHistory = {
+        id: `price-hist-${Date.now()}`,
+        product_id: productId,
+        old_price: prod.price,
+        new_price: targetPrice,
+        old_visitor_price: prod.visitor_price,
+        new_visitor_price: targetVisitorPrice,
+        changed_by: 'مدیریت مرکزی',
+        changed_at: nowPersian,
+      };
+
+      setPriceHistories((prev) => [historyRecord, ...prev]);
+    }
+
+    setProducts((prev) => prev.map((p) => (p.id === productId ? updatedProd : p)));
+
+    if (isSupabaseConfigured && supabase) {
+      const payload: Record<string, unknown> = {};
+      if (updates.name !== undefined) payload.name = updates.name.trim();
+      if (updates.brand !== undefined) payload.brand = updates.brand.trim();
+      if (updates.category_id !== undefined) payload.category_id = updates.category_id || null;
+      if (updates.price !== undefined) payload.price = targetPrice;
+      if (updates.visitor_price !== undefined) payload.visitor_price = targetVisitorPrice;
+      if (updates.consumer_price !== undefined) payload.consumer_price = targetConsumerPrice ?? null;
+      if (updates.stock !== undefined) payload.stock = updates.stock;
+      if (updates.unit !== undefined) payload.unit = updates.unit;
+      if (updates.image_url !== undefined) payload.image_url = updates.image_url;
+      if (updates.is_active !== undefined) payload.is_active = updates.is_active;
+
+      supabase
+        .from('products')
+        .update(payload)
+        .eq('id', productId)
+        .then(({ error }) => {
+          if (error) console.warn('Supabase product update warning:', error.message);
+        });
+    }
+
+    return { success: true, message: 'اطلاعات کالا با موفقیت ویرایش شد.' };
+  }, [products]);
+
   // Bulk Upsert Products from Excel import
   const bulkUpsertProducts = useCallback(async (items: Array<{
     id?: string;
@@ -843,6 +933,7 @@ export function useCatalog() {
     priceHistories,
     setPriceHistories,
     updateProductPrice,
+    updateProduct,
     addNewProduct,
     bulkUpsertProducts,
     deleteProduct,

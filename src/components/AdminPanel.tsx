@@ -38,6 +38,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     inventoryTransactions,
     priceHistories,
     updateProductPrice,
+    updateProduct,
     addNewProduct,
     bulkUpsertProducts,
     deleteProduct,
@@ -227,6 +228,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           priceHistories={priceHistories}
           initialFilterType={productsFilterHint}
           onUpdateProductPrice={updateProductPrice}
+          onUpdateProduct={updateProduct}
           onAddNewProduct={addNewProduct}
           onBulkUpsertProducts={bulkUpsertProducts}
           onDeleteProduct={deleteProduct}

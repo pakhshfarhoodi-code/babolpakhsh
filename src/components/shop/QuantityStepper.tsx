@@ -28,7 +28,7 @@ export const QuantityStepper: React.FC<QuantityStepperProps> = ({
   const handleIncrement = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (disabled || available <= 0) return;
-    const target = quantity + 1;
+    const target = Math.round((quantity + 1) * 100) / 100;
     const { quantity: nextQty, clamped } = clampQuantity(target, available);
     if (clamped && target > available) {
       if (onExceedLimit) onExceedLimit(available);
@@ -39,7 +39,7 @@ export const QuantityStepper: React.FC<QuantityStepperProps> = ({
   const handleDecrement = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (disabled) return;
-    const target = Math.max(0, quantity - 1);
+    const target = Math.max(0, Math.round((quantity - 1) * 100) / 100);
     onChange(target);
   };
 
@@ -56,10 +56,15 @@ export const QuantityStepper: React.FC<QuantityStepperProps> = ({
   };
 
   const handleBlur = () => {
-    if (quantity === 0) {
+    const parsed = normalizeDigits(inputValue);
+    if (parsed <= 0) {
       setInputValue('');
+      onChange(0);
     } else {
-      setInputValue(quantity.toString());
+      const { quantity: clampedQty } = clampQuantity(parsed, available);
+      const rounded = Math.round(clampedQty * 1000) / 1000;
+      setInputValue(rounded.toString());
+      onChange(rounded);
     }
   };
 
@@ -102,19 +107,20 @@ export const QuantityStepper: React.FC<QuantityStepperProps> = ({
         type="button"
         onClick={handleDecrement}
         title="کاهش تعداد"
-        className="w-10 h-full rounded-lg flex items-center justify-center text-slate-200 hover:bg-slate-800 hover:text-white active:scale-90 transition cursor-pointer shrink-0"
+        className="w-8 sm:w-9 h-full rounded-lg flex items-center justify-center text-slate-200 hover:bg-slate-800 hover:text-white active:scale-90 transition cursor-pointer shrink-0"
       >
-        <Minus className="w-4 h-4 text-emerald-400" />
+        <Minus className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400" />
       </button>
 
-      {/* Editable Number Input */}
+      {/* Editable Number Input with Decimal Keypad */}
       <input
         type="text"
-        inputMode="numeric"
+        inputMode="decimal"
         value={inputValue}
         onChange={handleInputChange}
         onBlur={handleBlur}
-        className="w-10 sm:w-12 h-full text-center bg-transparent text-sm font-bold text-slate-100 focus:outline-none focus:bg-slate-800/80 rounded"
+        placeholder="۰"
+        className="w-12 sm:w-14 h-full text-center bg-transparent text-xs sm:text-sm font-bold text-slate-100 focus:outline-none focus:bg-slate-800/80 rounded px-0.5"
       />
 
       {/* Increment Button */}
@@ -123,13 +129,13 @@ export const QuantityStepper: React.FC<QuantityStepperProps> = ({
         onClick={handleIncrement}
         disabled={quantity >= available}
         title="افزایش تعداد"
-        className={`w-10 h-full rounded-lg flex items-center justify-center transition shrink-0 ${
+        className={`w-8 sm:w-9 h-full rounded-lg flex items-center justify-center transition shrink-0 ${
           quantity >= available
             ? 'text-slate-600 cursor-not-allowed'
             : 'text-slate-200 hover:bg-slate-800 hover:text-white active:scale-90 cursor-pointer'
         }`}
       >
-        <Plus className="w-4 h-4 text-emerald-400" />
+        <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400" />
       </button>
     </div>
   );

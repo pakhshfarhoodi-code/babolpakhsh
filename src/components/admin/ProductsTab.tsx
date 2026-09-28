@@ -28,6 +28,7 @@ import {
   Package,
   DollarSign,
   Warehouse,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { LOW_STOCK_THRESHOLD, formatPrice } from './helpers';
 import { PriceHistoryDrawer } from './PriceHistoryDrawer';
@@ -108,7 +109,24 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   const [newProdConsumerPrice, setNewProdConsumerPrice] = useState(0);
   const [newProdStock, setNewProdStock] = useState(0);
   const [newProdUnit, setNewProdUnit] = useState('عدد');
+  const [newProdImage, setNewProdImage] = useState<string>('');
   const [addModalError, setAddModalError] = useState<string | null>(null);
+
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 3 * 1024 * 1024) {
+      setAddModalError('حجم تصویر نباید بیشتر از ۳ مگابایت باشد.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (typeof event.target?.result === 'string') {
+        setNewProdImage(event.target.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Delete product confirmation
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
@@ -311,7 +329,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
       stock: newProdStock,
       reserved_stock: 0,
       unit: newProdUnit,
-      image_url: getSampleImage(newProdCat),
+      image_url: newProdImage.trim() || getSampleImage(newProdCat),
       is_active: true,
     });
 
@@ -321,6 +339,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
     setNewProdVisitorPrice(0);
     setNewProdConsumerPrice(0);
     setNewProdStock(0);
+    setNewProdImage('');
     setAddModalError(null);
   };
 
@@ -983,6 +1002,62 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                       onChange={(e) => setNewProdStock(Number(e.target.value))}
                       className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500 font-mono"
                     />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 4: Product Image (Upload File, Image URL or Presets) */}
+              <div className="space-y-3 p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800/80">
+                <span className="text-xs font-bold text-indigo-400 flex items-center gap-1.5">
+                  <ImageIcon className="w-3.5 h-3.5" />
+                  تصویر و نمای کالا
+                </span>
+
+                <div className="flex flex-col sm:flex-row gap-3.5 items-start">
+                  {/* Image Preview Box */}
+                  <div className="w-20 h-20 rounded-2xl bg-slate-900 border border-slate-700/80 flex items-center justify-center shrink-0 overflow-hidden relative group">
+                    <img
+                      src={newProdImage || getSampleImage(newProdCat)}
+                      alt="پیش‌نمایش تصویر کالا"
+                      className="w-full h-full object-cover"
+                    />
+                    {newProdImage && (
+                      <button
+                        type="button"
+                        onClick={() => setNewProdImage('')}
+                        title="حذف تصویر اختصاصی و استفاده از تصویر پیش‌فرض"
+                        className="absolute inset-0 bg-black/60 text-rose-400 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Upload and URL Controls */}
+                  <div className="flex-1 space-y-2.5 w-full">
+                    <div className="flex items-center gap-2">
+                      <label className="px-3 py-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer">
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>انتخاب فایل عکس از سیستم...</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageFileChange}
+                          className="hidden"
+                        />
+                      </label>
+                      <span className="text-[11px] text-slate-500">(فرمت‌های JPG، PNG، WebP)</span>
+                    </div>
+
+                    <div>
+                      <input
+                        type="url"
+                        placeholder="یا درج لینک مستقیم عکس (https://...)..."
+                        value={newProdImage.startsWith('data:') ? '' : newProdImage}
+                        onChange={(e) => setNewProdImage(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 dir-ltr text-left font-mono"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>

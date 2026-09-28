@@ -3,9 +3,10 @@ import { Order, Product } from '../../types';
 export const LOW_STOCK_THRESHOLD = 10;
 
 /**
- * Normalizes Persian and Arabic numbers in string to English numbers and parses integer
+ * Normalizes Persian and Arabic numbers in string to English numbers and parses float decimal
  */
-export function normalizeDigits(input: string): number {
+export function normalizeDigits(input: string | number): number {
+  if (typeof input === 'number') return isNaN(input) ? 0 : input;
   if (!input) return 0;
   const persianDigits = [/۰/g, /۱/g, /۲/g, /۳/g, /۴/g, /۵/g, /۶/g, /۷/g, /۸/g, /۹/g];
   const arabicDigits = [/٠/g, /١/g, /٢/g, /٣/g, /٤/g, /٥/g, /٦/g, /٧/g, /٨/g, /٩/g];
@@ -15,9 +16,17 @@ export function normalizeDigits(input: string): number {
     str = str.replace(persianDigits[i], i.toString()).replace(arabicDigits[i], i.toString());
   }
 
-  // Remove any non-digit character
-  const cleanStr = str.replace(/[^\d]/g, '');
-  const parsed = parseInt(cleanStr, 10);
+  // Replace Persian momayyez (٫), slash (/), or comma (,) with standard dot (.)
+  str = str.replace(/[٫,/]/g, '.');
+
+  // Remove any character except digits and dot
+  const cleanStr = str.replace(/[^\d.]/g, '');
+  if (!cleanStr) return 0;
+
+  // Handle multiple dots if any
+  const parts = cleanStr.split('.');
+  const formatted = parts.length > 1 ? `${parts[0]}.${parts.slice(1).join('')}` : parts[0];
+  const parsed = parseFloat(formatted);
   return isNaN(parsed) ? 0 : parsed;
 }
 

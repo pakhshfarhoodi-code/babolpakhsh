@@ -1,9 +1,6 @@
 import { Category, Product, Visitor, Supermarket, Profile, Order, LoadingBill, InventoryTransaction } from '../types';
 
-export const INITIAL_PROFILES: Profile[] = [
-  { id: 'admin-1', name: 'مدیریت مرکزی فرهودی (بارفروش)', role: 'admin', username: 'admin', password: '123', phone: '۰۹۱۲۰۰۰۰۰۰۰' },
-  { id: 'wh-1', name: 'انباردار مرکزی فرهودی', role: 'warehouse', username: 'warehouse', password: '123', phone: '۰۹۱۲۱۱۱۰۰۰۰' },
-];
+export const INITIAL_PROFILES: Profile[] = [];
 
 export const INITIAL_CATEGORIES: Category[] = [];
 

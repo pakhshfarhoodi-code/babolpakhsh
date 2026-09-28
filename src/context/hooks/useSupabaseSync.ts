@@ -17,6 +17,7 @@ interface UseSupabaseSyncProps {
   setOrders: React.Dispatch<React.SetStateAction<Order[]>>;
   setCategories: React.Dispatch<React.SetStateAction<Category[]>>;
   setBrands: React.Dispatch<React.SetStateAction<string[]>>;
+  setUnits?: React.Dispatch<React.SetStateAction<string[]>>;
   setReassignmentRequests: React.Dispatch<React.SetStateAction<ReassignmentRequest[]>>;
   setSupermarkets: React.Dispatch<React.SetStateAction<Supermarket[]>>;
   setVisitors: React.Dispatch<React.SetStateAction<Visitor[]>>;
@@ -223,12 +224,17 @@ export function useSupabaseSync({
 
         setVisitors((prev) => {
           return cleanVis.map((v: Visitor) => {
-            const localMatch = prev.find((p) => p.id === v.id);
+            const localMatch = prev.find((p) => p.id === v.id || (p.phone && v.phone && p.phone === v.phone));
             const prof = profileMap.get(v.id);
+            let resolvedUsername = prof?.username || v.username || localMatch?.username || '';
+            // Filter out any raw UUID string inadvertently stored as username
+            if (resolvedUsername && resolvedUsername.includes('-') && resolvedUsername.length > 25) {
+              resolvedUsername = (localMatch?.username && !localMatch.username.includes('-')) ? localMatch.username : '';
+            }
             return {
               ...v,
-              username: prof?.username || localMatch?.username || v.username || '',
-              password: prof?.password || v.password || localMatch?.password || '123',
+              username: resolvedUsername,
+              password: prof?.password || v.password || localMatch?.password || '123456',
             };
           });
         });

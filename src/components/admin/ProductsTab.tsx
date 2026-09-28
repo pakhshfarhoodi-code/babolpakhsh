@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useApp } from '../../context/AppContext';
 import { Product, Category, ProductPriceHistory } from '../../types';
 import {
   Search,
@@ -33,11 +34,9 @@ import {
 } from 'lucide-react';
 import { LOW_STOCK_THRESHOLD, formatPrice } from './helpers';
 import { PriceHistoryDrawer } from './PriceHistoryDrawer';
-import { CategorySelectPicker, BrandSelectPicker } from '../CategoryBrandSelectors';
+import { CategorySelectPicker, BrandSelectPicker, UnitSelectPicker } from '../CategoryBrandSelectors';
 import { ExcelImportModal } from './ExcelImportModal';
 import { ExcelExportModal } from './ExcelExportModal';
-
-const STANDARD_UNITS = ['عدد', 'باکس', 'کارتن', 'کیلوگرم', 'بسته', 'بطری', 'دبه', 'کیسه', 'شانه', 'قوطی'];
 
 interface ProductsTabProps {
   products: Product[];
@@ -82,6 +81,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   onOpenEditCategory,
   onOpenEditBrand,
 }) => {
+  const { units } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all');
   const [selectedBrandFilter, setSelectedBrandFilter] = useState('all');
@@ -1102,21 +1102,10 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                 </span>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-300 mb-1 font-medium">واحد سنجش</label>
-                    <select
-                      value={newProdUnit}
-                      onChange={(e) => setNewProdUnit(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500 cursor-pointer"
-                    >
-                      <option value="عدد">عدد</option>
-                      <option value="باکس">باکس</option>
-                      <option value="بسته">بسته</option>
-                      <option value="کیلوگرم">کیلوگرم</option>
-                      <option value="جعبه">جعبه</option>
-                      <option value="سطل">سطل</option>
-                    </select>
-                  </div>
+                  <UnitSelectPicker
+                    selectedUnit={newProdUnit}
+                    onSelectUnit={setNewProdUnit}
+                  />
 
                   <div>
                     <label className="block text-slate-300 mb-1 font-medium">
@@ -1432,18 +1421,10 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                 </span>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                  <div>
-                    <label className="block text-slate-300 mb-1 font-medium text-xs">واحد سنجش</label>
-                    <select
-                      value={editProdUnit}
-                      onChange={(e) => setEditProdUnit(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500 cursor-pointer"
-                    >
-                      {STANDARD_UNITS.map((u) => (
-                        <option key={u} value={u}>{u}</option>
-                      ))}
-                    </select>
-                  </div>
+                  <UnitSelectPicker
+                    selectedUnit={editProdUnit}
+                    onSelectUnit={setEditProdUnit}
+                  />
 
                   <div>
                     <label className="block text-slate-300 mb-1 font-medium text-xs">
@@ -1673,7 +1654,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
                 >
                   <option value="">(بدون تغییر در واحد کالاها)</option>
-                  {STANDARD_UNITS.map((u) => (
+                  {units.map((u) => (
                     <option key={u} value={u}>
                       {u}
                     </option>

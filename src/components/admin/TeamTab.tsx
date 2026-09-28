@@ -524,7 +524,13 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                         <p className="text-xs text-slate-400 font-mono">{visitor.phone}</p>
                         <div className="inline-flex items-center gap-1.5 text-blue-300 font-mono text-xs bg-blue-950/70 px-2.5 py-0.5 rounded-lg border border-blue-500/40 font-bold shadow-xs">
                           <AtSign className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                          <span>نام کاربری: {visitor.username || visitor.id}</span>
+                          <span>
+                            نام کاربری: {
+                              visitor.username && !visitor.username.includes('-') && visitor.username.length < 25
+                                ? visitor.username
+                                : (visitor.phone || 'مشخص نشده')
+                            }
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -793,7 +799,13 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                               <span>مدیریت: <strong className="text-slate-300 font-semibold">{shop.owner}</strong></span>
                               <div className="inline-flex items-center gap-1.5 text-amber-300 font-mono text-xs bg-amber-950/60 px-2.5 py-0.5 rounded-lg border border-amber-500/40 font-bold shadow-xs">
                                 <AtSign className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                                <span>نام کاربری: {shop.username || shop.phone || shop.id}</span>
+                                <span>
+                                  نام کاربری: {
+                                    shop.username && !shop.username.includes('-') && shop.username.length < 25
+                                      ? shop.username
+                                      : (shop.phone || 'مشخص نشده')
+                                  }
+                                </span>
                               </div>
                             </div>
                           </div>

@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   Trash2,
   Pencil,
+  Scale,
 } from 'lucide-react';
 
 interface CategorySelectPickerProps {
@@ -701,6 +702,368 @@ export const BrandSelectPicker: React.FC<BrandSelectPickerProps> = ({
             {pendingDelete.productCount > 0 && (
               <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs leading-relaxed">
                 ⚠️ <strong>هشدار:</strong> تعداد {pendingDelete.productCount} کالا با این برند ثبت شده‌اند. با حذف برند، عنوان برند این کالاها به «متفرقه» تغییر داده می‌شود تا اطلاعات کالاها حفظ گردد.
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800 text-xs">
+              <button
+                type="button"
+                onClick={() => setPendingDelete(null)}
+                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium cursor-pointer transition"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold cursor-pointer transition shadow-lg shadow-rose-600/30"
+              >
+                بله، حذف شود
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+interface UnitSelectPickerProps {
+  selectedUnit: string;
+  onSelectUnit: (unit: string) => void;
+}
+
+export const UnitSelectPicker: React.FC<UnitSelectPickerProps> = ({
+  selectedUnit,
+  onSelectUnit,
+}) => {
+  const { units, addUnit, updateUnit, deleteUnit, products } = useApp();
+  const [isOpen, setIsOpen] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
+  const [newUnitName, setNewUnitName] = useState('');
+  const [editingUnitName, setEditingUnitName] = useState<string | null>(null);
+  const [editingUnitVal, setEditingUnitVal] = useState('');
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ name: string; productCount: number } | null>(null);
+
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+        setIsAdding(false);
+        setEditingUnitName(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleAddSubmit = (e?: React.SyntheticEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (!newUnitName.trim()) return;
+
+    const res = addUnit(newUnitName.trim());
+    if (res.success) {
+      onSelectUnit(newUnitName.trim());
+      setNewUnitName('');
+      setIsAdding(false);
+      setIsOpen(false);
+      setFeedback({ type: 'success', message: res.message });
+      setTimeout(() => setFeedback(null), 3000);
+    } else {
+      setFeedback({ type: 'error', message: res.message });
+      setTimeout(() => setFeedback(null), 3000);
+    }
+  };
+
+  const handleEditSubmit = (e?: React.SyntheticEvent, oldName?: string) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    const unitToEdit = oldName || editingUnitName;
+    if (!unitToEdit || !editingUnitVal.trim()) return;
+
+    const res = updateUnit(unitToEdit, editingUnitVal.trim());
+    if (res.success) {
+      if (selectedUnit === unitToEdit) {
+        onSelectUnit(editingUnitVal.trim());
+      }
+      setFeedback({ type: 'success', message: res.message });
+      setEditingUnitName(null);
+      setEditingUnitVal('');
+      setTimeout(() => setFeedback(null), 3000);
+    } else {
+      setFeedback({ type: 'error', message: res.message });
+      setTimeout(() => setFeedback(null), 3000);
+    }
+  };
+
+  const handleOpenDeleteConfirm = (e: React.MouseEvent, unitName: string) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const productCount = products.filter((p) => p.unit && p.unit.trim() === unitName.trim()).length;
+    setPendingDelete({ name: unitName, productCount });
+  };
+
+  const handleConfirmDelete = () => {
+    if (!pendingDelete) return;
+
+    const unitName = pendingDelete.name;
+    const res = deleteUnit(unitName);
+    if (res.success) {
+      if (selectedUnit === unitName) {
+        const remaining = units.filter((u) => u !== unitName);
+        onSelectUnit(remaining[0] || '');
+      }
+      setFeedback({ type: 'success', message: res.message });
+      setTimeout(() => setFeedback(null), 3000);
+    } else {
+      setFeedback({ type: 'error', message: res.message });
+      setTimeout(() => setFeedback(null), 3000);
+    }
+
+    setPendingDelete(null);
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <div className="flex items-center justify-between mb-1">
+        <label className="block text-slate-400 font-medium text-xs">واحد سنجش کالا</label>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsAdding(!isAdding);
+            if (!isOpen) setIsOpen(true);
+          }}
+          className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-semibold cursor-pointer py-0.5 px-1.5 rounded hover:bg-emerald-950/40"
+          title="تعریف واحد سنجش جدید"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>افزودن واحد جدید</span>
+        </button>
+      </div>
+
+      {feedback && (
+        <div
+          className={`mb-2 p-2 rounded-lg text-xs font-medium transition ${
+            feedback.type === 'success'
+              ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
+              : 'bg-rose-500/15 border border-rose-500/30 text-rose-300'
+          }`}
+        >
+          {feedback.message}
+        </div>
+      )}
+
+      {/* Inline Add Unit */}
+      {isAdding && (
+        <div className="mb-2 p-2.5 bg-emerald-950/70 border border-emerald-800/80 rounded-xl space-y-2">
+          <div className="flex items-center justify-between text-xs text-emerald-300 font-semibold">
+            <span>عنوان واحد سنجش جدید:</span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsAdding(false);
+              }}
+              className="text-slate-400 hover:text-slate-200 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <input
+              type="text"
+              autoFocus
+              value={newUnitName}
+              onChange={(e) => setNewUnitName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleAddSubmit(e);
+                }
+              }}
+              placeholder="مثلاً: کارتن، عدد، کیلوگرم..."
+              className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
+            />
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleAddSubmit(e);
+              }}
+              className="px-3 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-xs cursor-pointer shadow-sm transition"
+            >
+              ثبت
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Main Select Trigger */}
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-xl p-2.5 text-slate-200 flex items-center justify-between transition cursor-pointer text-xs"
+      >
+        <div className="flex items-center gap-2">
+          <Scale className="w-4 h-4 text-emerald-400" />
+          <span className="font-semibold text-slate-100">{selectedUnit || 'انتخاب واحد سنجش...'}</span>
+        </div>
+        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {/* Dropdown Options List */}
+      {isOpen && (
+        <div className="absolute top-full right-0 left-0 mt-1 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-800/80 p-1.5 no-scrollbar">
+          <div className="px-2 py-1 text-xs text-slate-400 font-medium flex items-center justify-between">
+            <span>ویرایش با قلم (✎) یا حذف (×):</span>
+            <span>{units.length} واحد</span>
+          </div>
+
+          {units.length === 0 ? (
+            <div className="p-3 text-center text-xs text-slate-400 space-y-2">
+              <p>هیچ واحد سنجشی تعریف نشده است.</p>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsAdding(true);
+                }}
+                className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold cursor-pointer"
+              >
+                + تعریف اولین واحد سنجش
+              </button>
+            </div>
+          ) : (
+            units.map((unit) => {
+              const isSelected = unit === selectedUnit;
+              const isEditing = editingUnitName === unit;
+              const productCount = products.filter((p) => p.unit && p.unit.trim() === unit.trim()).length;
+
+              if (isEditing) {
+                return (
+                  <div
+                    key={unit}
+                    onClick={(e) => e.stopPropagation()}
+                    className="p-1.5 bg-emerald-950/80 border border-emerald-700/80 rounded-lg flex items-center gap-1.5 my-1"
+                  >
+                    <input
+                      type="text"
+                      autoFocus
+                      value={editingUnitVal}
+                      onChange={(e) => setEditingUnitVal(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleEditSubmit(undefined, unit);
+                        } else if (e.key === 'Escape') {
+                          setEditingUnitName(null);
+                        }
+                      }}
+                      className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
+                      placeholder="عنوان جدید واحد..."
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleEditSubmit(undefined, unit)}
+                      title="ذخیره تغییرات"
+                      className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer transition shrink-0 shadow-sm"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingUnitName(null)}
+                      title="انصراف"
+                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer transition shrink-0"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                );
+              }
+
+              return (
+                <div
+                  key={unit}
+                  onClick={() => {
+                    onSelectUnit(unit);
+                    setIsOpen(false);
+                  }}
+                  className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition group ${
+                    isSelected ? 'bg-emerald-500/20 text-emerald-300 font-bold' : 'hover:bg-slate-800/80 text-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    {isSelected ? <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> : <div className="w-3.5 shrink-0" />}
+                    <span className="text-xs truncate">{unit}</span>
+                    {productCount > 0 && (
+                      <span className="text-xs text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded shrink-0">
+                        {productCount} کالا
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-0.5 shrink-0 mr-1" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        setEditingUnitName(unit);
+                        setEditingUnitVal(unit);
+                      }}
+                      title={`ویرایش واحد سنجش «${unit}»`}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-300 hover:bg-emerald-950/60 border border-transparent hover:border-emerald-800/50 transition cursor-pointer shrink-0"
+                    >
+                      <Pencil className="w-3.5 h-3.5 text-emerald-400" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => handleOpenDeleteConfirm(e, unit)}
+                      title={`حذف واحد سنجش «${unit}»`}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-300 hover:bg-rose-950/60 border border-transparent hover:border-rose-800/50 transition cursor-pointer shrink-0"
+                    >
+                      <X className="w-3.5 h-3.5 text-rose-400" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {/* Confirmation Modal for Deleting Unit */}
+      {pendingDelete && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5 max-w-sm w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-sm text-slate-100">تأیید حذف واحد سنجش</h4>
+                <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                  آیا مطمئن هستید واحد سنجش «<strong className="text-white">{pendingDelete.name}</strong>» حذف شود؟
+                </p>
+              </div>
+            </div>
+
+            {pendingDelete.productCount > 0 && (
+              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs leading-relaxed">
+                ⚠️ <strong>توجه:</strong> تعداد {pendingDelete.productCount} کالا با این واحد سنجش ثبت شده‌اند.
               </div>
             )}
 

@@ -56,6 +56,7 @@ interface AppContextType {
 
   categories: Category[];
   brands: string[];
+  units: string[];
   products: Product[];
   visitors: Visitor[];
   supermarkets: Supermarket[];
@@ -106,6 +107,9 @@ interface AppContextType {
   addBrand: (name: string) => { success: boolean; message: string };
   updateBrand: (oldBrandName: string, newBrandName: string) => { success: boolean; message: string };
   deleteBrand: (brandName: string) => { success: boolean; message: string };
+  addUnit: (name: string) => { success: boolean; message: string };
+  updateUnit: (oldUnitName: string, newUnitName: string) => { success: boolean; message: string };
+  deleteUnit: (unitName: string) => { success: boolean; message: string };
   registerSupermarket: (data: {
     name: string;
     owner: string;
@@ -417,6 +421,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (payload.name !== undefined) updateData.name = payload.name.trim();
         if (payload.phone !== undefined) updateData.phone = payload.phone.trim();
         if (payload.region !== undefined) updateData.region = payload.region.trim();
+        if (payload.username !== undefined) updateData.username = payload.username.trim();
         if (payload.is_active !== undefined) updateData.is_active = payload.is_active;
         if (payload.password !== undefined) updateData.password = payload.password;
 
@@ -433,6 +438,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const profileUpdates: Record<string, unknown> = {};
           if (payload.name) profileUpdates.name = payload.name.trim();
           if (payload.phone) profileUpdates.phone = payload.phone.trim();
+          if (payload.username) profileUpdates.username = payload.username.trim();
           if (payload.password) profileUpdates.password = payload.password;
 
           if (Object.keys(profileUpdates).length > 0) {
@@ -525,91 +531,80 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [visitors, setVisitors]);
 
-  // Account creation for Staff (Visitors / Warehouse) with Supabase persistence
+  // Thin wrapper to invoke create-staff-account Edge Function
   const createStaffAccount = useCallback(async (payload: CreateStaffAccountPayload): Promise<CreateStaffAccountResult> => {
-    const fallbackId = generateUniqueId(payload.role === 'visitor' ? 'vis' : 'wh');
-    const cleanUsername = payload.username.trim().toLowerCase();
-    const cleanName = payload.name.trim();
-    const cleanPhone = payload.phone.trim();
-    const cleanPassword = payload.password?.trim() || '123456';
-    const cleanRegion = payload.region?.trim() || 'مرکز استان';
-
-    if (isSupabaseConfigured && supabase) {
-      try {
-        // First, attempt Edge Function if deployed
-        const { data, error } = await supabase.functions.invoke('create-staff-account', {
-          body: payload,
-        });
-
-        if (!error && data && data.success !== false) {
-          const createdId = data.userId || data.id || fallbackId;
-          if (payload.role === 'visitor') {
-            const newVis: Visitor = {
-              id: createdId,
-              name: cleanName,
-              phone: cleanPhone,
-              region: cleanRegion,
-              username: cleanUsername,
-              password: cleanPassword,
-              is_active: true,
-              created_at: new Date().toISOString(),
-            };
-            setVisitors((prev) => [newVis, ...prev.filter((v) => v.id !== createdId)]);
-          }
-          return { success: true, username: cleanUsername, role: payload.role };
-        }
-      } catch (fnErr) {
-        console.warn('Edge function invoke skipped, falling back to direct table insertion:', fnErr);
-      }
-
-      // Direct Table Insertion in Supabase
-      try {
-        await supabase.from('profiles').upsert({
-          id: fallbackId,
-          name: cleanName,
-          phone: cleanPhone,
-          role: payload.role,
-          username: cleanUsername,
-          password: cleanPassword,
-          region: cleanRegion,
+    if (!isSupabaseConfigured) {
+      if (payload.role === 'visitor') {
+        const newVis: Visitor = {
+          id: generateUniqueId('vis'),
+          name: payload.name.trim(),
+          phone: payload.phone.trim(),
+          region: payload.region?.trim() || 'مرکز استان',
+          username: payload.username.trim(),
           is_active: true,
-        });
-
-        if (payload.role === 'visitor') {
-          await supabase.from('visitors').upsert({
-            id: fallbackId,
-            name: cleanName,
-            phone: cleanPhone,
-            region: cleanRegion,
-            username: cleanUsername,
-            password: cleanPassword,
-            is_active: true,
-          });
-        }
-      } catch (dbErr) {
-        console.warn('Direct database staff account insertion note:', dbErr);
+          created_at: new Date().toISOString(),
+        };
+        setVisitors((prev) => [...prev, newVis]);
       }
-    }
-
-    if (payload.role === 'visitor') {
-      const newVis: Visitor = {
-        id: fallbackId,
-        name: cleanName,
-        phone: cleanPhone,
-        region: cleanRegion,
-        username: cleanUsername,
-        password: cleanPassword,
-        is_active: true,
-        created_at: new Date().toISOString(),
+      return {
+        success: true,
+        username: payload.username,
+        role: payload.role,
       };
-      setVisitors((prev) => [newVis, ...prev.filter((v) => v.id !== fallbackId)]);
     }
 
-    return {
-      success: true,
-      username: cleanUsername,
-      role: payload.role,
-    };
+    try {
+      const { data, error } = await supabase.functions.invoke('create-staff-account', {
+        body: payload,
+      });
+
+      if (error) {
+        let errorMessage = error.message || 'خطا در ارتباط با Edge Function';
+        if (data && typeof data === 'object' && 'error' in data && typeof data.error === 'string') {
+          errorMessage = data.error;
+        } else if ('context' in error && error.context && typeof error.context === 'object') {
+          try {
+            const errorBody = await (error.context as Response).json();
+            if (errorBody?.error) errorMessage = errorBody.error;
+          } catch {
+            // ignore
+          }
+        }
+        return { success: false, error: errorMessage };
+      }
+
+      if (data && data.success === false) {
+        return { success: false, error: data.error || 'خطا در ایجاد حساب' };
+      }
+
+      if (payload.role === 'visitor') {
+        const createdVisitorId = data?.userId || data?.id || generateUniqueId('vis');
+        const newVis: Visitor = {
+          id: createdVisitorId,
+          name: payload.name.trim(),
+          phone: payload.phone.trim(),
+          region: payload.region?.trim() || 'مرکز استان',
+          username: payload.username.trim(),
+          is_active: true,
+          created_at: new Date().toISOString(),
+        };
+        setVisitors((prev) => {
+          if (prev.some((v) => v.id === createdVisitorId || (v.username && v.username.toLowerCase() === newVis.username?.toLowerCase()))) {
+            return prev.map((v) => (v.id === createdVisitorId || v.username === newVis.username ? { ...v, ...newVis } : v));
+          }
+          return [...prev, newVis];
+        });
+      }
+
+      return {
+        success: true,
+        username: data?.username || payload.username,
+        role: data?.role || payload.role,
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در برقراری ارتباط با سرور';
+      return { success: false, error: msg };
+    }
   }, [setVisitors]);
 
   // Memoized provider value so child components do not needlessly re-render
@@ -627,6 +622,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     logout: auth.logout,
     categories: catalog.categories,
     brands: catalog.brands,
+    units: catalog.units,
     products: catalog.products,
     visitors,
     supermarkets,
@@ -655,6 +651,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addBrand: catalog.addBrand,
     updateBrand: catalog.updateBrand,
     deleteBrand: catalog.deleteBrand,
+    addUnit: catalog.addUnit,
+    updateUnit: catalog.updateUnit,
+    deleteUnit: catalog.deleteUnit,
     registerSupermarket: auth.registerSupermarket,
     updateSupermarket,
     deleteSupermarket,
@@ -691,6 +690,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     createStaffAccount,
     catalog.categories,
     catalog.brands,
+    catalog.units,
     catalog.products,
     catalog.priceHistories,
     catalog.updateProductPrice,
@@ -705,6 +705,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     catalog.addBrand,
     catalog.updateBrand,
     catalog.deleteBrand,
+    catalog.addUnit,
+    catalog.updateUnit,
+    catalog.deleteUnit,
     visitors,
     supermarkets,
     orders.orders,

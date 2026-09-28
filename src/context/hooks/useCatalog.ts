@@ -56,6 +56,17 @@ export function useCatalog() {
     }
   });
 
+  const [units, setUnits] = useState<string[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.UNITS);
+    if (!saved) return [];
+    try {
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+
   const [priceHistories, setPriceHistories] = useState<ProductPriceHistory[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.PRICE_HISTORIES);
     return saved ? JSON.parse(saved) : [];
@@ -69,6 +80,27 @@ export function useCatalog() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.BRANDS, JSON.stringify(brands));
   }, [brands]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.UNITS, JSON.stringify(units));
+  }, [units]);
+
+  // Keep units synced with any unique unit found in products
+  useEffect(() => {
+    if (products.length > 0) {
+      setUnits((prev) => {
+        const set = new Set(prev);
+        let changed = false;
+        products.forEach((p) => {
+          if (p.unit && p.unit.trim() && !set.has(p.unit.trim())) {
+            set.add(p.unit.trim());
+            changed = true;
+          }
+        });
+        return changed ? Array.from(set) : prev;
+      });
+    }
+  }, [products]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
@@ -923,11 +955,80 @@ export function useCatalog() {
     return { success: true, message: `برند «${trimmed}» با موفقیت حذف شد.` };
   }, [brands]);
 
+  // Add unit
+  const addUnit = useCallback((unitName: string) => {
+    const trimmed = unitName.trim();
+    if (!trimmed) {
+      return { success: false, message: 'عنوان واحد سنجش نمی‌تواند خالی باشد.' };
+    }
+    const exists = units.some((u) => u.trim().toLowerCase() === trimmed.toLowerCase());
+    if (exists) {
+      return { success: false, message: 'این واحد سنجش قبلاً تعریف شده است.' };
+    }
+
+    setUnits((prev) => [...prev, trimmed]);
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('units').upsert({ name: trimmed }).then(({ error }) => {
+        if (error) console.warn('Supabase unit insert note:', error.message);
+      });
+    }
+
+    return { success: true, message: `واحد سنجش «${trimmed}» با موفقیت ایجاد شد.` };
+  }, [units]);
+
+  // Update unit
+  const updateUnit = useCallback((oldUnitName: string, newUnitName: string) => {
+    const oldTrimmed = oldUnitName.trim();
+    const newTrimmed = newUnitName.trim();
+    if (!newTrimmed) {
+      return { success: false, message: 'عنوان جدید واحد سنجش نمی‌تواند خالی باشد.' };
+    }
+    if (oldTrimmed.toLowerCase() === newTrimmed.toLowerCase()) {
+      return { success: true, message: 'تغییری در عنوان واحد سنجش داده نشد.' };
+    }
+    const exists = units.some(
+      (u) => u.trim().toLowerCase() === newTrimmed.toLowerCase() && u.trim().toLowerCase() !== oldTrimmed.toLowerCase()
+    );
+    if (exists) {
+      return { success: false, message: 'این واحد سنجش قبلاً وجود دارد.' };
+    }
+
+    setUnits((prev) => prev.map((u) => (u.trim().toLowerCase() === oldTrimmed.toLowerCase() ? newTrimmed : u)));
+
+    setProducts((prev) =>
+      prev.map((p) => (p.unit && p.unit.trim().toLowerCase() === oldTrimmed.toLowerCase() ? { ...p, unit: newTrimmed } : p))
+    );
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('products').update({ unit: newTrimmed }).eq('unit', oldTrimmed).then(() => {});
+      supabase.from('units').delete().eq('name', oldTrimmed).then(() => {
+        supabase.from('units').upsert({ name: newTrimmed }).then(() => {});
+      });
+    }
+
+    return { success: true, message: `عنوان واحد سنجش با موفقیت به «${newTrimmed}» تغییر یافت.` };
+  }, [units]);
+
+  // Delete unit
+  const deleteUnit = useCallback((unitName: string) => {
+    const trimmed = unitName.trim();
+    setUnits((prev) => prev.filter((u) => u.trim().toLowerCase() !== trimmed.toLowerCase()));
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('units').delete().eq('name', trimmed).then(() => {});
+    }
+
+    return { success: true, message: `واحد سنجش «${trimmed}» با موفقیت حذف شد.` };
+  }, []);
+
   return {
     categories,
     setCategories,
     brands,
     setBrands,
+    units,
+    setUnits,
     products,
     setProducts,
     priceHistories,
@@ -945,5 +1046,8 @@ export function useCatalog() {
     addBrand,
     updateBrand,
     deleteBrand,
+    addUnit,
+    updateUnit,
+    deleteUnit,
   };
 }

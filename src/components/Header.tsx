@@ -80,7 +80,7 @@ export const Header: React.FC<HeaderProps> = () => {
       <>
         <header className="border-b border-slate-800/80 bg-slate-900/90 sticky top-0 z-40 backdrop-blur-xl shadow-lg shadow-black/20">
           <div className="max-w-7xl mx-auto px-3 sm:px-5 py-2">
-            <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex items-center justify-between gap-2.5 min-w-0">
               {/* Top-Right Official Logo Badge */}
               <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-amber-500 p-0.5 shadow-md shadow-blue-500/20 shrink-0 overflow-hidden">
                 <img src={appLogo} alt="لوگوی پخش فرهودی" className="w-full h-full object-cover rounded-[10px]" />

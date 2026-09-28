@@ -214,12 +214,14 @@ Deno.serve(async (req: Request) => {
 
     const newUserId = createdUserData.user.id;
 
-    // 6. Insert profile record
+    // 6. Insert profile record with username & password
     const { error: profileInsertError } = await adminClient.from('profiles').upsert({
       id: newUserId,
       name: cleanName,
       role,
       phone: cleanPhone,
+      username: cleanUsername,
+      password: password,
     });
 
     if (profileInsertError) {
@@ -242,6 +244,8 @@ Deno.serve(async (req: Request) => {
         name: cleanName,
         phone: cleanPhone,
         region: cleanRegion || 'منطقه نامشخص',
+        username: cleanUsername,
+        password: password,
         is_active: true,
       });
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { UserRole, CurrentUser, Visitor, Supermarket } from '../../types';
+import { UserRole, CurrentUser, Visitor, Supermarket, Profile } from '../../types';
 import { INITIAL_PROFILES } from '../../data/initialData';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { STORAGE_KEYS, generateUniqueId, toSyntheticEmail, normalizeDigits } from '../utils';
@@ -17,12 +17,12 @@ const ROLE_LABELS: Record<UserRole, string> = {
   supermarket: 'فروشگاه',
 };
 
-// Standardized password verification (No backdoors or hardcoded bypasses)
+// Strict password verification (No backdoors, shortcuts, or default fallbacks)
 const verifyPassword = (inputPass: string, savedPass: string | undefined | null): boolean => {
   const cleanInput = normalizeDigits(inputPass.trim());
   const cleanSaved = normalizeDigits((savedPass || '').trim());
   if (!cleanSaved) {
-    return cleanInput === '123';
+    return false;
   }
   return cleanInput === cleanSaved;
 };
@@ -50,6 +50,20 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
     return localStorage.getItem(STORAGE_KEYS.AUTH_SUPERMARKET_ID) || supermarkets[0]?.id || '';
   });
 
+  const [authenticatedProfile, setAuthenticatedProfile] = useState<{
+    id: string;
+    name: string;
+    username: string;
+    phone: string;
+  } | null>(() => {
+    try {
+      const saved = localStorage.getItem('alborz_auth_profile');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
   // Setter wrappers that always sync to localStorage
   const setIsLoggedIn = useCallback((val: boolean) => {
     setIsLoggedInState(val);
@@ -71,6 +85,15 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
     localStorage.setItem(STORAGE_KEYS.AUTH_SUPERMARKET_ID, id);
   }, []);
 
+  const setAuthProfile = useCallback((prof: { id: string; name: string; username: string; phone: string } | null) => {
+    setAuthenticatedProfile(prof);
+    if (prof) {
+      localStorage.setItem('alborz_auth_profile', JSON.stringify(prof));
+    } else {
+      localStorage.removeItem('alborz_auth_profile');
+    }
+  }, []);
+
   // Auth State Listener: Sync Supabase session changes safely
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return;
@@ -79,66 +102,67 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
       if (event === 'SIGNED_OUT' || !session) {
         setIsLoggedInState(false);
         localStorage.setItem(STORAGE_KEYS.AUTH_LOGGED_IN, 'false');
+        setAuthProfile(null);
       }
     });
 
     return () => {
       authListener?.subscription?.unsubscribe();
     };
-  }, []);
+  }, [setAuthProfile]);
 
   const currentUser: CurrentUser = useMemo(() => {
     if (role === 'admin') {
       return {
-        id: 'admin-1',
-        name: 'مدیریت مرکزی فرهودی (بارفروش)',
-        username: 'admin',
+        id: authenticatedProfile?.id || 'admin-main',
+        name: authenticatedProfile?.name || 'مدیریت ارشد سامانه',
+        username: authenticatedProfile?.username || 'admin',
         role: 'admin',
         roleTitle: 'مدیر ارشد',
-        phone: '۰۹۱۲۰۰۰۰۰۰۰',
+        phone: authenticatedProfile?.phone || '',
       };
     }
     if (role === 'warehouse') {
       return {
-        id: 'wh-1',
-        name: 'انباردار مرکزی فرهودی',
-        username: 'warehouse',
+        id: authenticatedProfile?.id || 'warehouse-main',
+        name: authenticatedProfile?.name || 'انباردار مرکزی',
+        username: authenticatedProfile?.username || 'warehouse',
         role: 'warehouse',
         roleTitle: 'انباردار مرکزی',
-        phone: '۰۹۱۲۱۱۱۰۰۰۰',
+        phone: authenticatedProfile?.phone || '',
       };
     }
     if (role === 'visitor') {
       const v = visitors.find((vis) => vis.id === selectedVisitorId) || visitors[0];
       return {
-        id: v?.id || '',
-        name: v?.name || 'ویزیتور',
-        username: v?.username || 'visitor',
+        id: v?.id || authenticatedProfile?.id || '',
+        name: v?.name || authenticatedProfile?.name || 'ویزیتور',
+        username: v?.username || authenticatedProfile?.username || 'visitor',
         role: 'visitor',
         roleTitle: `ویزیتور (${v?.region || 'منطقه توزیع'})`,
-        phone: v?.phone || '',
+        phone: v?.phone || authenticatedProfile?.phone || '',
       };
     }
     if (role === 'supermarket') {
       const s = supermarkets.find((sm) => sm.id === selectedSupermarketId) || supermarkets[0];
       return {
-        id: s?.id || '',
-        name: s?.name || 'فروشگاه طرف قرارداد',
-        username: s?.username || 'supermarket',
+        id: s?.id || authenticatedProfile?.id || '',
+        name: s?.name || authenticatedProfile?.name || 'فروشگاه طرف قرارداد',
+        username: s?.username || authenticatedProfile?.username || 'supermarket',
         role: 'supermarket',
         roleTitle: `فروشگاه (${s?.owner || 'مدیریت'})`,
-        phone: s?.phone || '',
+        phone: s?.phone || authenticatedProfile?.phone || '',
       };
     }
     return {
-      id: 'admin-1',
-      name: 'مدیریت مرکزی فرهودی (بارفروش)',
+      id: 'admin-main',
+      name: 'مدیریت ارشد سامانه',
       username: 'admin',
       role: 'admin',
       roleTitle: 'مدیر ارشد',
-      phone: '۰۹۱۲۰۰۰۰۰۰۰',
+      phone: '',
     };
-  }, [role, selectedVisitorId, selectedSupermarketId, visitors, supermarkets]);
+  }, [role, selectedVisitorId, selectedSupermarketId, visitors, supermarkets, authenticatedProfile]);
 
   // Local fallback login evaluator with strict role & password enforcement
   const localLoginFallback = useCallback(
@@ -151,7 +175,7 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
       const inputDigits = cleanUser.replace(/[^0-9]/g, '');
       const userPrefix = cleanUser.includes('@') ? cleanUser.split('@')[0] : cleanUser;
 
-      // 1. Search in predefined profiles (Admin / Warehouse / System)
+      // 1. Search in profiles (if any exist locally)
       const matchedProfile = INITIAL_PROFILES.find((p) => {
         const u = normalizeDigits(p.username).toLowerCase();
         const phoneDigits = normalizeDigits(p.phone).replace(/[^0-9]/g, '');
@@ -174,6 +198,12 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
           };
         }
         setRole(matchedProfile.role);
+        setAuthProfile({
+          id: matchedProfile.id,
+          name: matchedProfile.name,
+          username: matchedProfile.username,
+          phone: matchedProfile.phone,
+        });
         if (matchedProfile.role === 'visitor') {
           setSelectedVisitorId(matchedProfile.id);
         } else if (matchedProfile.role === 'supermarket') {
@@ -206,6 +236,12 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
           };
         }
         setRole('visitor');
+        setAuthProfile({
+          id: matchedVis.id,
+          name: matchedVis.name,
+          username: matchedVis.username || matchedVis.id,
+          phone: matchedVis.phone,
+        });
         setSelectedVisitorId(matchedVis.id);
         setIsLoggedIn(true);
         return { success: true };
@@ -240,6 +276,12 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
           };
         }
         setRole('supermarket');
+        setAuthProfile({
+          id: matchedSm.id,
+          name: matchedSm.name,
+          username: matchedSm.username || matchedSm.id,
+          phone: matchedSm.phone,
+        });
         setSelectedSupermarketId(matchedSm.id);
         setIsLoggedIn(true);
         return { success: true };
@@ -250,7 +292,7 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
         message: 'نام کاربری یا شماره همراه وارد شده یافت نشد.',
       };
     },
-    [supermarkets, visitors, setRole, setSelectedVisitorId, setSelectedSupermarketId, setIsLoggedIn]
+    [supermarkets, visitors, setRole, setSelectedVisitorId, setSelectedSupermarketId, setIsLoggedIn, setAuthProfile]
   );
 
   // Main login with credentials evaluator
@@ -309,6 +351,12 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
               }
 
               setRole(userRole);
+              setAuthProfile({
+                id: matchedProfile.id,
+                name: matchedProfile.name,
+                username: matchedProfile.username,
+                phone: matchedProfile.phone,
+              });
               if (userRole === 'visitor') {
                 setSelectedVisitorId(matchedProfile.id);
               } else if (userRole === 'supermarket') {
@@ -319,7 +367,7 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
             }
           }
 
-          // Step 2: Also check supermarkets table directly
+          // Step 2: Check supermarkets table directly
           const { data: dbSupermarkets } = await supabase
             .from('supermarkets')
             .select('*');
@@ -359,6 +407,12 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
               }
 
               setRole('supermarket');
+              setAuthProfile({
+                id: matchedSm.id,
+                name: matchedSm.name,
+                username: matchedSm.username || matchedSm.id,
+                phone: matchedSm.phone,
+              });
               setSelectedSupermarketId(matchedSm.id);
               setIsLoggedIn(true);
               return { success: true };
@@ -391,6 +445,12 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
                 };
               }
               setRole(userRole);
+              setAuthProfile({
+                id: profile.id,
+                name: profile.name,
+                username: profile.username,
+                phone: profile.phone,
+              });
               if (userRole === 'visitor') {
                 setSelectedVisitorId(profile.id);
               } else if (userRole === 'supermarket') {
@@ -406,32 +466,28 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
         }
       }
 
-      // Fallback to local memory & demo profiles
+      // Fallback to local memory & registered accounts
       return localLoginFallback(normalizedUser, cleanPass, allowedRoles);
     },
-    [setRole, setSelectedVisitorId, setSelectedSupermarketId, setIsLoggedIn, localLoginFallback]
+    [setRole, setSelectedVisitorId, setSelectedSupermarketId, setIsLoggedIn, setAuthProfile, localLoginFallback]
   );
 
   const login = useCallback(
     (profileId: string) => {
-      const profile = INITIAL_PROFILES.find((p) => p.id === profileId);
-      if (profile) {
-        setRole(profile.role);
-        if (profile.role === 'visitor') {
-          setSelectedVisitorId(profile.id);
-        } else if (profile.role === 'supermarket') {
-          setSelectedSupermarketId(profile.id);
-        }
-      } else {
-        const dynamicSm = supermarkets.find((s) => s.id === profileId);
-        if (dynamicSm) {
-          setRole('supermarket');
-          setSelectedSupermarketId(dynamicSm.id);
-        }
+      const dynamicSm = supermarkets.find((s) => s.id === profileId);
+      if (dynamicSm) {
+        setRole('supermarket');
+        setAuthProfile({
+          id: dynamicSm.id,
+          name: dynamicSm.name,
+          username: dynamicSm.username || dynamicSm.id,
+          phone: dynamicSm.phone,
+        });
+        setSelectedSupermarketId(dynamicSm.id);
       }
       setIsLoggedIn(true);
     },
-    [supermarkets, setRole, setSelectedVisitorId, setSelectedSupermarketId, setIsLoggedIn]
+    [supermarkets, setRole, setSelectedSupermarketId, setIsLoggedIn, setAuthProfile]
   );
 
   const logout = useCallback(() => {
@@ -440,10 +496,12 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
     localStorage.removeItem(STORAGE_KEYS.AUTH_ROLE);
     localStorage.removeItem(STORAGE_KEYS.AUTH_VISITOR_ID);
     localStorage.removeItem(STORAGE_KEYS.AUTH_SUPERMARKET_ID);
+    localStorage.removeItem('alborz_auth_profile');
+    setAuthProfile(null);
     if (isSupabaseConfigured && supabase) {
       supabase.auth.signOut().catch((e) => console.warn('Supabase signOut error:', e));
     }
-  }, []);
+  }, [setAuthProfile]);
 
   const registerSupermarket = useCallback(
     async (data: {

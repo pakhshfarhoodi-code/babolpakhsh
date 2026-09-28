@@ -14,6 +14,7 @@ export const STORAGE_KEYS = {
   LOADING_BILLS: 'alborz_loading_bills_v1',
   TRANSACTIONS: 'alborz_tx_v1',
   PRICE_HISTORIES: 'alborz_price_histories_v1',
+  UNITS: 'alborz_units_v1',
   SUPERMARKETS: 'alborz_supermarkets_v1',
   VISITORS: 'alborz_visitors_v1',
 } as const;

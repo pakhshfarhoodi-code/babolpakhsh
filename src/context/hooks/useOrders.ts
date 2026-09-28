@@ -128,6 +128,8 @@ export function useOrders({
         orderSource,
         visitorId: visitor.id,
         supermarketId: supermarket.id,
+        visitors,
+        supermarkets,
         existingOrders: orders,
       });
 

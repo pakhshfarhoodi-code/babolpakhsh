@@ -93,21 +93,45 @@ export function formatPriceToWords(amount: number): string {
 }
 
 /**
- * Extracts a numeric code from an ID string (e.g. 'vis-4' -> '04', 'sp-247' -> '247')
+ * Extracts a 2-digit or N-digit numeric code from an ID or username string.
+ * If entityList is provided, it calculates a 1-based sequential index (01, 02, 03...)
+ * based on creation order or list position.
  */
-export function extractCodeFromId(id: string, defaultLength: number = 2): string {
+export function extractCodeFromId(
+  id: string,
+  defaultLength: number = 2,
+  entityList?: Array<{ id: string; username?: string; created_at?: string }>
+): string {
   if (!id) return '01';
-  const digits = id.replace(/\D/g, '');
-  if (digits) {
-    return digits.length < defaultLength ? digits.padStart(defaultLength, '0') : digits;
+
+  // 1. If entity list is provided, try finding 1-based index in the array
+  if (entityList && Array.isArray(entityList) && entityList.length > 0) {
+    const sorted = [...entityList].sort((a, b) => {
+      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      if (timeA !== timeB) return timeA - timeB;
+      return a.id.localeCompare(b.id);
+    });
+    const index = sorted.findIndex((item) => item.id === id || (item.username && item.username === id));
+    if (index >= 0) {
+      const seqNum = index + 1;
+      return String(seqNum).padStart(defaultLength, '0');
+    }
   }
-  // If no digits, hash the string to a consistent number
+
+  // 2. Extract digits if id contains short explicit digits (e.g., 'vs01' -> '01', 'sp-04' -> '04', 'vis-1' -> '01')
+  const digits = id.replace(/\D/g, '');
+  if (digits && digits.length <= 4) {
+    return digits.padStart(defaultLength, '0');
+  }
+
+  // 3. Fallback for UUIDs without entity list: deterministic hash from 01 to 99
   let hash = 0;
   for (let i = 0; i < id.length; i++) {
     hash = (hash << 5) - hash + id.charCodeAt(i);
     hash |= 0;
   }
-  const positive = Math.abs(hash) % 1000;
+  const positive = (Math.abs(hash) % 99) + 1;
   return String(positive).padStart(defaultLength, '0');
 }
 
@@ -115,6 +139,8 @@ export interface InvoiceNumberParams {
   orderSource: 'visitor' | 'supermarket';
   visitorId?: string;
   supermarketId?: string;
+  visitors?: Array<{ id: string; username?: string; created_at?: string }>;
+  supermarkets?: Array<{ id: string; username?: string; created_at?: string }>;
   existingOrders: Array<{
     id: string;
     order_source?: 'visitor' | 'supermarket';
@@ -126,20 +152,22 @@ export interface InvoiceNumberParams {
 /**
  * Generates custom structured invoice number according to business specifications:
  * - Base starts from 1000
- * - Visitor: VS{visitorCode}-{overallSeq}-{visitorSeq} (e.g. VS04-3359-17)
- * - Supermarket: SP{storeCode}-{overallSeq}-{storeSeq} (e.g. SP247-5488-39)
+ * - Visitor: VS{visitorCode}-{overallSeq}-{visitorSeq} (e.g. VS01-1001-1, VS04-3359-17)
+ * - Supermarket: SP{storeCode}-{overallSeq}-{storeSeq} (e.g. SP04-1001-1, SP247-5488-39)
  */
 export function generateStructuredInvoiceNumber({
   orderSource,
   visitorId,
   supermarketId,
+  visitors = [],
+  supermarkets = [],
   existingOrders = [],
 }: InvoiceNumberParams): string {
   const BASE_OFFSET = 1000;
 
   if (orderSource === 'visitor') {
-    // 1. Visitor code formatted (e.g., 04, 12)
-    const visitorCode = extractCodeFromId(visitorId || 'vis-1', 2);
+    // 1. Visitor code formatted (e.g., 01, 02, 04)
+    const visitorCode = extractCodeFromId(visitorId || 'vis-1', 2, visitors);
 
     // 2. Count overall visitor orders + 1
     const visitorOrders = existingOrders.filter(
@@ -155,8 +183,8 @@ export function generateStructuredInvoiceNumber({
 
     return `VS${visitorCode}-${overallSeq}-${visitorSeq}`;
   } else {
-    // 1. Supermarket code formatted (e.g., 247, 08)
-    const storeCode = extractCodeFromId(supermarketId || 'sp-1', 2);
+    // 1. Supermarket code formatted (e.g., 01, 04, 247)
+    const storeCode = extractCodeFromId(supermarketId || 'sp-1', 2, supermarkets);
 
     // 2. Count overall supermarket direct orders + 1
     const supermarketOrders = existingOrders.filter(

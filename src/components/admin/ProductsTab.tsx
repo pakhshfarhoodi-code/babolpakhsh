@@ -43,7 +43,7 @@ interface ProductsTabProps {
   brands: string[];
   priceHistories: ProductPriceHistory[];
   initialFilterType?: 'lowStock' | 'all';
-  onUpdateProductPrice: (productId: string, newPrice: number, newVisitorPrice?: number) => void;
+  onUpdateProductPrice: (productId: string, newPrice: number, newVisitorPrice?: number, newConsumerPrice?: number) => void;
   onAddNewProduct: (newProd: Omit<Product, 'id'>) => void;
   onBulkUpsertProducts?: (items: any[]) => Promise<{ success: boolean; createdCount: number; updatedCount: number; message: string }> | { success: boolean; createdCount: number; updatedCount: number; message: string };
   onDeleteProduct: (productId: string) => { success: boolean; message: string };
@@ -84,10 +84,11 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   const [onlyLowStock, setOnlyLowStock] = useState(initialFilterType === 'lowStock');
   const [onlyInactive, setOnlyInactive] = useState(false);
 
-  // Quick Inline Price Editing (both store price and visitor price)
+  // Quick Inline Price Editing (visitor price, store price, consumer price)
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
-  const [tempStorePrice, setTempStorePrice] = useState<number>(0);
   const [tempVisitorPrice, setTempVisitorPrice] = useState<number>(0);
+  const [tempStorePrice, setTempStorePrice] = useState<number>(0);
+  const [tempConsumerPrice, setTempConsumerPrice] = useState<number>(0);
 
   // Modals for Excel Import / Export
   const [isExcelImportOpen, setIsExcelImportOpen] = useState(false);
@@ -247,7 +248,12 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
 
   const handleSavePrice = (productId: string) => {
     if (tempStorePrice > 0) {
-      onUpdateProductPrice(productId, tempStorePrice, tempVisitorPrice > 0 ? tempVisitorPrice : undefined);
+      onUpdateProductPrice(
+        productId,
+        tempStorePrice,
+        tempVisitorPrice > 0 ? tempVisitorPrice : undefined,
+        tempConsumerPrice > 0 ? tempConsumerPrice : undefined
+      );
     }
     setEditingPriceId(null);
   };
@@ -566,9 +572,9 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                   <th className="py-3 px-4 font-semibold">نام و مشخصات کالا</th>
                   <th className="py-3 px-4 font-semibold">دسته</th>
                   <th className="py-3 px-4 font-semibold">برند</th>
-                  <th className="py-3 px-4 font-semibold">قیمت مصوب فروش</th>
-                  <th className="py-3 px-4 font-semibold text-emerald-400">قیمت فروشگاه</th>
                   <th className="py-3 px-4 font-semibold text-blue-400">قیمت خرید ویزیتور</th>
+                  <th className="py-3 px-4 font-semibold text-emerald-400">قیمت خرید فروشگاه</th>
+                  <th className="py-3 px-4 font-semibold text-amber-400">قیمت مصرف کننده</th>
                   <th className="py-3 px-4 font-semibold">کل سردخانه</th>
                   <th className="py-3 px-4 font-semibold">رزرو سفارشات</th>
                   <th className="py-3 px-4 font-semibold">موجودی آزاد</th>
@@ -629,7 +635,30 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                         </span>
                       </td>
 
-                      {/* Store Purchase Price (Editable Inline) */}
+                      {/* 1. Visitor Purchase Price (قیمت خرید ویزیتور) */}
+                      <td className="py-3 px-4">
+                        {isEditing ? (
+                          <div className="space-y-1">
+                            <span className="text-[10px] text-blue-400 block font-bold">ویزیتور:</span>
+                            <input
+                              type="number"
+                              min="0"
+                              value={tempVisitorPrice}
+                              onChange={(e) => setTempVisitorPrice(Number(e.target.value))}
+                              className="w-24 px-2 py-1 bg-slate-950 border border-blue-500 rounded-lg text-xs text-blue-300 font-mono"
+                            />
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold font-mono text-blue-400">
+                              {formatPrice(visitorPrice)}
+                            </span>
+                            <span className="text-[11px] text-slate-500">تومان</span>
+                          </div>
+                        )}
+                      </td>
+
+                      {/* 2. Store Purchase Price (قیمت خرید فروشگاه) */}
                       <td className="py-3 px-4">
                         {isEditing ? (
                           <div className="space-y-1">
@@ -652,18 +681,18 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                         )}
                       </td>
 
-                      {/* Visitor Purchase Price (Editable Inline) */}
+                      {/* 3. Consumer Price (قیمت مصرف کننده) */}
                       <td className="py-3 px-4">
                         {isEditing ? (
                           <div className="flex items-center gap-1.5">
                             <div className="space-y-1">
-                              <span className="text-[10px] text-blue-400 block font-bold">ویزیتور:</span>
+                              <span className="text-[10px] text-amber-400 block font-bold">مصرف‌کننده:</span>
                               <input
                                 type="number"
-                                min="1000"
-                                value={tempVisitorPrice}
-                                onChange={(e) => setTempVisitorPrice(Number(e.target.value))}
-                                className="w-24 px-2 py-1 bg-slate-950 border border-blue-500 rounded-lg text-xs text-blue-300 font-mono"
+                                min="0"
+                                value={tempConsumerPrice}
+                                onChange={(e) => setTempConsumerPrice(Number(e.target.value))}
+                                className="w-24 px-2 py-1 bg-slate-950 border border-amber-500 rounded-lg text-xs text-amber-300 font-mono"
                               />
                             </div>
                             <div className="flex items-center gap-1 pt-4">
@@ -685,13 +714,15 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                               </button>
                             </div>
                           </div>
-                        ) : (
+                        ) : product.consumer_price && product.consumer_price > 0 ? (
                           <div className="flex items-center gap-1.5">
-                            <span className="font-bold font-mono text-blue-400">
-                              {formatPrice(visitorPrice)}
+                            <span className="font-bold font-mono text-amber-400">
+                              {formatPrice(product.consumer_price)}
                             </span>
                             <span className="text-[11px] text-slate-500">تومان</span>
                           </div>
+                        ) : (
+                          <span className="text-slate-500 font-mono text-xs">—</span>
                         )}
                       </td>
 
@@ -743,8 +774,9 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                               type="button"
                               onClick={() => {
                                 setEditingPriceId(product.id);
-                                setTempStorePrice(product.price);
                                 setTempVisitorPrice(product.visitor_price || Math.round(product.price * 0.85));
+                                setTempStorePrice(product.price);
+                                setTempConsumerPrice(product.consumer_price || 0);
                               }}
                               className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 inline-flex items-center gap-1 cursor-pointer transition"
                               title="تغییر رسمی نرخ"
@@ -863,6 +895,22 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
+                    <label className="block text-slate-200 mb-1 font-semibold flex items-center justify-between">
+                      <span>خرید ویزیتور</span>
+                      <span className="text-[10px] text-blue-400">محرمانه</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={newProdVisitorPrice || ''}
+                      onChange={(e) => setNewProdVisitorPrice(Number(e.target.value))}
+                      placeholder={newProdPrice ? `${Math.round(newProdPrice * 0.85)}` : 'نرخ ویزیتور'}
+                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
+                    />
+                    <span className="text-[10px] text-slate-400 mt-1 block">نرخ حواله شرکت به ویزیتور</span>
+                  </div>
+
+                  <div>
                     <label className="block text-slate-200 mb-1 font-semibold">
                       خرید فروشگاه <span className="text-amber-400">*</span>
                     </label>
@@ -878,37 +926,22 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                           setNewProdVisitorPrice(Math.round(val * 0.85));
                         }
                       }}
-                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-amber-500 font-mono"
+                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500 font-mono"
                     />
                     <span className="text-[10px] text-slate-400 mt-1 block">نرخ فروش به سوپرمارکت</span>
                   </div>
 
                   <div>
                     <label className="block text-slate-200 mb-1 font-semibold flex items-center justify-between">
-                      <span>خرید ویزیتور</span>
-                      <span className="text-[10px] text-blue-400">محرمانه</span>
-                    </label>
-                    <input
-                      type="number"
-                      min="1000"
-                      value={newProdVisitorPrice || ''}
-                      onChange={(e) => setNewProdVisitorPrice(Number(e.target.value))}
-                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
-                    />
-                    <span className="text-[10px] text-slate-400 mt-1 block">نرخ حواله شرکت به ویزیتور</span>
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-200 mb-1 font-semibold flex items-center justify-between">
                       <span>قیمت مصرف‌کننده</span>
-                      <span className="text-[10px] text-emerald-400">اختیاری</span>
+                      <span className="text-[10px] text-amber-400">اختیاری</span>
                     </label>
                     <input
                       type="number"
                       min="0"
                       value={newProdConsumerPrice || ''}
                       onChange={(e) => setNewProdConsumerPrice(Number(e.target.value))}
-                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500 font-mono"
+                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-amber-500 font-mono"
                     />
                     <span className="text-[10px] text-slate-400 mt-1 block">درج روی جلد کالا (در صورت وجود)</span>
                   </div>

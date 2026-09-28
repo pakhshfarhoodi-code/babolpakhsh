@@ -71,7 +71,7 @@ interface AppContextType {
   respondToReassignment: (requestId: string, accept: boolean) => void;
   createLoadingBill: (visitorId: string, orderIds: string[]) => void;
   approveLoadingBill: (billId: string) => void;
-  updateProductPrice: (productId: string, newPrice: number, newVisitorPrice?: number) => void;
+  updateProductPrice: (productId: string, newPrice: number, newVisitorPrice?: number, newConsumerPrice?: number) => void;
   updateProductStock: (productId: string, additionalStock: number) => void;
   addNewProduct: (product: Omit<Product, 'id' | 'reserved_stock'>) => void;
   bulkUpsertProducts: (items: Array<{

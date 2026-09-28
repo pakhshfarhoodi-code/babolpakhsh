@@ -78,13 +78,14 @@ export function useCatalog() {
     localStorage.setItem(STORAGE_KEYS.PRICE_HISTORIES, JSON.stringify(priceHistories));
   }, [priceHistories]);
 
-  // Update product price (supports both store price and visitor purchase price)
-  const updateProductPrice = useCallback((productId: string, newPrice: number, newVisitorPrice?: number) => {
+  // Update product price (supports store price, visitor purchase price, and optional consumer price)
+  const updateProductPrice = useCallback((productId: string, newPrice: number, newVisitorPrice?: number, newConsumerPrice?: number) => {
     const prod = products.find((p) => p.id === productId);
     if (!prod) return;
     
     const targetVisitorPrice = newVisitorPrice !== undefined ? newVisitorPrice : (prod.visitor_price ?? Math.round(newPrice * 0.85));
-    if (prod.price === newPrice && prod.visitor_price === targetVisitorPrice) return;
+    const targetConsumerPrice = newConsumerPrice !== undefined ? newConsumerPrice : prod.consumer_price;
+    if (prod.price === newPrice && prod.visitor_price === targetVisitorPrice && prod.consumer_price === targetConsumerPrice) return;
 
     const nowPersian = new Intl.DateTimeFormat('fa-IR', {
       year: 'numeric',
@@ -107,16 +108,25 @@ export function useCatalog() {
 
     setPriceHistories((prev) => [historyRecord, ...prev]);
     setProducts((prev) =>
-      prev.map((p) => (p.id === productId ? { ...p, price: newPrice, visitor_price: targetVisitorPrice } : p))
+      prev.map((p) => (p.id === productId ? { ...p, price: newPrice, visitor_price: targetVisitorPrice, consumer_price: targetConsumerPrice } : p))
     );
 
     if (isSupabaseConfigured && supabase) {
       supabase
         .from('products')
-        .update({ price: newPrice, visitor_price: targetVisitorPrice })
+        .update({
+          price: newPrice,
+          visitor_price: targetVisitorPrice,
+          consumer_price: targetConsumerPrice !== undefined ? targetConsumerPrice : null,
+        })
         .eq('id', productId)
         .then(({ error }) => {
-          if (error) console.error('خطا در تغییر قیمت کالا روی Supabase:', error);
+          if (error) {
+            supabase
+              .from('products')
+              .update({ price: newPrice, visitor_price: targetVisitorPrice })
+              .eq('id', productId);
+          }
         });
 
       supabase

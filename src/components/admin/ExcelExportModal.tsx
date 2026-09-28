@@ -39,12 +39,14 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
         'نام کالا': p.name,
         'برند': p.brand || 'متفرقه',
         'دسته‌بندی': cat?.name || 'عمومی',
-        'قیمت خرید فروشگاه (تومان)': p.price,
       };
 
       if (includeVisitorPrice) {
         row['قیمت خرید ویزیتور (تومان)'] = p.visitor_price || Math.round(p.price * 0.85);
       }
+
+      row['قیمت خرید فروشگاه (تومان)'] = p.price;
+      row['قیمت مصرف‌کننده (تومان)'] = p.consumer_price && p.consumer_price > 0 ? p.consumer_price : '';
 
       if (includeStock) {
         row['موجودی کل انبار'] = p.stock;

@@ -133,7 +133,14 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
       };
     }
     if (role === 'visitor') {
-      const v = visitors.find((vis) => vis.id === selectedVisitorId) || visitors[0];
+      const v =
+        visitors.find(
+          (vis) =>
+            vis.id === selectedVisitorId ||
+            (authenticatedProfile?.id && vis.id === authenticatedProfile.id) ||
+            (authenticatedProfile?.username && vis.username && vis.username.toLowerCase() === authenticatedProfile.username.toLowerCase()) ||
+            (authenticatedProfile?.phone && vis.phone && vis.phone === authenticatedProfile.phone)
+        ) || visitors[0];
       return {
         id: v?.id || authenticatedProfile?.id || '',
         name: v?.name || authenticatedProfile?.name || 'ویزیتور',
@@ -144,7 +151,14 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
       };
     }
     if (role === 'supermarket') {
-      const s = supermarkets.find((sm) => sm.id === selectedSupermarketId) || supermarkets[0];
+      const s =
+        supermarkets.find(
+          (sm) =>
+            sm.id === selectedSupermarketId ||
+            (authenticatedProfile?.id && sm.id === authenticatedProfile.id) ||
+            (authenticatedProfile?.username && sm.username && sm.username.toLowerCase() === authenticatedProfile.username.toLowerCase()) ||
+            (authenticatedProfile?.phone && sm.phone && sm.phone === authenticatedProfile.phone)
+        ) || supermarkets[0];
       return {
         id: s?.id || authenticatedProfile?.id || '',
         name: s?.name || authenticatedProfile?.name || 'فروشگاه طرف قرارداد',
@@ -215,11 +229,11 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
 
       // 2. Search in registered visitors
       const matchedVis = visitors.find((v) => {
-        const u = normalizeDigits(v.username || v.id).toLowerCase();
+        const u = v.username ? normalizeDigits(v.username).toLowerCase() : '';
         const phoneDigits = normalizeDigits(v.phone || '').replace(/[^0-9]/g, '');
         return (
-          u === cleanUser ||
-          u === userPrefix ||
+          (u && u === cleanUser) ||
+          (u && u === userPrefix) ||
           (inputDigits.length >= 7 && phoneDigits.includes(inputDigits)) ||
           (inputDigits.length >= 7 && inputDigits.includes(phoneDigits) && phoneDigits.length >= 7)
         );
@@ -239,7 +253,7 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
         setAuthProfile({
           id: matchedVis.id,
           name: matchedVis.name,
-          username: matchedVis.username || matchedVis.id,
+          username: matchedVis.username || matchedVis.phone || matchedVis.id,
           phone: matchedVis.phone,
         });
         setSelectedVisitorId(matchedVis.id);
@@ -249,11 +263,11 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
 
       // 3. Search in registered supermarkets
       const matchedSm = supermarkets.find((s) => {
-        const u = normalizeDigits(s.username || s.id).toLowerCase();
+        const u = s.username ? normalizeDigits(s.username).toLowerCase() : '';
         const phoneDigits = normalizeDigits(s.phone || '').replace(/[^0-9]/g, '');
         return (
-          u === cleanUser ||
-          u === userPrefix ||
+          (u && u === cleanUser) ||
+          (u && u === userPrefix) ||
           (inputDigits.length >= 7 && phoneDigits.includes(inputDigits)) ||
           (inputDigits.length >= 7 && inputDigits.includes(phoneDigits) && phoneDigits.length >= 7)
         );
@@ -279,7 +293,7 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
         setAuthProfile({
           id: matchedSm.id,
           name: matchedSm.name,
-          username: matchedSm.username || matchedSm.id,
+          username: matchedSm.username || matchedSm.phone || matchedSm.id,
           phone: matchedSm.phone,
         });
         setSelectedSupermarketId(matchedSm.id);
@@ -316,16 +330,14 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
 
           if (!profErr && dbProfiles && dbProfiles.length > 0) {
             const matchedProfile = dbProfiles.find((p: any) => {
-              const u = normalizeDigits(p.username || '').toLowerCase();
+              const u = p.username ? normalizeDigits(p.username).toLowerCase() : '';
               const pPhoneDigits = normalizeDigits(p.phone || '').replace(/[^0-9]/g, '');
-              const pName = (p.name || '').toLowerCase();
 
               return (
-                u === normalizedUser ||
-                u === userPrefix ||
+                (u && u === normalizedUser) ||
+                (u && u === userPrefix) ||
                 (rawDigits.length >= 7 && pPhoneDigits.includes(rawDigits)) ||
-                (rawDigits.length >= 7 && rawDigits.includes(pPhoneDigits) && pPhoneDigits.length >= 7) ||
-                pName === normalizedUser
+                (rawDigits.length >= 7 && rawDigits.includes(pPhoneDigits) && pPhoneDigits.length >= 7)
               );
             });
 
@@ -351,16 +363,36 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
               }
 
               setRole(userRole);
-              setAuthProfile({
-                id: matchedProfile.id,
-                name: matchedProfile.name,
-                username: matchedProfile.username,
-                phone: matchedProfile.phone,
-              });
               if (userRole === 'visitor') {
-                setSelectedVisitorId(matchedProfile.id);
+                const localVis = visitors.find(
+                  (v) =>
+                    v.id === matchedProfile.id ||
+                    (v.username && matchedProfile.username && v.username.toLowerCase() === matchedProfile.username.toLowerCase()) ||
+                    (v.phone && matchedProfile.phone && v.phone === matchedProfile.phone)
+                );
+                const resolvedVisId = localVis ? localVis.id : matchedProfile.id;
+                setAuthProfile({
+                  id: resolvedVisId,
+                  name: localVis?.name || matchedProfile.name,
+                  username: localVis?.username || matchedProfile.username,
+                  phone: localVis?.phone || matchedProfile.phone,
+                });
+                setSelectedVisitorId(resolvedVisId);
               } else if (userRole === 'supermarket') {
-                setSelectedSupermarketId(matchedProfile.id);
+                const localSm = supermarkets.find(
+                  (s) =>
+                    s.id === matchedProfile.id ||
+                    (s.username && matchedProfile.username && s.username.toLowerCase() === matchedProfile.username.toLowerCase()) ||
+                    (s.phone && matchedProfile.phone && s.phone === matchedProfile.phone)
+                );
+                const resolvedSmId = localSm ? localSm.id : matchedProfile.id;
+                setAuthProfile({
+                  id: resolvedSmId,
+                  name: localSm?.name || matchedProfile.name,
+                  username: localSm?.username || matchedProfile.username,
+                  phone: localSm?.phone || matchedProfile.phone,
+                });
+                setSelectedSupermarketId(resolvedSmId);
               }
               setIsLoggedIn(true);
               return { success: true };
@@ -374,16 +406,14 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
 
           if (dbSupermarkets && dbSupermarkets.length > 0) {
             const matchedSm = dbSupermarkets.find((s: any) => {
-              const u = normalizeDigits(s.username || '').toLowerCase();
+              const u = s.username ? normalizeDigits(s.username).toLowerCase() : '';
               const sPhoneDigits = normalizeDigits(s.phone || '').replace(/[^0-9]/g, '');
-              const sName = (s.name || '').toLowerCase();
 
               return (
-                u === normalizedUser ||
-                u === userPrefix ||
+                (u && u === normalizedUser) ||
+                (u && u === userPrefix) ||
                 (rawDigits.length >= 7 && sPhoneDigits.includes(rawDigits)) ||
-                (rawDigits.length >= 7 && rawDigits.includes(sPhoneDigits) && sPhoneDigits.length >= 7) ||
-                sName === normalizedUser
+                (rawDigits.length >= 7 && rawDigits.includes(sPhoneDigits) && sPhoneDigits.length >= 7)
               );
             });
 
@@ -406,14 +436,22 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
                 };
               }
 
+              const localSm = supermarkets.find(
+                (s) =>
+                  s.id === matchedSm.id ||
+                  (s.username && matchedSm.username && s.username.toLowerCase() === matchedSm.username.toLowerCase()) ||
+                  (s.phone && matchedSm.phone && s.phone === matchedSm.phone)
+              );
+              const resolvedSmId = localSm ? localSm.id : matchedSm.id;
+
               setRole('supermarket');
               setAuthProfile({
-                id: matchedSm.id,
-                name: matchedSm.name,
-                username: matchedSm.username || matchedSm.id,
-                phone: matchedSm.phone,
+                id: resolvedSmId,
+                name: localSm?.name || matchedSm.name,
+                username: localSm?.username || matchedSm.username || matchedSm.id,
+                phone: localSm?.phone || matchedSm.phone,
               });
-              setSelectedSupermarketId(matchedSm.id);
+              setSelectedSupermarketId(resolvedSmId);
               setIsLoggedIn(true);
               return { success: true };
             }

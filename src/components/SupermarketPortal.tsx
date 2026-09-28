@@ -36,6 +36,7 @@ export const SupermarketPortal: React.FC = () => {
     categories,
     orders,
     createOrder,
+    currentUser,
   } = useApp();
 
   const defaultFallbackStore: Supermarket = useMemo(() => ({
@@ -51,7 +52,13 @@ export const SupermarketPortal: React.FC = () => {
   }), []);
 
   const currentStore =
-    supermarkets.find((s) => s.id === selectedSupermarketId) ||
+    supermarkets.find(
+      (s) =>
+        s.id === selectedSupermarketId ||
+        (currentUser?.id && s.id === currentUser.id) ||
+        (currentUser?.username && s.username && s.username.toLowerCase() === currentUser.username.toLowerCase()) ||
+        (currentUser?.phone && s.phone && s.phone === currentUser.phone)
+    ) ||
     supermarkets[0] ||
     defaultFallbackStore;
 
@@ -112,7 +119,7 @@ export const SupermarketPortal: React.FC = () => {
     }
   });
 
-  // Re-sync cart on store change or product stock updates
+  // Re-sync cart on store change
   useEffect(() => {
     try {
       const saved = localStorage.getItem(storageKey);
@@ -132,7 +139,7 @@ export const SupermarketPortal: React.FC = () => {
     } catch {
       setCart({});
     }
-  }, [storageKey, products]);
+  }, [storageKey]);
 
   // Persist cart to localStorage whenever it changes
   useEffect(() => {
@@ -230,9 +237,12 @@ export const SupermarketPortal: React.FC = () => {
   );
 
   const handleClearCart = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(storageKey, JSON.stringify({}));
+    }
     setCart({});
     showToast('سبد سفارش خالی شد.');
-  }, [showToast]);
+  }, [storageKey, showToast]);
 
   // Quick reorder handler
   const handleReorder = useCallback(
@@ -317,6 +327,9 @@ export const SupermarketPortal: React.FC = () => {
       });
 
       if (res.success) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(storageKey, JSON.stringify({}));
+        }
         setCart({});
         setIsMobileCartOpen(false);
         setPlacedOrderId(res.orderId || 'ORD-NEW');

@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
-import { Supermarket, Visitor } from '../../types';
+import { Visitor } from '../../types';
 import { useApp } from '../../context/AppContext';
 import {
   X,
-  Store,
-  User,
-  MapPin,
   Truck,
+  User,
   Phone,
+  MapPin,
   KeyRound,
   Lock,
   CheckCircle2,
@@ -16,20 +15,18 @@ import {
   AtSign,
 } from 'lucide-react';
 
-interface StoreProfileSheetProps {
+interface VisitorProfileSheetProps {
   isOpen: boolean;
   onClose: () => void;
-  store?: Supermarket;
   visitor?: Visitor;
 }
 
-export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
+export const VisitorProfileSheet: React.FC<VisitorProfileSheetProps> = ({
   isOpen,
   onClose,
-  store,
   visitor,
 }) => {
-  const { resetSupermarketPassword } = useApp();
+  const { resetVisitorPassword } = useApp();
 
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [newPassword, setNewPassword] = useState('');
@@ -42,7 +39,7 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
 
   const handleChangePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!store?.id) return;
+    if (!visitor?.id) return;
 
     setError(null);
     setSuccess(null);
@@ -65,9 +62,9 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
 
     setIsSubmitting(true);
     try {
-      const res = await resetSupermarketPassword(store.id, cleanPass);
+      const res = await resetVisitorPassword(visitor.id, cleanPass);
       if (res.success) {
-        setSuccess('رمز عبور حساب کاربری فروشگاه با موفقیت تغییر یافت.');
+        setSuccess('رمز عبور حساب کاربری ویزیتور با موفقیت تغییر یافت.');
         setNewPassword('');
         setConfirmPassword('');
         setTimeout(() => {
@@ -93,12 +90,12 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-emerald-600/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
-              <Store className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-lg bg-blue-600/20 text-blue-400 flex items-center justify-center border border-blue-500/30">
+              <Truck className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-100">{store?.name || 'فروشگاه طرف قرارداد'}</h3>
-              <p className="text-xs text-slate-400">پروفایل فروشگاه و مدیریت حساب</p>
+              <h3 className="text-sm font-bold text-slate-100">{visitor?.name || 'واحد ویزیت و توزیع'}</h3>
+              <p className="text-xs text-slate-400">پروفایل ویزیتور و مدیریت حساب</p>
             </div>
           </div>
           <button
@@ -114,62 +111,43 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
         <div className="space-y-2.5 text-xs">
           <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80">
             <div className="flex items-center gap-2 text-slate-400">
-              <User className="w-4 h-4 text-emerald-400" />
-              <span>مدیریت / مالک:</span>
+              <User className="w-4 h-4 text-blue-400" />
+              <span>نام و نام خانوادگی:</span>
             </div>
-            <span className="font-bold text-slate-200">{store?.owner || 'مدیر فروشگاه'}</span>
+            <span className="font-bold text-slate-200">{visitor?.name || 'نامشخص'}</span>
           </div>
 
-          {store?.username && (
+          {visitor?.phone && (
             <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80">
               <div className="flex items-center gap-2 text-slate-400">
-                <AtSign className="w-4 h-4 text-emerald-400" />
+                <Phone className="w-4 h-4 text-blue-400" />
+                <span>شماره تماس:</span>
+              </div>
+              <span className="font-mono font-bold text-slate-200 dir-ltr">{visitor.phone}</span>
+            </div>
+          )}
+
+          {visitor?.region && (
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80">
+              <div className="flex items-center gap-2 text-slate-400">
+                <MapPin className="w-4 h-4 text-blue-400" />
+                <span>منطقه توزیع:</span>
+              </div>
+              <span className="font-bold text-blue-300">{visitor.region}</span>
+            </div>
+          )}
+
+          {visitor?.username && (
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80">
+              <div className="flex items-center gap-2 text-slate-400">
+                <AtSign className="w-4 h-4 text-blue-400" />
                 <span>نام کاربری ورود:</span>
               </div>
-              <span className="font-mono font-bold text-emerald-300 dir-ltr">{store.username}</span>
-            </div>
-          )}
-
-          {store?.address && (
-            <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1">
-              <div className="flex items-center gap-2 text-slate-400">
-                <MapPin className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>آدرس فروشگاه:</span>
-              </div>
-              <p className="text-slate-200 text-xs leading-relaxed pr-6">{store.address}</p>
-            </div>
-          )}
-
-          {visitor ? (
-            <div className="p-2.5 rounded-xl bg-blue-950/40 border border-blue-900/60 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-slate-300 font-semibold">
-                  <Truck className="w-4 h-4 text-blue-400" />
-                  <span>ویزیتور اختصاصی:</span>
-                </div>
-                <span className="font-bold text-slate-100">{visitor.name}</span>
-              </div>
-
-              {visitor.region && (
-                <p className="text-xs text-slate-400 pr-6">منطقه: {visitor.region}</p>
-              )}
-
-              {visitor.phone && (
-                <div className="pt-2 border-t border-blue-900/40 flex items-center justify-between">
-                  <span className="text-slate-400 font-mono text-xs dir-ltr">{visitor.phone}</span>
-                  <a
-                    href={`tel:${visitor.phone}`}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-sm transition"
-                  >
-                    <Phone className="w-3.5 h-3.5" />
-                    <span>تماس تلفنی</span>
-                  </a>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 text-slate-400">
-              ویزیتور مستقیم تعیین نشده است.
+              <span className="font-mono font-bold text-blue-300 dir-ltr">
+                {visitor.username && !visitor.username.includes('-') && visitor.username.length < 25
+                  ? visitor.username
+                  : (visitor.phone || 'مشخص نشده')}
+              </span>
             </div>
           )}
         </div>
@@ -194,7 +172,7 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
               <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-amber-300">
                   <Lock className="w-3.5 h-3.5 text-amber-400" />
-                  <span>تغییر رمز عبور ورود</span>
+                  <span>تغییر رمز عبور ورود ویزیتور</span>
                 </div>
                 <button
                   type="button"
@@ -284,4 +262,3 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
     </div>
   );
 };
-

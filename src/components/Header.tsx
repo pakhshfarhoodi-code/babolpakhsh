@@ -13,6 +13,7 @@ import {
   Phone,
 } from 'lucide-react';
 import { StoreProfileSheet } from './shop/StoreProfileSheet';
+import { VisitorProfileSheet } from './visitor/VisitorProfileSheet';
 import appLogo from '../assets/images/farhoodi_b2b_logo_1790548040455.jpg';
 
 interface HeaderProps {
@@ -69,6 +70,7 @@ export const Header: React.FC<HeaderProps> = () => {
     defaultVisitor;
 
   const [isStoreProfileOpen, setIsStoreProfileOpen] = useState(false);
+  const [isVisitorProfileOpen, setIsVisitorProfileOpen] = useState(false);
 
   // Counter metrics
   const pendingReassignments = orders.filter((o) => o.status === 'delegated').length;
@@ -154,48 +156,64 @@ export const Header: React.FC<HeaderProps> = () => {
   // 2. Visitor Portal Header
   if (role === 'visitor') {
     return (
-      <header className="border-b border-slate-800/80 bg-slate-900/90 sticky top-0 z-40 backdrop-blur-xl shadow-lg shadow-black/20">
-        <div className="max-w-7xl mx-auto px-3 sm:px-5 py-2">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-amber-500 p-0.5 shadow-md shadow-blue-500/20 shrink-0 overflow-hidden">
-                <img src={appLogo} alt="لوگوی پخش فرهودی" className="w-full h-full object-cover rounded-[10px]" />
-              </div>
+      <>
+        <header className="border-b border-slate-800/80 bg-slate-900/90 sticky top-0 z-40 backdrop-blur-xl shadow-lg shadow-black/20">
+          <div className="max-w-7xl mx-auto px-3 sm:px-5 py-2">
+            <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
-                <span className="text-sm font-bold text-slate-100 truncate max-w-[130px] sm:max-w-[200px]">
-                  {currentVisitor?.name || 'واحد ویزیت و توزیع'}
-                </span>
-                <span className="text-xs font-semibold text-blue-300 bg-blue-950/80 px-2 py-0.5 rounded-full border border-blue-800/50 shrink-0">
-                  {currentVisitor?.region || 'عمومی'}
-                </span>
-                <span className="text-[11px] text-amber-400/90 bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-800/40 shrink-0 hidden sm:inline-block font-medium">
-                  بارفروش | پخش فرهودی
-                </span>
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-amber-500 p-0.5 shadow-md shadow-blue-500/20 shrink-0 overflow-hidden">
+                  <img src={appLogo} alt="لوگوی پخش فرهودی" className="w-full h-full object-cover rounded-[10px]" />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsVisitorProfileOpen(true)}
+                  className="flex items-center gap-2 min-w-0 hover:opacity-85 transition cursor-pointer text-right group"
+                  title="مشاهده پروفایل ویزیتور و تغییر رمز عبور"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-sm font-bold text-slate-100 truncate max-w-[130px] sm:max-w-[200px]">
+                      {currentVisitor?.name || 'واحد ویزیت و توزیع'}
+                    </span>
+                    <span className="text-xs font-semibold text-blue-300 bg-blue-950/80 px-2 py-0.5 rounded-full border border-blue-800/50 shrink-0">
+                      {currentVisitor?.region || 'عمومی'}
+                    </span>
+                    <span className="text-xs text-blue-400 bg-blue-950/80 px-2 py-0.5 rounded-full border border-blue-800/40 shrink-0">
+                      پروفایل
+                    </span>
+                  </div>
+                </button>
               </div>
-            </div>
 
-            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              <button
-                id="theme-toggle-btn"
-                onClick={toggleTheme}
-                title={theme === 'dark' ? 'تغییر به حالت روز (روشن)' : 'تغییر به حالت شب (تاریک)'}
-                className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white border border-slate-700/60 transition cursor-pointer shrink-0"
-              >
-                {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-400" />}
-              </button>
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                <button
+                  id="theme-toggle-btn"
+                  onClick={toggleTheme}
+                  title={theme === 'dark' ? 'تغییر به حالت روز (روشن)' : 'تغییر به حالت شب (تاریک)'}
+                  className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white border border-slate-700/60 transition cursor-pointer shrink-0"
+                >
+                  {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-400" />}
+                </button>
 
-              <button
-                id="header-logout-btn"
-                onClick={() => logout()}
-                title="خروج از حساب کاربری و بازگشت به صفحه ورود"
-                className="p-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 hover:text-rose-200 border border-rose-500/40 transition text-xs font-semibold cursor-pointer shrink-0"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
+                <button
+                  id="header-logout-btn"
+                  onClick={() => logout()}
+                  title="خروج از حساب کاربری و بازگشت به صفحه ورود"
+                  className="p-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 hover:text-rose-200 border border-rose-500/40 transition text-xs font-semibold cursor-pointer shrink-0"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      </header>
+        </header>
+
+        <VisitorProfileSheet
+          isOpen={isVisitorProfileOpen}
+          onClose={() => setIsVisitorProfileOpen(false)}
+          visitor={currentVisitor}
+        />
+      </>
     );
   }
 

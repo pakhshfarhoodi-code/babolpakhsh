@@ -514,13 +514,19 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-sm text-slate-100">{visitor.name}</span>
                         <span className="text-xs px-2 py-0.5 rounded-md bg-blue-900/50 text-blue-300 border border-blue-800/50">
                           {visitor.region}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-400 mt-1 font-mono">{visitor.phone}</p>
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                        <p className="text-xs text-slate-400 font-mono">{visitor.phone}</p>
+                        <div className="inline-flex items-center gap-1.5 text-blue-300 font-mono text-xs bg-blue-950/70 px-2.5 py-0.5 rounded-lg border border-blue-500/40 font-bold shadow-xs">
+                          <AtSign className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                          <span>نام کاربری: {visitor.username || visitor.id}</span>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="text-left space-y-0.5">
@@ -783,13 +789,12 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                                 </span>
                               )}
                             </div>
-                            <div className="flex items-center gap-2 mt-0.5 text-slate-400 flex-wrap">
-                              <span>مدیریت: {shop.owner}</span>
-                              {shop.username && (
-                                <span className="text-amber-300 font-mono text-[11px] bg-slate-900/90 px-2 py-0.5 rounded-md border border-slate-800">
-                                  نام کاربری: {shop.username}
-                                </span>
-                              )}
+                            <div className="flex items-center gap-2.5 mt-1.5 text-slate-400 flex-wrap">
+                              <span>مدیریت: <strong className="text-slate-300 font-semibold">{shop.owner}</strong></span>
+                              <div className="inline-flex items-center gap-1.5 text-amber-300 font-mono text-xs bg-amber-950/60 px-2.5 py-0.5 rounded-lg border border-amber-500/40 font-bold shadow-xs">
+                                <AtSign className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                <span>نام کاربری: {shop.username || shop.phone || shop.id}</span>
+                              </div>
                             </div>
                           </div>
                         </div>

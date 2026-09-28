@@ -58,8 +58,32 @@ export function useSupabaseSync({
           const validProds = (prods || []).filter((p: Product) => !LEGACY_MOCK_NAMES.has(p.name?.trim()));
           setProducts((prev) => {
             const dbMap = new Map(validProds.map((p: Product) => [p.id, p]));
-            const merged: Product[] = [...validProds];
+            const localMap = new Map(prev.map((p: Product) => [p.id, p]));
             const localOnlyItems: Product[] = [];
+
+            // Merge server data with any locally edited properties (like image_url, price, etc.)
+            const merged: Product[] = validProds.map((dbProd: Product) => {
+              const localProd = localMap.get(dbProd.id);
+              if (!localProd) return dbProd;
+
+              // If local image_url was updated and differs from dbProd, prioritize local edited image_url
+              const finalImage = (localProd.image_url && localProd.image_url !== dbProd.image_url) 
+                ? localProd.image_url 
+                : dbProd.image_url;
+
+              const mergedItem = {
+                ...dbProd,
+                image_url: finalImage,
+              };
+
+              // If local image is different, sync it up to Supabase in the background
+              if (localProd.image_url && localProd.image_url !== dbProd.image_url && isSupabaseConfigured && supabase) {
+                supabase.from('products').update({ image_url: localProd.image_url }).eq('id', dbProd.id).then(() => {});
+              }
+
+              return mergedItem;
+            });
+
             prev.forEach((localP) => {
               if (!LEGACY_MOCK_NAMES.has(localP.name?.trim()) && !dbMap.has(localP.id)) {
                 merged.push(localP);

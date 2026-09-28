@@ -308,6 +308,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteSupermarket = useCallback(async (id: string): Promise<{ success: boolean; message: string }> => {
     try {
       if (isSupabaseConfigured && supabase) {
+        // 1. Decouple orders referencing this supermarket to prevent foreign key RESTRICT failure
+        const { error: ordError } = await supabase
+          .from('orders')
+          .update({ supermarket_id: null })
+          .eq('supermarket_id', id);
+
+        if (ordError) {
+          console.warn('Supermarket order decoupling warning:', ordError.message);
+        }
+
+        // 2. Delete from supermarkets table
         const { error: smError } = await supabase
           .from('supermarkets')
           .delete()
@@ -317,14 +328,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return { success: false, message: `خطا در حذف سوپرمارکت از پایگاه داده: ${smError.message}` };
         }
 
-        // Also delete profile
-        await supabase
+        // 3. Delete from profiles table
+        const { error: profError } = await supabase
           .from('profiles')
           .delete()
           .eq('id', id);
+
+        if (profError) {
+          console.warn('Profile deletion warning:', profError.message);
+        }
       }
 
-      setSupermarkets((prev) => prev.filter((s) => s.id !== id));
+      setSupermarkets((prev) => {
+        const next = prev.filter((s) => s.id !== id);
+        localStorage.setItem(STORAGE_KEYS.SUPERMARKETS, JSON.stringify(next));
+        return next;
+      });
 
       return { success: true, message: 'مشتری با موفقیت حذف گردید.' };
     } catch (err: unknown) {
@@ -465,14 +484,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteVisitor = useCallback(async (id: string): Promise<{ success: boolean; message: string }> => {
     try {
       if (isSupabaseConfigured && supabase) {
+        // 1. Unlink assigned_visitor_id in supermarkets and orders to prevent FK constraint failure
+        await supabase.from('supermarkets').update({ assigned_visitor_id: null }).eq('assigned_visitor_id', id);
+        await supabase.from('orders').update({ assigned_visitor_id: null }).eq('assigned_visitor_id', id);
+
+        // 2. Delete from visitors table
         const { error: visError } = await supabase.from('visitors').delete().eq('id', id);
         if (visError) {
-          return { success: false, message: `خطا در حذف ویزیتور از دیتابیس: این ویزیتور دارای سفارش یا مشتری متصل است (${visError.message})` };
+          return { success: false, message: `خطا در حذف ویزیتور از دیتابیس: ${visError.message}` };
         }
+
+        // 3. Delete profile
         await supabase.from('profiles').delete().eq('id', id);
       }
 
-      setVisitors((prev) => prev.filter((v) => v.id !== id));
+      setVisitors((prev) => {
+        const next = prev.filter((v) => v.id !== id);
+        localStorage.setItem(STORAGE_KEYS.VISITORS, JSON.stringify(next));
+        return next;
+      });
 
       return { success: true, message: 'ویزیتور با موفقیت حذف گردید.' };
     } catch (err: unknown) {

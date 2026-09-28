@@ -134,44 +134,9 @@ export function useSupabaseSync({
 
         // 6. Supermarkets
         const { data: sms } = await supabase!.from('supermarkets').select('*');
-        let cleanSms: Supermarket[] = sms
+        const cleanSms: Supermarket[] = sms
           ? sms.filter((sm: Supermarket) => !DUMMY_SUPERMARKET_IDS.has(sm.id))
           : [];
-
-        // Auto-reconcile missing stores from profiles (e.g. online registrations)
-        if (profiles) {
-          const existingSmIds = new Set(cleanSms.map((s) => s.id));
-          const missingSmProfiles = profiles.filter(
-            (p) => p.role === 'supermarket' && !existingSmIds.has(p.id) && !DUMMY_SUPERMARKET_IDS.has(p.id)
-          );
-
-          for (const prof of missingSmProfiles) {
-            const restoredSm: Supermarket = {
-              id: prof.id,
-              name: prof.name || 'فروشگاه جدید',
-              owner: prof.owner || prof.name || 'متصدی فروشگاه',
-              phone: prof.phone || '',
-              address: prof.address || 'ثبت نام آنلاین',
-              assigned_visitor_id: prof.assigned_visitor_id || '',
-              is_active: prof.is_active ?? true,
-              username: prof.username || '',
-            };
-            cleanSms.push(restoredSm);
-
-            // Auto-heal missing row in supermarkets table on Supabase
-            supabase!.from('supermarkets').upsert({
-              id: restoredSm.id,
-              name: restoredSm.name,
-              owner: restoredSm.owner,
-              phone: restoredSm.phone,
-              address: restoredSm.address,
-              assigned_visitor_id: restoredSm.assigned_visitor_id || null,
-              is_active: restoredSm.is_active,
-            }).then(({ error }) => {
-              if (error) console.warn('Auto-repair supermarket table warning:', error.message);
-            });
-          }
-        }
 
         setSupermarkets((prev) => {
           return cleanSms.map((sm: Supermarket) => {
@@ -187,40 +152,9 @@ export function useSupabaseSync({
 
         // 7. Visitors
         const { data: visData } = await supabase!.from('visitors').select('*');
-        let cleanVis: Visitor[] = visData
+        const cleanVis: Visitor[] = visData
           ? visData.filter((v: Visitor) => !DUMMY_VISITOR_IDS.has(v.id))
           : [];
-
-        // Auto-reconcile missing visitors from profiles
-        if (profiles) {
-          const existingVisIds = new Set(cleanVis.map((v) => v.id));
-          const missingVisProfiles = profiles.filter(
-            (p) => p.role === 'visitor' && !existingVisIds.has(p.id) && !DUMMY_VISITOR_IDS.has(p.id)
-          );
-
-          for (const prof of missingVisProfiles) {
-            const restoredVis: Visitor = {
-              id: prof.id,
-              name: prof.name || 'ویزیتور جدید',
-              phone: prof.phone || '',
-              region: prof.region || 'عمومی',
-              username: prof.username || '',
-              is_active: prof.is_active ?? true,
-            };
-            cleanVis.push(restoredVis);
-
-            // Auto-heal missing row in visitors table on Supabase
-            supabase!.from('visitors').upsert({
-              id: restoredVis.id,
-              name: restoredVis.name,
-              phone: restoredVis.phone,
-              region: restoredVis.region,
-              is_active: restoredVis.is_active,
-            }).then(({ error }) => {
-              if (error) console.warn('Auto-repair visitor table warning:', error.message);
-            });
-          }
-        }
 
         setVisitors((prev) => {
           return cleanVis.map((v: Visitor) => {

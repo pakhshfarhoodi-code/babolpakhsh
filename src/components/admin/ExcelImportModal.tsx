@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { Product, Category } from '../../types';
+import { useApp } from '../../context/AppContext';
 import {
   Upload,
   FileSpreadsheet,
@@ -82,9 +83,33 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     unitCol: '',
   });
 
+  const { addCategory } = useApp();
+
   // Manual fallback and bulk assignment controls
   const [defaultCategoryId, setDefaultCategoryId] = useState<string>(() => categories[0]?.id || '');
   const [applyCategoryToAll, setApplyCategoryToAll] = useState<boolean>(false);
+  const [customCategoryName, setCustomCategoryName] = useState<string>('');
+  const [isCreatingCategory, setIsCreatingCategory] = useState<boolean>(false);
+
+  const handleCreateCategoryInline = () => {
+    const trimmed = customCategoryName.trim();
+    if (!trimmed) return;
+
+    setIsCreatingCategory(true);
+    try {
+      const res = addCategory(trimmed);
+      if (res.success && res.category) {
+        setDefaultCategoryId(res.category.id);
+        setCustomCategoryName('');
+      } else {
+        setErrorMessage(res.message || 'خطا در ثبت دسته‌بندی جدید.');
+      }
+    } catch (err) {
+      setErrorMessage('خطایی در ارتباط با ثبت دسته‌بندی جدید رخ داد.');
+    } finally {
+      setIsCreatingCategory(false);
+    }
+  };
 
   const [defaultBrand, setDefaultBrand] = useState<string>(() => brands[0] || 'متفرقه');
   const [customBrand, setCustomBrand] = useState<string>('');
@@ -242,6 +267,11 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
       return;
     }
 
+    if (defaultCategoryId === '__new_cat__') {
+      setErrorMessage('لطفاً ابتدا دسته‌بندی جدید را ثبت کنید یا یکی از دسته‌بندی‌های موجود را انتخاب نمایید.');
+      return;
+    }
+
     setErrorMessage(null);
 
     const rows: typeof parsedRows = [];
@@ -275,7 +305,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
 
       // 1. Category Assignment:
       let matchedCat: Category | undefined;
-      if (applyCategoryToAll && defaultCategoryId) {
+      if (applyCategoryToAll && defaultCategoryId && defaultCategoryId !== '__new_cat__') {
         matchedCat = categories.find((c) => c.id === defaultCategoryId);
       } else {
         if (rawCatFromExcel) {
@@ -284,7 +314,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
             matchedCat = categories.find((c) => c.name.includes(rawCatFromExcel) || rawCatFromExcel.includes(c.name));
           }
         }
-        if (!matchedCat && defaultCategoryId) {
+        if (!matchedCat && defaultCategoryId && defaultCategoryId !== '__new_cat__') {
           matchedCat = categories.find((c) => c.id === defaultCategoryId);
         }
       }
@@ -831,15 +861,48 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
 
                     <select
                       value={defaultCategoryId}
-                      onChange={(e) => setDefaultCategoryId(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-slate-100 focus:outline-none focus:border-amber-500"
+                      onChange={(e) => {
+                        setDefaultCategoryId(e.target.value);
+                        if (e.target.value !== '__new_cat__') {
+                          setCustomCategoryName('');
+                        }
+                      }}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-slate-100 focus:outline-none focus:border-amber-500 cursor-pointer"
                     >
                       {categories.map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.name}
                         </option>
                       ))}
+                      <option value="__new_cat__">+ تعریف دسته‌بندی جدید...</option>
                     </select>
+
+                    {defaultCategoryId === '__new_cat__' && (
+                      <div className="space-y-1.5 pt-1.5 p-2 rounded-xl bg-slate-900 border border-amber-500/30 animate-in slide-in-from-top-1">
+                        <label className="block text-[10px] text-amber-300 font-bold">نام دسته‌بندی جدید:</label>
+                        <input
+                          type="text"
+                          required
+                          value={customCategoryName}
+                          onChange={(e) => setCustomCategoryName(e.target.value)}
+                          placeholder="مثلاً: لبنیات سنتی"
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-amber-500"
+                        />
+                        <button
+                          type="button"
+                          disabled={isCreatingCategory || !customCategoryName.trim()}
+                          onClick={handleCreateCategoryInline}
+                          className="w-full py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-slate-950 font-bold text-[11px] transition cursor-pointer flex items-center justify-center gap-1 shadow-md shadow-amber-500/10"
+                        >
+                          {isCreatingCategory ? (
+                            <Loader2 className="w-3 h-3 animate-spin text-slate-950" />
+                          ) : (
+                            <Plus className="w-3.5 h-3.5" />
+                          )}
+                          <span>ثبت و اعمال دسته‌بندی</span>
+                        </button>
+                      </div>
+                    )}
 
                     <label className="flex items-start gap-2 pt-1 cursor-pointer">
                       <input

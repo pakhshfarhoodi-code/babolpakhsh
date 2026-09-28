@@ -141,24 +141,42 @@ export function useCatalog() {
     }
 
     if (isSupabaseConfigured && supabase) {
-      supabase
-        .from('products')
-        .insert({
+      (async () => {
+        const row = {
           id,
           name: newProd.name,
           category_id: newProd.category_id,
           brand: newProd.brand,
           price: newProd.price,
           visitor_price,
+          consumer_price: newProd.consumer_price !== undefined ? newProd.consumer_price : null,
           stock: newProd.stock,
           reserved_stock: 0,
           unit: newProd.unit,
           image_url: newProd.image_url,
           is_active: newProd.is_active,
-        })
-        .then(({ error }) => {
-          if (error) console.error('خطا در افزودن کالای جدید روی Supabase:', error);
-        });
+        };
+
+        const { error: err1 } = await supabase.from('products').insert(row);
+        if (!err1) return;
+
+        console.warn('Supabase product insert failed, retrying without consumer_price:', err1.message);
+        const { consumer_price, ...row2 } = row;
+        const { error: err2 } = await supabase.from('products').insert(row2);
+        if (!err2) return;
+
+        console.warn('Supabase fallback insert failed, retrying without visitor_price:', err2.message);
+        const { visitor_price: vp, ...row3 } = row2;
+        const { error: err3 } = await supabase.from('products').insert(row3);
+        if (!err3) return;
+
+        console.warn('Supabase fallback insert failed, retrying without brand:', err3.message);
+        const { brand: b, ...row4 } = row3;
+        const { error: err4 } = await supabase.from('products').insert(row4);
+        if (err4) {
+          console.error('All inserts failed:', err4.message);
+        }
+      })();
     }
   }, []);
 
@@ -331,14 +349,32 @@ export function useCatalog() {
           const chunkSize = 50;
           for (let i = 0; i < rowsToSave.length; i += chunkSize) {
             const chunk = rowsToSave.slice(i, i + chunkSize);
-            const { error: upsertErr } = await supabase.from('products').upsert(chunk, { onConflict: 'id' });
-            if (upsertErr) {
-              console.warn('Supabase products upsert failed, retrying without visitor_price:', upsertErr.message);
-              const fallbackChunk = chunk.map(({ visitor_price, ...rest }) => rest);
-              const { error: fallbackErr } = await supabase.from('products').upsert(fallbackChunk, { onConflict: 'id' });
-              if (fallbackErr) {
-                console.error('Supabase fallback upsert failed:', fallbackErr.message);
-              }
+            
+            // Try 1: Full upsert
+            const { error: err1 } = await supabase.from('products').upsert(chunk, { onConflict: 'id' });
+            if (!err1) continue;
+
+            console.warn('Supabase products upsert failed with full fields, retrying without consumer_price:', err1.message);
+            
+            // Try 2: Strip consumer_price
+            const chunk2 = chunk.map(({ consumer_price, ...rest }) => rest);
+            const { error: err2 } = await supabase.from('products').upsert(chunk2, { onConflict: 'id' });
+            if (!err2) continue;
+
+            console.warn('Supabase products upsert failed without consumer_price, retrying without visitor_price:', err2.message);
+
+            // Try 3: Strip consumer_price & visitor_price
+            const chunk3 = chunk.map(({ consumer_price, visitor_price, ...rest }) => rest);
+            const { error: err3 } = await supabase.from('products').upsert(chunk3, { onConflict: 'id' });
+            if (!err3) continue;
+
+            console.warn('Supabase products upsert failed without visitor_price, retrying without brand:', err3.message);
+
+            // Try 4: Strip consumer_price, visitor_price, and brand
+            const chunk4 = chunk.map(({ consumer_price, visitor_price, brand, ...rest }) => rest);
+            const { error: err4 } = await supabase.from('products').upsert(chunk4, { onConflict: 'id' });
+            if (err4) {
+              console.error('All progressive fallbacks failed on Supabase for products chunk:', err4.message);
             }
           }
         } catch (err) {
@@ -470,7 +506,7 @@ export function useCatalog() {
     }
 
     if (isSupabaseConfigured && supabase && updatedItemsForDb.length > 0) {
-      try {
+      (async () => {
         const rows = updatedItemsForDb.map((p) => ({
           id: p.id,
           name: p.name,
@@ -484,10 +520,22 @@ export function useCatalog() {
           image_url: p.image_url,
           is_active: p.is_active,
         }));
-        await supabase.from('products').upsert(rows, { onConflict: 'id' });
-      } catch (err) {
-        console.error('Error updating products in Supabase:', err);
-      }
+
+        const { error: err1 } = await supabase.from('products').upsert(rows, { onConflict: 'id' });
+        if (!err1) return;
+
+        console.warn('Supabase bulk update upsert failed with full fields, retrying without visitor_price:', err1.message);
+        const rows2 = rows.map(({ visitor_price, ...rest }) => rest);
+        const { error: err2 } = await supabase.from('products').upsert(rows2, { onConflict: 'id' });
+        if (!err2) return;
+
+        console.warn('Supabase bulk update upsert failed without visitor_price, retrying without brand:', err2.message);
+        const rows3 = rows2.map(({ brand, ...rest }) => rest);
+        const { error: err3 } = await supabase.from('products').upsert(rows3, { onConflict: 'id' });
+        if (err3) {
+          console.error('All bulk update fallback upserts failed on Supabase:', err3.message);
+        }
+      })();
     }
 
     return {

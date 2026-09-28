@@ -34,8 +34,28 @@ function getNormalizedPath(): string {
 export const App: React.FC = () => {
   const { role, setRole, isLoggedIn } = useApp();
   const [currentPath, setCurrentPath] = useState<string>(getNormalizedPath);
-  const [adminActiveTab, setAdminActiveTab] = useState<'overview' | 'orders' | 'products' | 'team' | 'reports'>('overview');
-  const [warehouseActiveTab, setWarehouseActiveTab] = useState<'pending' | 'history'>('pending');
+  const [adminActiveTab, setAdminActiveTab] = useState<'overview' | 'orders' | 'products' | 'team' | 'reports'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('pakhsh_admin_active_tab');
+      if (saved) return saved as any;
+    }
+    return 'overview';
+  });
+  const [warehouseActiveTab, setWarehouseActiveTab] = useState<'pending' | 'history'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('pakhsh_warehouse_active_tab');
+      if (saved) return saved as any;
+    }
+    return 'pending';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('pakhsh_admin_active_tab', adminActiveTab);
+  }, [adminActiveTab]);
+
+  useEffect(() => {
+    localStorage.setItem('pakhsh_warehouse_active_tab', warehouseActiveTab);
+  }, [warehouseActiveTab]);
 
   // Synchronize route changes via popstate and custom navigation
   const navigateTo = useCallback((targetPath: string) => {

@@ -60,7 +60,17 @@ export const SupermarketPortal: React.FC = () => {
   );
 
   // Tabs: 'catalog' | 'orders'
-  const [activeTab, setActiveTab] = useState<'catalog' | 'orders'>('catalog');
+  const [activeTab, setActiveTab] = useState<'catalog' | 'orders'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('pakhsh_supermarket_active_tab');
+      if (saved === 'catalog' || saved === 'orders') return saved;
+    }
+    return 'catalog';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('pakhsh_supermarket_active_tab', activeTab);
+  }, [activeTab]);
 
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState('');

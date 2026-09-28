@@ -46,7 +46,17 @@ export const VisitorPortal: React.FC = () => {
   const visitorId = currentVisitor?.id || '';
 
   // Tab State: 'today' (default) | 'customers' | 'reports'
-  const [activeTab, setActiveTab] = useState<'today' | 'customers' | 'reports'>('today');
+  const [activeTab, setActiveTab] = useState<'today' | 'customers' | 'reports'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('pakhsh_visitor_active_tab');
+      if (saved === 'today' || saved === 'customers' || saved === 'reports') return saved;
+    }
+    return 'today';
+  });
+
+  React.useEffect(() => {
+    localStorage.setItem('pakhsh_visitor_active_tab', activeTab);
+  }, [activeTab]);
 
   // Modals state
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);

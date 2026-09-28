@@ -171,6 +171,7 @@ export function useCatalog() {
     brand?: string;
     price: number;
     visitor_price?: number;
+    consumer_price?: number;
     stock?: number;
     unit?: string;
     is_active?: boolean;
@@ -248,6 +249,7 @@ export function useCatalog() {
           category_id: catId,
           price: storePrice > 0 ? storePrice : current.price,
           visitor_price: visitorPrice > 0 ? visitorPrice : current.visitor_price,
+          consumer_price: item.consumer_price !== undefined ? Number(item.consumer_price) || undefined : current.consumer_price,
           stock: stockQty !== undefined ? stockQty : current.stock,
           unit: unitStr || current.unit,
           is_active: item.is_active !== undefined ? item.is_active : current.is_active,
@@ -266,6 +268,7 @@ export function useCatalog() {
           category_id: catId,
           price: storePrice,
           visitor_price: visitorPrice,
+          consumer_price: item.consumer_price !== undefined ? Number(item.consumer_price) || undefined : undefined,
           stock: stockQty,
           reserved_stock: 0,
           unit: unitStr,
@@ -316,6 +319,7 @@ export function useCatalog() {
               brand: p.brand?.trim() || 'متفرقه',
               price: sPrice,
               visitor_price: vPrice,
+              consumer_price: p.consumer_price !== undefined && p.consumer_price !== null ? Number(p.consumer_price) : null,
               stock: p.stock !== undefined ? Number(p.stock) : 50,
               reserved_stock: 0,
               unit: p.unit || 'عدد',

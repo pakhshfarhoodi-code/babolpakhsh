@@ -36,6 +36,7 @@ interface ExcelImportModalProps {
       brand?: string;
       price: number;
       visitor_price?: number;
+      consumer_price?: number;
       stock?: number;
       unit?: string;
       is_active?: boolean;
@@ -50,6 +51,7 @@ interface ColumnMapping {
   categoryCol: string;
   storePriceCol: string;
   visitorPriceCol: string;
+  consumerPriceCol: string;
   stockCol: string;
   unitCol: string;
 }
@@ -75,6 +77,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     categoryCol: '',
     storePriceCol: '',
     visitorPriceCol: '',
+    consumerPriceCol: '',
     stockCol: '',
     unitCol: '',
   });
@@ -104,6 +107,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
       category_name: string;
       price: number;
       visitor_price: number;
+      consumer_price?: number;
       stock: number;
       unit: string;
       isNew: boolean;
@@ -156,6 +160,16 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         'visitorprice',
         'cost',
         'buyprice',
+      ]),
+      consumerPriceCol: findMatch([
+        'قیمتمصرفکننده',
+        'قیمتمصرف',
+        'مصرفکننده',
+        'مصرف',
+        'consumerprice',
+        'retailprice',
+        'retail',
+        'consumer',
       ]),
       stockCol: findMatch(['موجودی', 'تعداد', 'انبار', 'stock', 'qty', 'quantity', 'inventory']),
       unitCol: findMatch(['واحد', 'واحدشمارش', 'بسته/عدد', 'unit', 'measure']),
@@ -250,12 +264,13 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         return parseFloat(str) || 0;
       };
 
-      const storePrice = cleanNum(row[mapping.storePriceCol]);
+       const storePrice = cleanNum(row[mapping.storePriceCol]);
       let visitorPrice = mapping.visitorPriceCol ? cleanNum(row[mapping.visitorPriceCol]) : 0;
       if (!visitorPrice && storePrice > 0) {
         visitorPrice = Math.round(storePrice * 0.85); // 85% default
       }
 
+      const consumerPrice = mapping.consumerPriceCol ? cleanNum(row[mapping.consumerPriceCol]) : undefined;
       const stock = mapping.stockCol ? cleanNum(row[mapping.stockCol]) : 50;
 
       // 1. Category Assignment:
@@ -315,6 +330,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         category_name,
         price: storePrice,
         visitor_price: visitorPrice,
+        consumer_price: consumerPrice && consumerPrice > 0 ? consumerPrice : undefined,
         stock,
         unit: finalUnit,
         isNew: !isExisting,
@@ -412,6 +428,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
           brand: r.brand,
           price: r.price,
           visitor_price: r.visitor_price,
+          consumer_price: r.consumer_price,
           stock: r.stock,
           unit: r.unit,
           is_active: true,
@@ -660,7 +677,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                     </select>
                   </div>
 
-                  {/* Visitor Purchase Price */}
+                   {/* Visitor Purchase Price */}
                   <div className="p-3 rounded-xl bg-slate-950 border border-slate-800/80 space-y-1.5">
                     <label className="text-xs font-bold text-slate-200 flex items-center justify-between">
                       <span>قیمت ویزیتور (تومان)</span>
@@ -672,6 +689,26 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
                     >
                       <option value="">-- محاسبه خودکار (۸۵٪) --</option>
+                      {headers.map((h) => (
+                        <option key={h} value={h}>
+                          {h}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Consumer Price */}
+                  <div className="p-3 rounded-xl bg-slate-950 border border-slate-800/80 space-y-1.5">
+                    <label className="text-xs font-bold text-slate-200 flex items-center justify-between">
+                      <span>قیمت مصرف‌کننده (تومان)</span>
+                      <span className="text-[10px] text-amber-400 font-bold">اختیاری</span>
+                    </label>
+                    <select
+                      value={mapping.consumerPriceCol}
+                      onChange={(e) => setMapping((prev) => ({ ...prev, consumerPriceCol: e.target.value }))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
+                    >
+                      <option value="">-- فاقد قیمت مصرف‌کننده --</option>
                       {headers.map((h) => (
                         <option key={h} value={h}>
                           {h}
@@ -1029,6 +1066,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                         <th className="p-2.5">دسته‌بندی</th>
                         <th className="p-2.5 text-emerald-400">قیمت فروشگاه</th>
                         <th className="p-2.5 text-blue-400">قیمت ویزیتور</th>
+                        <th className="p-2.5 text-amber-400">قیمت مصرف‌کننده</th>
                         <th className="p-2.5">موجودی</th>
                         <th className="p-2.5">واحد</th>
                       </tr>
@@ -1080,6 +1118,9 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                           </td>
                           <td className="p-2.5 font-bold font-mono text-blue-400 whitespace-nowrap">
                             {formatPrice(row.visitor_price)}
+                          </td>
+                          <td className="p-2.5 font-bold font-mono text-amber-400 whitespace-nowrap">
+                            {row.consumer_price ? formatPrice(row.consumer_price) : '—'}
                           </td>
                           <td className="p-2.5 font-mono text-slate-300 whitespace-nowrap">{row.stock}</td>
                           <td className="p-2.5">

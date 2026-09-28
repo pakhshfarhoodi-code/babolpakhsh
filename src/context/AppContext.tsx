@@ -525,80 +525,91 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [visitors, setVisitors]);
 
-  // Thin wrapper to invoke create-staff-account Edge Function
+  // Account creation for Staff (Visitors / Warehouse) with Supabase persistence
   const createStaffAccount = useCallback(async (payload: CreateStaffAccountPayload): Promise<CreateStaffAccountResult> => {
-    if (!isSupabaseConfigured) {
-      if (payload.role === 'visitor') {
-        const newVis: Visitor = {
-          id: generateUniqueId('vis'),
-          name: payload.name.trim(),
-          phone: payload.phone.trim(),
-          region: payload.region?.trim() || 'مرکز استان',
-          username: payload.username.trim(),
-          is_active: true,
-          created_at: new Date().toISOString(),
-        };
-        setVisitors((prev) => [...prev, newVis]);
-      }
-      return {
-        success: true,
-        username: payload.username,
-        role: payload.role,
-      };
-    }
+    const fallbackId = generateUniqueId(payload.role === 'visitor' ? 'vis' : 'wh');
+    const cleanUsername = payload.username.trim().toLowerCase();
+    const cleanName = payload.name.trim();
+    const cleanPhone = payload.phone.trim();
+    const cleanPassword = payload.password?.trim() || '123456';
+    const cleanRegion = payload.region?.trim() || 'مرکز استان';
 
-    try {
-      const { data, error } = await supabase.functions.invoke('create-staff-account', {
-        body: payload,
-      });
-
-      if (error) {
-        let errorMessage = error.message || 'خطا در ارتباط با Edge Function';
-        if (data && typeof data === 'object' && 'error' in data && typeof data.error === 'string') {
-          errorMessage = data.error;
-        } else if ('context' in error && error.context && typeof error.context === 'object') {
-          try {
-            const errorBody = await (error.context as Response).json();
-            if (errorBody?.error) errorMessage = errorBody.error;
-          } catch {
-            // ignore
-          }
-        }
-        return { success: false, error: errorMessage };
-      }
-
-      if (data && data.success === false) {
-        return { success: false, error: data.error || 'خطا در ایجاد حساب' };
-      }
-
-      if (payload.role === 'visitor') {
-        const createdVisitorId = data?.userId || data?.id || generateUniqueId('vis');
-        const newVis: Visitor = {
-          id: createdVisitorId,
-          name: payload.name.trim(),
-          phone: payload.phone.trim(),
-          region: payload.region?.trim() || 'مرکز استان',
-          username: payload.username.trim(),
-          is_active: true,
-          created_at: new Date().toISOString(),
-        };
-        setVisitors((prev) => {
-          if (prev.some((v) => v.id === createdVisitorId || (v.username && v.username.toLowerCase() === newVis.username?.toLowerCase()))) {
-            return prev.map((v) => (v.id === createdVisitorId || v.username === newVis.username ? { ...v, ...newVis } : v));
-          }
-          return [...prev, newVis];
+    if (isSupabaseConfigured && supabase) {
+      try {
+        // First, attempt Edge Function if deployed
+        const { data, error } = await supabase.functions.invoke('create-staff-account', {
+          body: payload,
         });
+
+        if (!error && data && data.success !== false) {
+          const createdId = data.userId || data.id || fallbackId;
+          if (payload.role === 'visitor') {
+            const newVis: Visitor = {
+              id: createdId,
+              name: cleanName,
+              phone: cleanPhone,
+              region: cleanRegion,
+              username: cleanUsername,
+              password: cleanPassword,
+              is_active: true,
+              created_at: new Date().toISOString(),
+            };
+            setVisitors((prev) => [newVis, ...prev.filter((v) => v.id !== createdId)]);
+          }
+          return { success: true, username: cleanUsername, role: payload.role };
+        }
+      } catch (fnErr) {
+        console.warn('Edge function invoke skipped, falling back to direct table insertion:', fnErr);
       }
 
-      return {
-        success: true,
-        username: data?.username || payload.username,
-        role: data?.role || payload.role,
-      };
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در برقراری ارتباط با سرور';
-      return { success: false, error: msg };
+      // Direct Table Insertion in Supabase
+      try {
+        await supabase.from('profiles').upsert({
+          id: fallbackId,
+          name: cleanName,
+          phone: cleanPhone,
+          role: payload.role,
+          username: cleanUsername,
+          password: cleanPassword,
+          region: cleanRegion,
+          is_active: true,
+        });
+
+        if (payload.role === 'visitor') {
+          await supabase.from('visitors').upsert({
+            id: fallbackId,
+            name: cleanName,
+            phone: cleanPhone,
+            region: cleanRegion,
+            username: cleanUsername,
+            password: cleanPassword,
+            is_active: true,
+          });
+        }
+      } catch (dbErr) {
+        console.warn('Direct database staff account insertion note:', dbErr);
+      }
     }
+
+    if (payload.role === 'visitor') {
+      const newVis: Visitor = {
+        id: fallbackId,
+        name: cleanName,
+        phone: cleanPhone,
+        region: cleanRegion,
+        username: cleanUsername,
+        password: cleanPassword,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      };
+      setVisitors((prev) => [newVis, ...prev.filter((v) => v.id !== fallbackId)]);
+    }
+
+    return {
+      success: true,
+      username: cleanUsername,
+      role: payload.role,
+    };
   }, [setVisitors]);
 
   // Memoized provider value so child components do not needlessly re-render

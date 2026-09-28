@@ -82,27 +82,24 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Auto-sync active role based on current URL path
+  // Route Guard: Ensure logged-in user is redirected to their authorized route
   useEffect(() => {
-    if (currentPath === '/admin') {
-      if (isLoggedIn && role === 'supermarket') {
-        navigateTo('/');
-      } else if (role !== 'admin' && role !== 'warehouse') {
-        setRole('admin');
+    if (!isLoggedIn) return;
+
+    if (role === 'visitor') {
+      if (currentPath !== '/visitor') {
+        navigateTo('/visitor');
       }
-    } else if (currentPath === '/visitor') {
-      if (isLoggedIn && role === 'supermarket') {
+    } else if (role === 'supermarket') {
+      if (currentPath !== '/') {
         navigateTo('/');
-      } else if (role !== 'visitor') {
-        setRole('visitor');
       }
-    } else {
-      // Root '/' is dedicated to supermarkets
-      if (role !== 'supermarket') {
-        setRole('supermarket');
+    } else if (role === 'admin' || role === 'warehouse') {
+      if (currentPath !== '/admin') {
+        navigateTo('/admin');
       }
     }
-  }, [currentPath, role, setRole, navigateTo, isLoggedIn]);
+  }, [currentPath, role, isLoggedIn, navigateTo]);
 
   // If user is not logged in, show tailored login screen for the route
   if (!isLoggedIn) {

@@ -64,7 +64,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
       const result = await loginWithCredentials(
         usernameInput,
         passwordInput,
-        allowedRoles && allowedRoles.length > 0 ? allowedRoles : [activeTab]
+        [activeTab]
       );
 
       if (!result.success) {

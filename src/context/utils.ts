@@ -2,6 +2,9 @@
 
 export const STORAGE_KEYS = {
   AUTH_LOGGED_IN: 'alborz_auth_logged_in',
+  AUTH_ROLE: 'alborz_auth_role',
+  AUTH_VISITOR_ID: 'alborz_auth_visitor_id',
+  AUTH_SUPERMARKET_ID: 'alborz_auth_supermarket_id',
   THEME: 'alborz_theme',
   CATEGORIES: 'alborz_categories_v2',
   BRANDS: 'alborz_brands_v2',
@@ -23,12 +26,34 @@ export const generateUniqueId = (prefix: string): string => {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 9)}`;
 };
 
-// Synthetic email generator for Supabase Auth
-export const toSyntheticEmail = (username: string): string => {
-  const trimmed = username.trim().toLowerCase();
-  if (trimmed.includes('@')) {
-    return trimmed;
+// Normalize Persian and Arabic digits to English ASCII digits
+export const normalizeDigits = (str: string): string => {
+  if (!str) return '';
+  const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+  const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+  let result = str;
+  for (let i = 0; i < 10; i++) {
+    result = result.split(persianDigits[i]).join(String(i));
+    result = result.split(arabicDigits[i]).join(String(i));
   }
-  const clean = trimmed.replace(/[^a-z0-9_-]/g, '');
-  return `${clean || 'user'}@babolpakhsh.internal`;
+  return result;
+};
+
+// Synthetic email generator for Supabase Auth that works reliably with English, Persian, numbers, or mixed usernames
+export const toSyntheticEmail = (username: string): string => {
+  const normalized = normalizeDigits(username.trim()).toLowerCase();
+  if (normalized.includes('@')) {
+    return normalized;
+  }
+  // If clean ASCII with length >= 3
+  const clean = normalized.replace(/[^a-z0-9_-]/g, '');
+  if (clean.length >= 3) {
+    return `${clean}@babolpakhsh.internal`;
+  }
+  // For Persian or non-ASCII strings, encode characters uniquely into hex representation
+  let hex = '';
+  for (let i = 0; i < normalized.length; i++) {
+    hex += normalized.charCodeAt(i).toString(16);
+  }
+  return `u_${hex || 'shop'}@babolpakhsh.internal`;
 };

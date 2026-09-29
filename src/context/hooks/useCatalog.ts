@@ -384,34 +384,53 @@ export function useCatalog() {
     });
 
     if (isSupabaseConfigured && supabase) {
-      const payload: Record<string, unknown> = {};
-      if (updates.name !== undefined) payload.name = updates.name.trim();
-      if (updates.brand !== undefined) payload.brand = updates.brand.trim();
-      if (updates.category_id !== undefined) payload.category_id = updates.category_id || null;
-      if (updates.price !== undefined) payload.price = targetPrice;
-      if (updates.visitor_price !== undefined) payload.visitor_price = targetVisitorPrice;
-      if (updates.consumer_price !== undefined) payload.consumer_price = targetConsumerPrice ?? null;
-      if (updates.stock !== undefined) payload.stock = updates.stock;
-      if (updates.unit !== undefined) payload.unit = updates.unit;
-      if (updates.image_url !== undefined) payload.image_url = updates.image_url;
-      if (updates.is_active !== undefined) payload.is_active = updates.is_active;
-      if (updates.is_market_test !== undefined) payload.is_market_test = updates.is_market_test;
+      (async () => {
+        const payload: Record<string, unknown> = {};
+        if (updates.name !== undefined) payload.name = updates.name.trim();
+        if (updates.brand !== undefined) payload.brand = updates.brand.trim();
+        if (updates.category_id !== undefined) payload.category_id = updates.category_id || null;
+        if (updates.price !== undefined) payload.price = targetPrice;
+        if (updates.visitor_price !== undefined) payload.visitor_price = targetVisitorPrice;
+        if (updates.consumer_price !== undefined) payload.consumer_price = targetConsumerPrice ?? null;
+        if (updates.stock !== undefined) payload.stock = updates.stock;
+        if (updates.unit !== undefined) payload.unit = updates.unit;
+        if (updates.image_url !== undefined) payload.image_url = updates.image_url;
+        if (updates.is_active !== undefined) payload.is_active = updates.is_active;
+        if (updates.is_market_test !== undefined) payload.is_market_test = updates.is_market_test;
 
-      supabase
-        .from('products')
-        .update(payload)
-        .eq('id', productId)
-        .then(({ error }) => {
-          if (error) {
-            console.warn('Supabase product update error, attempting fallback without is_market_test:', error.message);
-            if (payload.is_market_test !== undefined) {
-              const { is_market_test, ...safePayload } = payload;
-              if (Object.keys(safePayload).length > 0) {
-                supabase.from('products').update(safePayload).eq('id', productId).then(() => {});
-              }
-            }
+        if (Object.keys(payload).length === 0) return;
+
+        // Try 1: Full payload update
+        const { error: err1 } = await supabase.from('products').update(payload).eq('id', productId);
+        if (!err1) return;
+
+        console.warn('Supabase product update failed, retrying without optional columns:', err1.message);
+
+        // Try 2: Without is_market_test & consumer_price
+        const { is_market_test, consumer_price, ...payload2 } = payload;
+        const { error: err2 } = await supabase.from('products').update(payload2).eq('id', productId);
+        if (!err2) return;
+
+        // Try 3: Without category_id (prevents FK constraint failure)
+        const { category_id, ...payload3 } = payload2;
+        const { error: err3 } = await supabase.from('products').update(payload3).eq('id', productId);
+        if (!err3) return;
+
+        // Try 4: Core fields only (name, price, stock, is_active, unit)
+        const corePayload: Record<string, unknown> = {};
+        if (payload.name !== undefined) corePayload.name = payload.name;
+        if (payload.price !== undefined) corePayload.price = payload.price;
+        if (payload.stock !== undefined) corePayload.stock = payload.stock;
+        if (payload.is_active !== undefined) corePayload.is_active = payload.is_active;
+        if (payload.unit !== undefined) corePayload.unit = payload.unit;
+
+        if (Object.keys(corePayload).length > 0) {
+          const { error: err4 } = await supabase.from('products').update(corePayload).eq('id', productId);
+          if (err4) {
+            console.error('Core product update failed on Supabase:', err4.message);
           }
-        });
+        }
+      })();
     }
 
     return { success: true, message: 'اطلاعات کالا با موفقیت ویرایش شد.' };

@@ -254,18 +254,19 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
             </label>
             <div className="relative">
               <select
+                dir="rtl"
                 value={assignedVisitorId}
                 onChange={(e) => setAssignedVisitorId(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500 transition appearance-none cursor-pointer"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-3.5 pl-10 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500 transition appearance-none cursor-pointer text-right"
               >
-                <option value="direct">خرید مستقیم از پخش فرهودی</option>
+                <option value="direct" className="bg-slate-900 text-slate-100 py-2 px-3">خرید مستقیم از پخش فرهودی</option>
                 {visitors.map((v) => (
-                  <option key={v.id} value={v.id}>
+                  <option key={v.id} value={v.id} className="bg-slate-900 text-slate-100 py-2 px-3">
                     {v.name} — ({v.region})
                   </option>
                 ))}
               </select>
-              <Truck className="w-4 h-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
+              <Truck className="w-4 h-4 text-slate-500 absolute left-3 top-3.5 pointer-events-none" />
             </div>
           </div>
 

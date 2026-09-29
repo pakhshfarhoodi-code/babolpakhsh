@@ -67,7 +67,7 @@ interface AppContextType {
   loadingBills: LoadingBill[];
   inventoryTransactions: InventoryTransaction[];
   priceHistories: ProductPriceHistory[];
-
+  deleteInventoryTransactions: (txIds: string[]) => Promise<{ success: boolean; message: string; count: number }>;
   createOrder: (payload: CreateOrderPayload) => { success: boolean; message: string; orderId?: string; order?: Order };
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
   requestReassignment: (orderId: string, toVisitorId: string | null) => void;
@@ -87,6 +87,7 @@ interface AppContextType {
     supermarket: { id: string; name: string; owner?: string; phone?: string }
   ) => Promise<{ success: boolean; liked: boolean; message: string }>;
   updateProductStock: (productId: string, additionalStock: number) => void;
+  recordProductReturn: (productId: string, quantity: number, reason: string) => { success: boolean; message: string };
   addNewProduct: (product: Omit<Product, 'id' | 'reserved_stock'>) => void;
   bulkUpsertProducts: (items: Array<{
     id?: string;
@@ -830,6 +831,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     reassignmentRequests: orders.reassignmentRequests,
     loadingBills: warehouse.loadingBills,
     inventoryTransactions: warehouse.inventoryTransactions,
+    deleteInventoryTransactions: warehouse.deleteInventoryTransactions,
     priceHistories: catalog.priceHistories,
     createOrder: orders.createOrder,
     updateOrderStatus: orders.updateOrderStatus,
@@ -842,6 +844,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateProductPrice: catalog.updateProductPrice,
     updateProduct: catalog.updateProduct,
     updateProductStock: warehouse.updateProductStock,
+    recordProductReturn: warehouse.recordProductReturn,
     addNewProduct: catalog.addNewProduct,
     bulkUpsertProducts: catalog.bulkUpsertProducts,
     deleteProduct: catalog.deleteProduct,
@@ -924,9 +927,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     orders.deleteOrder,
     warehouse.loadingBills,
     warehouse.inventoryTransactions,
+    warehouse.deleteInventoryTransactions,
     warehouse.createLoadingBill,
     warehouse.approveLoadingBill,
     warehouse.updateProductStock,
+    warehouse.recordProductReturn,
     resetToDefaults,
     theme,
     toggleTheme,

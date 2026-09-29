@@ -908,6 +908,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                         <div className="flex items-center gap-1.5">
                           <span className="text-slate-400 font-medium">ویزیتور اختصاصی:</span>
                           <select
+                            dir="rtl"
                             value={shop.assigned_visitor_id || 'direct'}
                             onChange={async (e) => {
                               const newVisId = e.target.value;
@@ -921,16 +922,16 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                                 is_active: shop.is_active,
                               });
                             }}
-                            className={`rounded-lg px-2 py-1 text-xs font-bold border focus:outline-none transition cursor-pointer ${
+                            className={`rounded-lg pr-2.5 pl-6 py-1 text-xs font-bold border focus:outline-none transition cursor-pointer text-right appearance-none ${
                               shop.assigned_visitor_id === 'direct' || !assignedVisitor
                                 ? 'bg-amber-950/40 border-amber-800/60 text-amber-300'
                                 : 'bg-slate-900 border-slate-700 text-blue-300'
                             }`}
                             title="تغییر سریع ویزیتور اختصاصی فروشگاه"
                           >
-                            <option value="direct">خرید مستقیم از پخش مرکزی (بدون ویزیتور)</option>
+                            <option value="direct" className="bg-slate-900 text-slate-100 py-1.5 px-3">خرید مستقیم از پخش مرکزی (بدون ویزیتور)</option>
                             {visitors.map((v) => (
-                              <option key={v.id} value={v.id}>
+                              <option key={v.id} value={v.id} className="bg-slate-900 text-slate-100 py-1.5 px-3">
                                 {v.name} ({v.region || 'ویزیتور'}) - {v.phone}
                               </option>
                             ))}
@@ -1071,6 +1072,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                   نقش سازمانی <span className="text-rose-400">*</span>
                 </label>
                 <select
+                  dir="rtl"
                   value={staffForm.role}
                   onChange={(e) =>
                     setStaffForm((prev) => ({
@@ -1079,11 +1081,11 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                     }))
                   }
                   disabled={isSubmittingStaff}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-3.5 pl-8 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 text-right appearance-none cursor-pointer"
                 >
-                  <option value="admin">مدیر جدید سامانه (ادمین با دسترسی کامل)</option>
-                  <option value="warehouse">انباردار (مدیریت سردخانه و موجودی)</option>
-                  <option value="visitor">ویزیتور (پخش و بازاریابی مویرگی)</option>
+                  <option value="admin" className="bg-slate-900 text-slate-100 py-1.5 px-3">مدیر جدید سامانه (ادمین با دسترسی کامل)</option>
+                  <option value="warehouse" className="bg-slate-900 text-slate-100 py-1.5 px-3">انباردار (مدیریت سردخانه و موجودی)</option>
+                  <option value="visitor" className="bg-slate-900 text-slate-100 py-1.5 px-3">ویزیتور (پخش و بازاریابی مویرگی)</option>
                 </select>
               </div>
 
@@ -1324,14 +1326,15 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                     پشتیبان / ویزیتور اختصاصی
                   </label>
                   <select
+                    dir="rtl"
                     value={editForm.assigned_visitor_id}
                     onChange={(e) => setEditForm((prev) => ({ ...prev, assigned_visitor_id: e.target.value }))}
                     disabled={isUpdatingSupermarket}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-3.5 pl-8 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 text-right appearance-none cursor-pointer"
                   >
-                    <option value="direct">خرید مستقیم از پخش فرهودی</option>
+                    <option value="direct" className="bg-slate-900 text-slate-100 py-1.5 px-3">خرید مستقیم از پخش فرهودی</option>
                     {visitors.map((v) => (
-                      <option key={v.id} value={v.id}>
+                      <option key={v.id} value={v.id} className="bg-slate-900 text-slate-100 py-1.5 px-3">
                         {v.name} ({v.region})
                       </option>
                     ))}

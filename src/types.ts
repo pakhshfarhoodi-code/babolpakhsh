@@ -114,6 +114,7 @@ export interface Order {
   loading_bill_id?: string | null;
   order_date: string;
   items?: OrderItem[];
+  stock_deducted?: boolean;
 }
 
 export interface OrderVisitorHistory {
@@ -160,7 +161,7 @@ export interface LoadingBill {
   items?: LoadingBillItem[];
 }
 
-export type InventoryTransactionType = 'reserve' | 'release_reserve' | 'load_out' | 'return' | 'manual_adjustment';
+export type InventoryTransactionType = 'reserve' | 'release_reserve' | 'load_out' | 'return' | 'manual_adjustment' | 'manual_delivery_override';
 
 export interface InventoryTransaction {
   id: string;

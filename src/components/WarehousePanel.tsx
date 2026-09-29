@@ -16,6 +16,7 @@ import {
 import { PendingBillCard } from './warehouse/PendingBillCard';
 import { BillHistoryList } from './warehouse/BillHistoryList';
 import { RestockForm } from './warehouse/RestockForm';
+import { ProductReturnForm } from './warehouse/ProductReturnForm';
 import { LowStockList } from './warehouse/LowStockList';
 import { NewProductModal } from './warehouse/NewProductModal';
 import { ExcelImportModal } from './admin/ExcelImportModal';
@@ -40,6 +41,7 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({
     loadingBills,
     approveLoadingBill,
     updateProductStock,
+    recordProductReturn,
     addNewProduct,
     bulkUpsertProducts,
   } = useApp();
@@ -85,6 +87,14 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({
     const prod = products.find((p) => p.id === productId);
     setActionFeedback(`ورود ${formatNumber(amount)} واحد از ${prod?.name || 'کالا'} با موفقیت ثبت شد.`);
     setTimeout(() => setActionFeedback(null), 4000);
+  };
+
+  const handleReturnSubmit = (productId: string, quantity: number, reason: string) => {
+    const res = recordProductReturn(productId, quantity, reason);
+    if (res.success) {
+      setActionFeedback(res.message);
+      setTimeout(() => setActionFeedback(null), 5000);
+    }
   };
 
   const handleCreateProduct = (data: {
@@ -291,13 +301,19 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({
           </div>
         </div>
 
-        {/* Right Column: Restock Entry Form & Low Stock Monitoring */}
+        {/* Right Column: Restock Entry Form, Product Return Form & Low Stock Monitoring */}
         <div className="space-y-5">
           {/* Quick Restock Inbound Form */}
           <RestockForm
             products={products}
             onSubmitRestock={handleRestockSubmit}
             onOpenNewProductModal={() => setIsNewProductModalOpen(true)}
+          />
+
+          {/* Product Return Form */}
+          <ProductReturnForm
+            products={products}
+            onSubmitReturn={handleReturnSubmit}
           />
 
           {/* Low Stock Live Monitor */}

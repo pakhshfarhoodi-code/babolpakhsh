@@ -282,14 +282,84 @@ export function useOrders({
     [orders, supermarkets, visitors, products, setProducts, addInventoryTransactions]
   );
 
-  // Update order status (with reserved stock release on 'undelivered')
+  // Update order status (with reserved stock release on 'undelivered' and stock deduction on 'delivered')
   const updateOrderStatus = useCallback(
     (orderId: string, status: OrderStatus) => {
       const targetOrder = orders.find((o) => o.id === orderId);
+      if (!targetOrder) return;
 
-      // If changing to undelivered, release reserved stock
+      const nowIso = new Date().toISOString();
+
+      // Case 1: Status change to 'delivered'
+      if (status === 'delivered' && targetOrder.status !== 'delivered') {
+        const isStockAlreadyDeducted =
+          targetOrder.stock_deducted === true ||
+          (Boolean(targetOrder.loading_bill_id) &&
+            targetOrder.status === 'loading');
+
+        if (!isStockAlreadyDeducted) {
+          const items = targetOrder.items || [];
+          if (items.length > 0) {
+            // Deduct both physical stock & reserved stock for each item
+            setProducts((prev) =>
+              prev.map((p) => {
+                const item = items.find((i) => i.product_id === p.id);
+                if (item) {
+                  return {
+                    ...p,
+                    stock: Math.max(0, p.stock - item.quantity),
+                    reserved_stock: Math.max(0, p.reserved_stock - item.quantity),
+                  };
+                }
+                return p;
+              })
+            );
+
+            const overrideTx: InventoryTransaction[] = items.map((it) => ({
+              id: `tx-${Date.now()}-ovr-${it.product_id}`,
+              product_id: it.product_id,
+              product_name: it.name,
+              transaction_type: 'manual_delivery_override',
+              quantity: -it.quantity,
+              reference_id: orderId,
+              created_at: nowIso,
+            }));
+            addInventoryTransactions(overrideTx);
+
+            if (isSupabaseConfigured && supabase) {
+              supabase
+                .rpc('override_order_delivery', { p_order_id: orderId })
+                .then(({ error }) => {
+                  if (error) {
+                    console.warn('RPC override_order_delivery failed, falling back to direct updates:', error);
+                    supabase.from('orders').update({ status: 'delivered', stock_deducted: true }).eq('id', orderId).then(() => {});
+                  }
+                });
+            }
+          }
+        } else {
+          if (isSupabaseConfigured && supabase) {
+            supabase
+              .from('orders')
+              .update({ status: 'delivered', stock_deducted: true })
+              .eq('id', orderId)
+              .then(() => {});
+          }
+        }
+
+        setOrders((prev) =>
+          prev.map((order) => {
+            if (order.id === orderId) {
+              return { ...order, status: 'delivered', stock_deducted: true };
+            }
+            return order;
+          })
+        );
+        return;
+      }
+
+      // Case 2: Status change to 'undelivered'
       if (
-        targetOrder &&
         status === 'undelivered' &&
         targetOrder.status !== 'undelivered' &&
         targetOrder.status !== 'delivered'
@@ -316,7 +386,7 @@ export function useOrders({
             transaction_type: 'release_reserve',
             quantity: -it.quantity,
             reference_id: orderId,
-            created_at: new Date().toISOString(),
+            created_at: nowIso,
           }));
           addInventoryTransactions(releaseTx);
 

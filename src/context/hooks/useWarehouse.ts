@@ -165,6 +165,11 @@ export function useWarehouse({
       })
     );
 
+    // Mark associated orders as stock_deducted = true
+    setOrders((prev) =>
+      prev.map((o) => (o.loading_bill_id === billId ? { ...o, stock_deducted: true } : o))
+    );
+
     const newTx: InventoryTransaction[] = [];
     itemDeltas.forEach((qty, prodId) => {
       const prod = products.find((p) => p.id === prodId);
@@ -195,12 +200,94 @@ export function useWarehouse({
 
     if (isSupabaseConfigured && supabase) {
       supabase
+        .from('orders')
+        .update({ stock_deducted: true })
+        .eq('loading_bill_id', billId)
+        .then(() => {});
+
+      supabase
         .rpc('approve_loading_bill_transaction', { p_loading_bill_id: billId })
         .then(({ error }) => {
           if (error) console.error('خطا در تایید برگه بارگیری روی Supabase:', error);
         });
     }
-  }, [loadingBills, products, setProducts]);
+  }, [loadingBills, products, setProducts, setOrders]);
+
+  // Record Product Return to Warehouse (Increases physical stock & inserts transaction_type = 'return')
+  const recordProductReturn = useCallback((productId: string, quantity: number, reason: string): { success: boolean; message: string } => {
+    if (!productId || quantity <= 0) {
+      return { success: false, message: 'اطلاعات کالا و تعداد مرجوعی نامعتبر است.' };
+    }
+
+    const prod = products.find((p) => p.id === productId);
+    if (!prod) {
+      return { success: false, message: 'کالای مورد نظر در سیستم یافت نشد.' };
+    }
+
+    const nowPersian = new Intl.DateTimeFormat('fa-IR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+
+    let targetStock = prod.stock + quantity;
+
+    setProducts((prev) =>
+      prev.map((p) => {
+        if (p.id === productId) {
+          const newStock = p.stock + quantity;
+          targetStock = newStock;
+          return { ...p, stock: newStock };
+        }
+        return p;
+      })
+    );
+
+    const refReason = reason.trim() ? `مرجوعی: ${reason.trim()}` : 'مرجوعی به انبار سردخانه';
+    const txId = `tx-${Date.now()}-ret-${productId}`;
+
+    const returnTx: InventoryTransaction = {
+      id: txId,
+      product_id: productId,
+      product_name: prod.name,
+      transaction_type: 'return',
+      quantity: Math.abs(quantity),
+      reference_id: refReason,
+      created_at: nowPersian,
+    };
+
+    setInventoryTransactions((prev) => [returnTx, ...prev]);
+
+    if (isSupabaseConfigured && supabase) {
+      supabase
+        .from('products')
+        .update({ stock: targetStock })
+        .eq('id', productId)
+        .then(({ error }) => {
+          if (error) console.error('خطا در به‌روزرسانی موجودی مرجوعی در Supabase:', error);
+        });
+
+      supabase
+        .from('inventory_transactions')
+        .insert({
+          id: txId,
+          product_id: productId,
+          transaction_type: 'return',
+          quantity: Math.abs(quantity),
+          reference_id: refReason,
+        })
+        .then(({ error }) => {
+          if (error) console.error('خطا در ثبت تراکنش مرجوعی در Supabase:', error);
+        });
+    }
+
+    return {
+      success: true,
+      message: `تعداد ${quantity} واحد از «${prod.name}» با موفقیت مرجوع و به موجودی فیزیکی انبار افزوده شد.`,
+    };
+  }, [products, setProducts]);
 
   // Update product stock (Warehouse adjustment)
   const updateProductStock = useCallback((productId: string, additionalStock: number) => {
@@ -258,14 +345,54 @@ export function useWarehouse({
     }
   }, [products, setProducts]);
 
+  // Delete Inventory Transactions (Single or Batch)
+  const deleteInventoryTransactions = useCallback(async (txIds: string[]): Promise<{ success: boolean; message: string; count: number }> => {
+    if (txIds.length === 0) {
+      return { success: false, message: 'هیچ تراکنشی انتخاب نشده است.', count: 0 };
+    }
+
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const { error } = await supabase
+          .from('inventory_transactions')
+          .delete()
+          .in('id', txIds);
+
+        if (error) {
+          console.warn('Supabase inventory transactions delete error:', error.message);
+        }
+      }
+
+      const idSet = new Set(txIds);
+      setInventoryTransactions((prev) => {
+        const next = prev.filter((tx) => !idSet.has(tx.id));
+        try {
+          localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+
+      return {
+        success: true,
+        message: `${txIds.length} تراکنش دفتر کل با موفقیت حذف گردید.`,
+        count: txIds.length,
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطا در حذف تراکنش‌های دفتر کل.';
+      return { success: false, message: msg, count: 0 };
+    }
+  }, []);
+
   return {
     loadingBills,
     setLoadingBills,
     inventoryTransactions,
     setInventoryTransactions,
     addInventoryTransactions,
+    deleteInventoryTransactions,
     createLoadingBill,
     approveLoadingBill,
     updateProductStock,
+    recordProductReturn,
   };
 }

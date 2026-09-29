@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { InventoryTransaction, Order, Product, Category, Visitor, LoadingBill } from '../../types';
+import { useApp } from '../../context/AppContext';
 import {
   FileSpreadsheet,
   BarChart3,
@@ -15,6 +16,11 @@ import {
   DollarSign,
   ChevronDown,
   ChevronUp,
+  Trash2,
+  CheckSquare,
+  Square,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import {
   isToday,
@@ -41,13 +47,17 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
   visitors,
   loadingBills = [],
 }) => {
+  const { deleteInventoryTransactions } = useApp();
   const [activeSubSection, setActiveSubSection] = useState<'loadingBills' | 'inventoryLedger' | 'salesAnalytics'>('loadingBills');
   const [expandedBillId, setExpandedBillId] = useState<string | null>(null);
 
-  // Ledger Filter states
+  // Ledger Filter & Selection states
   const [txTypeFilter, setTxTypeFilter] = useState<string>('all');
   const [ledgerTimeFilter, setLedgerTimeFilter] = useState<'all' | 'today' | 'week'>('all');
   const [txSearchTerm, setTxSearchTerm] = useState('');
+  const [selectedTxIds, setSelectedTxIds] = useState<string[]>([]);
+  const [isDeletingTx, setIsDeletingTx] = useState(false);
+  const [ledgerFeedback, setLedgerFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // 1. Transaction Ledger Filters
   const filteredTransactions = useMemo(() => {
@@ -91,6 +101,73 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
     { id: 'return', label: 'مرجوعی به انبار' },
     { id: 'manual_adjustment', label: 'ورود بار به انبار' },
   ];
+
+  const isAllFilteredSelected = useMemo(() => {
+    if (filteredTransactions.length === 0) return false;
+    return filteredTransactions.every((tx) => selectedTxIds.includes(tx.id));
+  }, [filteredTransactions, selectedTxIds]);
+
+  const handleToggleSelectAll = () => {
+    if (isAllFilteredSelected) {
+      const filteredSet = new Set(filteredTransactions.map((t) => t.id));
+      setSelectedTxIds((prev) => prev.filter((id) => !filteredSet.has(id)));
+    } else {
+      const allFilteredIds = filteredTransactions.map((t) => t.id);
+      setSelectedTxIds((prev) => Array.from(new Set([...prev, ...allFilteredIds])));
+    }
+  };
+
+  const handleToggleSelectRow = (id: string) => {
+    setSelectedTxIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleDeleteSelectedTx = async () => {
+    if (selectedTxIds.length === 0) return;
+    setIsDeletingTx(true);
+    setLedgerFeedback(null);
+    try {
+      const count = selectedTxIds.length;
+      const res = await deleteInventoryTransactions(selectedTxIds);
+      if (res.success) {
+        setSelectedTxIds([]);
+        setLedgerFeedback({
+          type: 'success',
+          message: `${count} تراکنش با موفقیت از دفتر کل انبار حذف گردید.`,
+        });
+      } else {
+        setLedgerFeedback({ type: 'error', message: res.message });
+      }
+    } catch {
+      setLedgerFeedback({ type: 'error', message: 'خطا در حذف تراکنش‌های انتخابی.' });
+    } finally {
+      setIsDeletingTx(false);
+      setTimeout(() => setLedgerFeedback(null), 3500);
+    }
+  };
+
+  const handleDeleteSingleTx = async (id: string) => {
+    setIsDeletingTx(true);
+    setLedgerFeedback(null);
+    try {
+      const res = await deleteInventoryTransactions([id]);
+      if (res.success) {
+        setSelectedTxIds((prev) => prev.filter((i) => i !== id));
+        setLedgerFeedback({
+          type: 'success',
+          message: 'تراکنش با موفقیت از دفتر کل حذف شد.',
+        });
+      } else {
+        setLedgerFeedback({ type: 'error', message: res.message });
+      }
+    } catch {
+      setLedgerFeedback({ type: 'error', message: 'خطا در حذف تراکنش.' });
+    } finally {
+      setIsDeletingTx(false);
+      setTimeout(() => setLedgerFeedback(null), 3500);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -327,9 +404,9 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
               ))}
             </div>
 
-            {/* Time & Search */}
+            {/* Time, Search & Batch Deletion Bar */}
             <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800/80">
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-xs text-slate-400 font-medium ml-1">بازه زمانی:</span>
                 <button
                   type="button"
@@ -366,26 +443,81 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
                 </button>
               </div>
 
-              <div className="relative w-full sm:w-64">
-                <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-500 pointer-events-none" />
-                <input
-                  type="text"
-                  value={txSearchTerm}
-                  onChange={(e) => setTxSearchTerm(e.target.value)}
-                  placeholder="جستجوی نام کالا یا سند حواله..."
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
-                />
+              {/* Search input & Delete actions */}
+              <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+                {selectedTxIds.length > 0 && (
+                  <button
+                    type="button"
+                    disabled={isDeletingTx}
+                    onClick={handleDeleteSelectedTx}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition shadow-md shadow-rose-600/30 cursor-pointer disabled:opacity-50"
+                  >
+                    {isDeletingTx ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-3.5 h-3.5" />
+                    )}
+                    <span>حذف {selectedTxIds.length} موارد انتخابی</span>
+                  </button>
+                )}
+
+                <div className="relative w-full sm:w-64">
+                  <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-500 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={txSearchTerm}
+                    onChange={(e) => setTxSearchTerm(e.target.value)}
+                    placeholder="جستجوی نام کالا یا سند حواله..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
               </div>
             </div>
           </div>
 
+          {/* Feedback banner */}
+          {ledgerFeedback && (
+            <div
+              className={`p-3 rounded-xl text-xs font-bold flex items-center justify-between border ${
+                ledgerFeedback.type === 'success'
+                  ? 'bg-emerald-950/80 border-emerald-800 text-emerald-300'
+                  : 'bg-rose-950/80 border-rose-800 text-rose-300'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                {ledgerFeedback.type === 'success' ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                )}
+                <span>{ledgerFeedback.message}</span>
+              </div>
+            </div>
+          )}
+
           {/* Ledger Table */}
           <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-sm">
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2">
               <h3 className="font-bold text-sm text-slate-100">
                 دفتر دوبل ورود، خروج و رزروهای زنجیره انبار
               </h3>
-              <span className="text-xs text-slate-400">{filteredTransactions.length} تراکنش ثبت شده</span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-slate-400">{filteredTransactions.length} تراکنش ثبت شده</span>
+                {filteredTransactions.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleToggleSelectAll}
+                    className="text-xs font-semibold text-blue-400 hover:text-blue-300 flex items-center gap-1 cursor-pointer"
+                  >
+                    {isAllFilteredSelected ? (
+                      <CheckSquare className="w-3.5 h-3.5 text-blue-400" />
+                    ) : (
+                      <Square className="w-3.5 h-3.5 text-slate-500" />
+                    )}
+                    <span>{isAllFilteredSelected ? 'لغو انتخاب همه' : 'انتخاب همه'}</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {filteredTransactions.length === 0 ? (
@@ -397,15 +529,30 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
                 <table className="w-full text-right text-xs">
                   <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800">
                     <tr>
+                      <th className="py-3 px-3 text-center w-10">
+                        <button
+                          type="button"
+                          onClick={handleToggleSelectAll}
+                          className="p-1 text-slate-400 hover:text-slate-200 cursor-pointer"
+                        >
+                          {isAllFilteredSelected ? (
+                            <CheckSquare className="w-4 h-4 text-blue-400" />
+                          ) : (
+                            <Square className="w-4 h-4 text-slate-500" />
+                          )}
+                        </button>
+                      </th>
                       <th className="py-3 px-4 font-semibold">نام و کد محصول</th>
                       <th className="py-3 px-4 font-semibold">نوع عملیات انبارداری</th>
                       <th className="py-3 px-4 font-semibold">تعداد تغییر یافته</th>
                       <th className="py-3 px-4 font-semibold">سند مرجع / حواله</th>
                       <th className="py-3 px-4 font-semibold">زمان ثبت</th>
+                      <th className="py-3 px-4 text-center font-semibold">عملیات</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60">
                     {filteredTransactions.map((tx) => {
+                      const isSelected = selectedTxIds.includes(tx.id);
                       const typeMap = {
                         reserve: { label: 'رزرو سفارش جدید', color: 'text-amber-400' },
                         release_reserve: { label: 'آزادسازی رزرو (تحویل)', color: 'text-blue-400' },
@@ -415,7 +562,25 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
                       }[tx.transaction_type];
 
                       return (
-                        <tr key={tx.id} className="hover:bg-slate-800/35 transition">
+                        <tr
+                          key={tx.id}
+                          className={`transition ${
+                            isSelected ? 'bg-blue-950/30' : 'hover:bg-slate-800/35'
+                          }`}
+                        >
+                          <td className="py-3 px-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleSelectRow(tx.id)}
+                              className="p-1 text-slate-400 hover:text-slate-200 cursor-pointer"
+                            >
+                              {isSelected ? (
+                                <CheckSquare className="w-4 h-4 text-blue-400" />
+                              ) : (
+                                <Square className="w-4 h-4 text-slate-600" />
+                              )}
+                            </button>
+                          </td>
                           <td className="py-3 px-4 font-medium text-slate-100">
                             {tx.product_name || tx.product_id}
                           </td>
@@ -429,6 +594,17 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
                           </td>
                           <td className="py-3 px-4 text-slate-400 font-mono">{tx.reference_id}</td>
                           <td className="py-3 px-4 text-slate-400 font-mono">{tx.created_at}</td>
+                          <td className="py-3 px-4 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteSingleTx(tx.id)}
+                              disabled={isDeletingTx}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/30 transition cursor-pointer"
+                              title="حذف این تراکنش از دفتر کل"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
                         </tr>
                       );
                     })}

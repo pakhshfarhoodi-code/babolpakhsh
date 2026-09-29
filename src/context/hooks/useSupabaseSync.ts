@@ -53,6 +53,7 @@ export function useSupabaseSync({
     supabase.from('visitors').delete().in('id', Array.from(DUMMY_VISITOR_IDS)).then(() => {});
     supabase.from('profiles').delete().in('id', Array.from(DUMMY_VISITOR_IDS)).then(() => {});
     supabase.from('products').delete().in('name', Array.from(LEGACY_MOCK_NAMES)).then(() => {});
+    supabase.from('inventory_transactions').delete().or('product_id.like.prod-%,reference_id.like.ord-%').then(() => {});
 
     async function loadFromSupabase() {
       try {
@@ -79,17 +80,24 @@ export function useSupabaseSync({
             const localMap = new Map(prev.map((p: Product) => [p.id, p]));
             const localOnlyItems: Product[] = [];
 
-            // Merge server data with any locally edited properties (like image_url, is_market_test, price, etc.)
+            // Merge server data with any locally edited properties (like name, is_active, image_url, is_market_test, etc.)
             const merged: Product[] = validProds.map((dbProd: Product) => {
               const localProd = localMap.get(dbProd.id);
 
-              // If local image_url was updated and differs from dbProd, prioritize local edited image_url
+              const finalName = (localProd?.name && localProd.name.trim() !== dbProd.name?.trim())
+                ? localProd.name
+                : dbProd.name;
+              const finalBrand = (localProd?.brand && localProd.brand !== dbProd.brand)
+                ? localProd.brand
+                : dbProd.brand;
+              const finalIsActive = localProd?.is_active !== undefined
+                ? localProd.is_active
+                : (dbProd.is_active ?? true);
               const finalImage = (localProd?.image_url && localProd.image_url !== dbProd.image_url) 
                 ? localProd.image_url 
                 : dbProd.image_url;
 
               // Check is_market_test:
-              // Prioritize marketTestIds set from localStorage and local state to prevent sync resets
               const isMarketTestInStorage = marketTestIds.has(dbProd.id);
               let finalIsMarketTest = false;
               if (isMarketTestInStorage) {
@@ -105,14 +113,26 @@ export function useSupabaseSync({
 
               const mergedItem: Product = {
                 ...dbProd,
+                name: finalName,
+                brand: finalBrand,
                 image_url: finalImage,
-                is_active: dbProd.is_active !== undefined ? dbProd.is_active : (localProd?.is_active ?? true),
+                is_active: finalIsActive,
                 is_market_test: finalIsMarketTest,
               };
 
-              // If local image is different, sync it up to Supabase in the background
-              if (localProd?.image_url && localProd.image_url !== dbProd.image_url && isSupabaseConfigured && supabase) {
-                supabase.from('products').update({ image_url: localProd.image_url }).eq('id', dbProd.id).then(() => {});
+              // If local edits differ from dbProd, re-sync to Supabase in background
+              if (
+                (localProd?.name && localProd.name.trim() !== dbProd.name?.trim()) ||
+                (localProd?.is_active !== undefined && localProd.is_active !== dbProd.is_active) ||
+                (localProd?.image_url && localProd.image_url !== dbProd.image_url)
+              ) {
+                if (isSupabaseConfigured && supabase) {
+                  supabase.from('products').update({
+                    name: finalName,
+                    is_active: finalIsActive,
+                    image_url: finalImage,
+                  }).eq('id', dbProd.id).then(() => {});
+                }
               }
 
               return mergedItem;
@@ -401,10 +421,21 @@ export function useSupabaseSync({
           .limit(500);
 
         if (txData && txData.length > 0) {
+          const validTxData = txData.filter(
+            (t: InventoryTransaction) =>
+              !LEGACY_MOCK_NAMES.has(t.product_name?.trim() || '') &&
+              !t.product_id?.startsWith('prod-')
+          );
+
           setInventoryTransactions((prev) => {
-            const serverIds = new Set(txData.map((t: InventoryTransaction) => t.id));
-            const localOnly = prev.filter((p) => !serverIds.has(p.id));
-            return [...txData, ...localOnly];
+            const serverIds = new Set(validTxData.map((t: InventoryTransaction) => t.id));
+            const localOnly = prev.filter(
+              (p) =>
+                !serverIds.has(p.id) &&
+                !LEGACY_MOCK_NAMES.has(p.product_name?.trim() || '') &&
+                !p.product_id?.startsWith('prod-')
+            );
+            return [...validTxData, ...localOnly];
           });
         }
 

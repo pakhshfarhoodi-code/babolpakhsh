@@ -50,6 +50,26 @@
   }
 }
 
+/* Fix select and option dropdown styling in RTL mode (prevents text clipping on right side) */
+select {
+  direction: rtl !important;
+  text-align: right !important;
+}
+
+select option {
+  direction: rtl !important;
+  text-align: right !important;
+  padding: 6px 12px !important;
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+}
+
+html.theme-light select option,
+.theme-light select option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
 /* Light Theme Component & Utility Overrides */
 html.theme-light .bg-slate-950,
 .theme-light .bg-slate-950,

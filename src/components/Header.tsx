@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { StoreProfileSheet } from './shop/StoreProfileSheet';
 import { VisitorProfileSheet } from './visitor/VisitorProfileSheet';
-import appLogo from '../assets/images/farhoodi_b2b_logo_1790548040455.jpg';
+import appLogo from '../assets/images/farhoodi_b2b_logo.webp';
 
 interface HeaderProps {
   currentPath?: string;

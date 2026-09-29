@@ -17,8 +17,8 @@ import {
 } from 'lucide-react';
 import { UserRole } from '../types';
 import { SupermarketRegisterModal } from './SupermarketRegisterModal';
-import bgHero from '../assets/images/b2b_frozen_food_showcase_1790547579230.jpg';
-import appLogo from '../assets/images/farhoodi_b2b_logo_1790548040455.jpg';
+import bgHero from '../assets/images/b2b_frozen_food_showcase.webp';
+import appLogo from '../assets/images/farhoodi_b2b_logo.webp';
 
 interface LoginScreenProps {
   initialRole?: UserRole;

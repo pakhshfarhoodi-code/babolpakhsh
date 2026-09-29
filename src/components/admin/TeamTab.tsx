@@ -906,20 +906,35 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                       {/* Bottom row: Assigned Visitor + Approval Toggle Button + Edit & Delete Actions */}
                       <div className="mt-2.5 pt-2 border-t border-slate-900 flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-slate-500">پشتیبان / ویزیتور:</span>
-                          <span
-                            className={`rounded-lg px-2 py-0.5 text-xs font-semibold ${
+                          <span className="text-slate-400 font-medium">ویزیتور اختصاصی:</span>
+                          <select
+                            value={shop.assigned_visitor_id || 'direct'}
+                            onChange={async (e) => {
+                              const newVisId = e.target.value;
+                              await updateSupermarket(shop.id, {
+                                name: shop.name,
+                                owner: shop.owner,
+                                phone: shop.phone,
+                                address: shop.address,
+                                assigned_visitor_id: newVisId,
+                                username: shop.username,
+                                is_active: shop.is_active,
+                              });
+                            }}
+                            className={`rounded-lg px-2 py-1 text-xs font-bold border focus:outline-none transition cursor-pointer ${
                               shop.assigned_visitor_id === 'direct' || !assignedVisitor
-                                ? 'bg-amber-950/40 border border-amber-800/40 text-amber-300'
-                                : 'bg-slate-900 border border-slate-800 text-slate-300'
+                                ? 'bg-amber-950/40 border-amber-800/60 text-amber-300'
+                                : 'bg-slate-900 border-slate-700 text-blue-300'
                             }`}
+                            title="تغییر سریع ویزیتور اختصاصی فروشگاه"
                           >
-                            {shop.assigned_visitor_id === 'direct'
-                              ? 'خرید مستقیم از پخش مرکزی (دفتر مرکزی)'
-                              : assignedVisitor
-                              ? `${assignedVisitor.name} (${assignedVisitor.region})`
-                              : 'خرید مستقیم از پخش مرکزی'}
-                          </span>
+                            <option value="direct">خرید مستقیم از پخش مرکزی (بدون ویزیتور)</option>
+                            {visitors.map((v) => (
+                              <option key={v.id} value={v.id}>
+                                {v.name} ({v.region || 'ویزیتور'}) - {v.phone}
+                              </option>
+                            ))}
+                          </select>
                         </div>
 
                         <div className="flex items-center gap-1.5">

@@ -12,7 +12,7 @@ import {
 } from '../../types';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { LEGACY_MOCK_NAMES } from './useCatalog';
-import { STORAGE_KEYS, getDeletedIds } from '../utils';
+import { STORAGE_KEYS, getDeletedIds, getMarketTestIds, setMarketTestId } from '../utils';
 
 interface UseSupabaseSyncProps {
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
@@ -74,27 +74,44 @@ export function useSupabaseSync({
           );
 
           setProducts((prev) => {
+            const marketTestIds = getMarketTestIds();
             const dbMap = new Map(validProds.map((p: Product) => [p.id, p]));
             const localMap = new Map(prev.map((p: Product) => [p.id, p]));
             const localOnlyItems: Product[] = [];
 
-            // Merge server data with any locally edited properties (like image_url, price, etc.)
+            // Merge server data with any locally edited properties (like image_url, is_market_test, price, etc.)
             const merged: Product[] = validProds.map((dbProd: Product) => {
               const localProd = localMap.get(dbProd.id);
-              if (!localProd) return dbProd;
 
               // If local image_url was updated and differs from dbProd, prioritize local edited image_url
-              const finalImage = (localProd.image_url && localProd.image_url !== dbProd.image_url) 
+              const finalImage = (localProd?.image_url && localProd.image_url !== dbProd.image_url) 
                 ? localProd.image_url 
                 : dbProd.image_url;
 
-              const mergedItem = {
+              // Check is_market_test:
+              // Prioritize marketTestIds set from localStorage and local state to prevent sync resets
+              const isMarketTestInStorage = marketTestIds.has(dbProd.id);
+              let finalIsMarketTest = false;
+              if (isMarketTestInStorage) {
+                finalIsMarketTest = true;
+              } else if (dbProd.is_market_test === true) {
+                finalIsMarketTest = true;
+                setMarketTestId(dbProd.id, true);
+              } else if (localProd?.is_market_test !== undefined) {
+                finalIsMarketTest = Boolean(localProd.is_market_test);
+              } else {
+                finalIsMarketTest = false;
+              }
+
+              const mergedItem: Product = {
                 ...dbProd,
                 image_url: finalImage,
+                is_active: dbProd.is_active !== undefined ? dbProd.is_active : (localProd?.is_active ?? true),
+                is_market_test: finalIsMarketTest,
               };
 
               // If local image is different, sync it up to Supabase in the background
-              if (localProd.image_url && localProd.image_url !== dbProd.image_url && isSupabaseConfigured && supabase) {
+              if (localProd?.image_url && localProd.image_url !== dbProd.image_url && isSupabaseConfigured && supabase) {
                 supabase.from('products').update({ image_url: localProd.image_url }).eq('id', dbProd.id).then(() => {});
               }
 
@@ -127,11 +144,12 @@ export function useSupabaseSync({
                 unit: p.unit || 'عدد',
                 image_url: p.image_url || 'https://images.unsplash.com/photo-1551024601-bec78aea704b?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer',
                 is_active: p.is_active ?? true,
+                is_market_test: Boolean(p.is_market_test),
               }));
               supabase.from('products').upsert(rows, { onConflict: 'id' }).then(({ error }) => {
                 if (error) {
                   // Fallback without optional columns if schema is older
-                  const rowsSafe = rows.map(({ consumer_price, visitor_price, ...rest }) => rest);
+                  const rowsSafe = rows.map(({ is_market_test, consumer_price, visitor_price, ...rest }) => rest);
                   supabase.from('products').upsert(rowsSafe, { onConflict: 'id' }).then(() => {});
                 }
               });

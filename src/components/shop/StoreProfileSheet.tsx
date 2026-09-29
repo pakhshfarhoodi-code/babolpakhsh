@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Supermarket, Visitor } from '../../types';
 import { useApp } from '../../context/AppContext';
 import {
@@ -29,7 +29,7 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
   store,
   visitor,
 }) => {
-  const { resetSupermarketPassword } = useApp();
+  const { visitors, updateSupermarket, resetSupermarketPassword } = useApp();
 
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [newPassword, setNewPassword] = useState('');
@@ -38,7 +38,64 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  // Visitor change state
+  const [showVisitorChanger, setShowVisitorChanger] = useState(false);
+  const [selectedVisitorId, setSelectedVisitorId] = useState<string>(
+    store?.assigned_visitor_id || visitor?.id || 'direct'
+  );
+  const [isSavingVisitor, setIsSavingVisitor] = useState(false);
+  const [visitorChangeError, setVisitorChangeError] = useState<string | null>(null);
+  const [visitorChangeSuccess, setVisitorChangeSuccess] = useState<string | null>(null);
+
+  const activeVisitors = useMemo(
+    () => visitors.filter((v) => v.is_active !== false),
+    [visitors]
+  );
+
+  React.useEffect(() => {
+    if (store?.assigned_visitor_id) {
+      setSelectedVisitorId(store.assigned_visitor_id);
+    } else if (visitor?.id) {
+      setSelectedVisitorId(visitor.id);
+    } else {
+      setSelectedVisitorId('direct');
+    }
+  }, [store, visitor, isOpen]);
+
   if (!isOpen) return null;
+
+  const handleSaveVisitorChange = async () => {
+    if (!store?.id) return;
+    setIsSavingVisitor(true);
+    setVisitorChangeError(null);
+    setVisitorChangeSuccess(null);
+
+    try {
+      const res = await updateSupermarket(store.id, {
+        name: store.name,
+        owner: store.owner,
+        phone: store.phone,
+        address: store.address,
+        assigned_visitor_id: selectedVisitorId,
+        username: store.username,
+        is_active: store.is_active,
+      });
+
+      if (res.success) {
+        setVisitorChangeSuccess('ویزیتور اختصاصی فروشگاه با موفقیت به‌روزرسانی شد.');
+        setTimeout(() => {
+          setShowVisitorChanger(false);
+          setVisitorChangeSuccess(null);
+        }, 1500);
+      } else {
+        setVisitorChangeError(res.message || 'خطا در تغییر ویزیتور.');
+      }
+    } catch {
+      setVisitorChangeError('خطای غیرمنتظره در ثبت ویزیتور.');
+    } finally {
+      setIsSavingVisitor(false);
+    }
+  };
 
   const handleChangePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,44 +197,116 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
             </div>
           )}
 
-          {visitor ? (
-            <div className="p-2.5 rounded-xl bg-blue-950/40 border border-blue-900/60 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-slate-300 font-semibold">
-                  <Truck className="w-4 h-4 text-blue-400" />
-                  <span>ویزیتور اختصاصی:</span>
-                </div>
-                <span className="font-bold text-slate-100">{visitor.name}</span>
+          {/* Visitor assignment and change section */}
+          <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800/90 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-slate-300 font-semibold text-xs">
+                <Truck className="w-4 h-4 text-blue-400" />
+                <span>ویزیتور مسئول فروشگاه شما:</span>
               </div>
-
-              {visitor.region && (
-                <p className="text-xs text-slate-400 pr-6">منطقه: {visitor.region}</p>
+              {!showVisitorChanger && (
+                <button
+                  type="button"
+                  onClick={() => setShowVisitorChanger(true)}
+                  className="px-2.5 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-[11px] font-bold transition cursor-pointer"
+                >
+                  تغییر ویزیتور
+                </button>
               )}
+            </div>
 
-              {visitor.phone && (
-                <div className="pt-2 border-t border-blue-900/40 flex items-center justify-between">
-                  <span className="text-slate-400 font-mono text-xs dir-ltr">{visitor.phone}</span>
-                  <a
-                    href={`tel:${visitor.phone}`}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-sm transition"
+            {!showVisitorChanger ? (
+              visitor ? (
+                <div className="p-2.5 rounded-xl bg-blue-950/30 border border-blue-900/50 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-100 text-xs">{visitor.name}</span>
+                    {visitor.region && (
+                      <span className="text-[11px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                        {visitor.region}
+                      </span>
+                    )}
+                  </div>
+                  {visitor.phone && (
+                    <div className="pt-2 border-t border-blue-900/40 flex items-center justify-between">
+                      <span className="text-slate-400 font-mono text-xs dir-ltr">{visitor.phone}</span>
+                      <a
+                        href={`tel:${visitor.phone}`}
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-sm transition"
+                      >
+                        <Phone className="w-3.5 h-3.5" />
+                        <span>تماس تلفنی</span>
+                      </a>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="p-2.5 rounded-xl bg-amber-950/20 border border-amber-900/40 space-y-1">
+                  <span className="text-xs font-bold text-amber-300 block">خرید مستقیم از پخش مرکزی (بدون ویزیتور)</span>
+                  <p className="text-[11px] text-slate-400">
+                    سفارش‌های شما مستقیماً توسط واحد فروش مرکزی پردازش و ارسال می‌گردد.
+                  </p>
+                </div>
+              )
+            ) : (
+              <div className="p-3 rounded-xl bg-slate-900 border border-blue-500/30 space-y-3 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
+                  <span className="text-xs font-bold text-slate-200">انتخاب ویزیتور جدید</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowVisitorChanger(false)}
+                    className="text-xs text-slate-400 hover:text-slate-200 cursor-pointer"
                   >
-                    <Phone className="w-3.5 h-3.5" />
-                    <span>تماس تلفنی</span>
-                  </a>
+                    انصراف
+                  </button>
                 </div>
-              )}
-            </div>
-          ) : (
-            <div className="p-2.5 rounded-xl bg-amber-950/30 border border-amber-900/50 space-y-1">
-              <div className="flex items-center gap-2 text-amber-300 font-semibold text-xs">
-                <Truck className="w-4 h-4 text-amber-400" />
-                <span>خرید مستقیم از پخش مرکزی فرهودی</span>
+
+                {visitorChangeError && (
+                  <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs">
+                    {visitorChangeError}
+                  </div>
+                )}
+                {visitorChangeSuccess && (
+                  <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs">
+                    {visitorChangeSuccess}
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-semibold text-slate-300">
+                    لطفاً ویزیتور مورد نظر خود را انتخاب نمایید:
+                  </label>
+                  <select
+                    value={selectedVisitorId}
+                    onChange={(e) => setSelectedVisitorId(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="direct">خرید مستقیم از پخش مرکزی فرهودی (بدون ویزیتور)</option>
+                    {activeVisitors.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.name} ({v.region || 'ویزیتور رسمی'}) - {v.phone}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSaveVisitorChange}
+                  disabled={isSavingVisitor}
+                  className="w-full py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  {isSavingVisitor ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>در حال ثبت تغییرات...</span>
+                    </>
+                  ) : (
+                    <span>ذخیره و ثبت ویزیتور جدید</span>
+                  )}
+                </button>
               </div>
-              <p className="text-xs text-slate-400 pr-6">
-                سفارش‌های شما مستقیماً توسط واحد فروش مرکزی پردازش و ارسال می‌شود.
-              </p>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Password Change Action Section */}

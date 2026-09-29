@@ -18,6 +18,7 @@ export const STORAGE_KEYS = {
   SUPERMARKETS: 'alborz_supermarkets_v1',
   VISITORS: 'alborz_visitors_v1',
   PRODUCT_LIKES: 'farhoodi_product_likes_v1',
+  MARKET_TEST_PRODUCT_IDS: 'farhoodi_market_test_product_ids_v1',
   DELETED_PRODUCT_IDS: 'farhoodi_deleted_product_ids_v1',
   DELETED_SUPERMARKET_IDS: 'farhoodi_deleted_supermarket_ids_v1',
   DELETED_VISITOR_IDS: 'farhoodi_deleted_visitor_ids_v1',
@@ -41,6 +42,50 @@ export const addDeletedId = (key: string, id: string): void => {
     const set = getDeletedIds(key);
     set.add(id);
     localStorage.setItem(key, JSON.stringify(Array.from(set)));
+  } catch {
+    // quota fallback
+  }
+};
+
+// Read Market Test product IDs from localStorage
+export const getMarketTestIds = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.MARKET_TEST_PRODUCT_IDS);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch {
+    return new Set();
+  }
+};
+
+// Add or remove a single product ID from Market Test set
+export const setMarketTestId = (productId: string, isMarketTest: boolean): void => {
+  try {
+    const set = getMarketTestIds();
+    if (isMarketTest) {
+      set.add(productId);
+    } else {
+      set.delete(productId);
+    }
+    localStorage.setItem(STORAGE_KEYS.MARKET_TEST_PRODUCT_IDS, JSON.stringify(Array.from(set)));
+  } catch {
+    // quota fallback
+  }
+};
+
+// Bulk add or remove product IDs from Market Test set
+export const setBulkMarketTestIds = (productIds: string[], isMarketTest: boolean): void => {
+  try {
+    const set = getMarketTestIds();
+    productIds.forEach((id) => {
+      if (isMarketTest) {
+        set.add(id);
+      } else {
+        set.delete(id);
+      }
+    });
+    localStorage.setItem(STORAGE_KEYS.MARKET_TEST_PRODUCT_IDS, JSON.stringify(Array.from(set)));
   } catch {
     // quota fallback
   }

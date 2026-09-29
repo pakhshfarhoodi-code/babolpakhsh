@@ -2,7 +2,14 @@ import { useState, useEffect, useCallback } from 'react';
 import { Product, Category, ProductPriceHistory, ProductLike } from '../../types';
 import { INITIAL_CATEGORIES, INITIAL_BRANDS, INITIAL_PRODUCTS } from '../../data/initialData';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
-import { STORAGE_KEYS, generateUniqueId, addDeletedId } from '../utils';
+import {
+  STORAGE_KEYS,
+  generateUniqueId,
+  addDeletedId,
+  getMarketTestIds,
+  setMarketTestId,
+  setBulkMarketTestIds,
+} from '../utils';
 
 export const LEGACY_MOCK_NAMES = new Set([
   'بستنی مگنوم شکلاتی میهن',
@@ -46,11 +53,20 @@ export function useCatalog() {
 
   const [products, setProducts] = useState<Product[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
+    const marketTestIds = getMarketTestIds();
     if (!saved) return [];
     try {
       const parsed: Product[] = JSON.parse(saved);
       if (!Array.isArray(parsed)) return [];
-      return parsed.filter((p) => !LEGACY_MOCK_NAMES.has(p.name?.trim()));
+      return parsed
+        .filter((p) => !LEGACY_MOCK_NAMES.has(p.name?.trim()))
+        .map((p) => ({
+          ...p,
+          is_market_test:
+            p.is_market_test !== undefined
+              ? Boolean(p.is_market_test)
+              : marketTestIds.has(p.id),
+        }));
     } catch {
       return [];
     }
@@ -204,7 +220,12 @@ export function useCatalog() {
       category_id: validCatId || '',
       visitor_price,
       reserved_stock: 0,
+      is_market_test: Boolean(newProd.is_market_test),
     };
+
+    if (newProd.is_market_test) {
+      setMarketTestId(id, true);
+    }
 
     setProducts((prev) => {
       const next = [...prev, productToAdd];
@@ -255,25 +276,30 @@ export function useCatalog() {
         const { error: err1 } = await supabase.from('products').insert(row);
         if (!err1) return;
 
-        console.warn('Supabase product insert failed, retrying with category_id = null fallback:', err1.message);
+        console.warn('Supabase product insert failed, retrying without is_market_test / FK:', err1.message);
         
-        // Try 2: With category_id = null (avoids foreign key constraint violation)
-        const rowNoFK = { ...row, category_id: null };
-        const { error: err2 } = await supabase.from('products').insert(rowNoFK);
+        // Try 2: Without is_market_test (if column doesn't exist on remote DB)
+        const { is_market_test, ...rowNoMarket } = row;
+        const { error: err2 } = await supabase.from('products').insert(rowNoMarket);
         if (!err2) return;
 
-        console.warn('Supabase fallback insert failed, retrying without consumer_price:', err2.message);
-        const { consumer_price, ...row3 } = rowNoFK;
-        const { error: err3 } = await supabase.from('products').insert(row3);
+        // Try 3: With category_id = null (avoids foreign key constraint violation)
+        const rowNoFK = { ...rowNoMarket, category_id: null };
+        const { error: err3 } = await supabase.from('products').insert(rowNoFK);
         if (!err3) return;
 
-        console.warn('Supabase fallback insert failed, retrying without visitor_price:', err3.message);
-        const { visitor_price: vp, ...row4 } = row3;
+        console.warn('Supabase fallback insert failed, retrying without consumer_price:', err3.message);
+        const { consumer_price, ...row4 } = rowNoFK;
         const { error: err4 } = await supabase.from('products').insert(row4);
         if (!err4) return;
 
-        const { brand: b, ...row5 } = row4;
-        await supabase.from('products').insert(row5);
+        console.warn('Supabase fallback insert failed, retrying without visitor_price:', err4.message);
+        const { visitor_price: vp, ...row5 } = row4;
+        const { error: err5 } = await supabase.from('products').insert(row5);
+        if (!err5) return;
+
+        const { brand: b, ...row6 } = row5;
+        await supabase.from('products').insert(row6);
       })();
     }
   }, [categories]);
@@ -293,6 +319,9 @@ export function useCatalog() {
       ? updates.visitor_price
       : (prod.visitor_price ?? Math.round(targetPrice * 0.85));
     const targetConsumerPrice = updates.consumer_price !== undefined ? updates.consumer_price : prod.consumer_price;
+    const targetIsMarketTest = updates.is_market_test !== undefined
+      ? Boolean(updates.is_market_test)
+      : (prod.is_market_test ?? false);
 
     const updatedProd: Product = {
       ...prod,
@@ -307,8 +336,12 @@ export function useCatalog() {
       visitor_price: targetVisitorPrice,
       consumer_price: targetConsumerPrice,
       is_active: updates.is_active !== undefined ? updates.is_active : (prod.is_active ?? true),
-      is_market_test: updates.is_market_test !== undefined ? updates.is_market_test : (prod.is_market_test ?? false),
+      is_market_test: targetIsMarketTest,
     };
+
+    if (updates.is_market_test !== undefined) {
+      setMarketTestId(productId, targetIsMarketTest);
+    }
 
     if (updates.brand && updates.brand.trim()) {
       const bTrimmed = updates.brand.trim();
@@ -369,7 +402,15 @@ export function useCatalog() {
         .update(payload)
         .eq('id', productId)
         .then(({ error }) => {
-          if (error) console.warn('Supabase product update warning:', error.message);
+          if (error) {
+            console.warn('Supabase product update error, attempting fallback without is_market_test:', error.message);
+            if (payload.is_market_test !== undefined) {
+              const { is_market_test, ...safePayload } = payload;
+              if (Object.keys(safePayload).length > 0) {
+                supabase.from('products').update(safePayload).eq('id', productId).then(() => {});
+              }
+            }
+          }
         });
     }
 
@@ -715,6 +756,7 @@ export function useCatalog() {
 
     // Record tombstone immediately to prevent any auto-sync resurrection
     addDeletedId(STORAGE_KEYS.DELETED_PRODUCT_IDS, productId);
+    setMarketTestId(productId, false);
 
     // Update local state and persist to localStorage
     setProducts((prev) => {
@@ -758,6 +800,7 @@ export function useCatalog() {
     }
 
     productIds.forEach((id) => addDeletedId(STORAGE_KEYS.DELETED_PRODUCT_IDS, id));
+    setBulkMarketTestIds(productIds, false);
 
     const idsToDelete = new Set(productIds);
     setProducts((prev) => {
@@ -808,6 +851,10 @@ export function useCatalog() {
   ) => {
     if (!productIds || productIds.length === 0) {
       return { success: false, message: 'هیچ کالایی برای ویرایش انتخاب نشده است.', count: 0 };
+    }
+
+    if (updates.is_market_test !== undefined) {
+      setBulkMarketTestIds(productIds, Boolean(updates.is_market_test));
     }
 
     const targetIds = new Set(productIds);
@@ -868,12 +915,12 @@ export function useCatalog() {
         const { error: err1 } = await supabase.from('products').upsert(rows, { onConflict: 'id' });
         if (!err1) return;
 
-        console.warn('Supabase bulk update upsert failed with full fields, retrying without visitor_price:', err1.message);
-        const rows2 = rows.map(({ visitor_price, ...rest }) => rest);
+        console.warn('Supabase bulk update upsert failed with full fields, retrying without is_market_test / visitor_price:', err1.message);
+        const rows2 = rows.map(({ is_market_test, visitor_price, ...rest }) => rest);
         const { error: err2 } = await supabase.from('products').upsert(rows2, { onConflict: 'id' });
         if (!err2) return;
 
-        console.warn('Supabase bulk update upsert failed without visitor_price, retrying without brand:', err2.message);
+        console.warn('Supabase bulk update upsert failed, retrying without brand:', err2.message);
         const rows3 = rows2.map(({ brand, ...rest }) => rest);
         const { error: err3 } = await supabase.from('products').upsert(rows3, { onConflict: 'id' });
         if (err3) {

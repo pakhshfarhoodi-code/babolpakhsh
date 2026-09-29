@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { QuantityStepper } from './QuantityStepper';
 import { formatPrice, LOW_STOCK_THRESHOLD } from './shopUtils';
 import { Package, Maximize2, X, Tag, Warehouse, Heart, Clock, Sparkles } from 'lucide-react';
+import { SafeImage } from '../common/SafeImage';
 
 interface ProductRowProps {
   product: Product;
@@ -81,18 +82,13 @@ export const ProductRow: React.FC<ProductRowProps> = ({
             }`}
             title="برای مشاهده تصویر بزرگ کالا کلیک کنید"
           >
-            {!imageError && product.image_url ? (
-              <img
-                src={product.image_url}
-                alt={product.name}
-                loading="lazy"
-                onError={() => setImageError(true)}
-                className="w-full h-full object-cover transition duration-300 group-hover:scale-110"
-                referrerPolicy="no-referrer"
-              />
-            ) : (
-              <Package className="w-6 h-6 text-slate-600" />
-            )}
+            <SafeImage
+              src={product.image_url}
+              alt={product.name}
+              categoryId={product.category_id}
+              productName={product.name}
+              className="w-full h-full object-cover transition duration-300 group-hover:scale-110"
+            />
 
             {/* Hover Zoom Icon */}
             <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition text-white">
@@ -215,19 +211,13 @@ export const ProductRow: React.FC<ProductRowProps> = ({
 
             {/* Large Image Preview */}
             <div className="relative w-full h-72 sm:h-80 bg-slate-950 flex items-center justify-center overflow-hidden border-b border-slate-800 p-2">
-              {!imageError && product.image_url ? (
-                <img
-                  src={product.image_url}
-                  alt={product.name}
-                  className="w-full h-full object-contain rounded-2xl"
-                  referrerPolicy="no-referrer"
-                />
-              ) : (
-                <div className="flex flex-col items-center gap-2 text-slate-600">
-                  <Package className="w-16 h-16" />
-                  <span className="text-xs text-slate-500">تصویر اختصاصی برای این کالا ثبت نشده است</span>
-                </div>
-              )}
+              <SafeImage
+                src={product.image_url}
+                alt={product.name}
+                categoryId={product.category_id}
+                productName={product.name}
+                className="w-full h-full object-contain rounded-2xl"
+              />
 
               {/* Status Badge Over Image */}
               {isMarketTest ? (

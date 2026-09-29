@@ -10,6 +10,7 @@ import {
   setMarketTestId,
   setBulkMarketTestIds,
 } from '../utils';
+import { sanitizeImageUrl } from '../../utils/imageUtils';
 
 export const LEGACY_MOCK_NAMES = new Set([
   'بستنی مگنوم شکلاتی میهن',
@@ -214,10 +215,13 @@ export function useCatalog() {
     const visitor_price = newProd.visitor_price !== undefined ? newProd.visitor_price : Math.round(newProd.price * 0.85);
     const validCatId = newProd.category_id && newProd.category_id.trim() ? newProd.category_id.trim() : null;
 
+    const safeImage = sanitizeImageUrl(newProd.image_url, validCatId || undefined, newProd.name);
+
     const productToAdd: Product = {
       ...newProd,
       id,
       category_id: validCatId || '',
+      image_url: safeImage,
       visitor_price,
       reserved_stock: 0,
       is_market_test: Boolean(newProd.is_market_test),
@@ -323,13 +327,19 @@ export function useCatalog() {
       ? Boolean(updates.is_market_test)
       : (prod.is_market_test ?? false);
 
+    const targetName = updates.name !== undefined ? updates.name.trim() : prod.name;
+    const targetCatId = updates.category_id !== undefined ? updates.category_id : prod.category_id;
+    const targetImage = updates.image_url !== undefined
+      ? sanitizeImageUrl(updates.image_url, targetCatId, targetName)
+      : sanitizeImageUrl(prod.image_url, targetCatId, targetName);
+
     const updatedProd: Product = {
       ...prod,
       ...updates,
-      name: updates.name !== undefined ? updates.name.trim() : prod.name,
+      name: targetName,
       brand: updates.brand !== undefined ? updates.brand.trim() || 'متفرقه' : prod.brand,
-      category_id: updates.category_id !== undefined ? updates.category_id : prod.category_id,
-      image_url: updates.image_url !== undefined ? updates.image_url : prod.image_url,
+      category_id: targetCatId,
+      image_url: targetImage,
       unit: updates.unit !== undefined ? updates.unit : prod.unit,
       stock: updates.stock !== undefined ? updates.stock : prod.stock,
       price: targetPrice,

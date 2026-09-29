@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Product, Category, ProductPriceHistory } from '../../types';
+import { SafeImage } from '../common/SafeImage';
+import { compressImageFile, getCategoryFallbackImage, sanitizeImageUrl } from '../../utils/imageUtils';
 import {
   Search,
   Plus,
@@ -126,20 +128,20 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   const [newProdIsMarketTest, setNewProdIsMarketTest] = useState(false);
   const [addModalError, setAddModalError] = useState<string | null>(null);
 
-  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 3 * 1024 * 1024) {
-      setAddModalError('حجم تصویر نباید بیشتر از ۳ مگابایت باشد.');
+    if (file.size > 10 * 1024 * 1024) {
+      setAddModalError('حجم تصویر نباید بیشتر از ۱۰ مگابایت باشد.');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      if (typeof event.target?.result === 'string') {
-        setNewProdImage(event.target.result);
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressed = await compressImageFile(file, 600, 600, 0.75);
+      setNewProdImage(compressed);
+      setAddModalError(null);
+    } catch (err) {
+      setAddModalError('خطا در بارگذاری و فشرده‌سازی تصویر.');
+    }
   };
 
   // Full Edit Product Modal State
@@ -174,20 +176,20 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
     setEditModalError(null);
   };
 
-  const handleEditImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleEditImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 3 * 1024 * 1024) {
-      setEditModalError('حجم تصویر نباید بیشتر از ۳ مگابایت باشد.');
+    if (file.size > 10 * 1024 * 1024) {
+      setEditModalError('حجم تصویر نباید بیشتر از ۱۰ مگابایت باشد.');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      if (typeof event.target?.result === 'string') {
-        setEditProdImage(event.target.result);
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressed = await compressImageFile(file, 600, 600, 0.75);
+      setEditProdImage(compressed);
+      setEditModalError(null);
+    } catch (err) {
+      setEditModalError('خطا در بارگذاری و فشرده‌سازی تصویر.');
+    }
   };
 
   const handleSaveFullProduct = (e: React.FormEvent) => {
@@ -808,11 +810,12 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                             className="relative group w-10 h-10 rounded-xl overflow-hidden border border-slate-700/80 bg-slate-950 shrink-0 cursor-pointer shadow-xs hover:border-blue-500 transition"
                             title="برای تغییر، آپلود یا ویرایش عکس این کالا کلیک کنید"
                           >
-                            <img
+                            <SafeImage
                               src={product.image_url}
                               alt={product.name}
+                              categoryId={product.category_id}
+                              productName={product.name}
                               className="w-full h-full object-cover transition duration-200 group-hover:scale-110"
-                              referrerPolicy="no-referrer"
                             />
                             <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition text-white">
                               <Camera className="w-4 h-4 text-blue-300" />
@@ -1240,9 +1243,11 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                 <div className="flex flex-col sm:flex-row gap-3.5 items-start">
                   {/* Image Preview Box */}
                   <div className="w-20 h-20 rounded-2xl bg-slate-900 border border-slate-700/80 flex items-center justify-center shrink-0 overflow-hidden relative group">
-                    <img
+                    <SafeImage
                       src={newProdImage || getSampleImage(newProdCat)}
                       alt="پیش‌نمایش تصویر کالا"
+                      categoryId={newProdCat}
+                      productName={newProdName}
                       className="w-full h-full object-cover"
                     />
                     {newProdImage && (
@@ -1395,11 +1400,12 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                 <div className="flex flex-col sm:flex-row gap-4 items-start pt-1">
                   {/* Image Preview Box with Hover Actions */}
                   <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-slate-900 border border-slate-700 flex items-center justify-center shrink-0 overflow-hidden relative group shadow-md">
-                    <img
+                    <SafeImage
                       src={editProdImage || getSampleImage(editProdCat)}
                       alt="پیش‌نمایش تصویر کالا"
+                      categoryId={editProdCat}
+                      productName={editProdName}
                       className="w-full h-full object-cover"
-                      referrerPolicy="no-referrer"
                     />
                     <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-1 transition text-white text-[10px]">
                       <Camera className="w-5 h-5 text-blue-300" />

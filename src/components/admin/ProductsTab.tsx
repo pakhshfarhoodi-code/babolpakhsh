@@ -1348,9 +1348,9 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
       {/* Full Edit Product & Image Modal */}
       {editingProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 sm:p-6 overflow-y-auto animate-in fade-in duration-150">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl space-y-4 my-auto">
+          <div className="admin-edit-modal bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl space-y-4 my-auto">
             {/* Header */}
-            <div className="p-5 border-b border-slate-800 bg-slate-950/70 flex items-center justify-between">
+            <div className="p-5 border-b border-slate-800 bg-slate-950/70 flex items-center justify-between admin-modal-header">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-blue-600/20 text-blue-400 flex items-center justify-center border border-blue-500/30">
                   <Edit2 className="w-5 h-5" />
@@ -1383,7 +1383,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
             {/* Form Body */}
             <form onSubmit={handleSaveFullProduct} className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
               {/* Section 1: Product Image Upload & Link (Top Priority) */}
-              <div className="space-y-3 p-4 rounded-2xl bg-slate-950/70 border border-slate-800">
+              <div className="space-y-3 p-4 rounded-2xl bg-slate-950/70 border border-slate-800 admin-modal-section">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-indigo-400 flex items-center gap-1.5">
                     <ImageIcon className="w-4 h-4" />
@@ -1450,7 +1450,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
               </div>
 
               {/* Section 2: Product Name, Category & Brand */}
-              <div className="space-y-3 p-4 rounded-2xl bg-slate-950/70 border border-slate-800">
+              <div className="space-y-3 p-4 rounded-2xl bg-slate-950/70 border border-slate-800 admin-modal-section">
                 <span className="text-xs font-bold text-blue-400 flex items-center gap-1.5">
                   <Tag className="w-3.5 h-3.5" />
                   مشخصات هویتی کالا
@@ -1485,7 +1485,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
               </div>
 
               {/* Section 3: Pricing Structure */}
-              <div className="space-y-3 p-4 rounded-2xl bg-slate-950/70 border border-slate-800">
+              <div className="space-y-3 p-4 rounded-2xl bg-slate-950/70 border border-slate-800 admin-modal-section">
                 <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
                   <DollarSign className="w-3.5 h-3.5" />
                   نرخ‌گذاری و قیمت‌های مصوب (تومان)
@@ -1548,7 +1548,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
               </div>
 
               {/* Section 4: Inventory, Catalog Visibility & Market Test */}
-              <div className="space-y-4 p-4 rounded-2xl bg-slate-950/70 border border-slate-800">
+              <div className="space-y-4 p-4 rounded-2xl bg-slate-950/70 border border-slate-800 admin-modal-section">
                 <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
                   <Warehouse className="w-3.5 h-3.5" />
                   موجودی سردخانه، وضعیت عرضه و تست بازار

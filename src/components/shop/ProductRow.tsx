@@ -53,12 +53,12 @@ export const ProductRow: React.FC<ProductRowProps> = ({
   return (
     <>
       <div
-        className={`relative overflow-hidden p-3 rounded-2xl bg-slate-900 border transition shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+        className={`relative overflow-hidden p-3 rounded-2xl border transition shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
           isMarketTest
-            ? 'border-violet-500/50 bg-gradient-to-br from-slate-900 via-slate-900 to-violet-950/25 hover:border-violet-500/70 shadow-violet-950/20'
+            ? 'market-test-card border-violet-500/50 bg-slate-900 hover:border-violet-500/70 shadow-violet-950/20'
             : isOutOfStock
             ? 'opacity-60 bg-slate-950/40 border-slate-800'
-            : 'border-slate-800 hover:border-slate-700'
+            : 'bg-slate-900 border-slate-800 hover:border-slate-700'
         }`}
       >
         {/* Diagonal Corner Ribbon for "به زودی" */}
@@ -130,7 +130,7 @@ export const ProductRow: React.FC<ProductRowProps> = ({
             )}
 
             <div className="flex items-center gap-1.5 pt-0.5">
-              <span className={`text-sm font-extrabold ${isMarketTest ? 'text-violet-300' : 'text-emerald-400'}`}>
+              <span className={`text-sm font-extrabold market-test-price ${isMarketTest ? 'text-violet-300' : 'text-emerald-400'}`}>
                 {formatPrice(product.price)}
               </span>
               <span className="text-xs text-slate-500">/ {product.unit}</span>
@@ -148,8 +148,8 @@ export const ProductRow: React.FC<ProductRowProps> = ({
                 disabled={isLiking}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md active:scale-95 ${
                   hasLiked
-                    ? 'bg-rose-600/25 text-rose-300 border border-rose-500/50 hover:bg-rose-600/35 shadow-rose-900/30'
-                    : 'bg-violet-950/80 hover:bg-violet-900/90 text-violet-200 border border-violet-700/60 hover:border-violet-500'
+                    ? 'market-test-btn-liked bg-rose-600/25 text-rose-300 border border-rose-500/50 hover:bg-rose-600/35 shadow-rose-900/30'
+                    : 'market-test-btn-unliked bg-violet-950/80 hover:bg-violet-900/90 text-violet-200 border border-violet-700/60 hover:border-violet-500'
                 }`}
                 title={hasLiked ? 'لغو علاقه‌مندی' : 'ثبت علاقه‌مندی به این کالا'}
               >
@@ -166,7 +166,7 @@ export const ProductRow: React.FC<ProductRowProps> = ({
                 )}
               </button>
 
-              <p className="text-[10px] text-violet-300/80 text-center sm:text-left leading-tight max-w-[170px]">
+              <p className="text-[10px] market-test-subtext text-violet-300/80 text-center sm:text-left leading-tight max-w-[170px]">
                 لایک کنید تا پس از موجود شدن اطلاع‌رسانی گردد.
               </p>
             </div>

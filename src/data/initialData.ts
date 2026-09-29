@@ -1,6 +1,31 @@
 import { Category, Product, Visitor, Supermarket, Profile, Order, LoadingBill, InventoryTransaction } from '../types';
 
-export const INITIAL_PROFILES: Profile[] = [];
+export const INITIAL_PROFILES: Profile[] = [
+  {
+    id: 'admin-farhoodi',
+    name: 'مدیریت ارشد شبکه پخش فرهودی',
+    role: 'admin',
+    phone: '09120000000',
+    username: 'pakhshfarhoodi@gmail.com',
+    password: '123',
+  },
+  {
+    id: 'admin-main',
+    name: 'مدیریت ارشد سامانه',
+    role: 'admin',
+    phone: '09120000001',
+    username: 'admin',
+    password: '123',
+  },
+  {
+    id: 'warehouse-main',
+    name: 'انباردار مرکزی',
+    role: 'warehouse',
+    phone: '09120000002',
+    username: 'warehouse',
+    password: '123',
+  },
+];
 
 export const INITIAL_CATEGORIES: Category[] = [];
 

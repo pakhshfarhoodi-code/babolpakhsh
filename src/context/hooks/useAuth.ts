@@ -311,7 +311,7 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
       // 2. Find matching account candidate
       const allAccounts = Array.from(candidateMap.values());
 
-      const matchedAccount = allAccounts.find((acc) => {
+      let matchedAccount = allAccounts.find((acc) => {
         const u = normalizeDigits(acc.username || '').toLowerCase();
         const pPhone = normalizeDigits(acc.phone || '').replace(/[^0-9]/g, '');
 
@@ -337,7 +337,38 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
         return false;
       });
 
-      // If no account found at all with this username or phone
+      // If no account found locally, attempt direct Supabase Auth signIn if online
+      if (!matchedAccount && isSupabaseConfigured && supabase) {
+        try {
+          const authEmail = normalizedUser.includes('@')
+            ? normalizedUser
+            : toSyntheticEmail(normalizedUser);
+
+          const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+            email: authEmail,
+            password: cleanPass,
+          });
+
+          if (!authError && authData?.user) {
+            const userMeta = authData.user.user_metadata || {};
+            const resolvedRole: UserRole = (userMeta.role && ['admin', 'warehouse', 'visitor', 'supermarket'].includes(userMeta.role))
+              ? (userMeta.role as UserRole)
+              : (allowedRoles && allowedRoles.length > 0 ? allowedRoles[0] : 'admin');
+
+            matchedAccount = {
+              id: authData.user.id,
+              name: userMeta.name || (normalizedUser === 'pakhshfarhoodi@gmail.com' ? 'مدیریت ارشد شبکه پخش فرهودی' : 'کاربر سامانه'),
+              role: resolvedRole,
+              username: normalizedUser,
+              phone: userMeta.phone || '',
+              passwords: [cleanPass],
+              is_active: true,
+            };
+          }
+        } catch {}
+      }
+
+      // If no account found at all
       if (!matchedAccount) {
         return {
           success: false,

@@ -18,6 +18,7 @@ import {
 
 export const VisitorPortal: React.FC = () => {
   const {
+    currentUser,
     selectedVisitorId,
     visitors,
     supermarkets,
@@ -30,21 +31,25 @@ export const VisitorPortal: React.FC = () => {
     deleteOrder,
   } = useApp();
 
-  const defaultFallbackVisitor: Visitor = useMemo(() => ({
-    id: '',
-    name: 'واحد ویزیت و توزیع',
-    phone: '',
-    region: 'عمومی',
-    username: 'visitor',
-    is_active: true,
-  }), []);
+  const currentVisitor: Visitor = useMemo(() => {
+    const fromList = visitors.find(
+      (v) =>
+        v.id === selectedVisitorId ||
+        (currentUser.id && v.id === currentUser.id) ||
+        (currentUser.username && v.username && v.username.toLowerCase() === currentUser.username.toLowerCase())
+    );
+    if (fromList) return fromList;
+    return {
+      id: currentUser.id || selectedVisitorId || '',
+      name: currentUser.name || 'واحد ویزیت و توزیع',
+      phone: currentUser.phone || '',
+      region: 'منطقه توزیع',
+      username: currentUser.username || 'visitor',
+      is_active: true,
+    };
+  }, [visitors, selectedVisitorId, currentUser]);
 
-  const currentVisitor =
-    visitors.find((v) => v.id === selectedVisitorId) ||
-    visitors[0] ||
-    defaultFallbackVisitor;
-
-  const visitorId = currentVisitor?.id || '';
+  const visitorId = currentVisitor.id;
 
   // Tab State: 'today' (default) | 'customers' | 'reports'
   const [activeTab, setActiveTab] = useState<'today' | 'customers' | 'reports'>(() => {

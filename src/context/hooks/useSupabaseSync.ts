@@ -222,6 +222,7 @@ export function useSupabaseSync({
           : [];
 
         setSupermarkets((prev) => {
+          const dbMap = new Map(cleanSms.map((s: Supermarket) => [s.id, s]));
           const mapped = cleanSms.map((sm: Supermarket) => {
             const localMatch = prev.find((p) => p.id === sm.id);
             const prof = profileMap.get(sm.id);
@@ -232,6 +233,32 @@ export function useSupabaseSync({
               password: prof?.password || sm.password || localMatch?.password || '123',
             };
           });
+
+          // Keep any locally created supermarkets that are not deleted and not in db yet
+          prev.forEach((localSm) => {
+            if (!deletedSupermarketIds.has(localSm.id) && !DUMMY_SUPERMARKET_IDS.has(localSm.id) && !dbMap.has(localSm.id)) {
+              mapped.push({
+                ...localSm,
+                assigned_visitor_id: localSm.assigned_visitor_id || 'direct',
+                username: localSm.username || '',
+                password: localSm.password || '123',
+              });
+              if (isSupabaseConfigured && supabase) {
+                supabase.from('supermarkets').upsert({
+                  id: localSm.id,
+                  name: localSm.name,
+                  owner: localSm.owner,
+                  phone: localSm.phone,
+                  address: localSm.address,
+                  assigned_visitor_id: localSm.assigned_visitor_id || 'direct',
+                  username: localSm.username,
+                  password: localSm.password || '123',
+                  is_active: localSm.is_active ?? true,
+                }).then(() => {});
+              }
+            }
+          });
+
           try {
             localStorage.setItem(STORAGE_KEYS.SUPERMARKETS, JSON.stringify(mapped));
           } catch {}
@@ -255,6 +282,7 @@ export function useSupabaseSync({
           : [];
 
         setVisitors((prev) => {
+          const dbMap = new Map(cleanVis.map((v: Visitor) => [v.id, v]));
           const mapped = cleanVis.map((v: Visitor) => {
             const localMatch = prev.find((p) => p.id === v.id || (p.phone && v.phone && p.phone === v.phone));
             const prof = profileMap.get(v.id);
@@ -269,6 +297,29 @@ export function useSupabaseSync({
               password: prof?.password || v.password || localMatch?.password || '123456',
             };
           });
+
+          // Keep any locally created visitors that are not deleted and not in db yet
+          prev.forEach((localV) => {
+            if (!deletedVisitorIds.has(localV.id) && !DUMMY_VISITOR_IDS.has(localV.id) && !dbMap.has(localV.id)) {
+              mapped.push({
+                ...localV,
+                username: localV.username || '',
+                password: localV.password || '123456',
+              });
+              if (isSupabaseConfigured && supabase) {
+                supabase.from('visitors').upsert({
+                  id: localV.id,
+                  name: localV.name,
+                  phone: localV.phone,
+                  region: localV.region || 'مرکز استان',
+                  username: localV.username,
+                  password: localV.password || '123456',
+                  is_active: localV.is_active ?? true,
+                }).then(() => {});
+              }
+            }
+          });
+
           try {
             localStorage.setItem(STORAGE_KEYS.VISITORS, JSON.stringify(mapped));
           } catch {}

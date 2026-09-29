@@ -270,6 +270,19 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
     );
   };
 
+  // Check if any of the bulk-selected products have invoices or orders
+  const bulkSelectedHaveInvoices = useMemo(() => {
+    if (selectedProductIds.length === 0) return false;
+    const selectedSet = new Set(selectedProductIds);
+    return orders.some((o) =>
+      o.items?.some(
+        (i) =>
+          (i.product_id && selectedSet.has(i.product_id)) ||
+          (i.name && products.some((p) => selectedSet.has(p.id) && p.name?.trim() === i.name?.trim()))
+      )
+    );
+  }, [selectedProductIds, orders, products]);
+
   const handleExecuteBulkDelete = async () => {
     if (!onBulkDeleteProducts || selectedProductIds.length === 0) return;
     setIsBulkProcessing(true);
@@ -1874,9 +1887,21 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
               آیا از حذف دائم <span className="text-rose-400 font-bold">{selectedProductIds.length}</span> کالای انتخاب‌شده از پایگاه داده و سامانه اطمینان دارید؟
             </p>
 
-            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[11px] leading-relaxed">
-              ⚠️ توجه: کالاهایی که در سفارشات فعال ثبت شده باشند، به دلیل رزرو سردخانه حذف نخواهند شد.
-            </div>
+            {bulkSelectedHaveInvoices ? (
+              <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs space-y-1">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>هشدار: قبلاً برای برخی از این اقلام فاکتور صادر شده است!</span>
+                </div>
+                <p className="text-[11px] text-amber-200/90 leading-relaxed pr-5">
+                  سوابق، ریز اقلام و مبالغ فاکتورهای قبلی در بایگانی حفظ می‌گردد، اما این کالاها از لیست اقلام فعال و کاتالوگ فروش کلاً حذف خواهند شد.
+                </p>
+              </div>
+            ) : (
+              <div className="p-2.5 rounded-xl bg-slate-800/80 border border-slate-700/60 text-slate-300 text-[11px] leading-relaxed">
+                این عملیات کالاها را به طور کامل از کاتالوگ و سیستم حذف می‌کند.
+              </div>
+            )}
 
             {bulkFeedback && (
               <div className="p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs">

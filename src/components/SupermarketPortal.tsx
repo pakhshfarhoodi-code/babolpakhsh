@@ -58,9 +58,13 @@ export const SupermarketPortal: React.FC = () => {
         (currentUser?.id && s.id === currentUser.id) ||
         (currentUser?.username && s.username && s.username.toLowerCase() === currentUser.username.toLowerCase()) ||
         (currentUser?.phone && s.phone && s.phone === currentUser.phone)
-    ) ||
-    supermarkets[0] ||
-    defaultFallbackStore;
+    ) || {
+      ...defaultFallbackStore,
+      id: currentUser?.id || selectedSupermarketId || '',
+      name: currentUser?.name || 'فروشگاه طرف قرارداد',
+      phone: currentUser?.phone || '',
+      username: currentUser?.username || 'supermarket',
+    };
 
   const assignedVisitor = visitors.find(
     (v) => v.id === currentStore?.assigned_visitor_id

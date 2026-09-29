@@ -6,6 +6,7 @@ import { STORAGE_KEYS, generateUniqueId, toSyntheticEmail, normalizeDigits } fro
 
 interface UseAuthProps {
   visitors: Visitor[];
+  setVisitors: React.Dispatch<React.SetStateAction<Visitor[]>>;
   supermarkets: Supermarket[];
   setSupermarkets: React.Dispatch<React.SetStateAction<Supermarket[]>>;
 }
@@ -27,7 +28,7 @@ const verifyPassword = (inputPass: string, savedPass: string | undefined | null)
   return cleanInput === cleanSaved;
 };
 
-export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProps) {
+export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }: UseAuthProps) {
   // Persisted auth state
   const [isLoggedIn, setIsLoggedInState] = useState<boolean>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.AUTH_LOGGED_IN);
@@ -133,39 +134,51 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
       };
     }
     if (role === 'visitor') {
-      const v =
-        visitors.find(
-          (vis) =>
-            vis.id === selectedVisitorId ||
-            (authenticatedProfile?.id && vis.id === authenticatedProfile.id) ||
-            (authenticatedProfile?.username && vis.username && vis.username.toLowerCase() === authenticatedProfile.username.toLowerCase()) ||
-            (authenticatedProfile?.phone && vis.phone && vis.phone === authenticatedProfile.phone)
-        ) || visitors[0];
+      const v = visitors.find(
+        (vis) =>
+          vis.id === selectedVisitorId ||
+          (authenticatedProfile?.id && vis.id === authenticatedProfile.id) ||
+          (authenticatedProfile?.username && vis.username && vis.username.toLowerCase() === authenticatedProfile.username.toLowerCase()) ||
+          (authenticatedProfile?.phone && vis.phone && vis.phone === authenticatedProfile.phone)
+      );
+
+      const resolvedId = authenticatedProfile?.id || v?.id || selectedVisitorId || '';
+      const resolvedName = authenticatedProfile?.name || v?.name || 'ویزیتور';
+      const resolvedUsername = authenticatedProfile?.username || v?.username || 'visitor';
+      const resolvedPhone = authenticatedProfile?.phone || v?.phone || '';
+      const resolvedRegion = v?.region || 'منطقه توزیع';
+
       return {
-        id: v?.id || authenticatedProfile?.id || '',
-        name: v?.name || authenticatedProfile?.name || 'ویزیتور',
-        username: v?.username || authenticatedProfile?.username || 'visitor',
+        id: resolvedId,
+        name: resolvedName,
+        username: resolvedUsername,
         role: 'visitor',
-        roleTitle: `ویزیتور (${v?.region || 'منطقه توزیع'})`,
-        phone: v?.phone || authenticatedProfile?.phone || '',
+        roleTitle: `ویزیتور (${resolvedRegion})`,
+        phone: resolvedPhone,
       };
     }
     if (role === 'supermarket') {
-      const s =
-        supermarkets.find(
-          (sm) =>
-            sm.id === selectedSupermarketId ||
-            (authenticatedProfile?.id && sm.id === authenticatedProfile.id) ||
-            (authenticatedProfile?.username && sm.username && sm.username.toLowerCase() === authenticatedProfile.username.toLowerCase()) ||
-            (authenticatedProfile?.phone && sm.phone && sm.phone === authenticatedProfile.phone)
-        ) || supermarkets[0];
+      const s = supermarkets.find(
+        (sm) =>
+          sm.id === selectedSupermarketId ||
+          (authenticatedProfile?.id && sm.id === authenticatedProfile.id) ||
+          (authenticatedProfile?.username && sm.username && sm.username.toLowerCase() === authenticatedProfile.username.toLowerCase()) ||
+          (authenticatedProfile?.phone && sm.phone && sm.phone === authenticatedProfile.phone)
+      );
+
+      const resolvedId = authenticatedProfile?.id || s?.id || selectedSupermarketId || '';
+      const resolvedName = authenticatedProfile?.name || s?.name || 'فروشگاه طرف قرارداد';
+      const resolvedUsername = authenticatedProfile?.username || s?.username || 'supermarket';
+      const resolvedPhone = authenticatedProfile?.phone || s?.phone || '';
+      const resolvedOwner = s?.owner || 'مدیریت';
+
       return {
-        id: s?.id || authenticatedProfile?.id || '',
-        name: s?.name || authenticatedProfile?.name || 'فروشگاه طرف قرارداد',
-        username: s?.username || authenticatedProfile?.username || 'supermarket',
+        id: resolvedId,
+        name: resolvedName,
+        username: resolvedUsername,
         role: 'supermarket',
-        roleTitle: `فروشگاه (${s?.owner || 'مدیریت'})`,
-        phone: s?.phone || authenticatedProfile?.phone || '',
+        roleTitle: `فروشگاه (${resolvedOwner})`,
+        phone: resolvedPhone,
       };
     }
     return {
@@ -391,20 +404,40 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
                   return { success: false, message: 'رمز عبور وارد شده نادرست است.' };
                 }
 
-                const localVis = visitors.find(
-                  (v) =>
-                    v.id === matchedVis.id ||
-                    (v.username && matchedVis.username && v.username.toLowerCase() === matchedVis.username.toLowerCase()) ||
-                    (v.phone && matchedVis.phone && v.phone === matchedVis.phone)
-                );
-                const resolvedVisId = localVis ? localVis.id : matchedVis.id;
+                const fullVis: Visitor = {
+                  id: matchedVis.id,
+                  name: matchedVis.name || 'ویزیتور',
+                  phone: matchedVis.phone || '',
+                  region: matchedVis.region || 'مرکز استان',
+                  username: matchedVis.username || '',
+                  password: matchedVis.password,
+                  is_active: matchedVis.is_active ?? true,
+                };
+
+                // Immediately register this visitor in local state so currentUser & VisitorPortal find it!
+                setVisitors((prev) => {
+                  const exists = prev.find(
+                    (v) =>
+                      v.id === fullVis.id ||
+                      (v.username && fullVis.username && v.username.toLowerCase() === fullVis.username.toLowerCase())
+                  );
+                  const next = exists
+                    ? prev.map((v) => (v.id === fullVis.id ? { ...v, ...fullVis } : v))
+                    : [...prev, fullVis];
+                  try {
+                    localStorage.setItem(STORAGE_KEYS.VISITORS, JSON.stringify(next));
+                  } catch {}
+                  return next;
+                });
+
+                const resolvedVisId = fullVis.id;
 
                 setRole('visitor');
                 setAuthProfile({
                   id: resolvedVisId,
-                  name: localVis?.name || matchedVis.name,
-                  username: localVis?.username || matchedVis.username || matchedVis.id,
-                  phone: localVis?.phone || matchedVis.phone,
+                  name: fullVis.name,
+                  username: fullVis.username || fullVis.id,
+                  phone: fullVis.phone,
                 });
                 setSelectedVisitorId(resolvedVisId);
                 setIsLoggedIn(true);
@@ -446,11 +479,32 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
                 username: matchedProfile.username,
                 phone: matchedProfile.phone,
               });
+
               if (userRole === 'visitor') {
+                const fullVis: Visitor = {
+                  id: matchedProfile.id,
+                  name: matchedProfile.name || 'ویزیتور',
+                  phone: matchedProfile.phone || '',
+                  region: 'مرکز استان',
+                  username: matchedProfile.username || '',
+                  password: matchedProfile.password,
+                  is_active: true,
+                };
+                setVisitors((prev) => {
+                  const exists = prev.find((v) => v.id === fullVis.id);
+                  const next = exists
+                    ? prev.map((v) => (v.id === fullVis.id ? { ...v, ...fullVis } : v))
+                    : [...prev, fullVis];
+                  try {
+                    localStorage.setItem(STORAGE_KEYS.VISITORS, JSON.stringify(next));
+                  } catch {}
+                  return next;
+                });
                 setSelectedVisitorId(matchedProfile.id);
               } else if (userRole === 'supermarket') {
                 setSelectedSupermarketId(matchedProfile.id);
               }
+
               setIsLoggedIn(true);
               return { success: true };
             }
@@ -488,7 +542,28 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
                 username: profile.username,
                 phone: profile.phone,
               });
+
               if (userRole === 'visitor') {
+                const { data: vRow } = await supabase.from('visitors').select('*').eq('id', profile.id).maybeSingle();
+                const fullVis: Visitor = {
+                  id: profile.id,
+                  name: vRow?.name || profile.name || 'ویزیتور',
+                  phone: vRow?.phone || profile.phone || '',
+                  region: vRow?.region || 'مرکز استان',
+                  username: vRow?.username || profile.username || '',
+                  password: cleanPass,
+                  is_active: vRow?.is_active ?? true,
+                };
+                setVisitors((prev) => {
+                  const exists = prev.find((v) => v.id === fullVis.id);
+                  const next = exists
+                    ? prev.map((v) => (v.id === fullVis.id ? { ...v, ...fullVis } : v))
+                    : [...prev, fullVis];
+                  try {
+                    localStorage.setItem(STORAGE_KEYS.VISITORS, JSON.stringify(next));
+                  } catch {}
+                  return next;
+                });
                 setSelectedVisitorId(profile.id);
               } else if (userRole === 'supermarket') {
                 setSelectedSupermarketId(profile.id);

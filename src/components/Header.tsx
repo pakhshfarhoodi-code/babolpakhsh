@@ -59,15 +59,17 @@ export const Header: React.FC<HeaderProps> = () => {
   }), []);
 
   const currentStore =
-    supermarkets.find((s) => s.id === selectedSupermarketId) ||
-    supermarkets[0] ||
-    defaultStore;
+    supermarkets.find((s) => s.id === selectedSupermarketId || (currentUser.id && s.id === currentUser.id)) ||
+    (currentUser.id
+      ? { ...defaultStore, id: currentUser.id, name: currentUser.name, phone: currentUser.phone }
+      : defaultStore);
 
   const assignedVisitor = visitors.find((v) => v.id === currentStore?.assigned_visitor_id);
   const currentVisitor =
-    visitors.find((v) => v.id === selectedVisitorId) ||
-    visitors[0] ||
-    defaultVisitor;
+    visitors.find((v) => v.id === selectedVisitorId || (currentUser.id && v.id === currentUser.id)) ||
+    (currentUser.id
+      ? { ...defaultVisitor, id: currentUser.id, name: currentUser.name, phone: currentUser.phone }
+      : defaultVisitor);
 
   const [isStoreProfileOpen, setIsStoreProfileOpen] = useState(false);
   const [isVisitorProfileOpen, setIsVisitorProfileOpen] = useState(false);

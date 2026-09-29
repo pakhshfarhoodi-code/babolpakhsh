@@ -336,13 +336,18 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
 
       if (isSupabaseConfigured && supabase) {
         try {
-          // 1. If logging in as supermarket, check supermarkets table directly for freshest password
+          // Fetch profiles first as the authoritative store of user credentials
+          const { data: dbProfiles } = await supabase.from('profiles').select('*');
+          const profileMap = new Map<string, any>((dbProfiles || []).map((p: any) => [p.id, p]));
+
+          // 1. If logging in as supermarket, find matched supermarket or profile
           if (!allowedRoles || allowedRoles.includes('supermarket')) {
             const { data: dbSupermarkets } = await supabase.from('supermarkets').select('*');
             if (dbSupermarkets && dbSupermarkets.length > 0) {
               const matchedSm = dbSupermarkets.find((s: any) => {
-                const u = s.username ? normalizeDigits(s.username).toLowerCase() : '';
-                const sPhoneDigits = normalizeDigits(s.phone || '').replace(/[^0-9]/g, '');
+                const prof = profileMap.get(s.id);
+                const u = s.username ? normalizeDigits(s.username).toLowerCase() : prof?.username ? normalizeDigits(prof.username).toLowerCase() : '';
+                const sPhoneDigits = normalizeDigits(s.phone || prof?.phone || '').replace(/[^0-9]/g, '');
                 return (
                   (u && u === normalizedUser) ||
                   (u && u === userPrefix) ||
@@ -352,7 +357,17 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
               });
 
               if (matchedSm) {
-                if (!verifyPassword(cleanPass, matchedSm.password)) {
+                const prof = profileMap.get(matchedSm.id);
+                const localSm = supermarkets.find(
+                  (s) =>
+                    s.id === matchedSm.id ||
+                    (s.username && matchedSm.username && s.username.toLowerCase() === matchedSm.username.toLowerCase()) ||
+                    (s.phone && matchedSm.phone && s.phone === matchedSm.phone)
+                );
+                // Effective password from profiles, supermarkets table, or local state
+                const effectivePassword = prof?.password || matchedSm.password || localSm?.password;
+
+                if (!verifyPassword(cleanPass, effectivePassword)) {
                   return { success: false, message: 'رمز عبور وارد شده نادرست است.' };
                 }
                 if (matchedSm.is_active === false) {
@@ -362,20 +377,14 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
                   };
                 }
 
-                const localSm = supermarkets.find(
-                  (s) =>
-                    s.id === matchedSm.id ||
-                    (s.username && matchedSm.username && s.username.toLowerCase() === matchedSm.username.toLowerCase()) ||
-                    (s.phone && matchedSm.phone && s.phone === matchedSm.phone)
-                );
                 const resolvedSmId = localSm ? localSm.id : matchedSm.id;
 
                 setRole('supermarket');
                 setAuthProfile({
                   id: resolvedSmId,
                   name: localSm?.name || matchedSm.name,
-                  username: localSm?.username || matchedSm.username || matchedSm.id,
-                  phone: localSm?.phone || matchedSm.phone,
+                  username: localSm?.username || matchedSm.username || prof?.username || matchedSm.id,
+                  phone: localSm?.phone || matchedSm.phone || prof?.phone || '',
                 });
                 setSelectedSupermarketId(resolvedSmId);
                 setIsLoggedIn(true);
@@ -384,13 +393,14 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
             }
           }
 
-          // 2. If logging in as visitor, check visitors table directly for freshest password
+          // 2. If logging in as visitor, find matched visitor or profile
           if (!allowedRoles || allowedRoles.includes('visitor')) {
             const { data: dbVisitors } = await supabase.from('visitors').select('*');
             if (dbVisitors && dbVisitors.length > 0) {
               const matchedVis = dbVisitors.find((v: any) => {
-                const u = v.username ? normalizeDigits(v.username).toLowerCase() : '';
-                const vPhoneDigits = normalizeDigits(v.phone || '').replace(/[^0-9]/g, '');
+                const prof = profileMap.get(v.id);
+                const u = v.username ? normalizeDigits(v.username).toLowerCase() : prof?.username ? normalizeDigits(prof.username).toLowerCase() : '';
+                const vPhoneDigits = normalizeDigits(v.phone || prof?.phone || '').replace(/[^0-9]/g, '');
                 return (
                   (u && u === normalizedUser) ||
                   (u && u === userPrefix) ||
@@ -400,17 +410,21 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
               });
 
               if (matchedVis) {
-                if (!verifyPassword(cleanPass, matchedVis.password)) {
+                const prof = profileMap.get(matchedVis.id);
+                const localVis = visitors.find((v) => v.id === matchedVis.id || (v.phone && matchedVis.phone && v.phone === matchedVis.phone));
+                const effectivePassword = prof?.password || matchedVis.password || localVis?.password;
+
+                if (!verifyPassword(cleanPass, effectivePassword)) {
                   return { success: false, message: 'رمز عبور وارد شده نادرست است.' };
                 }
 
                 const fullVis: Visitor = {
                   id: matchedVis.id,
-                  name: matchedVis.name || 'ویزیتور',
-                  phone: matchedVis.phone || '',
+                  name: matchedVis.name || prof?.name || 'ویزیتور',
+                  phone: matchedVis.phone || prof?.phone || '',
                   region: matchedVis.region || 'مرکز استان',
-                  username: matchedVis.username || '',
-                  password: matchedVis.password,
+                  username: matchedVis.username || prof?.username || '',
+                  password: effectivePassword,
                   is_active: matchedVis.is_active ?? true,
                 };
 
@@ -447,7 +461,6 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
           }
 
           // 3. Fallback to profiles table for admin / warehouse / general logins
-          const { data: dbProfiles } = await supabase.from('profiles').select('*');
           if (dbProfiles && dbProfiles.length > 0) {
             const matchedProfile = dbProfiles.find((p: any) => {
               const u = p.username ? normalizeDigits(p.username).toLowerCase() : '';

@@ -40,7 +40,18 @@ export interface Product {
   unit: string;
   image_url: string;
   is_active: boolean;
+  is_market_test?: boolean; // قابلیت تست بازار و اعلام به زودی
   created_at?: string;
+}
+
+export interface ProductLike {
+  id: string;
+  product_id: string;
+  supermarket_id: string;
+  supermarket_name: string;
+  supermarket_owner?: string;
+  supermarket_phone?: string;
+  created_at: string;
 }
 
 export interface ProductPriceHistory {

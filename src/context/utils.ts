@@ -17,6 +17,7 @@ export const STORAGE_KEYS = {
   UNITS: 'alborz_units_v1',
   SUPERMARKETS: 'alborz_supermarkets_v1',
   VISITORS: 'alborz_visitors_v1',
+  PRODUCT_LIKES: 'farhoodi_product_likes_v1',
   DELETED_PRODUCT_IDS: 'farhoodi_deleted_product_ids_v1',
   DELETED_SUPERMARKET_IDS: 'farhoodi_deleted_supermarket_ids_v1',
   DELETED_VISITOR_IDS: 'farhoodi_deleted_visitor_ids_v1',

@@ -1,46 +1,74 @@
-# Brand Logo Design & Multi-Surface Integration Plan
+# طرح پیاده‌سازی قابلیت «تست بازار» و سیستم علاقه‌مندی (لایک) کالاها
 
-A plan for generating a custom, modern B2B logo for **Farhoodi Wholesale Distribution (بارفروش)** and integrating it across three key surfaces:
-1. **Login Screen**: Replacing generic icons with the new branded logo badge.
-2. **Top-Right Header (App Shell)**: Embedding the logo inside a glassmorphic badge on the top right of the application header.
-3. **Browser Favicon (`index.html`)**: Setting the logo image as the site favicon and apple-touch-icon so it displays in browser tabs.
+این طرح بر اساس نیازمندی‌ها و پاسخ‌های دقیق شما برای سنجش کشش بازار کالاها پیش از تامین و ورود به انبار تدوین شده است.
 
 ---
 
-## Confirmed Choices from Phase 1
+## ۱. اهداف و نیازمندی‌های کلیدی
 
-- **Logo Aesthetic**: Modern emblem combining cold-chain wholesale logistics (snowflake / frost star / distribution vector) with a premium royal blue and gold palette (`#1e3a8a`, `#3b82f6`, `#f59e0b`).
-- **Header Placement**: Positioned on the top right of the application header inside a glassmorphic elevated badge with brand title "فرهودی | پخش عمده".
-- **Browser Tab Favicon**: Linked in `index.html` via `<link rel="icon">` and `<link rel="apple-touch-icon">`.
+1. **تفکیک شفاف دکمه فعال/غیرفعال و تست بازار:**
+   - **وضعیت فعال/غیرفعال (`is_active`):** تعیین‌کننده نمایش یا عدم نمایش کالا در کل سامانه و کاتالوگ فروشگاه‌ها.
+   - **وضعیت تست بازار (`is_market_test`):** کالا در لیست اصلی کاتالوگ فروشگاه‌ها نمایش داده می‌شود، اما **غیرقابل سفارش** است و دارای برچسب و دکمه اعلام علاقه‌مندی (لایک) خواهد بود.
 
----
+2. **تجربه کاربری فروشگاه‌ها (پنل سوپرمارکت):**
+   - نمایش پیام رسمی:  
+     *«این کالا به زودی موجود خواهد شد. در صورتی که علاقمند به سفارش آن هستید لایک کنید تا وقتی موجود شد به شما اطلاع‌رسانی شود»*
+   - دکمه تعاملی قلب/لایک برای هر فروشگاه با امکان ثبت لایک و لغو مجدد (Toggle Like).
+   - غیرفعال‌سازی دکمه‌های افزودن به سبد و سفارش‌گیری برای اقلام تست بازار.
 
-## 1. Logo Asset Generation
-
-- **Tool Call**: `generate_image`
-- **Filename**: `farhoodi_b2b_logo` (`.png` / `.jpg`)
-- **Aspect Ratio**: `1:1`
-- **Prompt**:
-  > Modern minimalist vector logo icon for "Farhoodi B2B Food Wholesale Distribution". Features a sleek stylized snowflake emblem fused with a fast logistics delivery arrow, vibrant dark blue gradient background with glowing gold accents, clean sharp geometric lines, premium 3D glassmorphic badge look, isolated on a square dark background, 8k commercial brand icon quality.
-
----
-
-## 2. Interface Integration Strategy
-
-### A. Login Screen (`src/components/LoginScreen.tsx`)
-- Replace the icon box in the app header with the generated logo image in a rounded badge.
-- Preserve light/dark mode contrast and glassmorphism.
-
-### B. Application Header (`src/components/Header.tsx` or `src/components/Layout.tsx`)
-- Embed the logo image inside a glassmorphic badge on the top right (RTL layout: right side).
-- Display next to the brand title "پخش عمده فرهودی | بارفروش".
-
-### C. Browser Tab Favicon & Meta (`index.html`)
-- Add `<link rel="icon" type="image/png" href="..." />` pointing to the logo asset.
-- Update `<title>` to "بارفروش | شبکه پخش عمده فرهودی".
+3. **پنل مدیریت (ادمین):**
+   - سوییچ فعال/غیرفعال‌سازی وضعیت «تست بازار» در فرم ایجاد، ویرایش سریع و ویرایش کامل کالاها.
+   - نمایش نشانگر و تعداد لایک‌های هر کالا مستقیماً در جدول و کارت‌های محصولات (مثلاً: `❤️ ۱۲ فروشگاه`).
+   - مدال اختصاصی «لیست علاقه‌مندان به کالا» با کلیک روی شمارنده لایک، شامل:
+     - نام فروشگاه و نام متصدی
+     - شماره تماس فروشگاه
+     - تاریخ و ساعت ثبت علاقه‌مندی
 
 ---
 
-## 3. Technical Verification & Compilation
-- Run `lint_applet` and `compile_applet`.
-- Restart dev server to verify image asset loading in browser tab and headers.
+## ۲. معماری داده و ساختار دیتابیس
+
+### الف) ساختار مدل کالا (`Product`):
+```typescript
+export interface Product {
+  // فیلدهای موجود...
+  is_market_test?: boolean; // وضعیت تست بازار
+  likes_count?: number;     // تعداد لایک‌های ثبت‌شده
+}
+```
+
+### ب) ساختار جدول لایک‌های کالا (`product_likes`):
+```typescript
+export interface ProductLike {
+  id: string;
+  product_id: string;
+  supermarket_id: string;
+  supermarket_name: string;
+  supermarket_owner?: string;
+  supermarket_phone?: string;
+  created_at: string;
+}
+```
+
+---
+
+## ۳. مراحل اجرایی
+
+1. **افزودن تایپ‌ها و متدهای Context:**
+   - تعریف تایپ‌های `ProductLike` و گسترش `Product`.
+   - ایجاد متدهای `toggleProductLike(productId, supermarketId)` و `getProductLikes(productId)` در `AppContext` با ذخیره‌سازی در `localStorage` و همگام‌سازی خودکار با Supabase.
+
+2. **به‌روزرسانی پنل فروشگاهی (`ShopPortal` و کارت کالا):**
+   - اعمال برچسب رنگی چشم‌نواز «به زودی / تست بازار».
+   - درج باکس اطلاع‌رسانی با متن درخواستی.
+   - اضافه کردن دکمه لایک تعاملی با انیمیشن و وضعیت فعال/غیرفعال برای فروشگاه لاگین‌شده.
+
+3. **به‌روزرسانی پنل ادمین (`ProductsTab`):**
+   - اضافه کردن سوییچ «تست بازار» در مدال‌های ایجاد و ویرایش کالا.
+   - اضافه کردن نشانگر لایک‌ها در ستون وضعیت/عملیات جدول کالاها.
+   - طراحی و پیاده‌سازی مدال زیبای «لیست علاقه‌مندان به کالا» (نمایش فروشگاه‌ها، مالک، تلفن و زمان ثبت).
+
+4. **تست و اعتبارسنجی نهایی:**
+   - بررسی عدم امکان افزودن کالا به سبد خرید توسط فروشگاه.
+   - بررسی عملکرد دکمه لایک و لغو لایک.
+   - بررسی به‌روزرسانی آنی تعداد و اسامی لایک‌کنندگان در پنل ادمین.

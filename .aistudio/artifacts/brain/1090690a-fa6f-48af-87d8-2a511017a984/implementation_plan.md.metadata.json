@@ -1,6 +1,6 @@
 {
-  "summary":  "Implementation plan for designing a custom modern B2B cold-chain logo for Farhoodi Distribution, integrating it into the Login Screen, top-right app header, and browser tab favicon.",
-  "updatedAt":  "2026-09-27T22:26:46.859171753Z",
-  "requestFeedback":  true,
-  "userFacing":  true
+  "summary": "طرح جامع پیاده‌سازی قابلیت «تست بازار» و سیستم اعلام علاقه‌مندی (لایک) برای کالاها در پنل ادمین و فروشگاه‌ها شامل ساختار داده، کامپوننت‌های رابط کاربری، همگام‌سازی پایگاه داده و مدال مشاهده علاقه‌مندان.",
+  "updatedAt": "2026-09-29T15:54:10.129427998Z",
+  "requestFeedback": true,
+  "userFacing": true
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Product, Category, ProductPriceHistory } from '../../types';
+import { Product, Category, ProductPriceHistory, ProductLike } from '../../types';
 import { INITIAL_CATEGORIES, INITIAL_BRANDS, INITIAL_PRODUCTS } from '../../data/initialData';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { STORAGE_KEYS, generateUniqueId, addDeletedId } from '../utils';
@@ -56,6 +56,17 @@ export function useCatalog() {
     }
   });
 
+  const [productLikes, setProductLikes] = useState<ProductLike[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.PRODUCT_LIKES);
+    if (!saved) return [];
+    try {
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+
   const [units, setUnits] = useState<string[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.UNITS);
     if (!saved) return [];
@@ -71,6 +82,12 @@ export function useCatalog() {
     const saved = localStorage.getItem(STORAGE_KEYS.PRICE_HISTORIES);
     return saved ? JSON.parse(saved) : [];
   });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.PRODUCT_LIKES, JSON.stringify(productLikes));
+    } catch {}
+  }, [productLikes]);
 
   // Local storage persistence
   useEffect(() => {
@@ -231,6 +248,7 @@ export function useCatalog() {
           unit: newProd.unit || 'عدد',
           image_url: newProd.image_url,
           is_active: newProd.is_active ?? true,
+          is_market_test: Boolean(newProd.is_market_test),
         };
 
         // Try 1: Full insert
@@ -260,7 +278,7 @@ export function useCatalog() {
     }
   }, [categories]);
 
-  // Update a single product (Name, Brand, Category, Image, Prices, Stock, Unit, is_active)
+  // Update a single product (Name, Brand, Category, Image, Prices, Stock, Unit, is_active, is_market_test)
   const updateProduct = useCallback((
     productId: string,
     updates: Partial<Omit<Product, 'id' | 'reserved_stock'>>
@@ -289,6 +307,7 @@ export function useCatalog() {
       visitor_price: targetVisitorPrice,
       consumer_price: targetConsumerPrice,
       is_active: updates.is_active !== undefined ? updates.is_active : (prod.is_active ?? true),
+      is_market_test: updates.is_market_test !== undefined ? updates.is_market_test : (prod.is_market_test ?? false),
     };
 
     if (updates.brand && updates.brand.trim()) {
@@ -323,7 +342,13 @@ export function useCatalog() {
       setPriceHistories((prev) => [historyRecord, ...prev]);
     }
 
-    setProducts((prev) => prev.map((p) => (p.id === productId ? updatedProd : p)));
+    setProducts((prev) => {
+      const next = prev.map((p) => (p.id === productId ? updatedProd : p));
+      try {
+        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
 
     if (isSupabaseConfigured && supabase) {
       const payload: Record<string, unknown> = {};
@@ -337,6 +362,7 @@ export function useCatalog() {
       if (updates.unit !== undefined) payload.unit = updates.unit;
       if (updates.image_url !== undefined) payload.image_url = updates.image_url;
       if (updates.is_active !== undefined) payload.is_active = updates.is_active;
+      if (updates.is_market_test !== undefined) payload.is_market_test = updates.is_market_test;
 
       supabase
         .from('products')
@@ -349,6 +375,89 @@ export function useCatalog() {
 
     return { success: true, message: 'اطلاعات کالا با موفقیت ویرایش شد.' };
   }, [products]);
+
+  // Toggle Like / Market Interest for a Product by a Supermarket
+  const toggleProductLike = useCallback(
+    async (
+      productId: string,
+      supermarket: { id: string; name: string; owner?: string; phone?: string }
+    ): Promise<{ success: boolean; liked: boolean; message: string }> => {
+      if (!productId || !supermarket || !supermarket.id) {
+        return { success: false, liked: false, message: 'اطلاعات فروشگاه یا کالا ناقص است.' };
+      }
+
+      let isNowLiked = false;
+      const targetProd = products.find((p) => p.id === productId);
+
+      setProductLikes((prev) => {
+        const existingIndex = prev.findIndex(
+          (pl) => pl.product_id === productId && pl.supermarket_id === supermarket.id
+        );
+
+        if (existingIndex >= 0) {
+          // Unlike
+          isNowLiked = false;
+          const next = prev.filter((_, idx) => idx !== existingIndex);
+          try {
+            localStorage.setItem(STORAGE_KEYS.PRODUCT_LIKES, JSON.stringify(next));
+          } catch {}
+          return next;
+        } else {
+          // Like
+          isNowLiked = true;
+          const newLike: ProductLike = {
+            id: `like-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            product_id: productId,
+            supermarket_id: supermarket.id,
+            supermarket_name: supermarket.name || 'فروشگاه',
+            supermarket_owner: supermarket.owner || '',
+            supermarket_phone: supermarket.phone || '',
+            created_at: new Date().toISOString(),
+          };
+          const next = [newLike, ...prev];
+          try {
+            localStorage.setItem(STORAGE_KEYS.PRODUCT_LIKES, JSON.stringify(next));
+          } catch {}
+          return next;
+        }
+      });
+
+      if (isSupabaseConfigured && supabase) {
+        try {
+          if (!isNowLiked) {
+            await supabase
+              .from('product_likes')
+              .delete()
+              .eq('product_id', productId)
+              .eq('supermarket_id', supermarket.id);
+          } else {
+            await supabase.from('product_likes').upsert(
+              {
+                product_id: productId,
+                supermarket_id: supermarket.id,
+                supermarket_name: supermarket.name || 'فروشگاه',
+                supermarket_owner: supermarket.owner || '',
+                supermarket_phone: supermarket.phone || '',
+                created_at: new Date().toISOString(),
+              },
+              { onConflict: 'product_id,supermarket_id' }
+            );
+          }
+        } catch (err) {
+          console.warn('Supabase product_likes sync error:', err);
+        }
+      }
+
+      return {
+        success: true,
+        liked: isNowLiked,
+        message: isNowLiked
+          ? `علاقه‌مندی شما به «${targetProd?.name || 'کالا'}» با موفقیت ثبت شد.`
+          : `علاقه‌مندی به «${targetProd?.name || 'کالا'}» لغو گردید.`,
+      };
+    },
+    [products]
+  );
 
   // Bulk Upsert Products from Excel import
   const bulkUpsertProducts = useCallback(async (items: Array<{
@@ -694,6 +803,7 @@ export function useCatalog() {
       priceAdjustmentPercent?: number;
       fixedPrice?: number;
       is_active?: boolean;
+      is_market_test?: boolean;
     }
   ) => {
     if (!productIds || productIds.length === 0) {
@@ -723,6 +833,7 @@ export function useCatalog() {
         price: newPrice,
         visitor_price: newVisitorPrice,
         is_active: updates.is_active !== undefined ? updates.is_active : prod.is_active,
+        is_market_test: updates.is_market_test !== undefined ? updates.is_market_test : (prod.is_market_test ?? false),
       };
 
       updatedItemsForDb.push(updated);
@@ -745,11 +856,13 @@ export function useCatalog() {
           brand: p.brand,
           price: p.price,
           visitor_price: p.visitor_price,
+          consumer_price: p.consumer_price,
           stock: p.stock,
           reserved_stock: p.reserved_stock,
           unit: p.unit,
           image_url: p.image_url,
           is_active: p.is_active,
+          is_market_test: p.is_market_test,
         }));
 
         const { error: err1 } = await supabase.from('products').upsert(rows, { onConflict: 'id' });
@@ -1074,6 +1187,9 @@ export function useCatalog() {
     setUnits,
     products,
     setProducts,
+    productLikes,
+    setProductLikes,
+    toggleProductLike,
     priceHistories,
     setPriceHistories,
     updateProductPrice,

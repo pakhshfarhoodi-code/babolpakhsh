@@ -3,6 +3,7 @@ import {
   UserRole,
   CurrentUser,
   Product,
+  ProductLike,
   Category,
   Visitor,
   Supermarket,
@@ -58,6 +59,7 @@ interface AppContextType {
   brands: string[];
   units: string[];
   products: Product[];
+  productLikes: ProductLike[];
   visitors: Visitor[];
   supermarkets: Supermarket[];
   orders: Order[];
@@ -80,6 +82,10 @@ interface AppContextType {
   approveLoadingBill: (billId: string) => void;
   updateProductPrice: (productId: string, newPrice: number, newVisitorPrice?: number, newConsumerPrice?: number) => void;
   updateProduct: (productId: string, updates: Partial<Omit<Product, 'id' | 'reserved_stock'>>) => { success: boolean; message: string };
+  toggleProductLike: (
+    productId: string,
+    supermarket: { id: string; name: string; owner?: string; phone?: string }
+  ) => Promise<{ success: boolean; liked: boolean; message: string }>;
   updateProductStock: (productId: string, additionalStock: number) => void;
   addNewProduct: (product: Omit<Product, 'id' | 'reserved_stock'>) => void;
   bulkUpsertProducts: (items: Array<{
@@ -248,6 +254,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setVisitors,
     setLoadingBills: warehouse.setLoadingBills,
     setInventoryTransactions: warehouse.setInventoryTransactions,
+    setProductLikes: catalog.setProductLikes,
   });
 
   // Reset to default factory state
@@ -268,12 +275,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateSupermarket = useCallback(async (id: string, payload: UpdateSupermarketPayload): Promise<{ success: boolean; message: string }> => {
     try {
       if (isSupabaseConfigured && supabase) {
+        // In PostgreSQL schema, supermarkets.assigned_visitor_id is a foreign key to visitors(id).
+        // If 'direct', empty string, or invalid visitor ID is provided, it must be sent as null to prevent foreign key violation.
+        const validVisitorId =
+          payload.assigned_visitor_id &&
+          payload.assigned_visitor_id !== 'direct' &&
+          visitors.some((v) => v.id === payload.assigned_visitor_id)
+            ? payload.assigned_visitor_id
+            : null;
+
         const updateData: Record<string, unknown> = {
           name: payload.name.trim(),
           owner: payload.owner.trim(),
           phone: payload.phone.trim(),
           address: payload.address.trim(),
-          assigned_visitor_id: payload.assigned_visitor_id,
+          assigned_visitor_id: validVisitorId,
           is_active: payload.is_active,
         };
         if (payload.username) {
@@ -309,7 +325,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در ویرایش مشتری';
       return { success: false, message: msg };
     }
-  }, [setSupermarkets]);
+  }, [visitors, setSupermarkets]);
 
   // Delete Supermarket (both local and Supabase, along with associated orders)
   // Delete Supermarket (both local and Supabase, unlinking orders so historical invoices remain valid and deletion never reverts)
@@ -806,6 +822,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     brands: catalog.brands,
     units: catalog.units,
     products: catalog.products,
+    productLikes: catalog.productLikes,
+    toggleProductLike: catalog.toggleProductLike,
     visitors,
     supermarkets,
     orders: orders.orders,
@@ -876,6 +894,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     catalog.brands,
     catalog.units,
     catalog.products,
+    catalog.productLikes,
+    catalog.toggleProductLike,
     catalog.priceHistories,
     catalog.updateProductPrice,
     catalog.addNewProduct,

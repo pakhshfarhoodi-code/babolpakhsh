@@ -8,6 +8,7 @@ import {
   Visitor,
   LoadingBill,
   InventoryTransaction,
+  ProductLike,
 } from '../../types';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { LEGACY_MOCK_NAMES } from './useCatalog';
@@ -24,6 +25,7 @@ interface UseSupabaseSyncProps {
   setVisitors: React.Dispatch<React.SetStateAction<Visitor[]>>;
   setLoadingBills: React.Dispatch<React.SetStateAction<LoadingBill[]>>;
   setInventoryTransactions: React.Dispatch<React.SetStateAction<InventoryTransaction[]>>;
+  setProductLikes?: React.Dispatch<React.SetStateAction<ProductLike[]>>;
 }
 
 export function useSupabaseSync({
@@ -36,6 +38,7 @@ export function useSupabaseSync({
   setVisitors,
   setLoadingBills,
   setInventoryTransactions,
+  setProductLikes,
 }: UseSupabaseSyncProps) {
   const DUMMY_SUPERMARKET_IDS = new Set(['shop-1', 'shop-2', 'shop-3', 'shop-4', 'shop-5']);
   const DUMMY_VISITOR_IDS = new Set(['vis-1', 'vis-2', 'vis-3']);
@@ -244,13 +247,17 @@ export function useSupabaseSync({
                 password: localSm.password || '123',
               });
               if (isSupabaseConfigured && supabase) {
+                const validVisitorId =
+                  localSm.assigned_visitor_id && localSm.assigned_visitor_id !== 'direct'
+                    ? localSm.assigned_visitor_id
+                    : null;
                 supabase.from('supermarkets').upsert({
                   id: localSm.id,
                   name: localSm.name,
                   owner: localSm.owner,
                   phone: localSm.phone,
                   address: localSm.address,
-                  assigned_visitor_id: localSm.assigned_visitor_id || 'direct',
+                  assigned_visitor_id: validVisitorId,
                   username: localSm.username,
                   password: localSm.password || '123',
                   is_active: localSm.is_active ?? true,
@@ -370,6 +377,26 @@ export function useSupabaseSync({
             const localOnly = prev.filter((p) => !serverIds.has(p.id));
             return [...txData, ...localOnly];
           });
+        }
+
+        // 10. Product Likes (Market testing)
+        if (setProductLikes) {
+          try {
+            const { data: likesData } = await supabase!.from('product_likes').select('*');
+            if (likesData && Array.isArray(likesData)) {
+              setProductLikes((prev) => {
+                const dbIds = new Set(likesData.map((l: ProductLike) => `${l.product_id}_${l.supermarket_id}`));
+                const localOnly = prev.filter((p) => !dbIds.has(`${p.product_id}_${p.supermarket_id}`));
+                const merged = [...likesData, ...localOnly];
+                try {
+                  localStorage.setItem(STORAGE_KEYS.PRODUCT_LIKES, JSON.stringify(merged));
+                } catch {}
+                return merged;
+              });
+            }
+          } catch {
+            // Table might not exist yet on older schemas; ignore
+          }
         }
       } catch (err: unknown) {
         console.warn('Supabase fetch failed, continuing with local data:', err);

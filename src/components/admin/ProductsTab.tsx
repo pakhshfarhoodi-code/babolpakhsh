@@ -31,12 +31,17 @@ import {
   Warehouse,
   Image as ImageIcon,
   Camera,
+  Heart,
+  Sparkles,
+  Clock,
+  Phone,
 } from 'lucide-react';
 import { LOW_STOCK_THRESHOLD, formatPrice } from './helpers';
 import { PriceHistoryDrawer } from './PriceHistoryDrawer';
 import { CategorySelectPicker, BrandSelectPicker, UnitSelectPicker } from '../CategoryBrandSelectors';
 import { ExcelImportModal } from './ExcelImportModal';
 import { ExcelExportModal } from './ExcelExportModal';
+import { MarketTestLikesModal } from './MarketTestLikesModal';
 
 interface ProductsTabProps {
   products: Product[];
@@ -59,6 +64,7 @@ interface ProductsTabProps {
       priceAdjustmentPercent?: number;
       fixedPrice?: number;
       is_active?: boolean;
+      is_market_test?: boolean;
     }
   ) => Promise<{ success: boolean; message: string; count: number }>;
   onOpenEditCategory: (cat: { id: string; name: string }) => void;
@@ -81,12 +87,13 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   onOpenEditCategory,
   onOpenEditBrand,
 }) => {
-  const { units, orders } = useApp();
+  const { units, orders, productLikes, supermarkets } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all');
   const [selectedBrandFilter, setSelectedBrandFilter] = useState('all');
   const [onlyLowStock, setOnlyLowStock] = useState(initialFilterType === 'lowStock');
   const [onlyInactive, setOnlyInactive] = useState(false);
+  const [onlyMarketTest, setOnlyMarketTest] = useState(false);
 
   // Quick Inline Price Editing (visitor price, store price, consumer price)
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
@@ -102,6 +109,9 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   // Price History Drawer state
   const [historyDrawerProduct, setHistoryDrawerProduct] = useState<Product | null>(null);
 
+  // Likes details modal state
+  const [selectedLikesProduct, setSelectedLikesProduct] = useState<Product | null>(null);
+
   // Add Product Modal state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newProdName, setNewProdName] = useState('');
@@ -113,6 +123,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   const [newProdStock, setNewProdStock] = useState(0);
   const [newProdUnit, setNewProdUnit] = useState('عدد');
   const [newProdImage, setNewProdImage] = useState<string>('');
+  const [newProdIsMarketTest, setNewProdIsMarketTest] = useState(false);
   const [addModalError, setAddModalError] = useState<string | null>(null);
 
   const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -143,6 +154,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   const [editProdUnit, setEditProdUnit] = useState('عدد');
   const [editProdImage, setEditProdImage] = useState('');
   const [editProdIsActive, setEditProdIsActive] = useState(true);
+  const [editProdIsMarketTest, setEditProdIsMarketTest] = useState(false);
   const [editModalError, setEditModalError] = useState<string | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
@@ -158,6 +170,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
     setEditProdUnit(prod.unit || 'عدد');
     setEditProdImage(prod.image_url || '');
     setEditProdIsActive(prod.is_active !== false);
+    setEditProdIsMarketTest(Boolean(prod.is_market_test));
     setEditModalError(null);
   };
 
@@ -206,6 +219,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
           unit: editProdUnit,
           image_url: finalImage,
           is_active: editProdIsActive,
+          is_market_test: editProdIsMarketTest,
         });
       } else {
         onUpdateProductPrice(
@@ -255,6 +269,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   const [bulkPriceChangeType, setBulkPriceChangeType] = useState<'none' | 'percent' | 'fixed'>('none');
   const [bulkPriceValue, setBulkPriceValue] = useState<number>(0);
   const [bulkActiveStatus, setBulkActiveStatus] = useState<'keep' | 'active' | 'inactive'>('keep');
+  const [bulkMarketTestStatus, setBulkMarketTestStatus] = useState<'keep' | 'marketTest' | 'normal'>('keep');
 
   const toggleSelectAll = () => {
     if (selectedProductIds.length === filteredProducts.length && filteredProducts.length > 0) {
@@ -318,6 +333,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
       priceAdjustmentPercent?: number;
       fixedPrice?: number;
       is_active?: boolean;
+      is_market_test?: boolean;
     } = {};
 
     if (bulkCatId) updates.category_id = bulkCatId;
@@ -330,6 +346,8 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
     }
     if (bulkActiveStatus === 'active') updates.is_active = true;
     if (bulkActiveStatus === 'inactive') updates.is_active = false;
+    if (bulkMarketTestStatus === 'marketTest') updates.is_market_test = true;
+    if (bulkMarketTestStatus === 'normal') updates.is_market_test = false;
 
     try {
       const res = await onBulkUpdateProducts(selectedProductIds, updates);
@@ -364,6 +382,11 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
         return false;
       }
 
+      // Market test filter
+      if (onlyMarketTest && !product.is_market_test) {
+        return false;
+      }
+
       // Category filter
       if (selectedCategoryFilter !== 'all' && product.category_id !== selectedCategoryFilter) {
         return false;
@@ -384,7 +407,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
 
       return true;
     });
-  }, [products, onlyLowStock, onlyInactive, selectedCategoryFilter, selectedBrandFilter, searchTerm]);
+  }, [products, onlyLowStock, onlyInactive, onlyMarketTest, selectedCategoryFilter, selectedBrandFilter, searchTerm]);
 
   const handleSavePrice = (productId: string) => {
     if (tempStorePrice > 0) {
@@ -453,6 +476,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
       unit: newProdUnit,
       image_url: newProdImage.trim() || getSampleImage(newProdCat),
       is_active: true,
+      is_market_test: newProdIsMarketTest,
     });
 
     setIsAddModalOpen(false);
@@ -462,6 +486,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
     setNewProdConsumerPrice(0);
     setNewProdStock(0);
     setNewProdImage('');
+    setNewProdIsMarketTest(false);
     setAddModalError(null);
   };
 
@@ -517,12 +542,26 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
               <span>فقط غیرفعال‌ها</span>
             </button>
 
-            {(onlyLowStock || onlyInactive || selectedCategoryFilter !== 'all' || selectedBrandFilter !== 'all' || searchTerm) && (
+            <button
+              type="button"
+              onClick={() => setOnlyMarketTest((prev) => !prev)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+                onlyMarketTest
+                  ? 'bg-violet-500/25 text-violet-300 border border-violet-500/50 shadow-xs'
+                  : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+              <span>فقط تست بازار</span>
+            </button>
+
+            {(onlyLowStock || onlyInactive || onlyMarketTest || selectedCategoryFilter !== 'all' || selectedBrandFilter !== 'all' || searchTerm) && (
               <button
                 type="button"
                 onClick={() => {
                   setOnlyLowStock(false);
                   setOnlyInactive(false);
+                  setOnlyMarketTest(false);
                   setSelectedCategoryFilter('all');
                   setSelectedBrandFilter('all');
                   setSearchTerm('');
@@ -729,7 +768,8 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                   <th className="py-3 px-4 font-semibold">رزرو سفارشات</th>
                   <th className="py-3 px-4 font-semibold">موجودی آزاد</th>
                   <th className="py-3 px-4 font-semibold">واحد</th>
-                  <th className="py-3 px-4 font-semibold text-center">وضعیت</th>
+                  <th className="py-3 px-4 font-semibold text-center">نمایش در کاتالوگ</th>
+                  <th className="py-3 px-4 font-semibold text-center text-violet-400">تست بازار و لایک‌ها</th>
                   <th className="py-3 px-4 font-semibold text-center">عملیات</th>
                 </tr>
               </thead>
@@ -741,6 +781,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                   const isLow = freeStock < LOW_STOCK_THRESHOLD;
                   const visitorPrice = product.visitor_price || Math.round(product.price * 0.85);
                   const isSelected = selectedProductIds.includes(product.id);
+                  const itemLikes = productLikes.filter((pl) => pl.product_id === product.id);
 
                   return (
                     <tr key={product.id} className={`transition ${isSelected ? 'bg-blue-950/30' : 'hover:bg-slate-800/35'}`}>
@@ -785,21 +826,18 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                           </div>
                         </div>
                       </td>
-
                       {/* Category */}
                       <td className="py-3 px-4 text-slate-300">
                         <span className="px-2 py-0.5 rounded-lg bg-slate-950 border border-slate-800 text-xs">
                           {categoryObj?.name || 'سردخانه‌ای'}
                         </span>
                       </td>
-
                       {/* Brand */}
                       <td className="py-3 px-4">
                         <span className="px-2 py-0.5 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/20 text-xs font-semibold">
                           {product.brand || 'متفرقه'}
                         </span>
                       </td>
-
                       {/* 1. Visitor Purchase Price (قیمت خرید ویزیتور) */}
                       <td className="py-3 px-4">
                         {isEditing ? (
@@ -822,7 +860,6 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                           </div>
                         )}
                       </td>
-
                       {/* 2. Store Purchase Price (قیمت خرید فروشگاه) */}
                       <td className="py-3 px-4">
                         {isEditing ? (
@@ -845,7 +882,6 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                           </div>
                         )}
                       </td>
-
                       {/* 3. Consumer Price (قیمت مصرف کننده) */}
                       <td className="py-3 px-4">
                         {isEditing ? (
@@ -890,7 +926,6 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                           <span className="text-slate-500 font-mono text-xs">—</span>
                         )}
                       </td>
-
                       {/* Stock Info */}
                       <td className="py-3 px-4 font-semibold text-slate-200">
                         {formatPrice(product.stock)}
@@ -914,7 +949,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                       </td>
                       <td className="py-3 px-4 text-slate-400">{product.unit}</td>
 
-                      {/* Active Status Toggle */}
+                      {/* Active Status Toggle (Show / Hide in store catalog) */}
                       <td className="py-3 px-4 text-center">
                         <button
                           type="button"
@@ -923,15 +958,55 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                               onUpdateProduct(product.id, { is_active: !product.is_active });
                             }
                           }}
-                          title={product.is_active ? 'کلیک کنید تا کالا غیرفعال شود' : 'کلیک کنید تا کالا فعال شود'}
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border transition cursor-pointer ${
+                          title={product.is_active ? 'کلیک کنید تا کالا در کاتالوگ فروشگاه‌ها مخفی شود' : 'کلیک کنید تا کالا در کاتالوگ فروشگاه‌ها نمایش داده شود'}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition cursor-pointer ${
                             product.is_active
                               ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border-emerald-500/30'
                               : 'bg-slate-800 hover:bg-slate-700 text-slate-400 border-slate-700'
                           }`}
                         >
-                          <span>{product.is_active ? 'فعال' : 'غیرفعال'}</span>
+                          <span className={`w-1.5 h-1.5 rounded-full ${product.is_active ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                          <span>{product.is_active ? 'فعال در کاتالوگ' : 'مخفی / غیرفعال'}</span>
                         </button>
+                      </td>
+
+                      {/* Market Test Status & Likes List Trigger */}
+                      <td className="py-3 px-4 text-center">
+                        <div className="flex flex-col items-center gap-1.5 justify-center">
+                          {/* Market test toggle */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (onUpdateProduct) {
+                                onUpdateProduct(product.id, { is_market_test: !product.is_market_test });
+                              }
+                            }}
+                            title={product.is_market_test ? 'کلیک برای خروج از حالت تست بازار' : 'کلیک برای فعال‌سازی حالت تست بازار (نمایش به صورت "به زودی" با دکمه لایک)'}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                              product.is_market_test
+                                ? 'bg-violet-500/25 hover:bg-violet-500/35 text-violet-300 border-violet-500/50 shadow-xs shadow-violet-900/40'
+                                : 'bg-slate-800/80 hover:bg-slate-700 text-slate-400 border-slate-700/80'
+                            }`}
+                          >
+                            <Sparkles className={`w-3 h-3 ${product.is_market_test ? 'text-violet-400' : 'text-slate-500'}`} />
+                            <span>{product.is_market_test ? 'تست بازار (فعال)' : 'عادی'}</span>
+                          </button>
+
+                          {/* Likes count button -> Opens MarketTestLikesModal */}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedLikesProduct(product)}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[11px] font-bold transition cursor-pointer ${
+                              itemLikes.length > 0
+                                ? 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border-rose-500/30'
+                                : 'bg-slate-900/60 hover:bg-slate-800 text-slate-400 border-slate-800'
+                            }`}
+                            title="مشاهده لیست فروشگاه‌هایی که این کالا را لایک کرده‌اند"
+                          >
+                            <Heart className={`w-3 h-3 ${itemLikes.length > 0 ? 'fill-rose-500 text-rose-500' : 'text-slate-500'}`} />
+                            <span>{itemLikes.length.toLocaleString('fa-IR')} لایک</span>
+                          </button>
+                        </div>
                       </td>
 
                       {/* Actions */}
@@ -1211,6 +1286,32 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                 </div>
               </div>
 
+              {/* Section 5: Market Test Setting */}
+              <div className="space-y-2.5 p-3.5 rounded-2xl bg-violet-950/20 border border-violet-500/30">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-violet-300 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+                    وضعیت تست بازار (سنجش کشش و دریافت لایک از فروشگاه‌ها)
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => setNewProdIsMarketTest(!newProdIsMarketTest)}
+                    className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                      newProdIsMarketTest
+                        ? 'bg-violet-600 text-white border-violet-500 shadow-md shadow-violet-900/30'
+                        : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'
+                    }`}
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>{newProdIsMarketTest ? 'تست بازار: فعال (به زودی)' : 'تست بازار: غیرفعال (عادی)'}</span>
+                  </button>
+                </div>
+                <p className="text-[11px] text-violet-200/80 leading-relaxed">
+                  در صورت فعال‌سازی، این کالا با برچسب «به زودی» در کاتالوگ فروشگاه‌ها قرار می‌گیرد و به جای دکمه سفارش، دکمه «اعلام علاقه‌مندی و لایک» برای فروشگاه‌ها فعال خواهد شد.
+                </p>
+              </div>
+
               {addModalError && (
                 <div className="p-3 bg-rose-500/15 border border-rose-500/30 rounded-xl text-rose-300 text-xs font-medium flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
@@ -1446,11 +1547,11 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                 </div>
               </div>
 
-              {/* Section 4: Inventory & Unit & Active Status */}
-              <div className="space-y-3 p-4 rounded-2xl bg-slate-950/70 border border-slate-800">
+              {/* Section 4: Inventory, Catalog Visibility & Market Test */}
+              <div className="space-y-4 p-4 rounded-2xl bg-slate-950/70 border border-slate-800">
                 <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
                   <Warehouse className="w-3.5 h-3.5" />
-                  موجودی سردخانه و وضعیت فعال بودن
+                  موجودی سردخانه، وضعیت عرضه و تست بازار
                 </span>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
@@ -1473,7 +1574,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 mb-1 font-medium text-xs">وضعیت عرضه کالا</label>
+                    <label className="block text-slate-300 mb-1 font-medium text-xs">نمایش در کاتالوگ فروشگاه</label>
                     <button
                       type="button"
                       onClick={() => setEditProdIsActive(!editProdIsActive)}
@@ -1484,9 +1585,51 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                       }`}
                     >
                       <Check className={`w-4 h-4 ${editProdIsActive ? 'opacity-100' : 'opacity-40'}`} />
-                      <span>{editProdIsActive ? 'کالای فعال (قابل سفارش)' : 'کالای غیرفعال'}</span>
+                      <span>{editProdIsActive ? 'فعال (قابل مشاهده)' : 'مخفی از کاتالوگ'}</span>
                     </button>
                   </div>
+                </div>
+
+                {/* Market Test Toggle & Likes Section */}
+                <div className="pt-3 border-t border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-slate-900/50 p-3 rounded-xl border border-slate-800/80">
+                  <div className="flex items-center justify-between sm:justify-start gap-3 flex-1">
+                    <div>
+                      <span className="text-xs font-bold text-violet-300 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+                        وضعیت تست بازار (سنجش کشش)
+                      </span>
+                      <span className="text-[11px] text-slate-400 block mt-0.5">
+                        نمایش کالا با برچسب «به زودی» بدون امکان سفارش و دریافت لایک از فروشگاه‌ها
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setEditProdIsMarketTest(!editProdIsMarketTest)}
+                      className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shrink-0 ${
+                        editProdIsMarketTest
+                          ? 'bg-violet-600 text-white border-violet-500 shadow-md shadow-violet-900/30'
+                          : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'
+                      }`}
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>{editProdIsMarketTest ? 'تست بازار فعال' : 'کالای عادی'}</span>
+                    </button>
+                  </div>
+
+                  {editingProduct && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedLikesProduct(editingProduct)}
+                      className="px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer shrink-0"
+                      title="مشاهده لیست فروشگاه‌های علاقه‌مند به این کالا"
+                    >
+                      <Heart className="w-3.5 h-3.5 fill-rose-500 text-rose-500" />
+                      <span>
+                        مشاهده {productLikes.filter((pl) => pl.product_id === editingProduct.id).length.toLocaleString('fa-IR')} فروشگاه علاقه‌مند
+                      </span>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1812,7 +1955,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
               {/* Status Change */}
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-300 block">
-                  وضعیت نمایش / فعالیت:
+                  وضعیت نمایش در کاتالوگ فروشگاه:
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   <button
@@ -1835,7 +1978,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                         : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
                     }`}
                   >
-                    فعال‌سازی همه
+                    فعال در کاتالوگ
                   </button>
                   <button
                     type="button"
@@ -1846,7 +1989,50 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                         : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
                     }`}
                   >
-                    غیرفعال‌سازی همه
+                    مخفی از کاتالوگ
+                  </button>
+                </div>
+              </div>
+
+              {/* Market Test Bulk Setting */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-violet-300 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+                  وضعیت تست بازار (به زودی و دریافت لایک):
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setBulkMarketTestStatus('keep')}
+                    className={`p-2 rounded-xl border text-xs font-semibold transition cursor-pointer ${
+                      bulkMarketTestStatus === 'keep'
+                        ? 'bg-blue-600/20 border-blue-500 text-blue-300'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    بدون تغییر
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBulkMarketTestStatus('marketTest')}
+                    className={`p-2 rounded-xl border text-xs font-semibold transition cursor-pointer ${
+                      bulkMarketTestStatus === 'marketTest'
+                        ? 'bg-violet-600/30 border-violet-500 text-violet-300 shadow-xs'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    فعال‌سازی تست بازار
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBulkMarketTestStatus('normal')}
+                    className={`p-2 rounded-xl border text-xs font-semibold transition cursor-pointer ${
+                      bulkMarketTestStatus === 'normal'
+                        ? 'bg-slate-800 border-slate-600 text-slate-200'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    کالای عادی (خروج از تست)
                   </button>
                 </div>
               </div>
@@ -1930,6 +2116,22 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Market Test Likes Details Modal */}
+      {selectedLikesProduct && (
+        <MarketTestLikesModal
+          product={selectedLikesProduct}
+          likes={productLikes.filter((pl) => pl.product_id === selectedLikesProduct.id)}
+          supermarkets={supermarkets}
+          onClose={() => setSelectedLikesProduct(null)}
+          onToggleMarketTest={() => {
+            if (onUpdateProduct) {
+              onUpdateProduct(selectedLikesProduct.id, { is_market_test: !selectedLikesProduct.is_market_test });
+              setSelectedLikesProduct((prev) => (prev ? { ...prev, is_market_test: !prev.is_market_test } : null));
+            }
+          }}
+        />
       )}
     </div>
   );

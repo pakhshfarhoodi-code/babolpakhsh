@@ -614,7 +614,7 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
         });
 
         if (profileError) {
-          console.warn('Profile upsert warning:', profileError.message);
+          console.error('Profile upsert error on Supabase:', profileError.message);
         }
 
         const { error: smError } = await supabase.from('supermarkets').upsert({
@@ -630,7 +630,7 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
         });
 
         if (smError) {
-          console.warn('Supermarket upsert warning:', smError.message);
+          console.error('Supermarket upsert error on Supabase:', smError.message);
         }
       }
 

@@ -269,6 +269,17 @@ export function useSupabaseSync({
                   localSm.assigned_visitor_id && localSm.assigned_visitor_id !== 'direct'
                     ? localSm.assigned_visitor_id
                     : null;
+
+                supabase.from('profiles').upsert({
+                  id: localSm.id,
+                  name: localSm.name,
+                  role: 'supermarket',
+                  phone: localSm.phone,
+                  username: localSm.username,
+                  password: localSm.password || '123',
+                  is_active: localSm.is_active ?? true,
+                }).then(() => {});
+
                 supabase.from('supermarkets').upsert({
                   id: localSm.id,
                   name: localSm.name,

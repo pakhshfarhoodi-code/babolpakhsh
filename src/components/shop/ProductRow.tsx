@@ -53,14 +53,23 @@ export const ProductRow: React.FC<ProductRowProps> = ({
   return (
     <>
       <div
-        className={`p-3 rounded-2xl bg-slate-900 border transition shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+        className={`relative overflow-hidden p-3 rounded-2xl bg-slate-900 border transition shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
           isMarketTest
-            ? 'border-violet-500/40 bg-gradient-to-br from-slate-900 via-slate-900 to-violet-950/20 hover:border-violet-500/60'
+            ? 'border-violet-500/50 bg-gradient-to-br from-slate-900 via-slate-900 to-violet-950/25 hover:border-violet-500/70 shadow-violet-950/20'
             : isOutOfStock
             ? 'opacity-60 bg-slate-950/40 border-slate-800'
             : 'border-slate-800 hover:border-slate-700'
         }`}
       >
+        {/* Diagonal Corner Ribbon for "به زودی" */}
+        {isMarketTest && (
+          <div className="absolute top-0 right-0 w-20 h-20 overflow-hidden pointer-events-none z-10">
+            <div className="absolute top-3 -right-6 w-24 bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 text-white text-[10px] font-black text-center py-0.5 rotate-45 shadow-md border-y border-violet-300/30">
+              به زودی
+            </div>
+          </div>
+        )}
+
         {/* Right side: Product Image + Info */}
         <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
           {/* 56px-64px clickable image with zoom hover badge */}
@@ -91,12 +100,7 @@ export const ProductRow: React.FC<ProductRowProps> = ({
             </div>
 
             {/* Stock Badges */}
-            {isMarketTest ? (
-              <span className="absolute bottom-0 inset-x-0 bg-violet-950/95 text-violet-200 text-[10px] font-bold text-center py-0.5 border-t border-violet-800/80 z-10 flex items-center justify-center gap-0.5">
-                <Clock className="w-2.5 h-2.5 shrink-0" />
-                <span>به زودی</span>
-              </span>
-            ) : isOutOfStock ? (
+            {isOutOfStock ? (
               <span className="absolute bottom-0 inset-x-0 bg-rose-950/90 text-rose-300 text-xs font-bold text-center py-0.5 border-t border-rose-800/60 z-10">
                 ناموجود
               </span>
@@ -117,12 +121,6 @@ export const ProductRow: React.FC<ProductRowProps> = ({
               >
                 {product.name}
               </h4>
-              {isMarketTest && (
-                <span className="px-2 py-0.5 rounded-md bg-violet-500/20 text-violet-300 border border-violet-500/30 text-[10px] font-bold shrink-0 flex items-center gap-1">
-                  <Sparkles className="w-2.5 h-2.5 text-violet-400 shrink-0" />
-                  <span>تست بازار</span>
-                </span>
-              )}
             </div>
 
             {product.brand && (
@@ -132,50 +130,46 @@ export const ProductRow: React.FC<ProductRowProps> = ({
             )}
 
             <div className="flex items-center gap-1.5 pt-0.5">
-              <span className={`text-sm font-extrabold ${isMarketTest ? 'text-violet-400' : 'text-emerald-400'}`}>
+              <span className={`text-sm font-extrabold ${isMarketTest ? 'text-violet-300' : 'text-emerald-400'}`}>
                 {formatPrice(product.price)}
               </span>
               <span className="text-xs text-slate-500">/ {product.unit}</span>
             </div>
-
-            {/* Notice label specifically for market test */}
-            {isMarketTest && (
-              <div className="mt-1 p-2 rounded-xl bg-violet-950/40 border border-violet-500/25 text-violet-200 text-[11px] leading-relaxed flex items-start gap-1.5">
-                <span className="shrink-0 text-xs">📢</span>
-                <span>
-                  این کالا به زودی موجود خواهد شد. در صورتی که علاقمند به سفارش آن هستید لایک کنید تا وقتی موجود شد به شما اطلاع‌رسانی شود.
-                </span>
-              </div>
-            )}
           </div>
         </div>
 
         {/* Left side: Action Area */}
         <div className="shrink-0 flex items-center justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/80">
           {isMarketTest ? (
-            <button
-              type="button"
-              onClick={handleLikeClick}
-              disabled={isLiking}
-              className={`w-full sm:w-auto px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer shadow-md active:scale-95 ${
-                hasLiked
-                  ? 'bg-rose-600/25 text-rose-300 border border-rose-500/50 hover:bg-rose-600/35 shadow-rose-900/30'
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
-              }`}
-              title={hasLiked ? 'لغو علاقه‌مندی' : 'ثبت علاقه‌مندی به این کالا'}
-            >
-              <Heart
-                className={`w-4 h-4 transition-transform duration-200 ${
-                  hasLiked ? 'fill-rose-500 text-rose-500 scale-110' : 'text-slate-400 group-hover:text-rose-400'
+            <div className="flex flex-col items-stretch sm:items-end gap-1 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={handleLikeClick}
+                disabled={isLiking}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md active:scale-95 ${
+                  hasLiked
+                    ? 'bg-rose-600/25 text-rose-300 border border-rose-500/50 hover:bg-rose-600/35 shadow-rose-900/30'
+                    : 'bg-violet-950/80 hover:bg-violet-900/90 text-violet-200 border border-violet-700/60 hover:border-violet-500'
                 }`}
-              />
-              <span>{hasLiked ? 'علاقه‌مندی ثبت شد' : 'علاقه‌مند به خرید'}</span>
-              {itemLikes.length > 0 && (
-                <span className="text-[10px] bg-slate-900/90 border border-slate-700 px-1.5 py-0.5 rounded-full font-mono text-slate-300">
-                  {itemLikes.length.toLocaleString('fa-IR')}
-                </span>
-              )}
-            </button>
+                title={hasLiked ? 'لغو علاقه‌مندی' : 'ثبت علاقه‌مندی به این کالا'}
+              >
+                <Heart
+                  className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                    hasLiked ? 'fill-rose-500 text-rose-500 scale-110' : 'text-violet-400 group-hover:text-rose-400'
+                  }`}
+                />
+                <span>{hasLiked ? 'علاقه‌مندی ثبت شد' : 'علاقه‌مند به خرید'}</span>
+                {itemLikes.length > 0 && (
+                  <span className="text-[10px] bg-slate-900/90 border border-violet-800/80 px-1.5 py-0.2 rounded-full font-mono text-violet-300">
+                    {itemLikes.length.toLocaleString('fa-IR')}
+                  </span>
+                )}
+              </button>
+
+              <p className="text-[10px] text-violet-300/80 text-center sm:text-left leading-tight max-w-[170px]">
+                لایک کنید تا پس از موجود شدن اطلاع‌رسانی گردد.
+              </p>
+            </div>
           ) : (
             <QuantityStepper
               quantity={quantity}
@@ -279,7 +273,7 @@ export const ProductRow: React.FC<ProductRowProps> = ({
               {isMarketTest ? (
                 <div className="pt-3 border-t border-slate-800 space-y-3">
                   <div className="p-2.5 rounded-xl bg-violet-950/40 border border-violet-500/25 text-violet-200 text-xs leading-relaxed">
-                    📢 این کالا به زودی موجود خواهد شد. در صورتی که علاقمند به سفارش آن هستید لایک کنید تا وقتی موجود شد به شما اطلاع‌رسانی شود.
+                    📢 در صورتی که علاقمند به سفارش این کالا هستید لایک کنید تا پس از موجود شدن اطلاع‌رسانی گردد.
                   </div>
                   <button
                     type="button"

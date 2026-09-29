@@ -150,8 +150,13 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
   const buyerOwner = supermarket?.owner || 'متصدی فروشگاه';
   const buyerPhone = supermarket?.phone || '---';
   const buyerAddress = supermarket?.address || 'ثبت شده در سامانه مرکزی پخش';
-  const sellerVisitor = order.visitor_name || visitor?.name || 'واحد توزیع مویرگی';
-  const visitorPhone = visitor?.phone || '---';
+  const isDirectOrder = !order.assigned_visitor_id || order.assigned_visitor_id === 'direct';
+  const sellerVisitor = isDirectOrder
+    ? 'واحد فروش و پخش مرکزی فرهودی'
+    : (order.visitor_name || visitor?.name || 'واحد توزیع مویرگی');
+  const visitorPhone = isDirectOrder
+    ? (visitor?.phone || '۰۱۱-۳۲۲۲۰۰۰۰')
+    : (visitor?.phone || '---');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static print:inset-auto">

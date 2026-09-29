@@ -46,6 +46,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     bulkUpdateProducts,
     updateOrderStatus,
     requestReassignment,
+    assignOrderVisitor,
+    deleteOrder,
     updateCategory,
     updateBrand,
   } = useApp();
@@ -216,6 +218,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           initialStatusFilter={ordersStatusFilterHint}
           onUpdateOrderStatus={updateOrderStatus}
           onRequestReassignment={requestReassignment}
+          onAssignOrderVisitor={assignOrderVisitor}
+          onDeleteOrder={deleteOrder}
         />
       )}
 

@@ -437,8 +437,14 @@ export const TeamTab: React.FC<TeamTabProps> = ({
   // Filtered supermarkets based on visitor click, search term, and approval status
   const filteredSupermarkets = useMemo(() => {
     return supermarkets.filter((shop) => {
-      if (selectedVisitorFilter && shop.assigned_visitor_id !== selectedVisitorFilter) {
-        return false;
+      if (selectedVisitorFilter) {
+        if (selectedVisitorFilter === 'direct') {
+          if (shop.assigned_visitor_id && shop.assigned_visitor_id !== 'direct') {
+            return false;
+          }
+        } else if (shop.assigned_visitor_id !== selectedVisitorFilter) {
+          return false;
+        }
       }
       if (storeStatusFilter === 'inactive' && shop.is_active !== false) {
         return false;
@@ -496,8 +502,70 @@ export const TeamTab: React.FC<TeamTabProps> = ({
             </button>
           </div>
 
-          {/* Visitor Cards */}
+          {/* Visitor Cards & Direct Channel */}
           <div className="space-y-3">
+            {/* Direct Purchase Channel Card */}
+            {(() => {
+              const directStores = supermarkets.filter(
+                (s) => s.assigned_visitor_id === 'direct' || !s.assigned_visitor_id
+              );
+              const directOrders = orders.filter(
+                (o) =>
+                  o.assigned_visitor_id === 'direct' ||
+                  !o.assigned_visitor_id ||
+                  o.visitor_name?.includes('مستقیم')
+              );
+              const isSelected = selectedVisitorFilter === 'direct';
+
+              return (
+                <div
+                  className={`p-3.5 rounded-xl border transition shadow-xs ${
+                    isSelected
+                      ? 'bg-amber-950/40 border-amber-500/60'
+                      : 'bg-slate-950 border-amber-800/40 hover:border-amber-700/60'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm text-amber-300">پخش مرکزی فرهودی (خرید مستقیم)</span>
+                        <span className="text-[11px] px-2 py-0.5 rounded-md bg-amber-900/50 text-amber-300 border border-amber-800/50 font-bold">
+                          فروش بدون واسطه ویزیتور
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1">مدیریت مستقیم سفارشات توسط دفتر پخش مرکزی</p>
+                    </div>
+
+                    <div className="text-left space-y-0.5">
+                      <span className="text-xs font-bold text-amber-300">
+                        {directStores.length} فروشگاه
+                      </span>
+                      <p className="text-xs text-slate-400">
+                        {directOrders.length} سفارش مستقیم
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 pt-2.5 border-t border-slate-900 flex items-center justify-between text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedVisitorFilter(isSelected ? null : 'direct')}
+                      className={`px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                        isSelected
+                          ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
+                          : 'bg-slate-900 hover:bg-slate-800 text-amber-400 border border-amber-800/40'
+                      }`}
+                    >
+                      <Store className="w-3.5 h-3.5" />
+                      <span>
+                        {isSelected ? 'حذف فیلتر و نمایش همه' : 'مشاهده فروشگاه‌های خرید مستقیم'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
             {visitors.map((visitor) => {
               const assignedStores = supermarkets.filter((s) => s.assigned_visitor_id === visitor.id);
               const visitorOrders = orders.filter((o) => o.assigned_visitor_id === visitor.id);
@@ -826,12 +894,18 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                       <div className="mt-2.5 pt-2 border-t border-slate-900 flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5">
                           <span className="text-slate-500">پشتیبان / ویزیتور:</span>
-                          <span className="bg-slate-900 border border-slate-800 text-slate-300 rounded-lg px-2 py-0.5 text-xs">
+                          <span
+                            className={`rounded-lg px-2 py-0.5 text-xs font-semibold ${
+                              shop.assigned_visitor_id === 'direct' || !assignedVisitor
+                                ? 'bg-amber-950/40 border border-amber-800/40 text-amber-300'
+                                : 'bg-slate-900 border border-slate-800 text-slate-300'
+                            }`}
+                          >
                             {shop.assigned_visitor_id === 'direct'
-                              ? 'خرید مستقیم از پخش فرهودی'
+                              ? 'خرید مستقیم از پخش مرکزی (دفتر مرکزی)'
                               : assignedVisitor
                               ? `${assignedVisitor.name} (${assignedVisitor.region})`
-                              : 'خرید مستقیم از پخش فرهودی'}
+                              : 'خرید مستقیم از پخش مرکزی'}
                           </span>
                         </div>
 

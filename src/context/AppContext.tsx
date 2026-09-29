@@ -70,6 +70,12 @@ interface AppContextType {
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
   requestReassignment: (orderId: string, toVisitorId: string | null) => void;
   respondToReassignment: (requestId: string, accept: boolean) => void;
+  assignOrderVisitor: (
+    orderId: string,
+    targetVisitorId: string | 'direct',
+    updateCustomerPermanent?: boolean
+  ) => { success: boolean; message: string; targetVisitorName?: string };
+  deleteOrder: (orderId: string) => Promise<{ success: boolean; message: string }> | { success: boolean; message: string };
   createLoadingBill: (visitorId: string, orderIds: string[]) => void;
   approveLoadingBill: (billId: string) => void;
   updateProductPrice: (productId: string, newPrice: number, newVisitorPrice?: number, newConsumerPrice?: number) => void;
@@ -304,21 +310,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [setSupermarkets]);
 
-  // Delete Supermarket (both local and Supabase)
+  // Delete Supermarket (both local and Supabase, along with associated orders)
   const deleteSupermarket = useCallback(async (id: string): Promise<{ success: boolean; message: string }> => {
     try {
-      if (isSupabaseConfigured && supabase) {
-        // 1. Decouple orders referencing this supermarket to prevent foreign key RESTRICT failure
-        const { error: ordError } = await supabase
-          .from('orders')
-          .update({ supermarket_id: null })
-          .eq('supermarket_id', id);
+      // 1. Identify orders referencing this supermarket
+      const smOrders = orders.orders.filter((o) => o.supermarket_id === id);
+      const smOrderIds = smOrders.map((o) => o.id);
 
-        if (ordError) {
-          console.warn('Supermarket order decoupling warning:', ordError.message);
+      // 2. Release reserved stock for any unfulfilled orders
+      smOrders.forEach((ord) => {
+        if (ord.status !== 'delivered' && ord.status !== 'undelivered') {
+          const items = ord.items || [];
+          if (items.length > 0) {
+            catalog.setProducts((prev) =>
+              prev.map((p) => {
+                const item = items.find((i) => i.product_id === p.id);
+                if (item) {
+                  return {
+                    ...p,
+                    reserved_stock: Math.max(0, p.reserved_stock - item.quantity),
+                  };
+                }
+                return p;
+              })
+            );
+          }
         }
+      });
 
-        // 2. Delete from supermarkets table
+      if (isSupabaseConfigured && supabase) {
+        // Delete order items and orders for this supermarket
+        if (smOrderIds.length > 0) {
+          await supabase.from('order_items').delete().in('order_id', smOrderIds);
+          await supabase.from('reassignment_requests').delete().in('order_id', smOrderIds);
+          await supabase.from('orders').delete().in('id', smOrderIds);
+        }
+        await supabase.from('orders').delete().eq('supermarket_id', id);
+
+        // Delete from supermarkets table
         const { error: smError } = await supabase
           .from('supermarkets')
           .delete()
@@ -328,17 +357,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return { success: false, message: `خطا در حذف سوپرمارکت از پایگاه داده: ${smError.message}` };
         }
 
-        // 3. Delete from profiles table
-        const { error: profError } = await supabase
+        // Delete from profiles table
+        await supabase
           .from('profiles')
           .delete()
           .eq('id', id);
-
-        if (profError) {
-          console.warn('Profile deletion warning:', profError.message);
-        }
       }
 
+      // Update orders in local state
+      orders.setOrders((prev) => {
+        const next = prev.filter((o) => o.supermarket_id !== id);
+        localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(next));
+        return next;
+      });
+
+      // Update supermarkets in local state
       setSupermarkets((prev) => {
         const next = prev.filter((s) => s.id !== id);
         localStorage.setItem(STORAGE_KEYS.SUPERMARKETS, JSON.stringify(next));
@@ -350,7 +383,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در حذف مشتری';
       return { success: false, message: msg };
     }
-  }, [setSupermarkets]);
+  }, [orders, catalog, setSupermarkets]);
 
   // Quick toggle approval / active state for Supermarket
   const toggleSupermarketApproval = useCallback(async (id: string, currentStatus: boolean): Promise<{ success: boolean; message: string; newStatus: boolean }> => {
@@ -637,6 +670,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [setVisitors]);
 
+  // Direct Assignment / Reassignment by Admin
+  const assignOrderVisitor = useCallback(
+    (
+      orderId: string,
+      targetVisitorId: string | 'direct',
+      updateCustomerPermanent: boolean = false
+    ) => {
+      const res = orders.assignOrderVisitor(orderId, targetVisitorId, auth.currentUser.name);
+      if (res.success && updateCustomerPermanent) {
+        const ord = orders.orders.find((o) => o.id === orderId);
+        if (ord && ord.supermarket_id) {
+          const currentSm = supermarkets.find((s) => s.id === ord.supermarket_id);
+          if (currentSm) {
+            updateSupermarket(currentSm.id, {
+              name: currentSm.name,
+              owner: currentSm.owner,
+              phone: currentSm.phone,
+              address: currentSm.address,
+              assigned_visitor_id: targetVisitorId,
+              is_active: currentSm.is_active ?? true,
+            }).catch(() => {});
+          }
+        }
+      }
+      return res;
+    },
+    [orders, auth.currentUser.name, supermarkets, updateSupermarket]
+  );
+
   // Memoized provider value so child components do not needlessly re-render
   const contextValue: AppContextType = useMemo(() => ({
     role: auth.role,
@@ -665,6 +727,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateOrderStatus: orders.updateOrderStatus,
     requestReassignment: orders.requestReassignment,
     respondToReassignment: orders.respondToReassignment,
+    assignOrderVisitor,
+    deleteOrder: orders.deleteOrder,
     createLoadingBill: warehouse.createLoadingBill,
     approveLoadingBill: warehouse.approveLoadingBill,
     updateProductPrice: catalog.updateProductPrice,
@@ -746,6 +810,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     orders.updateOrderStatus,
     orders.requestReassignment,
     orders.respondToReassignment,
+    assignOrderVisitor,
+    orders.deleteOrder,
     warehouse.loadingBills,
     warehouse.inventoryTransactions,
     warehouse.createLoadingBill,

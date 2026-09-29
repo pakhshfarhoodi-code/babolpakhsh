@@ -94,7 +94,7 @@ export interface Order {
   id: string;
   supermarket_id: string;
   supermarket_name: string;
-  assigned_visitor_id: string;
+  assigned_visitor_id: string | null;
   visitor_name: string;
   status: OrderStatus;
   total_amount: number;

@@ -168,8 +168,14 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
               )}
             </div>
           ) : (
-            <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 text-slate-400">
-              ویزیتور مستقیم تعیین نشده است.
+            <div className="p-2.5 rounded-xl bg-amber-950/30 border border-amber-900/50 space-y-1">
+              <div className="flex items-center gap-2 text-amber-300 font-semibold text-xs">
+                <Truck className="w-4 h-4 text-amber-400" />
+                <span>خرید مستقیم از پخش مرکزی فرهودی</span>
+              </div>
+              <p className="text-xs text-slate-400 pr-6">
+                سفارش‌های شما مستقیماً توسط واحد فروش مرکزی پردازش و ارسال می‌شود.
+              </p>
             </div>
           )}
         </div>

@@ -27,6 +27,7 @@ export const VisitorPortal: React.FC = () => {
     requestReassignment,
     respondToReassignment,
     createLoadingBill,
+    deleteOrder,
   } = useApp();
 
   const defaultFallbackVisitor: Visitor = useMemo(() => ({
@@ -202,6 +203,7 @@ export const VisitorPortal: React.FC = () => {
           onOpenDelegateModal={(order) => setSelectedOrderForDelegate(order)}
           onRespondHandover={respondToReassignment}
           onCreateLoadingBill={createLoadingBill}
+          onDeleteOrder={deleteOrder}
         />
       )}
 

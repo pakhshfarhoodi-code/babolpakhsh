@@ -142,7 +142,7 @@ export interface VisitorSalesSummary {
 }
 
 export const getVisitorSalesSummaries = (visitors: Visitor[], orders: Order[]): VisitorSalesSummary[] => {
-  return visitors.map((v) => {
+  const list: VisitorSalesSummary[] = visitors.map((v) => {
     const vOrders = orders.filter((o) => o.assigned_visitor_id === v.id);
     const validOrders = vOrders.filter((o) => o.status !== 'undelivered');
     const totalSales = validOrders.reduce((sum, o) => sum + o.total_amount, 0);
@@ -154,7 +154,35 @@ export const getVisitorSalesSummaries = (visitors: Visitor[], orders: Order[]): 
       ordersCount: vOrders.length,
       deliveredCount,
     };
-  }).sort((a, b) => b.totalSales - a.totalSales);
+  });
+
+  const directOrders = orders.filter(
+    (o) =>
+      o.assigned_visitor_id === 'direct' ||
+      !o.assigned_visitor_id ||
+      o.visitor_name?.includes('مستقیم')
+  );
+
+  if (directOrders.length > 0) {
+    const validDirect = directOrders.filter((o) => o.status !== 'undelivered');
+    const totalDirectSales = validDirect.reduce((sum, o) => sum + o.total_amount, 0);
+    const deliveredDirectCount = directOrders.filter((o) => o.status === 'delivered').length;
+
+    list.unshift({
+      visitor: {
+        id: 'direct',
+        name: 'پخش مرکزی (خرید مستقیم)',
+        phone: '---',
+        region: 'مرکزی',
+        is_active: true,
+      },
+      totalSales: totalDirectSales,
+      ordersCount: directOrders.length,
+      deliveredCount: deliveredDirectCount,
+    });
+  }
+
+  return list.sort((a, b) => b.totalSales - a.totalSales);
 };
 
 // Aggregate sales by product category

@@ -51,7 +51,9 @@ export function useOrders({
       const parsed: Order[] = JSON.parse(saved);
       if (!Array.isArray(parsed)) return [];
       return parsed.filter(
-        (o) => !o.items?.some((it) => LEGACY_MOCK_NAMES.has(it.name?.trim()))
+        (o) =>
+          Boolean(o.supermarket_id) &&
+          !o.items?.some((it) => LEGACY_MOCK_NAMES.has(it.name?.trim()))
       );
     } catch {
       return [];
@@ -66,6 +68,56 @@ export function useOrders({
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
   }, [orders]);
+
+  // Self-healing: Automatically purge orphan orders from deleted supermarkets
+  useEffect(() => {
+    if (supermarkets.length > 0) {
+      const validSupermarketIds = new Set(supermarkets.map((s) => s.id));
+      setOrders((prev) => {
+        const orphanOrders = prev.filter(
+          (o) => !o.supermarket_id || !validSupermarketIds.has(o.supermarket_id)
+        );
+        if (orphanOrders.length > 0) {
+          const orphanIds = orphanOrders.map((o) => o.id);
+          // Release reserved stock for unfulfilled orphan orders
+          orphanOrders.forEach((ord) => {
+            if (ord.status !== 'delivered' && ord.status !== 'undelivered') {
+              const items = ord.items || [];
+              if (items.length > 0) {
+                setProducts((prodPrev) =>
+                  prodPrev.map((p) => {
+                    const item = items.find((i) => i.product_id === p.id);
+                    if (item) {
+                      return {
+                        ...p,
+                        reserved_stock: Math.max(0, p.reserved_stock - item.quantity),
+                      };
+                    }
+                    return p;
+                  })
+                );
+              }
+            }
+          });
+          // Delete from Supabase in background
+          if (isSupabaseConfigured && supabase) {
+            supabase.from('order_items').delete().in('order_id', orphanIds).then(() => {
+              supabase.from('orders').delete().in('id', orphanIds).then(() => {
+                console.log('Purged orphan orders:', orphanIds);
+              });
+            });
+            supabase.from('reassignment_requests').delete().in('order_id', orphanIds).then(() => {});
+          }
+          const next = prev.filter(
+            (o) => Boolean(o.supermarket_id) && validSupermarketIds.has(o.supermarket_id)
+          );
+          localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(next));
+          return next;
+        }
+        return prev;
+      });
+    }
+  }, [supermarkets, setProducts]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.REASSIGNMENTS, JSON.stringify(reassignmentRequests));
@@ -83,23 +135,39 @@ export function useOrders({
           owner: 'متصدی فروشگاه',
           phone: '۰۹۱۱۰۰۰۰۰۰۰',
           address: 'ثبت شده در سامانه مرکزی پخش',
-          assigned_visitor_id: '',
+          assigned_visitor_id: 'direct',
           credit_limit: 50000000,
           current_debt: 0,
           is_active: true,
         };
 
-      const visitor =
-        visitors.find((v) => v.id === payload.visitorId) ||
-        visitors[0] ||
-        {
-          id: payload.visitorId || '',
-          name: 'واحد ویزیت و توزیع',
-          phone: '۰۹۱۱۰۰۰۰۰۰۰',
-          region: 'عمومی',
-          username: 'visitor',
-          is_active: true,
-        };
+      // Determine order source (visitor vs supermarket direct)
+      const orderSource: 'visitor' | 'supermarket' = payload.orderSource || 'visitor';
+
+      // Check if this is a direct order from Farhoodi distribution
+      const isDirectOrder =
+        orderSource === 'supermarket' &&
+        (payload.visitorId === 'direct' ||
+          !payload.visitorId ||
+          supermarket.assigned_visitor_id === 'direct' ||
+          !supermarket.assigned_visitor_id);
+
+      let finalAssignedVisitorId: string = 'direct';
+      let finalVisitorName: string = 'خرید مستقیم از پخش مرکزی';
+      if (!isDirectOrder) {
+        const foundVisitor =
+          visitors.find((v) => v.id === payload.visitorId) ||
+          visitors.find((v) => v.id === supermarket.assigned_visitor_id);
+        if (foundVisitor) {
+          finalAssignedVisitorId = foundVisitor.id;
+          finalVisitorName = foundVisitor.name;
+        } else if (orderSource === 'visitor') {
+          // If initiated in visitor portal, fallback to current or first visitor
+          const defaultVis = visitors[0];
+          finalAssignedVisitorId = defaultVis?.id || '';
+          finalVisitorName = defaultVis?.name || 'واحد ویزیت و توزیع';
+        }
+      }
 
       if (!payload.items || payload.items.length === 0) {
         return { success: false, message: 'سبد سفارش خالی است.' };
@@ -120,13 +188,10 @@ export function useOrders({
         }
       }
 
-      // Determine order source (visitor vs supermarket direct)
-      const orderSource: 'visitor' | 'supermarket' = payload.orderSource || 'visitor';
-
       // Generate structured invoice ID according to business formula
       const orderId = generateStructuredInvoiceNumber({
         orderSource,
-        visitorId: visitor.id,
+        visitorId: finalAssignedVisitorId === 'direct' ? undefined : finalAssignedVisitorId,
         supermarketId: supermarket.id,
         visitors,
         supermarkets,
@@ -140,8 +205,8 @@ export function useOrders({
         id: orderId,
         supermarket_id: supermarket.id,
         supermarket_name: supermarket.name,
-        assigned_visitor_id: visitor.id,
-        visitor_name: visitor.name,
+        assigned_visitor_id: finalAssignedVisitorId,
+        visitor_name: finalVisitorName,
         status: 'assigned',
         total_amount: totalAmount,
         order_source: orderSource,
@@ -191,7 +256,7 @@ export function useOrders({
             p_order_id: newOrder.id,
             p_supermarket_id: newOrder.supermarket_id,
             p_supermarket_name: newOrder.supermarket_name,
-            p_assigned_visitor_id: newOrder.assigned_visitor_id,
+            p_assigned_visitor_id: finalAssignedVisitorId === 'direct' ? null : finalAssignedVisitorId,
             p_visitor_name: newOrder.visitor_name,
             p_status: newOrder.status,
             p_total_amount: newOrder.total_amount,
@@ -444,6 +509,169 @@ export function useOrders({
     [reassignmentRequests, visitors, selectedVisitorId]
   );
 
+  // Direct Assignment / Transfer by Admin (takes immediate effect)
+  const assignOrderVisitor = useCallback(
+    (
+      orderId: string,
+      targetVisitorId: string | 'direct',
+      adminName: string = 'مدیر ارشد'
+    ): { success: boolean; message: string; targetVisitorName?: string } => {
+      const targetOrder = orders.find((o) => o.id === orderId);
+      if (!targetOrder) return { success: false, message: 'سفارش مورد نظر یافت نشد.' };
+
+      let newVisitorId = 'direct';
+      let newVisitorName = 'خرید مستقیم از پخش مرکزی';
+      if (targetVisitorId !== 'direct') {
+        const foundVis = visitors.find((v) => v.id === targetVisitorId);
+        if (!foundVis) {
+          return { success: false, message: 'ویزیتور مورد نظر یافت نشد.' };
+        }
+        newVisitorId = foundVis.id;
+        newVisitorName = foundVis.name;
+      }
+
+      const oldVisitorId = targetOrder.assigned_visitor_id;
+
+      setOrders((prev) =>
+        prev.map((o) => {
+          if (o.id === orderId) {
+            return {
+              ...o,
+              assigned_visitor_id: newVisitorId,
+              visitor_name: newVisitorName,
+              // If order was in delegated status, clear delegation and keep ready
+              status: o.status === 'delegated' ? 'assigned' : o.status,
+              reassignment_id: null,
+            };
+          }
+          return o;
+        })
+      );
+
+      // Cancel any pending reassignment requests for this order
+      if (targetOrder.reassignment_id) {
+        setReassignmentRequests((prev) =>
+          prev.map((r) =>
+            r.order_id === orderId && r.status === 'pending'
+              ? { ...r, status: 'accepted' }
+              : r
+          )
+        );
+      }
+
+      // Sync with Supabase
+      if (isSupabaseConfigured && supabase) {
+        supabase
+          .from('orders')
+          .update({
+            assigned_visitor_id: newVisitorId === 'direct' ? null : newVisitorId,
+            visitor_name: newVisitorName,
+            status: targetOrder.status === 'delegated' ? 'assigned' : targetOrder.status,
+            reassignment_id: null,
+          })
+          .eq('id', orderId)
+          .then(({ error }) => {
+            if (error) console.error('خطا در تخصیص سفارش روی Supabase:', error);
+          });
+
+        supabase
+          .from('order_visitor_history')
+          .insert({
+            order_id: orderId,
+            old_visitor_id: oldVisitorId === 'direct' ? null : oldVisitorId,
+            new_visitor_id: newVisitorId === 'direct' ? null : newVisitorId,
+            changed_by: `${adminName} (مدیریت مرکزی)`,
+          })
+          .then(({ error }) => {
+            if (error) console.warn('ثبت تاریخچه انتقال ویزیتور:', error);
+          });
+      }
+
+      return {
+        success: true,
+        message:
+          newVisitorId === 'direct'
+            ? `سفارش ${orderId} به مدیریت مستقیم پخش مرکزی محول شد.`
+            : `سفارش ${orderId} به ${newVisitorName} محول شد.`,
+        targetVisitorName: newVisitorName,
+      };
+    },
+    [orders, visitors]
+  );
+
+  // Delete Order (Releases reserved stock, removes from Supabase and local storage)
+  const deleteOrder = useCallback(
+    async (orderId: string): Promise<{ success: boolean; message: string }> => {
+      const targetOrder = orders.find((o) => o.id === orderId);
+      if (!targetOrder) {
+        return { success: false, message: 'سفارش مورد نظر یافت نشد.' };
+      }
+
+      // If order was in assigned, loading, or delegated status, release reserved stock
+      if (
+        targetOrder.status !== 'delivered' &&
+        targetOrder.status !== 'undelivered'
+      ) {
+        const items = targetOrder.items || [];
+        if (items.length > 0) {
+          setProducts((prev) =>
+            prev.map((p) => {
+              const item = items.find((i) => i.product_id === p.id);
+              if (item) {
+                return {
+                  ...p,
+                  reserved_stock: Math.max(0, p.reserved_stock - item.quantity),
+                };
+              }
+              return p;
+            })
+          );
+
+          const releaseTx: InventoryTransaction[] = items.map((it) => ({
+            id: `tx-${Date.now()}-del-${it.product_id}`,
+            product_id: it.product_id,
+            product_name: it.name,
+            transaction_type: 'release_reserve',
+            quantity: -it.quantity,
+            reference_id: orderId,
+            created_at: new Date().toISOString(),
+          }));
+          addInventoryTransactions(releaseTx);
+        }
+      }
+
+      // Delete from Supabase
+      if (isSupabaseConfigured && supabase) {
+        try {
+          await supabase.from('order_items').delete().eq('order_id', orderId);
+          await supabase.from('reassignment_requests').delete().eq('order_id', orderId);
+          const { error: ordErr } = await supabase.from('orders').delete().eq('id', orderId);
+          if (ordErr) {
+            console.warn('Supabase delete order warning:', ordErr.message);
+          }
+        } catch (dbErr) {
+          console.error('Error deleting order from Supabase:', dbErr);
+        }
+      }
+
+      // Remove from local state
+      setOrders((prev) => {
+        const next = prev.filter((o) => o.id !== orderId);
+        localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(next));
+        return next;
+      });
+
+      // Remove any reassignment requests for this order
+      setReassignmentRequests((prev) => prev.filter((r) => r.order_id !== orderId));
+
+      return {
+        success: true,
+        message: `سفارش ${orderId} با موفقیت حذف و موجودی آزاد گردید.`,
+      };
+    },
+    [orders, setProducts, addInventoryTransactions]
+  );
+
   return {
     orders,
     setOrders,
@@ -453,5 +681,7 @@ export function useOrders({
     updateOrderStatus,
     requestReassignment,
     respondToReassignment,
+    assignOrderVisitor,
+    deleteOrder,
   };
 }

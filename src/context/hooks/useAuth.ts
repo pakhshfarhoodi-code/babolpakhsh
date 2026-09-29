@@ -554,7 +554,7 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
       const trimmedOwner = data.owner.trim() || 'مدیر فروشگاه';
       const trimmedPhone = normalizeDigits(data.phone.trim());
       const trimmedAddress = data.address.trim() || 'تهران - منطقه توزیع زنجیره سرد';
-      const assignedVisitorId = data.assigned_visitor_id || visitors[0]?.id || '';
+      const assignedVisitorId = data.assigned_visitor_id || 'direct';
       const trimmedUsername = normalizeDigits(data.username.trim());
       const trimmedPassword = normalizeDigits(data.password.trim());
 
@@ -622,9 +622,6 @@ export function useAuth({ visitors, supermarkets, setSupermarkets }: UseAuthProp
           if (match) {
             validVisitorId = match.id;
           }
-        }
-        if (!validVisitorId && visitors.length > 0) {
-          validVisitorId = visitors[0].id;
         }
 
         const { error: profileError } = await supabase.from('profiles').upsert({

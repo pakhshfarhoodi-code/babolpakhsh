@@ -115,15 +115,15 @@ export const OrderCard: React.FC<OrderCardProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5">
-          {/* If undelivered: Call visitor button */}
-          {order.status === 'undelivered' && assignedVisitor?.phone && (
+          {/* If undelivered: Call visitor or central distribution button */}
+          {order.status === 'undelivered' && (
             <a
-              href={`tel:${assignedVisitor.phone}`}
-              title="تماس با ویزیتور جهت بررسی عدم تحویل"
+              href={`tel:${assignedVisitor?.phone || '01132220000'}`}
+              title="تماس جهت بررسی علت عدم تحویل سفارش"
               className="px-2.5 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 font-bold text-xs flex items-center gap-1 border border-rose-500/30 transition"
             >
               <Phone className="w-3.5 h-3.5" />
-              <span>تماس با ویزیتور</span>
+              <span>{assignedVisitor?.phone ? 'تماس با ویزیتور' : 'تماس با پشتیبانی'}</span>
             </a>
           )}
 

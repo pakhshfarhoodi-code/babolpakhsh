@@ -11,6 +11,7 @@ import {
 } from '../../types';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { LEGACY_MOCK_NAMES } from './useCatalog';
+import { STORAGE_KEYS } from '../utils';
 
 interface UseSupabaseSyncProps {
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
@@ -122,9 +123,36 @@ export function useSupabaseSync({
 
         // 2. Orders (includes loading_bill_id & status='loading')
         const { data: ords } = await supabase!.from('orders').select('*, items:order_items(*)');
-        if (ords && ords.length > 0) {
-          const cleanOrds = ords.filter((o: Order) => !o.items?.some((it) => LEGACY_MOCK_NAMES.has(it.name?.trim())));
+        if (ords) {
+          // Identify orphan orders from deleted supermarkets (supermarket_id is null/missing)
+          const orphanOrders = ords.filter((o: any) => !o.supermarket_id);
+          if (orphanOrders.length > 0) {
+            const orphanIds = orphanOrders.map((o: any) => o.id);
+            supabase!.from('order_items').delete().in('order_id', orphanIds).then(() => {
+              supabase!.from('orders').delete().in('id', orphanIds).then(() => {
+                console.log('Purged orphan orders from Supabase:', orphanIds);
+              });
+            });
+            supabase!.from('reassignment_requests').delete().in('order_id', orphanIds).then(() => {});
+          }
+
+          const cleanOrds = ords
+            .filter(
+              (o: Order) =>
+                Boolean(o.supermarket_id) &&
+                !o.items?.some((it) => LEGACY_MOCK_NAMES.has(it.name?.trim()))
+            )
+            .map((o: Order) => ({
+              ...o,
+              assigned_visitor_id: o.assigned_visitor_id || 'direct',
+              visitor_name:
+                o.visitor_name ||
+                (o.assigned_visitor_id && o.assigned_visitor_id !== 'direct'
+                  ? 'ویزیتور'
+                  : 'پخش مرکزی (مستقیم)'),
+            }));
           setOrders(cleanOrds);
+          localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(cleanOrds));
         }
 
         // 3. Categories - Defensive merge
@@ -168,6 +196,7 @@ export function useSupabaseSync({
             const prof = profileMap.get(sm.id);
             return {
               ...sm,
+              assigned_visitor_id: sm.assigned_visitor_id || 'direct',
               username: prof?.username || localMatch?.username || sm.username || '',
               password: prof?.password || sm.password || localMatch?.password || '123',
             };

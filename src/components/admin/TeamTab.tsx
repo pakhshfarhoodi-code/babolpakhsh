@@ -24,6 +24,7 @@ import {
   User,
   Building,
   Check,
+  AlertTriangle,
 } from 'lucide-react';
 import { SupermarketRegisterModal } from '../SupermarketRegisterModal';
 
@@ -143,6 +144,18 @@ export const TeamTab: React.FC<TeamTabProps> = ({
   const [deletingSupermarket, setDeletingSupermarket] = useState<Supermarket | null>(null);
   const [isDeletingSupermarket, setIsDeletingSupermarket] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Check if invoice or order was previously issued for the supermarket being deleted
+  const supermarketHasInvoices = useMemo(() => {
+    if (!deletingSupermarket) return false;
+    return orders.some((o) => o.supermarket_id === deletingSupermarket.id);
+  }, [deletingSupermarket, orders]);
+
+  // Check if invoice or order was previously issued for the visitor being deleted
+  const visitorHasInvoices = useMemo(() => {
+    if (!deletingVisitor) return false;
+    return orders.some((o) => o.assigned_visitor_id === deletingVisitor.id);
+  }, [deletingVisitor, orders]);
 
   // Staff Account Creation State
   const [isAddStaffOpen, setIsAddStaffOpen] = useState(false);
@@ -1416,10 +1429,23 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                   آیا از حذف فروشگاه <strong className="text-white font-bold">{deletingSupermarket.name}</strong> با مدیریت آقای/خانم {deletingSupermarket.owner} اطمینان دارید؟
                 </p>
                 <p className="text-[11px] text-rose-400/90 pt-1">
-                  این عملیات غیرقابل بازگشت است و رکورد این مشتری حذف خواهد شد.
+                  این عملیات غیرقابل بازگشت است و حساب کاربری این مشتری حذف خواهد شد.
                 </p>
               </div>
             </div>
+
+            {/* Warning if invoice/order previously issued */}
+            {supermarketHasInvoices && (
+              <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs space-y-1">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>هشدار: قبلاً برای این مشتری / فروشگاه فاکتور صادر شده است!</span>
+                </div>
+                <p className="text-[11px] text-amber-200/90 leading-relaxed pr-5">
+                  اطلاعات و سوابق فاکتورهای پیشین در آرشیو ثبت می‌ماند، اما حساب کاربری مشتری به طور کامل حذف خواهد شد.
+                </p>
+              </div>
+            )}
 
             {deleteError && (
               <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-2 text-rose-400 text-xs">
@@ -1617,6 +1643,19 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                 </p>
               </div>
             </div>
+
+            {/* Warning if invoice/order previously issued for this visitor */}
+            {visitorHasInvoices && (
+              <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs space-y-1">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>هشدار: قبلاً برای این شخص (ویزیتور) فاکتور صادر شده است!</span>
+                </div>
+                <p className="text-[11px] text-amber-200/90 leading-relaxed pr-5">
+                  سوابق فاکتورهای پیشین حفظ شده و سفارش‌های در جریان به پخش مرکزی منتقل می‌گردند.
+                </p>
+              </div>
+            )}
 
             {deleteVisitorError && (
               <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-2 text-rose-400 text-xs">

@@ -48,7 +48,7 @@ interface ProductsTabProps {
   onUpdateProduct?: (productId: string, updates: Partial<Omit<Product, 'id' | 'reserved_stock'>>) => { success: boolean; message: string };
   onAddNewProduct: (newProd: Omit<Product, 'id'>) => void;
   onBulkUpsertProducts?: (items: any[]) => Promise<{ success: boolean; createdCount: number; updatedCount: number; message: string }> | { success: boolean; createdCount: number; updatedCount: number; message: string };
-  onDeleteProduct: (productId: string) => { success: boolean; message: string };
+  onDeleteProduct: (productId: string) => Promise<{ success: boolean; message: string }> | { success: boolean; message: string };
   onBulkDeleteProducts?: (productIds: string[]) => Promise<{ success: boolean; message: string; count: number }>;
   onBulkUpdateProducts?: (
     productIds: string[],
@@ -81,7 +81,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   onOpenEditCategory,
   onOpenEditBrand,
 }) => {
-  const { units } = useApp();
+  const { units, orders } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all');
   const [selectedBrandFilter, setSelectedBrandFilter] = useState('all');
@@ -229,6 +229,17 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   // Delete product confirmation
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [deleteFeedback, setDeleteFeedback] = useState<string | null>(null);
+  const [isDeletingProduct, setIsDeletingProduct] = useState(false);
+
+  // Check if invoice or order was previously issued for this product
+  const productHasInvoices = useMemo(() => {
+    if (!productToDelete) return false;
+    return orders.some((o) =>
+      o.items?.some(
+        (i) => i.product_id === productToDelete.id || i.name?.trim() === productToDelete.name?.trim()
+      )
+    );
+  }, [productToDelete, orders]);
 
   // Bulk selection and actions state
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
@@ -441,14 +452,23 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
     setAddModalError(null);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!productToDelete) return;
-    const res = onDeleteProduct(productToDelete.id);
-    if (res.success) {
-      setProductToDelete(null);
-      setDeleteFeedback(null);
-    } else {
-      setDeleteFeedback(res.message);
+    setIsDeletingProduct(true);
+    setDeleteFeedback(null);
+    try {
+      const res = await onDeleteProduct(productToDelete.id);
+      if (res.success) {
+        setProductToDelete(null);
+        setDeleteFeedback(null);
+      } else {
+        setDeleteFeedback(res.message);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در حذف کالا';
+      setDeleteFeedback(msg);
+    } finally {
+      setIsDeletingProduct(false);
     }
   };
 
@@ -1523,10 +1543,30 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
       {productToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-in fade-in">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-5 shadow-2xl space-y-4">
-            <h3 className="font-bold text-sm text-slate-100">حذف کالا از سیستم</h3>
-            <p className="text-xs text-slate-300">
-              آیا از حذف کالای <span className="text-rose-400 font-bold">{productToDelete.name}</span> اطمینان دارید؟
-            </p>
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/15 text-rose-400 flex items-center justify-center shrink-0 border border-rose-500/30">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="font-bold text-sm text-slate-100">حذف کالا از سیستم</h3>
+                <p className="text-xs text-slate-300">
+                  آیا از حذف کالای <span className="text-rose-400 font-bold">{productToDelete.name}</span> اطمینان دارید؟
+                </p>
+              </div>
+            </div>
+
+            {/* Warning if invoice/order was previously issued for this product */}
+            {productHasInvoices && (
+              <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs space-y-1">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>هشدار: قبلاً برای این کالا فاکتور صادر شده است!</span>
+                </div>
+                <p className="text-[11px] text-amber-200/90 leading-relaxed pr-5">
+                  سوابق و مبالغ فاکتورهای قبلی در سیستم حفظ خواهد شد، اما کالا از لیست اقلام و کاتالوگ فروش کلاً حذف می‌گردد.
+                </p>
+              </div>
+            )}
 
             {deleteFeedback && (
               <div className="p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs">
@@ -1537,17 +1577,29 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
               <button
                 type="button"
-                onClick={() => setProductToDelete(null)}
-                className="px-3.5 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-semibold"
+                onClick={() => {
+                  setProductToDelete(null);
+                  setDeleteFeedback(null);
+                }}
+                disabled={isDeletingProduct}
+                className="px-3.5 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-semibold cursor-pointer disabled:opacity-50"
               >
                 انصراف
               </button>
               <button
                 type="button"
                 onClick={handleDeleteConfirm}
-                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition shadow-md shadow-rose-600/30"
+                disabled={isDeletingProduct}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition shadow-md shadow-rose-600/30 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
-                تایید حذف
+                {isDeletingProduct ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>در حال حذف...</span>
+                  </>
+                ) : (
+                  <span>تایید حذف کالا</span>
+                )}
               </button>
             </div>
           </div>

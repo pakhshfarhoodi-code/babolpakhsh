@@ -17,7 +17,33 @@ export const STORAGE_KEYS = {
   UNITS: 'alborz_units_v1',
   SUPERMARKETS: 'alborz_supermarkets_v1',
   VISITORS: 'alborz_visitors_v1',
+  DELETED_PRODUCT_IDS: 'farhoodi_deleted_product_ids_v1',
+  DELETED_SUPERMARKET_IDS: 'farhoodi_deleted_supermarket_ids_v1',
+  DELETED_VISITOR_IDS: 'farhoodi_deleted_visitor_ids_v1',
 } as const;
+
+// Read tombstoned deleted IDs from localStorage
+export const getDeletedIds = (key: string): Set<string> => {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch {
+    return new Set();
+  }
+};
+
+// Add ID to tombstone set to prevent automatic revival during sync
+export const addDeletedId = (key: string, id: string): void => {
+  try {
+    const set = getDeletedIds(key);
+    set.add(id);
+    localStorage.setItem(key, JSON.stringify(Array.from(set)));
+  } catch {
+    // quota fallback
+  }
+};
 
 // Collision-free unique ID generator using crypto.randomUUID
 export const generateUniqueId = (prefix: string): string => {

@@ -11,7 +11,7 @@ import {
 } from '../../types';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { LEGACY_MOCK_NAMES } from './useCatalog';
-import { STORAGE_KEYS } from '../utils';
+import { STORAGE_KEYS, getDeletedIds } from '../utils';
 
 interface UseSupabaseSyncProps {
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
@@ -53,10 +53,23 @@ export function useSupabaseSync({
 
     async function loadFromSupabase() {
       try {
-        // 1. Products - Merge with local state so newly imported items are never wiped out
+        // 1. Products - Merge with local state so newly imported items are never wiped out, but respect deleted tombstones
+        const deletedProductIds = getDeletedIds(STORAGE_KEYS.DELETED_PRODUCT_IDS);
         const { data: prods, error: prodsErr } = await supabase!.from('products').select('*');
         if (!prodsErr && prods !== null) {
-          const validProds = (prods || []).filter((p: Product) => !LEGACY_MOCK_NAMES.has(p.name?.trim()));
+          // If Supabase returned any tombstoned products, actively purge them from Supabase
+          if (deletedProductIds.size > 0) {
+            const resurrected = prods.filter((p: Product) => deletedProductIds.has(p.id));
+            if (resurrected.length > 0) {
+              const resIds = resurrected.map((p: Product) => p.id);
+              supabase!.from('products').delete().in('id', resIds).then(() => {});
+            }
+          }
+
+          const validProds = (prods || []).filter(
+            (p: Product) => !LEGACY_MOCK_NAMES.has(p.name?.trim()) && !deletedProductIds.has(p.id)
+          );
+
           setProducts((prev) => {
             const dbMap = new Map(validProds.map((p: Product) => [p.id, p]));
             const localMap = new Map(prev.map((p: Product) => [p.id, p]));
@@ -86,7 +99,11 @@ export function useSupabaseSync({
             });
 
             prev.forEach((localP) => {
-              if (!LEGACY_MOCK_NAMES.has(localP.name?.trim()) && !dbMap.has(localP.id)) {
+              if (
+                !LEGACY_MOCK_NAMES.has(localP.name?.trim()) &&
+                !deletedProductIds.has(localP.id) &&
+                !dbMap.has(localP.id)
+              ) {
                 merged.push(localP);
                 localOnlyItems.push(localP);
               }
@@ -116,6 +133,10 @@ export function useSupabaseSync({
                 }
               });
             }
+
+            try {
+              localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(merged));
+            } catch {}
 
             return merged;
           });
@@ -185,13 +206,23 @@ export function useSupabaseSync({
         );
 
         // 6. Supermarkets
+        const deletedSupermarketIds = getDeletedIds(STORAGE_KEYS.DELETED_SUPERMARKET_IDS);
         const { data: sms } = await supabase!.from('supermarkets').select('*');
+        if (sms && deletedSupermarketIds.size > 0) {
+          const resurrectedSms = sms.filter((sm: Supermarket) => deletedSupermarketIds.has(sm.id));
+          if (resurrectedSms.length > 0) {
+            const resIds = resurrectedSms.map((s: Supermarket) => s.id);
+            supabase!.from('supermarkets').delete().in('id', resIds).then(() => {});
+            supabase!.from('profiles').delete().in('id', resIds).then(() => {});
+          }
+        }
+
         const cleanSms: Supermarket[] = sms
-          ? sms.filter((sm: Supermarket) => !DUMMY_SUPERMARKET_IDS.has(sm.id))
+          ? sms.filter((sm: Supermarket) => !DUMMY_SUPERMARKET_IDS.has(sm.id) && !deletedSupermarketIds.has(sm.id))
           : [];
 
         setSupermarkets((prev) => {
-          return cleanSms.map((sm: Supermarket) => {
+          const mapped = cleanSms.map((sm: Supermarket) => {
             const localMatch = prev.find((p) => p.id === sm.id);
             const prof = profileMap.get(sm.id);
             return {
@@ -201,16 +232,30 @@ export function useSupabaseSync({
               password: prof?.password || sm.password || localMatch?.password || '123',
             };
           });
+          try {
+            localStorage.setItem(STORAGE_KEYS.SUPERMARKETS, JSON.stringify(mapped));
+          } catch {}
+          return mapped;
         });
 
         // 7. Visitors
+        const deletedVisitorIds = getDeletedIds(STORAGE_KEYS.DELETED_VISITOR_IDS);
         const { data: visData } = await supabase!.from('visitors').select('*');
+        if (visData && deletedVisitorIds.size > 0) {
+          const resurrectedVis = visData.filter((v: Visitor) => deletedVisitorIds.has(v.id));
+          if (resurrectedVis.length > 0) {
+            const resVisIds = resurrectedVis.map((v: Visitor) => v.id);
+            supabase!.from('visitors').delete().in('id', resVisIds).then(() => {});
+            supabase!.from('profiles').delete().in('id', resVisIds).then(() => {});
+          }
+        }
+
         const cleanVis: Visitor[] = visData
-          ? visData.filter((v: Visitor) => !DUMMY_VISITOR_IDS.has(v.id))
+          ? visData.filter((v: Visitor) => !DUMMY_VISITOR_IDS.has(v.id) && !deletedVisitorIds.has(v.id))
           : [];
 
         setVisitors((prev) => {
-          return cleanVis.map((v: Visitor) => {
+          const mapped = cleanVis.map((v: Visitor) => {
             const localMatch = prev.find((p) => p.id === v.id || (p.phone && v.phone && p.phone === v.phone));
             const prof = profileMap.get(v.id);
             let resolvedUsername = prof?.username || v.username || localMatch?.username || '';
@@ -224,6 +269,10 @@ export function useSupabaseSync({
               password: prof?.password || v.password || localMatch?.password || '123456',
             };
           });
+          try {
+            localStorage.setItem(STORAGE_KEYS.VISITORS, JSON.stringify(mapped));
+          } catch {}
+          return mapped;
         });
 
         // 8. Loading Bills (with loading_bill_items fallback join)

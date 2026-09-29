@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Product, Category, ProductPriceHistory } from '../../types';
 import { INITIAL_CATEGORIES, INITIAL_BRANDS, INITIAL_PRODUCTS } from '../../data/initialData';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
-import { STORAGE_KEYS, generateUniqueId } from '../utils';
+import { STORAGE_KEYS, generateUniqueId, addDeletedId } from '../utils';
 
 export const LEGACY_MOCK_NAMES = new Set([
   'بستنی مگنوم شکلاتی میهن',
@@ -599,19 +599,45 @@ export function useCatalog() {
     };
   }, [products, categories]);
 
-  // Delete product (Admin full authority: cleans up product and associated references)
-  const deleteProduct = useCallback((productId: string) => {
+  // Delete product (Admin full authority: cleans up product and unlinks FK references so historical invoices remain valid)
+  const deleteProduct = useCallback(async (productId: string) => {
     const prod = products.find((p) => p.id === productId);
     if (!prod) return { success: false, message: 'کالای مورد نظر یافت نشد.' };
 
-    setProducts((prev) => prev.filter((p) => p.id !== productId));
+    // Record tombstone immediately to prevent any auto-sync resurrection
+    addDeletedId(STORAGE_KEYS.DELETED_PRODUCT_IDS, productId);
+
+    // Update local state and persist to localStorage
+    setProducts((prev) => {
+      const next = prev.filter((p) => p.id !== productId);
+      try {
+        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
     if (isSupabaseConfigured && supabase) {
-      // First clean up any order items referencing this product to satisfy foreign keys
-      supabase.from('order_items').delete().eq('product_id', productId).then(() => {
-        supabase.from('products').delete().eq('id', productId).then(({ error }) => {
-          if (error) console.error('خطا در حذف کالا از Supabase:', error);
-        });
-      });
+      try {
+        // 1. Unlink product_id in order_items so historical invoice line items preserve their name, price, quantity
+        await supabase.from('order_items').update({ product_id: null }).eq('product_id', productId);
+        // 2. Unlink product_id in loading_bill_items
+        await supabase.from('loading_bill_items').update({ product_id: null }).eq('product_id', productId);
+        // 3. Unlink product_id in inventory_transactions
+        await supabase.from('inventory_transactions').update({ product_id: null }).eq('product_id', productId);
+        // 4. Delete price history
+        await supabase.from('product_price_history').delete().eq('product_id', productId);
+        // 5. Delete product row from Supabase
+        const { error } = await supabase.from('products').delete().eq('id', productId);
+        if (error) {
+          console.warn('Supabase product delete warning, performing cascade cleanup:', error.message);
+          await supabase.from('inventory_transactions').delete().eq('product_id', productId);
+          await supabase.from('loading_bill_items').delete().eq('product_id', productId);
+          await supabase.from('order_items').delete().eq('product_id', productId);
+          await supabase.from('products').delete().eq('id', productId);
+        }
+      } catch (err) {
+        console.error('Error during product deletion on Supabase:', err);
+      }
     }
     return { success: true, message: `کالای «${prod.name}» با موفقیت حذف گردید.` };
   }, [products]);
@@ -622,13 +648,30 @@ export function useCatalog() {
       return { success: false, message: 'هیچ کالایی برای حذف انتخاب نشده است.', count: 0 };
     }
 
+    productIds.forEach((id) => addDeletedId(STORAGE_KEYS.DELETED_PRODUCT_IDS, id));
+
     const idsToDelete = new Set(productIds);
-    setProducts((prev) => prev.filter((p) => !idsToDelete.has(p.id)));
+    setProducts((prev) => {
+      const next = prev.filter((p) => !idsToDelete.has(p.id));
+      try {
+        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
 
     if (isSupabaseConfigured && supabase) {
       try {
-        await supabase.from('order_items').delete().in('product_id', productIds);
-        await supabase.from('products').delete().in('id', productIds);
+        await supabase.from('order_items').update({ product_id: null }).in('product_id', productIds);
+        await supabase.from('loading_bill_items').update({ product_id: null }).in('product_id', productIds);
+        await supabase.from('inventory_transactions').update({ product_id: null }).in('product_id', productIds);
+        await supabase.from('product_price_history').delete().in('product_id', productIds);
+        const { error } = await supabase.from('products').delete().in('id', productIds);
+        if (error) {
+          await supabase.from('inventory_transactions').delete().in('product_id', productIds);
+          await supabase.from('loading_bill_items').delete().in('product_id', productIds);
+          await supabase.from('order_items').delete().in('product_id', productIds);
+          await supabase.from('products').delete().in('id', productIds);
+        }
       } catch (err) {
         console.error('Error deleting products from Supabase:', err);
       }
@@ -639,7 +682,7 @@ export function useCatalog() {
       message: `${productIds.length} کالا با موفقیت از سیستم حذف شدند.`,
       count: productIds.length,
     };
-  }, [products]);
+  }, []);
 
   // Bulk Update Products
   const bulkUpdateProducts = useCallback(async (

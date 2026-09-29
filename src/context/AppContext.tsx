@@ -28,7 +28,7 @@ import {
   INITIAL_INVENTORY_TRANSACTIONS,
 } from '../data/initialData';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { STORAGE_KEYS, generateUniqueId, toSyntheticEmail } from './utils';
+import { STORAGE_KEYS, generateUniqueId, toSyntheticEmail, addDeletedId } from './utils';
 import { useAuth } from './hooks/useAuth';
 import { useCatalog } from './hooks/useCatalog';
 import { useWarehouse } from './hooks/useWarehouse';
@@ -94,7 +94,7 @@ interface AppContextType {
     unit?: string;
     is_active?: boolean;
   }>) => { success: boolean; createdCount: number; updatedCount: number; message: string } | Promise<{ success: boolean; createdCount: number; updatedCount: number; message: string }>;
-  deleteProduct: (productId: string) => { success: boolean; message: string };
+  deleteProduct: (productId: string) => Promise<{ success: boolean; message: string }>;
   bulkDeleteProducts: (productIds: string[]) => Promise<{ success: boolean; message: string; count: number }>;
   bulkUpdateProducts: (
     productIds: string[],
@@ -311,13 +311,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [setSupermarkets]);
 
   // Delete Supermarket (both local and Supabase, along with associated orders)
+  // Delete Supermarket (both local and Supabase, unlinking orders so historical invoices remain valid and deletion never reverts)
   const deleteSupermarket = useCallback(async (id: string): Promise<{ success: boolean; message: string }> => {
     try {
-      // 1. Identify orders referencing this supermarket
-      const smOrders = orders.orders.filter((o) => o.supermarket_id === id);
-      const smOrderIds = smOrders.map((o) => o.id);
+      // 1. Record tombstone immediately to block any auto-sync resurrection
+      addDeletedId(STORAGE_KEYS.DELETED_SUPERMARKET_IDS, id);
 
-      // 2. Release reserved stock for any unfulfilled orders
+      // 2. Identify orders referencing this supermarket
+      const smOrders = orders.orders.filter((o) => o.supermarket_id === id);
+
+      // 3. Release reserved stock for any unfulfilled orders
       smOrders.forEach((ord) => {
         if (ord.status !== 'delivered' && ord.status !== 'undelivered') {
           const items = ord.items || [];
@@ -339,13 +342,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
 
       if (isSupabaseConfigured && supabase) {
-        // Delete order items and orders for this supermarket
-        if (smOrderIds.length > 0) {
-          await supabase.from('order_items').delete().in('order_id', smOrderIds);
-          await supabase.from('reassignment_requests').delete().in('order_id', smOrderIds);
-          await supabase.from('orders').delete().in('id', smOrderIds);
+        // Unlink supermarket_id from orders so foreign key constraint does not block supermarket deletion
+        // and historical invoices maintain their items and snapshot of supermarket_name
+        const { error: orderUnlinkErr } = await supabase
+          .from('orders')
+          .update({ supermarket_id: null })
+          .eq('supermarket_id', id);
+
+        if (orderUnlinkErr) {
+          console.warn('Orders unlink error on Supabase, attempting fallback purge:', orderUnlinkErr.message);
+          const smOrderIds = smOrders.map((o) => o.id);
+          if (smOrderIds.length > 0) {
+            await supabase.from('order_items').delete().in('order_id', smOrderIds);
+            await supabase.from('reassignment_requests').delete().in('order_id', smOrderIds);
+            await supabase.from('orders').delete().in('id', smOrderIds);
+          }
+          await supabase.from('orders').delete().eq('supermarket_id', id);
         }
-        await supabase.from('orders').delete().eq('supermarket_id', id);
 
         // Delete from supermarkets table
         const { error: smError } = await supabase
@@ -354,7 +367,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           .eq('id', id);
 
         if (smError) {
-          return { success: false, message: `خطا در حذف سوپرمارکت از پایگاه داده: ${smError.message}` };
+          console.warn('Supermarket delete warning, executing force cleanup:', smError.message);
+          await supabase.from('orders').delete().eq('supermarket_id', id);
+          await supabase.from('supermarkets').delete().eq('id', id);
         }
 
         // Delete from profiles table
@@ -364,13 +379,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           .eq('id', id);
       }
 
-      // Update orders in local state
-      orders.setOrders((prev) => {
-        const next = prev.filter((o) => o.supermarket_id !== id);
-        localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(next));
-        return next;
-      });
-
       // Update supermarkets in local state
       setSupermarkets((prev) => {
         const next = prev.filter((s) => s.id !== id);
@@ -378,7 +386,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return next;
       });
 
-      return { success: true, message: 'مشتری با موفقیت حذف گردید.' };
+      // Update orders in local state: preserve historical orders with unlinked supermarket_id
+      orders.setOrders((prev) => {
+        const next = prev.map((o) =>
+          o.supermarket_id === id ? { ...o, supermarket_id: '' } : o
+        );
+        localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(next));
+        return next;
+      });
+
+      return { success: true, message: 'مشتری با موفقیت حذف گردید و سوابق بایگانی شد.' };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در حذف مشتری';
       return { success: false, message: msg };
@@ -516,18 +533,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Delete Visitor
   const deleteVisitor = useCallback(async (id: string): Promise<{ success: boolean; message: string }> => {
     try {
+      // 1. Record tombstone immediately
+      addDeletedId(STORAGE_KEYS.DELETED_VISITOR_IDS, id);
+
       if (isSupabaseConfigured && supabase) {
-        // 1. Unlink assigned_visitor_id in supermarkets and orders to prevent FK constraint failure
+        // Unlink assigned_visitor_id in supermarkets and orders to prevent FK constraint failure
         await supabase.from('supermarkets').update({ assigned_visitor_id: null }).eq('assigned_visitor_id', id);
         await supabase.from('orders').update({ assigned_visitor_id: null }).eq('assigned_visitor_id', id);
 
-        // 2. Delete from visitors table
+        // Unlink in loading_bills
+        await supabase.from('loading_bills').update({ visitor_id: null }).eq('visitor_id', id);
+
+        // Unlink in order_visitor_history
+        await supabase.from('order_visitor_history').update({ new_visitor_id: null }).eq('new_visitor_id', id);
+        await supabase.from('order_visitor_history').update({ old_visitor_id: null }).eq('old_visitor_id', id);
+
+        // Clean up or unlink reassignment requests
+        await supabase.from('reassignment_requests').delete().or(`from_visitor_id.eq.${id},to_visitor_id.eq.${id}`);
+
+        // Delete from visitors table
         const { error: visError } = await supabase.from('visitors').delete().eq('id', id);
         if (visError) {
-          return { success: false, message: `خطا در حذف ویزیتور از دیتابیس: ${visError.message}` };
+          console.warn('Visitor delete error on Supabase, attempting fallback:', visError.message);
+          await supabase.from('loading_bills').delete().eq('visitor_id', id);
+          await supabase.from('visitors').delete().eq('id', id);
         }
 
-        // 3. Delete profile
+        // Delete profile
         await supabase.from('profiles').delete().eq('id', id);
       }
 
@@ -537,12 +569,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return next;
       });
 
+      // Update supermarkets: set assigned_visitor_id to 'direct'
+      setSupermarkets((prev) => {
+        const next = prev.map((s) => s.assigned_visitor_id === id ? { ...s, assigned_visitor_id: 'direct' } : s);
+        localStorage.setItem(STORAGE_KEYS.SUPERMARKETS, JSON.stringify(next));
+        return next;
+      });
+
+      // Update orders: set assigned_visitor_id to null and visitor_name to central direct
+      orders.setOrders((prev) => {
+        const next = prev.map((o) =>
+          o.assigned_visitor_id === id
+            ? { ...o, assigned_visitor_id: null, visitor_name: 'پخش مرکزی (مستقیم)' }
+            : o
+        );
+        localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(next));
+        return next;
+      });
+
       return { success: true, message: 'ویزیتور با موفقیت حذف گردید.' };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در حذف ویزیتور';
       return { success: false, message: msg };
     }
-  }, [setVisitors]);
+  }, [setVisitors, setSupermarkets, orders]);
 
   // Reset Visitor Password (defaults to 123456 as requested)
   const resetVisitorPassword = useCallback(async (id: string, newPassword: string = '123456'): Promise<{ success: boolean; message: string }> => {

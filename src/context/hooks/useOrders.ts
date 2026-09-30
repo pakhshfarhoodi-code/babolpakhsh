@@ -136,6 +136,7 @@ export function useOrders({
           phone: '۰۹۱۱۰۰۰۰۰۰۰',
           address: 'ثبت شده در سامانه مرکزی پخش',
           assigned_visitor_id: 'direct',
+          username: 'supermarket',
           credit_limit: 50000000,
           current_debt: 0,
           is_active: true,
@@ -247,29 +248,126 @@ export function useOrders({
       }));
 
       addInventoryTransactions(newTxList);
-      setOrders((prev) => [newOrder, ...prev]);
+      setOrders((prev) => {
+        const next = [newOrder, ...prev.filter((o) => o.id !== newOrder.id)];
+        try {
+          localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(next));
+        } catch {}
+        return next;
+      });
 
-      // Send to Supabase
+      // Send to Supabase with comprehensive resilience & direct fallback
       if (isSupabaseConfigured && supabase) {
-        supabase
-          .rpc('create_order_transaction', {
-            p_order_id: newOrder.id,
-            p_supermarket_id: newOrder.supermarket_id,
-            p_supermarket_name: newOrder.supermarket_name,
-            p_assigned_visitor_id: finalAssignedVisitorId === 'direct' ? null : finalAssignedVisitorId,
-            p_visitor_name: newOrder.visitor_name,
-            p_status: newOrder.status,
-            p_total_amount: newOrder.total_amount,
-            p_items: payload.items.map((i) => ({
-              productId: i.productId,
-              name: i.name,
-              price: i.price,
-              quantity: i.quantity,
-            })),
-          })
-          .then(({ error }) => {
-            if (error) console.error('خطا در ثبت سفارش روی Supabase:', error);
-          });
+        (async () => {
+          try {
+            // A. Ensure supermarket exists in profiles & supermarkets to prevent FK violation
+            if (newOrder.supermarket_id) {
+              const sm = supermarkets.find((s) => s.id === newOrder.supermarket_id) || supermarket;
+              if (sm) {
+                await supabase.from('profiles').upsert({
+                  id: sm.id,
+                  name: sm.name,
+                  role: 'supermarket',
+                  phone: sm.phone || '',
+                  username: (sm as any).username || sm.id,
+                }, { onConflict: 'id' }).then(() => {});
+
+                await supabase.from('supermarkets').upsert({
+                  id: sm.id,
+                  name: sm.name,
+                  owner: sm.owner || 'مدیریت فروشگاه',
+                  phone: sm.phone || '',
+                  address: sm.address || 'تهران',
+                  assigned_visitor_id: null,
+                  is_active: sm.is_active ?? true,
+                }, { onConflict: 'id' }).then(() => {});
+              }
+            }
+
+            const validVisitorId =
+              finalAssignedVisitorId && finalAssignedVisitorId !== 'direct'
+                ? (visitors.some((v) => v.id === finalAssignedVisitorId) ? finalAssignedVisitorId : null)
+                : null;
+
+            // B. Try atomic RPC create_order_transaction
+            const { error: rpcError } = await supabase.rpc('create_order_transaction', {
+              p_order_id: newOrder.id,
+              p_supermarket_id: newOrder.supermarket_id || null,
+              p_supermarket_name: newOrder.supermarket_name,
+              p_assigned_visitor_id: validVisitorId,
+              p_visitor_name: newOrder.visitor_name,
+              p_status: newOrder.status,
+              p_total_amount: newOrder.total_amount,
+              p_items: payload.items.map((i) => ({
+                productId: i.productId,
+                name: i.name,
+                price: i.price,
+                quantity: i.quantity,
+              })),
+            });
+
+            // C. If RPC failed or function is missing, fall back to direct table inserts
+            if (rpcError) {
+              console.warn('RPC create_order_transaction note, performing direct table upsert fallback:', rpcError.message);
+
+              const { error: orderErr } = await supabase.from('orders').upsert({
+                id: newOrder.id,
+                supermarket_id: newOrder.supermarket_id || null,
+                supermarket_name: newOrder.supermarket_name,
+                assigned_visitor_id: validVisitorId,
+                visitor_name: newOrder.visitor_name,
+                status: newOrder.status,
+                total_amount: newOrder.total_amount,
+                order_source: newOrder.order_source || 'supermarket',
+                order_date: newOrder.order_date,
+              }, { onConflict: 'id' });
+
+              if (orderErr) {
+                console.warn('Direct order upsert warning, retrying with unlinked foreign keys:', orderErr.message);
+                await supabase.from('orders').upsert({
+                  id: newOrder.id,
+                  supermarket_id: null,
+                  supermarket_name: newOrder.supermarket_name,
+                  assigned_visitor_id: null,
+                  visitor_name: newOrder.visitor_name,
+                  status: newOrder.status,
+                  total_amount: newOrder.total_amount,
+                  order_source: newOrder.order_source || 'supermarket',
+                  order_date: newOrder.order_date,
+                }, { onConflict: 'id' });
+              }
+
+              // Line items
+              const itemRows = payload.items.map((i) => ({
+                order_id: newOrder.id,
+                product_id: i.productId,
+                name: i.name,
+                price: i.price,
+                quantity: i.quantity,
+              }));
+              await supabase.from('order_items').upsert(itemRows).then(({ error: itErr }) => {
+                if (itErr) {
+                  const safeItemRows = itemRows.map(({ product_id, ...rest }) => ({ ...rest, product_id: null }));
+                  supabase.from('order_items').upsert(safeItemRows);
+                }
+              });
+
+              // Increment reserved stock on products in Supabase
+              for (const item of payload.items) {
+                try {
+                  const { data: currP } = await supabase.from('products').select('reserved_stock').eq('id', item.productId).single();
+                  if (currP) {
+                    await supabase.from('products').update({
+                      reserved_stock: (currP.reserved_stock || 0) + item.quantity,
+                    }).eq('id', item.productId);
+                  }
+                } catch {}
+              }
+            }
+          } catch (syncErr) {
+            console.error('Unexpected error syncing order to Supabase:', syncErr);
+          }
+        })();
       }
 
       return {

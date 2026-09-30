@@ -186,35 +186,74 @@ export function useSupabaseSync({
         // 2. Orders (includes loading_bill_id & status='loading')
         const { data: ords } = await supabase!.from('orders').select('*, items:order_items(*)');
         if (ords) {
-          // Identify orphan orders from deleted supermarkets (supermarket_id is null/missing)
-          const orphanOrders = ords.filter((o: any) => !o.supermarket_id);
-          if (orphanOrders.length > 0) {
-            const orphanIds = orphanOrders.map((o: any) => o.id);
-            supabase!.from('order_items').delete().in('order_id', orphanIds).then(() => {
-              supabase!.from('orders').delete().in('id', orphanIds).then(() => {
-                console.log('Purged orphan orders from Supabase:', orphanIds);
-              });
-            });
-            supabase!.from('reassignment_requests').delete().in('order_id', orphanIds).then(() => {});
-          }
-
           const cleanOrds = ords
             .filter(
               (o: Order) =>
-                Boolean(o.supermarket_id) &&
+                Boolean(o.id) &&
                 !o.items?.some((it) => LEGACY_MOCK_NAMES.has(it.name?.trim()))
             )
             .map((o: Order) => ({
               ...o,
+              supermarket_id: o.supermarket_id || 'direct-store',
+              supermarket_name: o.supermarket_name || 'فروشگاه طرف قرارداد',
               assigned_visitor_id: o.assigned_visitor_id || 'direct',
               visitor_name:
                 o.visitor_name ||
                 (o.assigned_visitor_id && o.assigned_visitor_id !== 'direct'
                   ? 'ویزیتور'
-                  : 'پخش مرکزی (مستقیم)'),
+                  : 'خرید مستقیم از پخش مرکزی'),
             }));
-          setOrders(cleanOrds);
-          localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(cleanOrds));
+
+          setOrders((prev) => {
+            const dbIds = new Set(cleanOrds.map((o) => o.id));
+            const localOnly = prev.filter(
+              (o) => !dbIds.has(o.id) && !o.items?.some((it) => LEGACY_MOCK_NAMES.has(it.name?.trim()))
+            );
+            const merged = [...cleanOrds, ...localOnly];
+
+            // Re-sync any local-only orders to Supabase in the background
+            if (localOnly.length > 0 && isSupabaseConfigured && supabase) {
+              localOnly.forEach(async (pendingOrder) => {
+                try {
+                  const validVisId =
+                    pendingOrder.assigned_visitor_id && pendingOrder.assigned_visitor_id !== 'direct'
+                      ? pendingOrder.assigned_visitor_id
+                      : null;
+                  await supabase!.from('orders').upsert({
+                    id: pendingOrder.id,
+                    supermarket_id: pendingOrder.supermarket_id && pendingOrder.supermarket_id !== 'direct-store' ? pendingOrder.supermarket_id : null,
+                    supermarket_name: pendingOrder.supermarket_name,
+                    assigned_visitor_id: validVisId,
+                    visitor_name: pendingOrder.visitor_name || 'خرید مستقیم از پخش مرکزی',
+                    status: pendingOrder.status,
+                    total_amount: pendingOrder.total_amount,
+                    order_source: pendingOrder.order_source || 'supermarket',
+                    order_date: pendingOrder.order_date,
+                  }, { onConflict: 'id' });
+
+                  if (pendingOrder.items && pendingOrder.items.length > 0) {
+                    await supabase!.from('order_items').upsert(
+                      pendingOrder.items.map((i) => ({
+                        order_id: pendingOrder.id,
+                        product_id: i.product_id,
+                        name: i.name,
+                        price: i.price,
+                        quantity: i.quantity,
+                      }))
+                    );
+                  }
+                } catch (e) {
+                  console.warn('Re-syncing pending local order note:', e);
+                }
+              });
+            }
+
+            try {
+              localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(merged));
+            } catch {}
+
+            return merged;
+          });
         }
 
         // 3. Categories - Defensive merge

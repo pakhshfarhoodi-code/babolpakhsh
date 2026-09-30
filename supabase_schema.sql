@@ -174,37 +174,89 @@ CREATE OR REPLACE FUNCTION create_order_transaction(
   p_status TEXT,
   p_total_amount NUMERIC,
   p_items JSONB
-) RETURNS VOID AS $$
+) RETURNS JSON AS $$
 DECLARE
   item JSONB;
+  v_assigned_vis TEXT;
+  v_sm_id TEXT;
 BEGIN
-  -- Insert Main Order with assigned visitor
-  INSERT INTO orders (id, supermarket_id, supermarket_name, assigned_visitor_id, visitor_name, status, total_amount)
-  VALUES (p_order_id, p_supermarket_id, p_supermarket_name, p_assigned_visitor_id, p_visitor_name, p_status, p_total_amount);
+  -- Sanitize visitor ID: if 'direct' or not present in visitors, use NULL
+  IF p_assigned_visitor_id IS NOT NULL AND p_assigned_visitor_id != 'direct' THEN
+    IF EXISTS (SELECT 1 FROM public.visitors WHERE id = p_assigned_visitor_id) THEN
+      v_assigned_vis := p_assigned_visitor_id;
+    ELSE
+      v_assigned_vis := NULL;
+    END IF;
+  ELSE
+    v_assigned_vis := NULL;
+  END IF;
+
+  -- Sanitize supermarket ID: if not present in supermarkets, use NULL to avoid FK error
+  IF p_supermarket_id IS NOT NULL AND p_supermarket_id != '' THEN
+    IF EXISTS (SELECT 1 FROM public.supermarkets WHERE id = p_supermarket_id) THEN
+      v_sm_id := p_supermarket_id;
+    ELSE
+      v_sm_id := NULL;
+    END IF;
+  ELSE
+    v_sm_id := NULL;
+  END IF;
+
+  -- Insert or replace Order with assigned visitor
+  INSERT INTO orders (id, supermarket_id, supermarket_name, assigned_visitor_id, visitor_name, status, total_amount, order_date)
+  VALUES (
+    p_order_id, 
+    v_sm_id, 
+    p_supermarket_name, 
+    v_assigned_vis, 
+    COALESCE(p_visitor_name, 'خرید مستقیم از پخش مرکزی'), 
+    COALESCE(p_status, 'assigned'), 
+    p_total_amount,
+    NOW()
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    supermarket_name = EXCLUDED.supermarket_name,
+    assigned_visitor_id = EXCLUDED.assigned_visitor_id,
+    visitor_name = EXCLUDED.visitor_name,
+    status = EXCLUDED.status,
+    total_amount = EXCLUDED.total_amount;
 
   -- Process line items, allocate reserved stock, audit ledger
-  FOR item IN SELECT * FROM jsonb_array_elements(p_items) LOOP
-    -- Increment reserved_stock
-    UPDATE products 
-    SET reserved_stock = reserved_stock + (item->>'quantity')::INTEGER 
-    WHERE id = item->>'productId';
+  IF p_items IS NOT NULL THEN
+    FOR item IN SELECT * FROM jsonb_array_elements(p_items) LOOP
+      -- Increment reserved_stock
+      UPDATE products 
+      SET reserved_stock = COALESCE(reserved_stock, 0) + (item->>'quantity')::INTEGER 
+      WHERE id = item->>'productId';
 
-    -- Log transaction in ledger
-    INSERT INTO inventory_transactions (product_id, transaction_type, quantity, reference_id)
-    VALUES (item->>'productId', 'reserve', (item->>'quantity')::INTEGER, p_order_id);
+      -- Log transaction in ledger
+      INSERT INTO inventory_transactions (id, product_id, transaction_type, quantity, reference_id, created_at)
+      VALUES (
+        'tx-' || extract(epoch from now())::bigint || '-' || (item->>'productId'),
+        item->>'productId', 
+        'reserve', 
+        (item->>'quantity')::INTEGER, 
+        p_order_id,
+        NOW()
+      );
 
-    -- Insert Item Detail
-    INSERT INTO order_items (order_id, product_id, name, price, quantity)
-    VALUES (
-      p_order_id,
-      item->>'productId',
-      item->>'name',
-      (item->>'price')::NUMERIC,
-      (item->>'quantity')::INTEGER
-    );
-  END LOOP;
+      -- Insert Item Detail
+      INSERT INTO order_items (order_id, product_id, name, price, quantity)
+      VALUES (
+        p_order_id,
+        item->>'productId',
+        item->>'name',
+        (item->>'price')::NUMERIC,
+        (item->>'quantity')::INTEGER
+      );
+    END LOOP;
+  END IF;
+
+  RETURN json_build_object('success', true, 'message', 'سفارش با موفقیت ثبت شد.');
+EXCEPTION WHEN OTHERS THEN
+  RETURN json_build_object('success', false, 'message', SQLERRM);
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- 17. Stored Procedure: Approve Loading Bill (Commit delivery dispatch & subtract physical stocks)
 CREATE OR REPLACE FUNCTION approve_loading_bill_transaction(

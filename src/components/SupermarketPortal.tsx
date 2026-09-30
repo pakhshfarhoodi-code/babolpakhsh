@@ -325,7 +325,7 @@ export const SupermarketPortal: React.FC = () => {
     try {
       const res = createOrder({
         supermarketId: currentStore?.id || '',
-        visitorId: assignedVisitor?.id || visitors[0]?.id || '',
+        visitorId: assignedVisitor?.id || 'direct',
         orderSource: 'supermarket',
         items,
       });

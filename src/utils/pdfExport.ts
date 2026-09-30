@@ -10,14 +10,21 @@ export async function exportElementToPdf(
   fileName: string = 'factor.pdf'
 ): Promise<boolean> {
   try {
-    // 1. Ensure all images are loaded
+    // 1. Ensure all images are loaded (with 1s timeout to prevent hanging)
     const images = Array.from(element.querySelectorAll('img'));
     await Promise.all(
       images.map((img) => {
         if (img.complete) return Promise.resolve();
         return new Promise((resolve) => {
-          img.onload = resolve;
-          img.onerror = resolve;
+          const timeout = setTimeout(resolve, 800);
+          img.onload = () => {
+            clearTimeout(timeout);
+            resolve(true);
+          };
+          img.onerror = () => {
+            clearTimeout(timeout);
+            resolve(false);
+          };
         });
       })
     );
@@ -26,15 +33,21 @@ export async function exportElementToPdf(
     const canvas = await html2canvas(element, {
       scale: 2, // High-DPI crisp quality
       useCORS: true,
-      allowTaint: true,
+      allowTaint: false, // Critical: must be false so toDataURL does NOT throw SecurityError
       backgroundColor: '#ffffff',
       logging: false,
       scrollX: 0,
       scrollY: 0,
-      windowWidth: 1024,
+      imageTimeout: 1000,
     });
 
-    const imgData = canvas.toDataURL('image/jpeg', 0.95);
+    let imgData: string;
+    try {
+      imgData = canvas.toDataURL('image/jpeg', 0.95);
+    } catch {
+      imgData = canvas.toDataURL('image/png');
+    }
+
     const pdf = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
@@ -82,15 +95,16 @@ export async function exportElementToPdf(
     }
 
     const cleanName = fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`;
-    const folderPrefixedName = `فاکتورها_${cleanName}`;
     const pdfBlob = pdf.output('blob');
     let savedSuccessfully = false;
 
-    // 3. Desktop Native "Save As" Dialog (Chrome, Edge, Windows/Mac)
-    if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
+    const isInsideIframe = typeof window !== 'undefined' && window.self !== window.top;
+
+    // 3. Desktop Native "Save As" Dialog (Chrome, Edge on Windows/Mac outside iframe)
+    if (!isInsideIframe && typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
       try {
         const fileHandle = await (window as any).showSaveFilePicker({
-          suggestedName: folderPrefixedName,
+          suggestedName: cleanName,
           types: [
             {
               description: 'فایل فاکتور PDF (پخش فرهودی)',
@@ -103,7 +117,6 @@ export async function exportElementToPdf(
         await writableStream.close();
         savedSuccessfully = true;
       } catch (pickerErr: any) {
-        // If user cancelled, return gracefully
         if (pickerErr?.name === 'AbortError') {
           return true;
         }
@@ -112,9 +125,9 @@ export async function exportElementToPdf(
     }
 
     // 4. Mobile Native Share/Save Sheet (Android/iOS Save to Files / Downloads)
-    if (!savedSuccessfully && typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
+    if (!savedSuccessfully && !isInsideIframe && typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
       try {
-        const pdfFile = new File([pdfBlob], folderPrefixedName, {
+        const pdfFile = new File([pdfBlob], cleanName, {
           type: 'application/pdf',
         });
         if (navigator.canShare({ files: [pdfFile] })) {
@@ -133,26 +146,33 @@ export async function exportElementToPdf(
       }
     }
 
-    // 5. Universal Standard Download Fallback
+    // 5. Universal Standard Download Fallback (Creates genuine browser download prompt)
     if (!savedSuccessfully) {
       const blobUrl = URL.createObjectURL(pdfBlob);
       const link = document.createElement('a');
       link.href = blobUrl;
-      link.download = folderPrefixedName;
+      link.download = cleanName;
       link.style.display = 'none';
       document.body.appendChild(link);
       link.click();
       setTimeout(() => {
-        document.body.removeChild(link);
+        if (document.body.contains(link)) {
+          document.body.removeChild(link);
+        }
         URL.revokeObjectURL(blobUrl);
-      }, 1000);
+      }, 3000);
       savedSuccessfully = true;
     }
 
     return true;
   } catch (error) {
-    console.error('Error exporting invoice to PDF:', error);
-    return false;
+    console.warn('Direct PDF canvas generation encountered issue, opening print/save-as-pdf dialog:', error);
+    try {
+      printInvoiceDocument(element);
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
 

@@ -111,14 +111,16 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
     if (success) {
       setExportFeedback({
         type: 'success',
-        message: 'فایل PDF فاکتور با موفقیت ایجاد و دانلود شد.',
+        message: 'فایل PDF آماده شد و پنجره ذخیره/دانلود باز گردید.',
       });
       setTimeout(() => setExportFeedback(null), 4000);
     } else {
+      printInvoiceDocument(printRef.current);
       setExportFeedback({
-        type: 'error',
-        message: 'خطا در تولید فایل PDF. می‌توانید از دکمه چاپ استفاده کنید.',
+        type: 'success',
+        message: 'صفحه ذخیره باز شد. گزینه «ذخیره به عنوان PDF» را انتخاب نمایید.',
       });
+      setTimeout(() => setExportFeedback(null), 5000);
     }
   };
 

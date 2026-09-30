@@ -84,6 +84,7 @@ export async function exportElementToPdf(
     const cleanName = fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`;
     const folderPrefixedName = `فاکتورها_${cleanName}`;
     const pdfBlob = pdf.output('blob');
+    let savedSuccessfully = false;
 
     // 3. Desktop Native "Save As" Dialog (Chrome, Edge, Windows/Mac)
     if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
@@ -100,18 +101,18 @@ export async function exportElementToPdf(
         const writableStream = await fileHandle.createWritable();
         await writableStream.write(pdfBlob);
         await writableStream.close();
-        return true;
+        savedSuccessfully = true;
       } catch (pickerErr: any) {
         // If user cancelled, return gracefully
         if (pickerErr?.name === 'AbortError') {
           return true;
         }
-        // Fallback to other save methods if rejected
+        console.warn('Native file picker blocked or failed, trying fallback...', pickerErr);
       }
     }
 
     // 4. Mobile Native Share/Save Sheet (Android/iOS Save to Files / Downloads)
-    if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
+    if (!savedSuccessfully && typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
       try {
         const pdfFile = new File([pdfBlob], folderPrefixedName, {
           type: 'application/pdf',
@@ -122,28 +123,31 @@ export async function exportElementToPdf(
             text: `فاکتور رسمی ${cleanName.replace('.pdf', '')}`,
             files: [pdfFile],
           });
-          return true;
+          savedSuccessfully = true;
         }
       } catch (shareErr: any) {
         if (shareErr?.name === 'AbortError') {
           return true;
         }
-        // Fallback to standard blob download
+        console.warn('Navigator share blocked or failed, trying fallback...', shareErr);
       }
     }
 
     // 5. Universal Standard Download Fallback
-    const blobUrl = URL.createObjectURL(pdfBlob);
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = folderPrefixedName;
-    link.style.display = 'none';
-    document.body.appendChild(link);
-    link.click();
-    setTimeout(() => {
-      document.body.removeChild(link);
-      URL.revokeObjectURL(blobUrl);
-    }, 1000);
+    if (!savedSuccessfully) {
+      const blobUrl = URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = folderPrefixedName;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(blobUrl);
+      }, 1000);
+      savedSuccessfully = true;
+    }
 
     return true;
   } catch (error) {

@@ -189,23 +189,6 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={handleExportPdf}
-              disabled={isExportingPdf}
-              className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold transition flex items-center gap-1 cursor-pointer disabled:opacity-50 text-xs"
-            >
-              <FileDown className="w-3.5 h-3.5" />
-              <span>{isExportingPdf ? 'در حال خروجی...' : 'دانلود PDF'}</span>
-            </button>
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition flex items-center gap-1 cursor-pointer text-xs"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>چاپ فاکتور</span>
-            </button>
-            <button
-              type="button"
               onClick={onClose}
               className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer flex items-center gap-1 text-xs"
               title="بستن پنجره فاکتور"

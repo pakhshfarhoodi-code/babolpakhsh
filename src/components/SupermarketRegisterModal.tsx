@@ -260,7 +260,7 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-3.5 pl-10 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500 transition appearance-none cursor-pointer text-right"
               >
                 <option value="direct" className="bg-slate-900 text-slate-100 py-2 px-3">خرید مستقیم از پخش فرهودی</option>
-                {visitors.map((v) => (
+                {visitors.filter((v) => v.is_active !== false).map((v) => (
                   <option key={v.id} value={v.id} className="bg-slate-900 text-slate-100 py-2 px-3">
                     {v.name} — ({v.region})
                   </option>

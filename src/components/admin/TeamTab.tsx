@@ -600,6 +600,15 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                         <span className="text-xs px-2 py-0.5 rounded-md bg-blue-900/50 text-blue-300 border border-blue-800/50">
                           {visitor.region}
                         </span>
+                        {visitor.is_active === false ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                            غیرفعال
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            فعال
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                         <p className="text-xs text-slate-400 font-mono">{visitor.phone}</p>

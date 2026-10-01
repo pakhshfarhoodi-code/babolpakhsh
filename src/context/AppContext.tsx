@@ -70,7 +70,7 @@ interface AppContextType {
   inventoryTransactions: InventoryTransaction[];
   priceHistories: ProductPriceHistory[];
   deleteInventoryTransactions: (txIds: string[]) => Promise<{ success: boolean; message: string; count: number }>;
-  createOrder: (payload: CreateOrderPayload) => { success: boolean; message: string; orderId?: string; order?: Order };
+  createOrder: (payload: CreateOrderPayload) => Promise<{ success: boolean; message: string; orderId?: string; order?: Order }> | { success: boolean; message: string; orderId?: string; order?: Order };
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
   requestReassignment: (orderId: string, toVisitorId: string | null) => void;
   respondToReassignment: (requestId: string, accept: boolean) => void;

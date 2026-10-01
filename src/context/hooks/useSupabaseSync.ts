@@ -221,13 +221,10 @@ export function useSupabaseSync({
       setIsDataReady?.(true);
       isInitialFetchDoneRef.current = true;
     } catch (err: unknown) {
-      console.error('Supabase fetch failed:', err);
       const msg = err instanceof Error ? err.message : 'خطا در ارتباط با پایگاه داده';
+      console.warn('Supabase fetch notice:', msg);
       if (!isInitialFetchDoneRef.current) {
         setFetchError?.(msg);
-      } else {
-        // Soft error if background polling fails while user already has data
-        console.warn('Background sync warning:', msg);
       }
     }
   }, [

@@ -25,6 +25,7 @@ import {
 interface ReportsTabProps {
   currentVisitor: Visitor;
   customers: Supermarket[];
+  allSupermarkets?: Supermarket[];
   orders: Order[];
   onOpenNewOrder: (customerId: string) => void;
 }
@@ -32,6 +33,7 @@ interface ReportsTabProps {
 export const ReportsTab: React.FC<ReportsTabProps> = ({
   currentVisitor,
   customers,
+  allSupermarkets,
   orders,
   onOpenNewOrder,
 }) => {
@@ -39,6 +41,22 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
   const [timeFilter, setTimeFilter] = useState<'all' | 'today' | 'week' | 'month' | 'year'>('all');
   const [selectedCustomerForReport, setSelectedCustomerForReport] = useState<Supermarket | null>(null);
   const [printReportType, setPrintReportType] = useState<'aggregated' | 'individual' | null>(null);
+
+  // Combine assigned customers with any other stores in DB that have orders assigned to this visitor
+  const fullCustomersList = useMemo(() => {
+    const map = new Map<string, Supermarket>();
+    customers.forEach((c) => map.set(c.id, c));
+    const all = allSupermarkets || [];
+    orders.forEach((o) => {
+      if (o.supermarket_id && !map.has(o.supermarket_id)) {
+        const found = all.find((s) => s.id === o.supermarket_id);
+        if (found) {
+          map.set(found.id, found);
+        }
+      }
+    });
+    return Array.from(map.values());
+  }, [customers, allSupermarkets, orders]);
 
   // Time filter logic
   const filterOrdersByTime = (
@@ -88,7 +106,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
     const totalOrdersCount = timeFilteredOrders.length;
     const deliveredCount = timeFilteredOrders.filter((o) => o.status === 'delivered').length;
     const avgOrderValue = totalOrdersCount > 0 ? Math.round(totalRevenue / totalOrdersCount) : 0;
-    const activeCustomerCount = customers.length;
+    const activeCustomerCount = fullCustomersList.length;
 
     return {
       totalRevenue,
@@ -97,11 +115,11 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
       avgOrderValue,
       activeCustomerCount,
     };
-  }, [timeFilteredOrders, customers]);
+  }, [timeFilteredOrders, fullCustomersList]);
 
   // Customer detailed rankings
   const customersReportData = useMemo(() => {
-    return customers
+    return fullCustomersList
       .map((shop) => {
         const shopOrders = timeFilteredOrders.filter((o) => o.supermarket_id === shop.id);
         const allShopOrders = orders.filter((o) => o.supermarket_id === shop.id);

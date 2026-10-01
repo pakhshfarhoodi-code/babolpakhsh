@@ -149,6 +149,8 @@ export function useWarehouse({
         total_store_amount: totalStoreAmount,
       };
 
+      let finalBill: LoadingBill;
+
       // In Supabase mode, call ONLY supabase.rpc('create_loading_bill_transaction', ...)
       if (isSupabaseConfigured && supabase) {
         const { data, error } = await supabase.rpc('create_loading_bill_transaction', {
@@ -171,11 +173,36 @@ export function useWarehouse({
             message: (data as any).message || 'خطا در ثبت تراکنشی برگه بارگیری.',
           };
         }
+
+        // Fetch created loading bill from DB with its items
+        const { data: dbBill, error: fetchErr } = await supabase
+          .from('loading_bills')
+          .select('*, items:loading_bill_items(*)')
+          .eq('id', billId)
+          .maybeSingle();
+
+        if (fetchErr || !dbBill) {
+          return {
+            success: false,
+            message: fetchErr?.message || 'برگه بارگیری پس از ثبت از سرور دریافت نشد.',
+          };
+        }
+
+        if (!dbBill.items || dbBill.items.length === 0) {
+          return {
+            success: false,
+            message: 'اقلام سفارش‌ها روی سرور ثبت نشده‌اند.',
+          };
+        }
+
+        finalBill = dbBill as LoadingBill;
+      } else {
+        finalBill = bill;
       }
 
-      // If Supabase succeeded or in offline mode: commit to local state and localStorage
+      // Commit to local state (and localStorage in offline mode)
       setLoadingBills((prev) => {
-        const next = [bill, ...prev.filter((b) => b.id !== billId)];
+        const next = [finalBill, ...prev.filter((b) => b.id !== billId)];
         if (!isSupabaseConfigured) {
           try {
             localStorage.setItem(STORAGE_KEYS.LOADING_BILLS, JSON.stringify(next));

@@ -200,7 +200,7 @@ export const NewOrderModal: React.FC<Props> = ({
     return cartItems.reduce((sum, item) => sum + item.quantity, 0);
   }, [cartItems]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!currentSupermarket?.id || !currentVisitor?.id) {
       setFeedback({ type: 'error', message: 'لطفاً سوپرمارکت و ویزیتور را مشخص کنید.' });
       return;
@@ -211,7 +211,7 @@ export const NewOrderModal: React.FC<Props> = ({
       return;
     }
 
-    const res = createOrder({
+    const res = await createOrder({
       supermarketId: currentSupermarket.id,
       visitorId: currentVisitor.id,
       orderSource: 'visitor',

@@ -201,6 +201,7 @@ export const VisitorPortal: React.FC = () => {
           currentVisitor={currentVisitor}
           orders={myOrders}
           supermarkets={mySupermarkets}
+          allSupermarkets={supermarkets}
           incomingHandovers={incomingHandovers}
           outgoingHandovers={outgoingHandovers}
           onDeliverOrder={handleDeliverOrder}
@@ -208,7 +209,6 @@ export const VisitorPortal: React.FC = () => {
           onOpenDelegateModal={(order) => setSelectedOrderForDelegate(order)}
           onRespondHandover={respondToReassignment}
           onCreateLoadingBill={createLoadingBill}
-          onDeleteOrder={deleteOrder}
         />
       )}
 
@@ -225,6 +225,7 @@ export const VisitorPortal: React.FC = () => {
         <ReportsTab
           currentVisitor={currentVisitor}
           customers={mySupermarkets}
+          allSupermarkets={supermarkets}
           orders={myOrders}
           onOpenNewOrder={(customerId) => handleOpenNewOrder(customerId)}
         />

@@ -33,6 +33,7 @@ interface TodayTabProps {
   currentVisitor: Visitor;
   orders: Order[];
   supermarkets: Supermarket[];
+  allSupermarkets?: Supermarket[];
   incomingHandovers: ReassignmentRequest[];
   outgoingHandovers: ReassignmentRequest[];
   onDeliverOrder: (orderId: string) => void;
@@ -43,13 +44,13 @@ interface TodayTabProps {
     visitorId: string,
     orderIds: string[]
   ) => Promise<{ success: boolean; message: string; billId?: string }> | { success: boolean; message: string; billId?: string };
-  onDeleteOrder?: (orderId: string) => void;
 }
 
 export const TodayTab: React.FC<TodayTabProps> = ({
   currentVisitor,
   orders,
   supermarkets,
+  allSupermarkets,
   incomingHandovers,
   outgoingHandovers,
   onDeliverOrder,
@@ -57,15 +58,12 @@ export const TodayTab: React.FC<TodayTabProps> = ({
   onOpenDelegateModal,
   onRespondHandover,
   onCreateLoadingBill,
-  onDeleteOrder,
 }) => {
   const { loadingBills } = useApp();
 
   // Active menu dropdown state for card actions
   const [activeMenuOrderId, setActiveMenuOrderId] = useState<string | null>(null);
   const [invoiceOrder, setInvoiceOrder] = useState<Order | null>(null);
-  const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
 
   // Loading Bill accordion & selection
   const [isBillSectionOpen, setIsBillSectionOpen] = useState(false);
@@ -74,12 +72,14 @@ export const TodayTab: React.FC<TodayTabProps> = ({
   const [billErrorMessage, setBillErrorMessage] = useState<string | null>(null);
   const [isGeneratingBill, setIsGeneratingBill] = useState(false);
 
-  // Supermarket lookup map for fast details (phone, address)
+  // Supermarket lookup map built from allSupermarkets (full database list)
+  const supermarketListToUse = allSupermarkets && allSupermarkets.length > 0 ? allSupermarkets : supermarkets;
+
   const supermarketMap = useMemo(() => {
     const map = new Map<string, Supermarket>();
-    supermarkets.forEach((s) => map.set(s.id, s));
+    supermarketListToUse.forEach((s) => map.set(s.id, s));
     return map;
-  }, [supermarkets]);
+  }, [supermarketListToUse]);
 
   // Orders eligible for new loading bill (strictly status === 'assigned' and not yet in a loading bill)
   const pendingOrders = useMemo(
@@ -345,25 +345,26 @@ export const TodayTab: React.FC<TodayTabProps> = ({
                         })()}
                       </div>
 
-                      {/* Address 1 Line Truncate or Deleted Shop Warning */}
-                      {shop?.address ? (
+                      {/* Address / Shop Info */}
+                      {!order.supermarket_id ? (
+                        <div className="flex items-center gap-1.5 text-xs text-rose-400 mt-1 flex-wrap">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          <span className="font-semibold">فروشگاه حذف شده است</span>
+                        </div>
+                      ) : !shop ? (
+                        <div className="flex items-center gap-1 text-xs text-slate-400 mt-1 min-w-0">
+                          <span className="px-2 py-0.5 rounded-md bg-slate-800/80 border border-slate-700/60 text-slate-300 text-[11px] font-medium">
+                            فروشگاه خارج از لیست شما
+                          </span>
+                        </div>
+                      ) : shop.address ? (
                         <div className="flex items-center gap-1 text-xs text-slate-400 mt-1 min-w-0" title={shop.address}>
                           <MapPin className="w-3 h-3 text-emerald-400 shrink-0" />
                           <span className="truncate">{shop.address}</span>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-1.5 text-xs text-rose-400 mt-1 flex-wrap">
-                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                          <span className="font-semibold">فروشگاه حذف شده است</span>
-                          {onDeleteOrder && (
-                            <button
-                              type="button"
-                              onClick={() => setOrderToDelete(order)}
-                              className="text-[11px] bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-white px-2 py-0.5 rounded-lg border border-rose-500/40 font-bold transition cursor-pointer"
-                            >
-                              حذف سفارش
-                            </button>
-                          )}
+                        <div className="flex items-center gap-1 text-xs text-slate-500 mt-1 min-w-0">
+                          <span className="truncate">آدرس ثبت نشده</span>
                         </div>
                       )}
                     </div>
@@ -481,19 +482,6 @@ export const TodayTab: React.FC<TodayTabProps> = ({
                               <XCircle className="w-3.5 h-3.5" />
                               <span>ثبت عدم تحویل</span>
                             </button>
-                            {onDeleteOrder && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setActiveMenuOrderId(null);
-                                  setOrderToDelete(order);
-                                }}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-rose-500 hover:bg-rose-950/40 transition cursor-pointer text-right border-t border-slate-800/80 font-semibold"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                <span>حذف سفارش</span>
-                              </button>
-                            )}
                           </div>
                         </>
                       )}
@@ -631,83 +619,6 @@ export const TodayTab: React.FC<TodayTabProps> = ({
         }
         visitor={currentVisitor}
       />
-
-      {/* Delete Order Confirmation Modal */}
-      {orderToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-in fade-in">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md shadow-2xl p-5 sm:p-6 space-y-4">
-            <div className="flex items-center gap-3 pb-3 border-b border-slate-800">
-              <div className="w-10 h-10 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-400 flex items-center justify-center shrink-0">
-                <Trash2 className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-100">
-                  حذف قطعی سفارش
-                </h3>
-                <p className="text-xs text-slate-400 font-mono">{orderToDelete.id}</p>
-              </div>
-            </div>
-
-            <div className="p-3 bg-slate-950 rounded-2xl border border-slate-800 space-y-2 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400">سوپرمارکت:</span>
-                <span className="font-bold text-slate-200">{orderToDelete.supermarket_name}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400">مبلغ کل:</span>
-                <span className="font-mono font-bold text-emerald-400">
-                  {formatPrice(orderToDelete.total_amount)} تومان
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400">اقلام:</span>
-                <span className="font-bold text-slate-300">
-                  {orderToDelete.items?.length || 0} قلم کالا
-                </span>
-              </div>
-            </div>
-
-            <div className="p-3 rounded-2xl bg-rose-950/30 border border-rose-800/40 text-xs text-rose-300 space-y-1">
-              <p className="font-semibold flex items-center gap-1.5">
-                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
-                <span>توجه:</span>
-              </p>
-              <p className="text-slate-400 leading-relaxed text-[11px] pr-5">
-                با حذف این سفارش، فاکتور لغو شده و موجودی رزرو شده به انبار آزاد می‌گردد.
-              </p>
-            </div>
-
-            <div className="flex items-center justify-end gap-2.5 pt-2">
-              <button
-                type="button"
-                disabled={isDeleting}
-                onClick={() => setOrderToDelete(null)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition cursor-pointer"
-              >
-                انصراف
-              </button>
-              <button
-                type="button"
-                disabled={isDeleting}
-                onClick={async () => {
-                  if (!orderToDelete || !onDeleteOrder) return;
-                  setIsDeleting(true);
-                  try {
-                    await onDeleteOrder(orderToDelete.id);
-                    setOrderToDelete(null);
-                  } finally {
-                    setIsDeleting(false);
-                  }
-                }}
-                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white text-xs font-bold transition shadow-lg shadow-rose-600/25 cursor-pointer flex items-center gap-1.5"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>{isDeleting ? 'در حال حذف...' : 'تایید و حذف'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

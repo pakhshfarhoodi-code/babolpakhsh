@@ -46,6 +46,7 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({
     addNewProduct,
     bulkUpsertProducts,
     currentUser,
+    showToast,
   } = useApp();
 
   const [internalTab, setInternalTab] = useState<WarehouseTabKey>('pending');
@@ -81,9 +82,12 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({
   const handleApproveBill = async (billId: string) => {
     const res = await approveLoadingBill(billId, currentUser?.name || 'انباردار');
     if (res && res.success) {
+      showToast(res.message, 'success');
       setActionFeedback(res.message);
     } else {
-      setActionFeedback(`برگه بارگیری ${billId} تایید شد و اقلام به طور قطعی از موجودی سردخانه ترخیص شدند.`);
+      const errorMsg = res?.message || `خطا در تایید برگه بارگیری ${billId}`;
+      showToast(errorMsg, 'error');
+      setActionFeedback(errorMsg);
     }
     setTimeout(() => setActionFeedback(null), 5000);
   };
@@ -92,9 +96,12 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({
     if (cancelLoadingBill) {
       const res = await cancelLoadingBill(billId, currentUser?.name || 'انباردار', reason);
       if (res && res.success) {
+        showToast(res.message, 'success');
         setActionFeedback(res.message);
       } else {
-        setActionFeedback(res?.message || 'خطا در لغو برگه بارگیری.');
+        const errorMsg = res?.message || 'خطا در لغو برگه بارگیری.';
+        showToast(errorMsg, 'error');
+        setActionFeedback(errorMsg);
       }
       setTimeout(() => setActionFeedback(null), 5000);
     }

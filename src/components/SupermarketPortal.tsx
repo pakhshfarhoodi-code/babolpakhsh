@@ -323,7 +323,7 @@ export const SupermarketPortal: React.FC = () => {
     setOrderError(null);
 
     try {
-      const res = createOrder({
+      const res = await createOrder({
         supermarketId: currentStore?.id || '',
         visitorId: assignedVisitor?.id || 'direct',
         orderSource: 'supermarket',

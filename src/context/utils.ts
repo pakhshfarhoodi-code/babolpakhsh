@@ -1,4 +1,5 @@
 // Helper utilities and storage keys for AppContext and sub-hooks
+import { Order, OrderChannel } from '../types';
 
 export const STORAGE_KEYS = {
   AUTH_LOGGED_IN: 'alborz_auth_logged_in',
@@ -130,3 +131,33 @@ export const toSyntheticEmail = (username: string): string => {
   }
   return `u_${hex || 'shop'}@babolpakhsh.internal`;
 };
+
+// Fallback helper to determine order_channel for legacy orders without explicit channel
+export const getOrderChannel = (order: Partial<Order>): OrderChannel => {
+  if (
+    order.order_channel === 'visitor_field' ||
+    order.order_channel === 'store_self' ||
+    order.order_channel === 'store_direct'
+  ) {
+    return order.order_channel;
+  }
+
+  // 1. Direct distribution order (assigned_visitor_id is 'direct', null, or empty, or name indicates direct)
+  const isDirect =
+    order.assigned_visitor_id === 'direct' ||
+    !order.assigned_visitor_id ||
+    order.visitor_name?.includes('مستقیم');
+
+  if (isDirect) {
+    return 'store_direct';
+  }
+
+  // 2. Field order registered by visitor (order_source === 'visitor' or ID starts with 'VS')
+  if (order.order_source === 'visitor' || (order.id && order.id.startsWith('VS'))) {
+    return 'visitor_field';
+  }
+
+  // 3. Self order placed by supermarket with an assigned visitor
+  return 'store_self';
+};
+

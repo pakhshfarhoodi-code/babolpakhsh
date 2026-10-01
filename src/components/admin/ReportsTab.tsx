@@ -249,19 +249,29 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
                 const isExpanded = expandedBillId === bill.id;
 
                 // Compute total visitor buy cost vs total store invoice amount
-                let totalVisitorBuyCost = 0;
-                let totalStoreInvoiceAmount = 0;
+                // Prioritize total_visitor_cost and total_store_amount, then snapshot prices, fallback to current product
+                let totalVisitorBuyCost = bill.total_visitor_cost ?? 0;
+                let totalStoreInvoiceAmount = bill.total_store_amount ?? 0;
                 let totalItemsCount = 0;
 
                 const billItems = bill.items || [];
-                billItems.forEach((it) => {
-                  const prod = products.find((p) => p.id === it.product_id);
-                  const storePrice = prod?.price || 0;
-                  const visitorPrice = prod?.visitor_price || Math.round(storePrice * 0.85);
+                const needsRecalc = !bill.total_visitor_cost || !bill.total_store_amount;
+                if (needsRecalc) {
+                  totalVisitorBuyCost = 0;
+                  totalStoreInvoiceAmount = 0;
+                }
 
-                  totalVisitorBuyCost += visitorPrice * it.quantity;
-                  totalStoreInvoiceAmount += storePrice * it.quantity;
+                billItems.forEach((it) => {
                   totalItemsCount += it.quantity;
+                  if (needsRecalc) {
+                    const prod = products.find((p) => p.id === it.product_id);
+                    const fallbackStorePrice = prod?.price || 0;
+                    const storePrice = it.store_price ?? fallbackStorePrice;
+                    const visitorPrice = it.visitor_price ?? (prod?.visitor_price || Math.round(storePrice * 0.85));
+
+                    totalVisitorBuyCost += visitorPrice * it.quantity;
+                    totalStoreInvoiceAmount += storePrice * it.quantity;
+                  }
                 });
 
                 return (
@@ -309,10 +319,16 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
                           className={`px-2.5 py-1 rounded-full text-xs font-bold border ${
                             bill.status === 'approved'
                               ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                              : bill.status === 'cancelled'
+                              ? 'bg-slate-800 text-slate-400 border-slate-700'
                               : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
                           }`}
                         >
-                          {bill.status === 'approved' ? 'تایید انبار شده' : 'در انتظار خروج'}
+                          {bill.status === 'approved'
+                            ? 'تایید انبار شده'
+                            : bill.status === 'cancelled'
+                            ? 'لغو شده'
+                            : 'در انتظار خروج'}
                         </span>
 
                         <span className="p-1 text-slate-400 hover:text-slate-200">
@@ -347,8 +363,10 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
                             <tbody className="divide-y divide-slate-900 bg-slate-950">
                               {billItems.map((item, idx) => {
                                 const prod = products.find((p) => p.id === item.product_id);
-                                const storePrice = prod?.price || 0;
-                                const visitorPrice = prod?.visitor_price || Math.round(storePrice * 0.85);
+                                const fallbackStorePrice = prod?.price || 0;
+                                const storePrice = item.store_price ?? fallbackStorePrice;
+                                const visitorPrice =
+                                  item.visitor_price ?? (prod?.visitor_price || Math.round(storePrice * 0.85));
 
                                 return (
                                   <tr key={idx} className="hover:bg-slate-900/50">

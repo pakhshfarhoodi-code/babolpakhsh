@@ -91,6 +91,8 @@ export interface Supermarket {
 
 export type OrderStatus = 'assigned' | 'loading' | 'delegated' | 'delivered' | 'undelivered';
 
+export type OrderChannel = 'visitor_field' | 'store_self' | 'store_direct';
+
 export interface OrderItem {
   id: string;
   order_id: string;
@@ -110,6 +112,7 @@ export interface Order {
   status: OrderStatus;
   total_amount: number;
   order_source?: 'visitor' | 'supermarket';
+  order_channel?: OrderChannel;
   reassignment_id?: string | null;
   loading_bill_id?: string | null;
   order_date: string;
@@ -149,6 +152,8 @@ export interface LoadingBillItem {
   product_id: string;
   product_name: string;
   quantity: number;
+  visitor_price?: number;
+  store_price?: number;
   created_at?: string;
 }
 
@@ -159,6 +164,14 @@ export interface LoadingBill {
   status: LoadingBillStatus;
   created_at: string;
   items?: LoadingBillItem[];
+  orders_count?: number;
+  total_visitor_cost?: number;
+  total_store_amount?: number;
+  approved_by?: string;
+  approved_at?: string;
+  cancelled_by?: string;
+  cancelled_at?: string;
+  cancel_reason?: string;
 }
 
 export type InventoryTransactionType = 'reserve' | 'release_reserve' | 'load_out' | 'return' | 'manual_adjustment' | 'manual_delivery_override';

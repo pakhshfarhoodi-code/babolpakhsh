@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { LoadingBill, InventoryTransaction, Product, Visitor, Order } from '../../types';
+import { LoadingBill, LoadingBillItem, InventoryTransaction, Product, Visitor, Order } from '../../types';
 import { INITIAL_LOADING_BILLS, INITIAL_INVENTORY_TRANSACTIONS } from '../../data/initialData';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { STORAGE_KEYS, generateUniqueId } from '../utils';
+import { extractCodeFromId } from '../../utils/numberToPersianWords';
 
 interface UseWarehouseProps {
   products: Product[];
@@ -41,177 +42,341 @@ export function useWarehouse({
     setInventoryTransactions((prev) => [...txs, ...prev]);
   }, []);
 
-  // Create Loading Bill (locks orders in 'loading' status and assigns loading_bill_id)
-  const createLoadingBill = useCallback((visitorId: string, orderIds: string[]) => {
-    const visitor = visitors.find((v) => v.id === visitorId);
-    if (!visitor || orderIds.length === 0) return;
+  // Create Loading Bill (Atomically locks orders in 'loading' status, snapshots prices, and syncs via RPC)
+  const createLoadingBill = useCallback(
+    async (
+      visitorId: string,
+      orderIds: string[]
+    ): Promise<{ success: boolean; message: string; billId?: string }> => {
+      const visitor = visitors.find((v) => v.id === visitorId);
+      if (!visitor) {
+        return { success: false, message: 'اطلاعات ویزیتور در سیستم یافت نشد.' };
+      }
+      if (!orderIds || orderIds.length === 0) {
+        return { success: false, message: 'هیچ سفارشی برای صدور برگه بارگیری انتخاب نشده است.' };
+      }
 
-    const selectedOrders = orders.filter((o) => orderIds.includes(o.id));
-    const itemsMap = new Map<string, { productId: string; name: string; quantity: number; orderId: string }>();
+      // Check current local orders
+      const selectedOrders = orders.filter((o) => orderIds.includes(o.id));
+      if (selectedOrders.length !== orderIds.length) {
+        return { success: false, message: 'برخی از سفارش‌های انتخابی در سیستم یافت نشدند.' };
+      }
 
-    for (const ord of selectedOrders) {
-      if (ord.items) {
-        for (const it of ord.items) {
-          const key = `${ord.id}-${it.product_id}`;
-          itemsMap.set(key, {
-            productId: it.product_id,
-            name: it.name,
-            quantity: it.quantity,
-            orderId: ord.id,
-          });
+      // Concurrency check: Ensure none of the orders are already in a loading bill or not in 'assigned' status
+      const busyOrders = selectedOrders.filter(
+        (o) => o.status !== 'assigned' || Boolean(o.loading_bill_id)
+      );
+      if (busyOrders.length > 0) {
+        return {
+          success: false,
+          message: 'برخی سفارش‌های انتخابی قبلاً در برگه بارگیری دیگری ثبت شده یا از وضعیت آماده ارسال خارج شده‌اند.',
+        };
+      }
+
+      const otherVisitorOrders = selectedOrders.filter((o) => o.assigned_visitor_id !== visitorId);
+      if (otherVisitorOrders.length > 0) {
+        return {
+          success: false,
+          message: 'تمامی سفارش‌های انتخابی باید متعلق به ویزیتور جاری باشند.',
+        };
+      }
+
+      // Generate readable bill ID: BL-{visitorCode2Digits}-{seq3Digits}
+      const visitorCode = extractCodeFromId(visitorId, 2, visitors);
+      const visitorBills = loadingBills.filter((b) => b.visitor_id === visitorId);
+      let seq = visitorBills.length + 1;
+      let billId = `BL-${visitorCode}-${String(seq).padStart(3, '0')}`;
+      const existingIds = new Set(loadingBills.map((b) => b.id));
+      while (existingIds.has(billId)) {
+        seq++;
+        billId = `BL-${visitorCode}-${String(seq).padStart(3, '0')}`;
+      }
+
+      const nowIso = new Date().toISOString();
+      const itemsMap = new Map<string, { productId: string; name: string; quantity: number; orderId: string }>();
+
+      for (const ord of selectedOrders) {
+        if (ord.items) {
+          for (const it of ord.items) {
+            const key = `${ord.id}-${it.product_id}`;
+            itemsMap.set(key, {
+              productId: it.product_id,
+              name: it.name,
+              quantity: it.quantity,
+              orderId: ord.id,
+            });
+          }
         }
       }
-    }
 
-    const billId = generateUniqueId('LB');
-    const nowIso = new Date().toISOString();
+      let totalVisitorCost = 0;
+      let totalStoreAmount = 0;
 
-    const billItems = Array.from(itemsMap.values()).map((val, idx) => ({
-      id: `lbi-${Date.now()}-${idx}`,
-      loading_bill_id: billId,
-      order_id: val.orderId,
-      product_id: val.productId,
-      product_name: val.name,
-      quantity: val.quantity,
-    }));
+      const billItems: LoadingBillItem[] = Array.from(itemsMap.values()).map((val, idx) => {
+        const prod = products.find((p) => p.id === val.productId);
+        const storePrice = prod ? Number(prod.price) : 0;
+        const visitorPrice = prod ? (prod.visitor_price ?? Math.round(storePrice * 0.85)) : 0;
 
-    const bill: LoadingBill = {
-      id: billId,
-      visitor_id: visitorId,
-      visitor_name: visitor.name,
-      status: 'pending',
-      created_at: nowIso,
-      items: billItems,
-    };
+        totalStoreAmount += storePrice * val.quantity;
+        totalVisitorCost += visitorPrice * val.quantity;
 
-    setLoadingBills((prev) => [bill, ...prev]);
+        return {
+          id: `lbi-${Date.now()}-${idx}`,
+          loading_bill_id: billId,
+          order_id: val.orderId,
+          product_id: val.productId,
+          product_name: val.name,
+          quantity: val.quantity,
+          visitor_price: visitorPrice,
+          store_price: storePrice,
+          created_at: nowIso,
+        };
+      });
 
-    // Update orders: exclude from subsequent loading bill pools
-    setOrders((prev) =>
-      prev.map((o) => (orderIds.includes(o.id) ? { ...o, status: 'loading', loading_bill_id: billId } : o))
-    );
+      const bill: LoadingBill = {
+        id: billId,
+        visitor_id: visitorId,
+        visitor_name: visitor.name,
+        status: 'pending',
+        created_at: nowIso,
+        items: billItems,
+        orders_count: selectedOrders.length,
+        total_visitor_cost: totalVisitorCost,
+        total_store_amount: totalStoreAmount,
+      };
 
-    if (isSupabaseConfigured && supabase) {
-      supabase
-        .from('orders')
-        .update({ status: 'loading', loading_bill_id: billId })
-        .in('id', orderIds)
-        .then(({ error }) => {
-          if (error) console.error('خطا در به‌روزرسانی وضعیت سفارشات در برگه بارگیری روی Supabase:', error);
+      // In Supabase mode, call ONLY supabase.rpc('create_loading_bill_transaction', ...)
+      if (isSupabaseConfigured && supabase) {
+        const { data, error } = await supabase.rpc('create_loading_bill_transaction', {
+          p_bill_id: billId,
+          p_visitor_id: visitorId,
+          p_order_ids: orderIds,
         });
 
-      supabase
-        .from('loading_bills')
-        .insert({
-          id: billId,
-          visitor_id: visitorId,
-          visitor_name: visitor.name,
-          status: 'pending',
-        })
-        .then(({ error }) => {
-          if (error) {
-            console.error('خطا در ثبت برگه بارگیری روی Supabase:', error);
-            return;
-          }
-          if (billItems.length > 0) {
-            supabase
-              .from('loading_bill_items')
-              .insert(
-                billItems.map((item) => ({
-                  id: item.id,
-                  loading_bill_id: item.loading_bill_id,
-                  order_id: item.order_id,
-                  product_id: item.product_id,
-                  product_name: item.product_name,
-                  quantity: item.quantity,
-                }))
-              )
-              .then(({ error: itemsErr }) => {
-                if (itemsErr) console.error('خطا در ثبت اقلام برگه بارگیری روی Supabase:', itemsErr);
-              });
-          }
-        });
-    }
-  }, [visitors, orders, setOrders]);
-
-  // Approve Loading Bill (Cold-chain warehouse commits dispatch & deducts physical stock)
-  const approveLoadingBill = useCallback((billId: string) => {
-    const bill = loadingBills.find((b) => b.id === billId);
-    if (!bill || bill.status === 'approved') return;
-
-    const nowPersian = new Intl.DateTimeFormat('fa-IR', {
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(new Date());
-
-    const itemDeltas = new Map<string, number>();
-    if (bill.items) {
-      for (const item of bill.items) {
-        itemDeltas.set(item.product_id, (itemDeltas.get(item.product_id) || 0) + item.quantity);
-      }
-    }
-
-    setProducts((prev) =>
-      prev.map((p) => {
-        const qty = itemDeltas.get(p.id);
-        if (qty) {
+        if (error) {
+          console.error('RPC create_loading_bill_transaction error:', error);
           return {
-            ...p,
-            stock: Math.max(0, p.stock - qty),
-            reserved_stock: Math.max(0, p.reserved_stock - qty),
+            success: false,
+            message: error.message || 'خطا در ثبت برگه بارگیری روی سرور.',
           };
         }
-        return p;
-      })
-    );
 
-    // Mark associated orders as stock_deducted = true
-    setOrders((prev) =>
-      prev.map((o) => (o.loading_bill_id === billId ? { ...o, stock_deducted: true } : o))
-    );
+        if (data && (data as any).success === false) {
+          return {
+            success: false,
+            message: (data as any).message || 'خطا در ثبت تراکنشی برگه بارگیری.',
+          };
+        }
+      }
 
-    const newTx: InventoryTransaction[] = [];
-    itemDeltas.forEach((qty, prodId) => {
-      const prod = products.find((p) => p.id === prodId);
-      newTx.push({
-        id: `tx-${Date.now()}-out-${prodId}`,
-        product_id: prodId,
-        product_name: prod?.name || 'کالا',
-        transaction_type: 'load_out',
-        quantity: qty,
-        reference_id: billId,
-        created_at: nowPersian,
+      // If Supabase succeeded or in offline mode: commit to local state and localStorage
+      setLoadingBills((prev) => {
+        const next = [bill, ...prev.filter((b) => b.id !== billId)];
+        try {
+          localStorage.setItem(STORAGE_KEYS.LOADING_BILLS, JSON.stringify(next));
+        } catch {}
+        return next;
       });
-      newTx.push({
-        id: `tx-${Date.now()}-rel-${prodId}`,
-        product_id: prodId,
-        product_name: prod?.name || 'کالا',
-        transaction_type: 'release_reserve',
-        quantity: -qty,
-        reference_id: billId,
-        created_at: nowPersian,
+
+      setOrders((prev) => {
+        const next = prev.map((o) =>
+          orderIds.includes(o.id) ? { ...o, status: 'loading' as const, loading_bill_id: billId } : o
+        );
+        try {
+          localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(next));
+        } catch {}
+        return next;
       });
-    });
 
-    setInventoryTransactions((prev) => [...newTx, ...prev]);
-    setLoadingBills((prev) =>
-      prev.map((b) => (b.id === billId ? { ...b, status: 'approved' } : b))
-    );
+      return {
+        success: true,
+        message: `برگه بارگیری ${billId} شامل ${selectedOrders.length} سفارش با موفقیت صادر و به سردخانه ارسال شد.`,
+        billId,
+      };
+    },
+    [visitors, orders, products, loadingBills, setOrders]
+  );
 
-    if (isSupabaseConfigured && supabase) {
-      supabase
-        .from('orders')
-        .update({ stock_deducted: true })
-        .eq('loading_bill_id', billId)
-        .then(() => {});
+  // Cancel Loading Bill (reverts orders to assigned without touching inventory)
+  const cancelLoadingBill = useCallback(
+    async (
+      billId: string,
+      cancelledBy: string = 'انباردار',
+      reason: string
+    ): Promise<{ success: boolean; message: string }> => {
+      if (!reason || !reason.trim()) {
+        return { success: false, message: 'ثبت دلیل لغو برگه بارگیری الزامی است.' };
+      }
 
-      supabase
-        .rpc('approve_loading_bill_transaction', { p_loading_bill_id: billId })
-        .then(({ error }) => {
-          if (error) console.error('خطا در تایید برگه بارگیری روی Supabase:', error);
+      const bill = loadingBills.find((b) => b.id === billId);
+      if (!bill) {
+        return { success: false, message: 'برگه بارگیری مورد نظر یافت نشد.' };
+      }
+      if (bill.status !== 'pending') {
+        return { success: false, message: 'تنها برگه‌های در انتظار تایید (pending) امکان لغو دارند.' };
+      }
+
+      const nowIso = new Date().toISOString();
+
+      if (isSupabaseConfigured && supabase) {
+        const { data, error } = await supabase.rpc('cancel_loading_bill_transaction', {
+          p_bill_id: billId,
+          p_cancelled_by: cancelledBy,
+          p_reason: reason.trim(),
         });
-    }
-  }, [loadingBills, products, setProducts, setOrders]);
+
+        if (error) {
+          console.error('RPC cancel_loading_bill_transaction error:', error);
+          return { success: false, message: error.message || 'خطا در لغو برگه روی سرور.' };
+        }
+        if (data && (data as any).success === false) {
+          return { success: false, message: (data as any).message || 'خطا در لغو برگه بارگیری.' };
+        }
+      }
+
+      // Revert in local state & localStorage
+      setLoadingBills((prev) => {
+        const next = prev.map((b) =>
+          b.id === billId
+            ? {
+                ...b,
+                status: 'cancelled' as const,
+                cancelled_by: cancelledBy,
+                cancelled_at: nowIso,
+                cancel_reason: reason.trim(),
+              }
+            : b
+        );
+        try {
+          localStorage.setItem(STORAGE_KEYS.LOADING_BILLS, JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+
+      setOrders((prev) => {
+        const next = prev.map((o) =>
+          o.loading_bill_id === billId ? { ...o, status: 'assigned' as const, loading_bill_id: null } : o
+        );
+        try {
+          localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+
+      return {
+        success: true,
+        message: `برگه بارگیری ${billId} لغو شد و سفارش‌ها به وضعیت آماده ارسال بازگشتند.`,
+      };
+    },
+    [loadingBills, setOrders]
+  );
+
+  // Approve Loading Bill (Cold-chain warehouse commits dispatch & deducts physical stock)
+  const approveLoadingBill = useCallback(
+    async (
+      billId: string,
+      approvedBy: string = 'انباردار'
+    ): Promise<{ success: boolean; message: string }> => {
+      const bill = loadingBills.find((b) => b.id === billId);
+      if (!bill) {
+        return { success: false, message: 'برگه بارگیری مورد نظر یافت نشد.' };
+      }
+      if (bill.status !== 'pending') {
+        return { success: false, message: 'این برگه قبلاً تایید یا لغو شده است.' };
+      }
+
+      const nowIso = new Date().toISOString();
+      const nowPersian = new Intl.DateTimeFormat('fa-IR', {
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(new Date());
+
+      if (isSupabaseConfigured && supabase) {
+        const { data, error } = await supabase.rpc('approve_loading_bill_transaction', {
+          p_loading_bill_id: billId,
+          p_approved_by: approvedBy,
+        });
+
+        if (error) {
+          console.error('RPC approve_loading_bill_transaction error:', error);
+          return { success: false, message: error.message || 'خطا در تایید برگه روی سرور.' };
+        }
+        if (data && (data as any).success === false) {
+          return { success: false, message: (data as any).message || 'خطا در تایید برگه بارگیری.' };
+        }
+      }
+
+      const itemDeltas = new Map<string, number>();
+      if (bill.items) {
+        for (const item of bill.items) {
+          itemDeltas.set(item.product_id, (itemDeltas.get(item.product_id) || 0) + item.quantity);
+        }
+      }
+
+      setProducts((prev) =>
+        prev.map((p) => {
+          const qty = itemDeltas.get(p.id);
+          if (qty) {
+            return {
+              ...p,
+              stock: Math.max(0, p.stock - qty),
+              reserved_stock: Math.max(0, p.reserved_stock - qty),
+            };
+          }
+          return p;
+        })
+      );
+
+      // Mark associated orders as stock_deducted = true
+      setOrders((prev) =>
+        prev.map((o) => (o.loading_bill_id === billId ? { ...o, stock_deducted: true } : o))
+      );
+
+      const newTx: InventoryTransaction[] = [];
+      itemDeltas.forEach((qty, prodId) => {
+        const prod = products.find((p) => p.id === prodId);
+        newTx.push({
+          id: `tx-${Date.now()}-out-${prodId}`,
+          product_id: prodId,
+          product_name: prod?.name || 'کالا',
+          transaction_type: 'load_out',
+          quantity: qty,
+          reference_id: billId,
+          created_at: nowPersian,
+        });
+        newTx.push({
+          id: `tx-${Date.now()}-rel-${prodId}`,
+          product_id: prodId,
+          product_name: prod?.name || 'کالا',
+          transaction_type: 'release_reserve',
+          quantity: -qty,
+          reference_id: billId,
+          created_at: nowPersian,
+        });
+      });
+
+      setInventoryTransactions((prev) => [...newTx, ...prev]);
+
+      setLoadingBills((prev) =>
+        prev.map((b) =>
+          b.id === billId
+            ? {
+                ...b,
+                status: 'approved' as const,
+                approved_by: approvedBy,
+                approved_at: nowIso,
+              }
+            : b
+        )
+      );
+
+      return {
+        success: true,
+        message: `برگه بارگیری ${billId} با موفقیت تایید و خروج از سردخانه انجام شد.`,
+      };
+    },
+    [loadingBills, products, setProducts, setOrders]
+  );
 
   // Record Product Return to Warehouse (Increases physical stock & inserts transaction_type = 'return')
   const recordProductReturn = useCallback((productId: string, quantity: number, reason: string): { success: boolean; message: string } => {
@@ -392,6 +557,7 @@ export function useWarehouse({
     deleteInventoryTransactions,
     createLoadingBill,
     approveLoadingBill,
+    cancelLoadingBill,
     updateProductStock,
     recordProductReturn,
   };

@@ -253,8 +253,19 @@ export const Header: React.FC<HeaderProps> = () => {
                 >
                   <ShieldCheck className="w-3 h-3" />
                   <span>مدیریت</span>
+                  {pendingLoadingBills > 0 && (
+                    <span
+                      className="px-1.5 py-0.5 rounded-full text-xs font-black bg-amber-400 text-slate-950 font-mono"
+                      title={`${pendingLoadingBills} برگه بارگیری در انتظار تایید`}
+                    >
+                      {pendingLoadingBills}
+                    </span>
+                  )}
                   {pendingReassignments > 0 && (
-                    <span className="px-1.5 py-0.5 rounded-full text-xs font-black bg-amber-400 text-slate-950">
+                    <span
+                      className="px-1.5 py-0.5 rounded-full text-xs font-black bg-purple-400 text-slate-950 font-mono"
+                      title={`${pendingReassignments} واگذاری در انتظار`}
+                    >
                       {pendingReassignments}
                     </span>
                   )}

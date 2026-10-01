@@ -5,6 +5,7 @@ import {
   ReassignmentRequest,
   Visitor,
 } from '../../types';
+import { useApp } from '../../context/AppContext';
 import {
   Truck,
   CheckCircle2,
@@ -23,6 +24,7 @@ import {
   Info,
   Printer,
   Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import { isToday, formatPrice } from './helpers';
 import { OrderInvoiceModal } from '../invoice/OrderInvoiceModal';
@@ -37,7 +39,10 @@ interface TodayTabProps {
   onOpenUndeliveredModal: (order: Order) => void;
   onOpenDelegateModal: (order: Order) => void;
   onRespondHandover: (requestId: string, accept: boolean) => void;
-  onCreateLoadingBill: (visitorId: string, orderIds: string[]) => void;
+  onCreateLoadingBill: (
+    visitorId: string,
+    orderIds: string[]
+  ) => Promise<{ success: boolean; message: string; billId?: string }> | { success: boolean; message: string; billId?: string };
   onDeleteOrder?: (orderId: string) => void;
 }
 
@@ -54,6 +59,8 @@ export const TodayTab: React.FC<TodayTabProps> = ({
   onCreateLoadingBill,
   onDeleteOrder,
 }) => {
+  const { loadingBills } = useApp();
+
   // Active menu dropdown state for card actions
   const [activeMenuOrderId, setActiveMenuOrderId] = useState<string | null>(null);
   const [invoiceOrder, setInvoiceOrder] = useState<Order | null>(null);
@@ -64,6 +71,8 @@ export const TodayTab: React.FC<TodayTabProps> = ({
   const [isBillSectionOpen, setIsBillSectionOpen] = useState(false);
   const [selectedOrdersForBill, setSelectedOrdersForBill] = useState<string[]>([]);
   const [billSuccessMessage, setBillSuccessMessage] = useState<string | null>(null);
+  const [billErrorMessage, setBillErrorMessage] = useState<string | null>(null);
+  const [isGeneratingBill, setIsGeneratingBill] = useState(false);
 
   // Supermarket lookup map for fast details (phone, address)
   const supermarketMap = useMemo(() => {
@@ -106,19 +115,35 @@ export const TodayTab: React.FC<TodayTabProps> = ({
   }, [orders, currentVisitor?.id]);
 
   // Loading bill handler
-  const handleGenerateBill = () => {
-    // If none selected, default to all pending orders eligible for bill
+  const handleGenerateBill = async () => {
     const targetOrderIds =
       selectedOrdersForBill.length > 0
         ? selectedOrdersForBill
         : pendingOrders.map((o) => o.id);
 
-    if (targetOrderIds.length === 0) return;
+    if (targetOrderIds.length === 0 || isGeneratingBill) return;
 
-    onCreateLoadingBill(currentVisitor?.id || '', targetOrderIds);
-    setSelectedOrdersForBill([]);
-    setBillSuccessMessage(`برگه بارگیری شامل ${targetOrderIds.length} سفارش برای سردخانه صادر شد.`);
-    setTimeout(() => setBillSuccessMessage(null), 4500);
+    setIsGeneratingBill(true);
+    setBillErrorMessage(null);
+    setBillSuccessMessage(null);
+
+    try {
+      const res = await onCreateLoadingBill(currentVisitor?.id || '', targetOrderIds);
+      if (res && res.success) {
+        setSelectedOrdersForBill([]);
+        setBillSuccessMessage(res.message);
+        setTimeout(() => setBillSuccessMessage(null), 5000);
+      } else {
+        setBillErrorMessage(res?.message || 'خطا در صدور برگه بارگیری.');
+        setTimeout(() => setBillErrorMessage(null), 6000);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطای غیرمنتظره در ثبت برگه بارگیری.';
+      setBillErrorMessage(msg);
+      setTimeout(() => setBillErrorMessage(null), 6000);
+    } finally {
+      setIsGeneratingBill(false);
+    }
   };
 
   const toggleOrderSelection = (orderId: string) => {
@@ -237,9 +262,17 @@ export const TodayTab: React.FC<TodayTabProps> = ({
 
       {/* Bill Success Feedback */}
       {billSuccessMessage && (
-        <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2 animate-in fade-in">
+        <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2 animate-in fade-in">
           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>{billSuccessMessage}</span>
+        </div>
+      )}
+
+      {/* Bill Error Feedback */}
+      {billErrorMessage && (
+        <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2 animate-in fade-in">
+          <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+          <span>{billErrorMessage}</span>
         </div>
       )}
 
@@ -282,11 +315,34 @@ export const TodayTab: React.FC<TodayTabProps> = ({
                           {order.supermarket_name}
                         </span>
                         <span className="text-xs font-mono text-slate-500">{order.id}</span>
-                        {order.status === 'loading' && (
-                          <span className="text-xs px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800/50 font-medium">
-                            در حواله بارگیری
-                          </span>
-                        )}
+                        {order.status === 'loading' && (() => {
+                          const bill = order.loading_bill_id
+                            ? loadingBills.find((b) => b.id === order.loading_bill_id)
+                            : loadingBills.find((b) => b.items?.some((it) => it.order_id === order.id));
+
+                          if (bill?.status === 'approved') {
+                            return (
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-950/90 text-emerald-300 border border-emerald-700/60 font-medium inline-flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                                <span>تایید شده</span>
+                              </span>
+                            );
+                          }
+                          if (bill?.status === 'cancelled') {
+                            return (
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-rose-950/90 text-rose-300 border border-rose-700/60 font-medium inline-flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
+                                <span>لغو شده</span>
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-amber-950/90 text-amber-300 border border-amber-700/60 font-medium inline-flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+                              <span>در انتظار انبار</span>
+                            </span>
+                          );
+                        })()}
                       </div>
 
                       {/* Address 1 Line Truncate or Deleted Shop Warning */}
@@ -543,11 +599,18 @@ export const TodayTab: React.FC<TodayTabProps> = ({
                 <button
                   type="button"
                   onClick={handleGenerateBill}
-                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition shadow-md shadow-indigo-600/25 cursor-pointer"
+                  disabled={isGeneratingBill}
+                  className={`w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-white font-bold text-xs transition shadow-md cursor-pointer ${
+                    isGeneratingBill
+                      ? 'bg-indigo-800 text-indigo-300 cursor-not-allowed opacity-75'
+                      : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/25 active:scale-98'
+                  }`}
                 >
                   <FileText className="w-4 h-4" />
                   <span>
-                    صدور برگه بارگیری ({selectedOrdersForBill.length || pendingOrders.length} فاکتور)
+                    {isGeneratingBill
+                      ? 'در حال صدور برگه بارگیری...'
+                      : `صدور برگه بارگیری (${selectedOrdersForBill.length || pendingOrders.length} فاکتور)`}
                   </span>
                 </button>
               </div>

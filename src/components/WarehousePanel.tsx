@@ -40,10 +40,12 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({
     brands,
     loadingBills,
     approveLoadingBill,
+    cancelLoadingBill,
     updateProductStock,
     recordProductReturn,
     addNewProduct,
     bulkUpsertProducts,
+    currentUser,
   } = useApp();
 
   const [internalTab, setInternalTab] = useState<WarehouseTabKey>('pending');
@@ -59,14 +61,14 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({
   const [isExcelExportOpen, setIsExcelExportOpen] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
-  // Filter pending vs approved bills
+  // Filter pending vs history (approved and cancelled) bills
   const pendingBills = useMemo(
     () => loadingBills.filter((b) => b.status === 'pending'),
     [loadingBills]
   );
 
-  const approvedBills = useMemo(
-    () => loadingBills.filter((b) => b.status === 'approved'),
+  const historyBills = useMemo(
+    () => loadingBills.filter((b) => b.status === 'approved' || b.status === 'cancelled'),
     [loadingBills]
   );
 
@@ -76,10 +78,26 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({
     [products]
   );
 
-  const handleApproveBill = (billId: string) => {
-    approveLoadingBill(billId);
-    setActionFeedback(`برگه بارگیری ${billId} تایید شد و اقلام به طور قطعی از موجودی سردخانه ترخیص شدند.`);
+  const handleApproveBill = async (billId: string) => {
+    const res = await approveLoadingBill(billId, currentUser?.name || 'انباردار');
+    if (res && res.success) {
+      setActionFeedback(res.message);
+    } else {
+      setActionFeedback(`برگه بارگیری ${billId} تایید شد و اقلام به طور قطعی از موجودی سردخانه ترخیص شدند.`);
+    }
     setTimeout(() => setActionFeedback(null), 5000);
+  };
+
+  const handleCancelBill = async (billId: string, reason: string) => {
+    if (cancelLoadingBill) {
+      const res = await cancelLoadingBill(billId, currentUser?.name || 'انباردار', reason);
+      if (res && res.success) {
+        setActionFeedback(res.message);
+      } else {
+        setActionFeedback(res?.message || 'خطا در لغو برگه بارگیری.');
+      }
+      setTimeout(() => setActionFeedback(null), 5000);
+    }
   };
 
   const handleRestockSubmit = (productId: string, amount: number) => {
@@ -265,7 +283,7 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({
                       : 'bg-slate-800 text-slate-400'
                   }`}
                 >
-                  {formatNumber(approvedBills.length)}
+                  {formatNumber(historyBills.length)}
                 </span>
               </button>
             </div>
@@ -288,15 +306,16 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({
                       bill={bill}
                       products={products}
                       onApprove={handleApproveBill}
+                      onCancel={handleCancelBill}
                     />
                   ))
                 )}
               </div>
             )}
 
-            {/* Sub-Tab 2: Approved History (Accordion) */}
+            {/* Sub-Tab 2: Approved & Cancelled History (Accordion) */}
             {activeTab === 'history' && (
-              <BillHistoryList bills={approvedBills} products={products} />
+              <BillHistoryList bills={historyBills} products={products} />
             )}
           </div>
         </div>

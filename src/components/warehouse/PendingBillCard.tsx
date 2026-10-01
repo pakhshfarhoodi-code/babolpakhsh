@@ -13,18 +13,21 @@ import {
   PackageCheck,
   Ban,
   Boxes,
+  X,
 } from 'lucide-react';
 
 interface PendingBillCardProps {
   bill: LoadingBill;
   products: Product[];
   onApprove: (billId: string) => void;
+  onCancel: (billId: string, reason: string) => void;
 }
 
 export const PendingBillCard: React.FC<PendingBillCardProps> = ({
   bill,
   products,
   onApprove,
+  onCancel,
 }) => {
   // Compute aggregated items
   const aggregatedItems: AggregatedBillItem[] = useMemo(
@@ -34,6 +37,22 @@ export const PendingBillCard: React.FC<PendingBillCardProps> = ({
 
   // Track checked item IDs
   const [checkedProductIds, setCheckedProductIds] = useState<Set<string>>(new Set());
+
+  // Cancellation modal state
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelError, setCancelError] = useState<string | null>(null);
+
+  const handleConfirmCancel = () => {
+    if (!cancelReason.trim()) {
+      setCancelError('لطفاً دلیل لغو برگه بارگیری را وارد نمایید.');
+      return;
+    }
+    onCancel(bill.id, cancelReason.trim());
+    setIsCancelModalOpen(false);
+    setCancelReason('');
+    setCancelError(null);
+  };
 
   const handleToggleItem = (productId: string) => {
     setCheckedProductIds((prev) => {
@@ -184,15 +203,18 @@ export const PendingBillCard: React.FC<PendingBillCardProps> = ({
 
       {/* Action Buttons */}
       <div className="pt-2 flex flex-wrap items-center justify-between gap-3">
-        {/* Reject Button (Disabled with tooltip) */}
+        {/* Cancel Button */}
         <button
           type="button"
-          disabled
-          title="قابلیت رد برگه بارگیری یا ارجاع به اصلاح به‌زودی اضافه می‌شود"
-          className="min-h-[40px] px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-500 text-xs font-semibold flex items-center gap-1.5 cursor-not-allowed opacity-60"
+          onClick={() => {
+            setCancelReason('');
+            setCancelError(null);
+            setIsCancelModalOpen(true);
+          }}
+          className="min-h-[40px] px-3.5 py-2 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/60 text-rose-300 hover:text-rose-200 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer active:scale-98"
         >
-          <Ban className="w-4 h-4" />
-          <span>رد برگه بارگیری (به‌زودی)</span>
+          <Ban className="w-4 h-4 text-rose-400" />
+          <span>لغو برگه بارگیری</span>
         </button>
 
         {/* Final Approve Button (Requires all items checked) */}
@@ -215,6 +237,71 @@ export const PendingBillCard: React.FC<PendingBillCardProps> = ({
           )}
         </button>
       </div>
+
+      {/* Cancellation Reason Modal */}
+      {isCancelModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-rose-400 font-bold text-sm">
+                <Ban className="w-4 h-4" />
+                <span>لغو برگه بارگیری {bill.id}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCancelModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              با لغو این برگه، تمامی سفارش‌های مندرج در آن مجدداً به وضعیت آماده ارسال بازمی‌گردند و
+              ویزیتور می‌تواند مجدداً اقدام به صدور برگه نماید. موجودی فیزیکی انبار دست‌نخورده باقی می‌ماند.
+            </p>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-200 flex items-center justify-between">
+                <span>علت لغو برگه بارگیری <span className="text-rose-400">*</span></span>
+              </label>
+              <textarea
+                value={cancelReason}
+                onChange={(e) => {
+                  setCancelReason(e.target.value);
+                  if (cancelError) setCancelError(null);
+                }}
+                rows={3}
+                placeholder="مثال: عدم حضور راننده، نقص فنی خودرو، مغایرت موجودی با فاکتور..."
+                className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 transition resize-none"
+              />
+              {cancelError && (
+                <p className="text-xs text-rose-400 flex items-center gap-1 pt-0.5">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{cancelError}</span>
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsCancelModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition cursor-pointer"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCancel}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition shadow-md shadow-rose-600/30 cursor-pointer active:scale-98"
+              >
+                ثبت و لغو برگه
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

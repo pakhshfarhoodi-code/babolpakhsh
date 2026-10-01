@@ -80,6 +80,18 @@ export const OrderOverrideModal: React.FC<OrderOverrideModalProps> = ({
               </div>
             </div>
 
+            {order.status === 'loading' && (
+              <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-200 text-xs space-y-1 animate-in fade-in">
+                <div className="flex items-center gap-1.5 text-amber-300 font-bold">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+                  <span>هشدار تاییدیه: این سفارش در برگه بارگیری است</span>
+                </div>
+                <p className="text-amber-200/90 text-[11px] leading-relaxed pr-5">
+                  این سفارش در حال حاضر به برگه بارگیری شماره <strong className="font-mono text-amber-300">{order.loading_bill_id || 'فعال'}</strong> متصل است. تغییر وضعیت دستی ممکن است با کسر موجودی انبار ناسازگار شود.
+                </p>
+              </div>
+            )}
+
             <p className="text-slate-300">
               جهت حفظ انضباط مالی و حسابرسی سیستم پخش، لطفاً دلیل تغییر دستی وضعیت را ثبت فرمایید:
             </p>

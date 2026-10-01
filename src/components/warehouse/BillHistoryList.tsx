@@ -9,6 +9,8 @@ import {
   Clock,
   CheckCircle2,
   Package,
+  Ban,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface BillHistoryListProps {
@@ -29,7 +31,7 @@ export const BillHistoryList: React.FC<BillHistoryListProps> = ({
   if (bills.length === 0) {
     return (
       <div className="py-10 text-center text-slate-500 text-xs bg-slate-900/40 rounded-xl border border-slate-800">
-        هیچ سابقه‌ای از برگه‌های ترخیص شده در سیستم وجود ندارد.
+        هیچ سابقه‌ای از برگه‌های ترخیص یا لغو شده در سیستم وجود ندارد.
       </div>
     );
   }
@@ -38,13 +40,18 @@ export const BillHistoryList: React.FC<BillHistoryListProps> = ({
     <div className="space-y-2.5">
       {bills.map((bill) => {
         const isExpanded = expandedBillId === bill.id;
+        const isCancelled = bill.status === 'cancelled';
         const aggregated = aggregateBillItems(bill, products);
         const totalItemsCount = aggregated.reduce((sum, i) => sum + i.totalQuantity, 0);
 
         return (
           <div
             key={bill.id}
-            className="rounded-xl bg-slate-950/70 border border-slate-800 overflow-hidden transition-colors"
+            className={`rounded-xl border overflow-hidden transition-colors ${
+              isCancelled
+                ? 'bg-slate-950/50 border-slate-800/80 opacity-90'
+                : 'bg-slate-950/70 border-slate-800'
+            }`}
           >
             {/* Header Accordion Bar */}
             <div
@@ -52,7 +59,13 @@ export const BillHistoryList: React.FC<BillHistoryListProps> = ({
               className="p-3.5 flex items-center justify-between gap-3 cursor-pointer hover:bg-slate-900/60 transition select-none"
             >
               <div className="flex items-center gap-2.5 min-w-0">
-                <span className="font-mono font-bold text-xs text-emerald-400 bg-emerald-950/70 px-2 py-0.5 rounded border border-emerald-800/40 shrink-0">
+                <span
+                  className={`font-mono font-bold text-xs px-2 py-0.5 rounded border shrink-0 ${
+                    isCancelled
+                      ? 'text-slate-400 bg-slate-900 border-slate-700'
+                      : 'text-emerald-400 bg-emerald-950/70 border-emerald-800/40'
+                  }`}
+                >
                   {bill.id}
                 </span>
 
@@ -69,10 +82,17 @@ export const BillHistoryList: React.FC<BillHistoryListProps> = ({
                   <span>{bill.created_at}</span>
                 </div>
 
-                <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span className="hidden xs:inline">ترخیص شده</span>
-                </span>
+                {isCancelled ? (
+                  <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1">
+                    <Ban className="w-3.5 h-3.5 text-slate-400" />
+                    <span>لغو شده</span>
+                  </span>
+                ) : (
+                  <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span className="hidden xs:inline">ترخیص شده</span>
+                  </span>
+                )}
 
                 <span className="p-1 text-slate-400 hover:text-slate-200">
                   {isExpanded ? (
@@ -84,13 +104,40 @@ export const BillHistoryList: React.FC<BillHistoryListProps> = ({
               </div>
             </div>
 
-            {/* Accordion Content: Aggregated items list */}
+            {/* Accordion Content */}
             {isExpanded && (
-              <div className="p-4 pt-1 border-t border-slate-800/80 bg-slate-900/40 space-y-3">
+              <div className="p-4 pt-2 border-t border-slate-800/80 bg-slate-900/40 space-y-3">
+                {/* Cancelled Banner */}
+                {isCancelled && (
+                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 space-y-1.5">
+                    <div className="flex items-center gap-2 text-rose-400 font-bold">
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                      <span>علت لغو برگه بارگیری:</span>
+                    </div>
+                    <p className="text-slate-200 font-medium pr-6">
+                      {bill.cancel_reason || 'دلیلی ثبت نشده است.'}
+                    </p>
+                    {(bill.cancelled_by || bill.cancelled_at) && (
+                      <div className="text-[11px] text-slate-400 pr-6 flex flex-wrap items-center gap-2 pt-1 border-t border-slate-800/80 mt-1">
+                        {bill.cancelled_by && <span>لغو توسط: {bill.cancelled_by}</span>}
+                        {bill.cancelled_at && <span>• زمان لغو: {bill.cancelled_at}</span>}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Approved Metadata */}
+                {!isCancelled && bill.approved_by && (
+                  <div className="text-xs text-slate-400 flex items-center gap-2 pb-1 border-b border-slate-800/60">
+                    <span>تایید و ترخیص توسط: <strong className="text-slate-200">{bill.approved_by}</strong></span>
+                    {bill.approved_at && <span>• در تاریخ: {bill.approved_at}</span>}
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between text-xs text-slate-400">
                   <span className="flex items-center gap-1.5 font-medium text-slate-300">
                     <Package className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>ریز اقلام ترخیص‌شده به خودروی مویرگی:</span>
+                    <span>اقلام مندرج در برگه:</span>
                   </span>
                   <span>مجموع تعداد: {formatNumber(totalItemsCount)} واحد</span>
                 </div>
@@ -104,7 +151,7 @@ export const BillHistoryList: React.FC<BillHistoryListProps> = ({
                       <span className="text-slate-200 font-medium truncate">
                         {it.productName}
                       </span>
-                      <span className="font-bold text-emerald-400 font-mono shrink-0">
+                      <span className="font-bold text-slate-300 font-mono shrink-0">
                         {formatNumber(it.totalQuantity)} {it.unit}
                       </span>
                     </div>

@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Order, Product, Supermarket } from '../../types';
+import { Order, Product, Supermarket, LoadingBill } from '../../types';
 import {
   AlertTriangle,
   ArrowRightLeft,
@@ -11,6 +11,9 @@ import {
   Users,
   CheckCircle2,
   UserCheck,
+  Truck,
+  Clock,
+  FileCheck,
 } from 'lucide-react';
 import {
   LOW_STOCK_THRESHOLD,
@@ -18,23 +21,28 @@ import {
   isStoreInactiveFor30Days,
   formatPrice,
 } from './helpers';
+import { getBillAgeInfo } from './LoadingBillsTab';
 
 interface OverviewTabProps {
   orders: Order[];
   products: Product[];
   supermarkets: Supermarket[];
+  loadingBills?: LoadingBill[];
   onNavigateToOrders: (statusFilter?: string) => void;
   onNavigateToProducts: (filterType?: 'lowStock') => void;
   onNavigateToTeam: () => void;
+  onNavigateToLoadingBills?: (statusFilter?: string) => void;
 }
 
 export const OverviewTab: React.FC<OverviewTabProps> = ({
   orders,
   products,
   supermarkets,
+  loadingBills = [],
   onNavigateToOrders,
   onNavigateToProducts,
   onNavigateToTeam,
+  onNavigateToLoadingBills,
 }) => {
   // 1. Action Items
   // A. Delegated orders
@@ -61,6 +69,26 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
     [supermarkets]
   );
 
+  // E. Pending loading bills awaiting warehouse approval
+  const pendingBills = useMemo(
+    () => (loadingBills || []).filter((b) => b.status === 'pending'),
+    [loadingBills]
+  );
+
+  const oldestPendingBill = useMemo(() => {
+    if (pendingBills.length === 0) return null;
+    return [...pendingBills].sort((a, b) => {
+      const timeA = Date.parse(a.created_at) || 0;
+      const timeB = Date.parse(b.created_at) || 0;
+      return timeA - timeB;
+    })[0];
+  }, [pendingBills]);
+
+  const oldestAgeInfo = useMemo(() => {
+    if (!oldestPendingBill) return null;
+    return getBillAgeInfo(oldestPendingBill.created_at);
+  }, [oldestPendingBill]);
+
   // 2. Standard 3 KPIs
   const totalRevenue = useMemo(
     () => orders.filter((o) => o.status !== 'undelivered').reduce((sum, o) => sum + o.total_amount, 0),
@@ -80,7 +108,8 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   const totalActionItems =
     delegatedOrders.length +
     lowStockProducts.length +
-    inactiveStores.length;
+    inactiveStores.length +
+    pendingBills.length;
 
   return (
     <div className="space-y-6">
@@ -179,6 +208,49 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             <ArrowLeft className="w-4 h-4 text-purple-400" />
           </button>
         </div>
+
+        {/* Action: Pending Loading Bills (Only shown if pendingBills.length > 0) */}
+        {pendingBills.length > 0 && oldestPendingBill && oldestAgeInfo && (
+          <div className="p-4 rounded-2xl bg-slate-900 border border-amber-500/40 flex flex-col justify-between space-y-4 hover:border-amber-500/80 transition shadow-sm">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center border border-amber-500/30">
+                  <Truck className="w-5 h-5" />
+                </div>
+                <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                  {pendingBills.length} برگه در انتظار
+                </span>
+              </div>
+
+              <h3 className="font-bold text-sm text-slate-100">برگه‌های منتظر تایید انبار</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                حواله‌های تجمیعی ویزیتورها منتظر بررسی موجودی و تایید خروج از سردخانه هستند.
+              </p>
+
+              <div className="pt-1">
+                <span
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border ${
+                    oldestAgeInfo.isOverdue
+                      ? 'bg-rose-950/60 text-rose-300 border-rose-800/60 font-bold'
+                      : 'bg-amber-950/40 text-amber-300 border-amber-800/40'
+                  }`}
+                >
+                  <Clock className="w-3.5 h-3.5 shrink-0" />
+                  <span>قدیمی‌ترین: {oldestAgeInfo.formattedText}</span>
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onNavigateToLoadingBills?.('pending')}
+              className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-98 text-white text-xs font-bold transition shadow-md shadow-indigo-600/20 cursor-pointer"
+            >
+              <span>مشاهده برگه‌های در انتظار انبار</span>
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
         {/* Action 1: Delegated Orders */}
         <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col justify-between space-y-4 hover:border-amber-500/40 transition">

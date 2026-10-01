@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { OverviewTab } from './admin/OverviewTab';
 import { OrdersTab } from './admin/OrdersTab';
+import { LoadingBillsTab } from './admin/LoadingBillsTab';
 import { ProductsTab } from './admin/ProductsTab';
 import { TeamTab } from './admin/TeamTab';
 import { ReportsTab } from './admin/ReportsTab';
@@ -15,6 +16,8 @@ import {
   Pencil,
   X,
   Check,
+  FileText,
+  Truck,
 } from 'lucide-react';
 
 export type AdminTabKey = 'overview' | 'orders' | 'products' | 'team' | 'reports';
@@ -35,6 +38,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     orders,
     visitors,
     supermarkets,
+    loadingBills,
     inventoryTransactions,
     priceHistories,
     updateProductPrice,
@@ -60,7 +64,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setInternalTab(tab);
   };
 
-  // Passing filter hints to sub-tabs
+  // Orders Segmented Control & Filter state
+  const [ordersViewMode, setOrdersViewMode] = useState<'orders' | 'bills'>('orders');
+  const [highlightedBillId, setHighlightedBillId] = useState<string | null>(null);
+  const [billsStatusFilterHint, setBillsStatusFilterHint] = useState<string>('all');
   const [ordersStatusFilterHint, setOrdersStatusFilterHint] = useState<string>('all');
   const [productsFilterHint, setProductsFilterHint] = useState<'lowStock' | 'all'>('all');
 
@@ -76,16 +83,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     return supermarkets.filter((s) => s.is_active === false).length;
   }, [supermarkets]);
 
+  const pendingBillsCount = useMemo(() => {
+    return loadingBills.filter((b) => b.status === 'pending').length;
+  }, [loadingBills]);
+
   const actionItemsCount = useMemo(() => {
     const delegatedCount = orders.filter((o) => o.status === 'delegated').length;
     const lowStockCount = products.filter((p) => p.stock - p.reserved_stock < LOW_STOCK_THRESHOLD).length;
     const inactiveStoresCount = supermarkets.filter((s) => s.is_active !== false && isStoreInactiveFor30Days(s.id, orders)).length;
-    return delegatedCount + lowStockCount + inactiveStoresCount;
-  }, [orders, products, supermarkets]);
+    return delegatedCount + lowStockCount + inactiveStoresCount + pendingBillsCount;
+  }, [orders, products, supermarkets, pendingBillsCount]);
 
   // Tab Navigation Handlers from Overview Cards
   const handleNavigateToOrders = (statusFilter = 'all') => {
     setOrdersStatusFilterHint(statusFilter);
+    setOrdersViewMode('orders');
+    setHighlightedBillId(null);
+    setActiveTab('orders');
+  };
+
+  const handleNavigateToLoadingBills = (statusFilter = 'pending', billId?: string) => {
+    setBillsStatusFilterHint(statusFilter);
+    setOrdersViewMode('bills');
+    setHighlightedBillId(billId || null);
     setActiveTab('orders');
   };
 
@@ -193,6 +213,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   {item.badge}
                 </span>
               )}
+              {item.id === 'orders' && pendingBillsCount > 0 && (
+                <span
+                  className="px-1.5 py-0.5 rounded-full font-black text-[11px] bg-amber-400 text-slate-950 font-mono shadow-sm animate-pulse"
+                  title={`${pendingBillsCount} برگه بارگیری در انتظار تایید انبار`}
+                >
+                  {pendingBillsCount}
+                </span>
+              )}
             </button>
           );
         })}
@@ -204,23 +232,99 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           orders={orders}
           products={products}
           supermarkets={supermarkets}
+          loadingBills={loadingBills}
           onNavigateToOrders={handleNavigateToOrders}
           onNavigateToProducts={handleNavigateToProducts}
           onNavigateToTeam={handleNavigateToTeam}
+          onNavigateToLoadingBills={handleNavigateToLoadingBills}
         />
       )}
 
-      {/* Tab 2: Orders */}
+      {/* Tab 2: Orders & Loading Bills */}
       {activeTab === 'orders' && (
-        <OrdersTab
-          orders={orders}
-          visitors={visitors}
-          initialStatusFilter={ordersStatusFilterHint}
-          onUpdateOrderStatus={updateOrderStatus}
-          onRequestReassignment={requestReassignment}
-          onAssignOrderVisitor={assignOrderVisitor}
-          onDeleteOrder={deleteOrder}
-        />
+        <div className="space-y-4">
+          {/* Segmented Control for Orders vs Loading Bills */}
+          <div className="flex items-center gap-2 p-1.5 bg-slate-900 border border-slate-800 rounded-2xl w-fit flex-wrap">
+            <button
+              type="button"
+              onClick={() => {
+                setOrdersViewMode('orders');
+                setHighlightedBillId(null);
+              }}
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 cursor-pointer ${
+                ordersViewMode === 'orders'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <FileText className="w-4 h-4" />
+              <span>سفارش‌های فروشگاه‌ها</span>
+              <span
+                className={`px-1.5 py-0.5 rounded-full text-xs font-mono ${
+                  ordersViewMode === 'orders' ? 'bg-white/20 text-white font-bold' : 'bg-slate-800 text-slate-400'
+                }`}
+              >
+                {orders.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setOrdersViewMode('bills');
+                setHighlightedBillId(null);
+                setBillsStatusFilterHint('all');
+              }}
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 cursor-pointer ${
+                ordersViewMode === 'bills'
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Truck className="w-4 h-4" />
+              <span>برگه‌های بارگیری</span>
+              <span
+                className={`px-1.5 py-0.5 rounded-full text-xs font-mono ${
+                  ordersViewMode === 'bills' ? 'bg-white/20 text-white font-bold' : 'bg-slate-800 text-slate-400'
+                }`}
+              >
+                {loadingBills.length}
+              </span>
+              {pendingBillsCount > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-400 text-slate-950 font-mono shadow-sm animate-pulse flex items-center gap-1">
+                  <span>{pendingBillsCount}</span>
+                  <span className="text-[10px] hidden xs:inline">در انتظار</span>
+                </span>
+              )}
+            </button>
+          </div>
+
+          {/* Sub-view 1: OrdersTab */}
+          {ordersViewMode === 'orders' && (
+            <OrdersTab
+              orders={orders}
+              visitors={visitors}
+              initialStatusFilter={ordersStatusFilterHint}
+              onUpdateOrderStatus={updateOrderStatus}
+              onRequestReassignment={requestReassignment}
+              onAssignOrderVisitor={assignOrderVisitor}
+              onDeleteOrder={deleteOrder}
+              onOpenBill={(billId) => handleNavigateToLoadingBills('all', billId)}
+            />
+          )}
+
+          {/* Sub-view 2: LoadingBillsTab */}
+          {ordersViewMode === 'bills' && (
+            <LoadingBillsTab
+              initialBillId={highlightedBillId}
+              initialStatusFilter={billsStatusFilterHint}
+              onNavigateToOrder={(orderId) => {
+                setOrdersViewMode('orders');
+                setOrdersStatusFilterHint('all');
+              }}
+            />
+          )}
+        </div>
       )}
 
       {/* Tab 3: Products */}

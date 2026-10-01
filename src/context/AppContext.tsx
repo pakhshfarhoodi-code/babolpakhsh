@@ -35,6 +35,7 @@ import { useCatalog } from './hooks/useCatalog';
 import { useWarehouse } from './hooks/useWarehouse';
 import { useOrders, CreateOrderPayload } from './hooks/useOrders';
 import { useSupabaseSync } from './hooks/useSupabaseSync';
+import { CheckCircle2, AlertTriangle, Info, X, Bell } from 'lucide-react';
 
 // Re-export helpers for backwards compatibility
 export { generateUniqueId, toSyntheticEmail };
@@ -54,6 +55,7 @@ interface AppContextType {
   login: (profileId: string) => void;
   loginWithCredentials: (username: string, password: string, allowedRoles?: UserRole[]) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
+  showToast: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
 
   categories: Category[];
   brands: string[];
@@ -78,8 +80,19 @@ interface AppContextType {
     updateCustomerPermanent?: boolean
   ) => { success: boolean; message: string; targetVisitorName?: string };
   deleteOrder: (orderId: string) => Promise<{ success: boolean; message: string }> | { success: boolean; message: string };
-  createLoadingBill: (visitorId: string, orderIds: string[]) => void;
-  approveLoadingBill: (billId: string) => void;
+  createLoadingBill: (
+    visitorId: string,
+    orderIds: string[]
+  ) => Promise<{ success: boolean; message: string; billId?: string }> | { success: boolean; message: string; billId?: string };
+  approveLoadingBill: (
+    billId: string,
+    approvedBy?: string
+  ) => Promise<{ success: boolean; message: string }> | { success: boolean; message: string };
+  cancelLoadingBill: (
+    billId: string,
+    cancelledBy: string,
+    reason: string
+  ) => Promise<{ success: boolean; message: string }> | { success: boolean; message: string };
   updateProductPrice: (productId: string, newPrice: number, newVisitorPrice?: number, newConsumerPrice?: number) => void;
   updateProduct: (productId: string, updates: Partial<Omit<Product, 'id' | 'reserved_stock'>>) => { success: boolean; message: string };
   toggleProductLike: (
@@ -244,7 +257,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setOrders: orders.setOrders,
   });
 
-  // Hook 5: Supabase Realtime / Polling Sync
+  // Global Toast notification system
+  const [globalToast, setGlobalToast] = useState<{
+    message: string;
+    type: 'info' | 'success' | 'warning' | 'error';
+  } | null>(null);
+
+  const showToast = useCallback((message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
+    setGlobalToast({ message, type });
+    setTimeout(() => {
+      setGlobalToast((curr) => (curr?.message === message ? null : curr));
+    }, 5000);
+  }, []);
+
+  // Hook 5: Supabase Realtime / Polling Sync & LocalStorage Cross-Tab Sync
   useSupabaseSync({
     setProducts: catalog.setProducts,
     setOrders: orders.setOrders,
@@ -256,6 +282,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setLoadingBills: warehouse.setLoadingBills,
     setInventoryTransactions: warehouse.setInventoryTransactions,
     setProductLikes: catalog.setProductLikes,
+    role: auth.role,
+    currentUser: auth.currentUser,
+    onShowToast: showToast,
   });
 
   // Reset to default factory state
@@ -841,6 +870,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     deleteOrder: orders.deleteOrder,
     createLoadingBill: warehouse.createLoadingBill,
     approveLoadingBill: warehouse.approveLoadingBill,
+    cancelLoadingBill: warehouse.cancelLoadingBill,
     updateProductPrice: catalog.updateProductPrice,
     updateProduct: catalog.updateProduct,
     updateProductStock: warehouse.updateProductStock,
@@ -872,6 +902,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     isOnlineDb: isSupabaseConfigured,
     theme,
     toggleTheme,
+    showToast,
   }), [
     auth.role,
     auth.setRole,
@@ -930,16 +961,57 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     warehouse.deleteInventoryTransactions,
     warehouse.createLoadingBill,
     warehouse.approveLoadingBill,
+    warehouse.cancelLoadingBill,
     warehouse.updateProductStock,
     warehouse.recordProductReturn,
     resetToDefaults,
     theme,
     toggleTheme,
+    showToast,
   ]);
 
   return (
     <AppContext.Provider value={contextValue}>
       {children}
+
+      {/* Real-time Global Toast Notification Banner */}
+      {globalToast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-md w-full px-4 animate-in fade-in slide-in-from-top-4 duration-200 pointer-events-auto">
+          <div
+            className={`p-3.5 rounded-2xl shadow-2xl border flex items-center justify-between gap-3 backdrop-blur-xl ${
+              globalToast.type === 'success'
+                ? 'bg-emerald-950/95 border-emerald-500/50 text-emerald-200'
+                : globalToast.type === 'error'
+                ? 'bg-rose-950/95 border-rose-500/50 text-rose-200'
+                : globalToast.type === 'warning'
+                ? 'bg-amber-950/95 border-amber-500/50 text-amber-200'
+                : 'bg-slate-900/95 border-blue-500/50 text-blue-200'
+            }`}
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              {globalToast.type === 'success' ? (
+                <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+              ) : globalToast.type === 'error' ? (
+                <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
+              ) : globalToast.type === 'warning' ? (
+                <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+              ) : (
+                <Bell className="w-5 h-5 text-blue-400 shrink-0 animate-bounce" />
+              )}
+              <span className="text-xs sm:text-sm font-bold truncate">
+                {globalToast.message}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setGlobalToast(null)}
+              className="p-1 rounded-lg hover:bg-white/10 transition cursor-pointer text-slate-400 hover:text-white"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </AppContext.Provider>
   );
 };

@@ -12,7 +12,7 @@ import {
 } from '../../types';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { LEGACY_MOCK_NAMES } from './useCatalog';
-import { STORAGE_KEYS, getDeletedIds, getMarketTestIds, setMarketTestId } from '../utils';
+import { STORAGE_KEYS, getDeletedIds, getMarketTestIds, setMarketTestId, getOrderChannel } from '../utils';
 
 interface UseSupabaseSyncProps {
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
@@ -26,6 +26,9 @@ interface UseSupabaseSyncProps {
   setLoadingBills: React.Dispatch<React.SetStateAction<LoadingBill[]>>;
   setInventoryTransactions: React.Dispatch<React.SetStateAction<InventoryTransaction[]>>;
   setProductLikes?: React.Dispatch<React.SetStateAction<ProductLike[]>>;
+  role?: string;
+  currentUser?: { id: string; name: string; role: string };
+  onShowToast?: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
 }
 
 export function useSupabaseSync({
@@ -39,10 +42,14 @@ export function useSupabaseSync({
   setLoadingBills,
   setInventoryTransactions,
   setProductLikes,
+  role,
+  currentUser,
+  onShowToast,
 }: UseSupabaseSyncProps) {
   const DUMMY_SUPERMARKET_IDS = new Set(['shop-1', 'shop-2', 'shop-3', 'shop-4', 'shop-5']);
   const DUMMY_VISITOR_IDS = new Set(['vis-1', 'vis-2', 'vis-3']);
 
+  // 1. Supabase Realtime & Polling Sync
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return;
 
@@ -202,6 +209,7 @@ export function useSupabaseSync({
                 (o.assigned_visitor_id && o.assigned_visitor_id !== 'direct'
                   ? 'ویزیتور'
                   : 'خرید مستقیم از پخش مرکزی'),
+              order_channel: getOrderChannel(o),
             }));
 
           setOrders((prev) => {
@@ -228,6 +236,7 @@ export function useSupabaseSync({
                     status: pendingOrder.status,
                     total_amount: pendingOrder.total_amount,
                     order_source: pendingOrder.order_source || 'supermarket',
+                    order_channel: getOrderChannel(pendingOrder),
                     order_date: pendingOrder.order_date,
                   }, { onConflict: 'id' });
 
@@ -504,7 +513,119 @@ export function useSupabaseSync({
 
     loadFromSupabase();
     const interval = setInterval(loadFromSupabase, 20000); // Poll every 20s
-    return () => clearInterval(interval);
+
+    // Realtime Supabase Channel Subscription for loading_bills & orders
+    const billsChannel = supabase
+      .channel('loading-bills-realtime')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'loading_bills' },
+        async (payload) => {
+          const newBillRaw = payload.new as LoadingBill;
+          if (!newBillRaw || !newBillRaw.id) return;
+
+          // Fetch items for this new bill with a single fetch
+          let items: any[] = [];
+          try {
+            const { data: itemsData } = await supabase!
+              .from('loading_bill_items')
+              .select('*')
+              .eq('loading_bill_id', newBillRaw.id);
+            if (itemsData) items = itemsData;
+          } catch (e) {
+            console.warn('Failed to fetch loading_bill_items for new bill:', e);
+          }
+
+          const completeBill: LoadingBill = {
+            ...newBillRaw,
+            items,
+          };
+
+          setLoadingBills((prev) => {
+            if (prev.some((b) => b.id === completeBill.id)) return prev;
+            const updated = [completeBill, ...prev];
+            try {
+              localStorage.setItem(STORAGE_KEYS.LOADING_BILLS, JSON.stringify(updated));
+            } catch {}
+            return updated;
+          });
+
+          // Show Toast notification for warehouse and admin
+          if (role === 'warehouse' || role === 'admin') {
+            onShowToast?.(`برگه جدید از ${completeBill.visitor_name}`, 'info');
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'loading_bills' },
+        (payload) => {
+          const updatedBillRaw = payload.new as LoadingBill;
+          if (!updatedBillRaw || !updatedBillRaw.id) return;
+
+          setLoadingBills((prev) => {
+            const oldBill = prev.find((b) => b.id === updatedBillRaw.id);
+            const merged: LoadingBill = {
+              ...oldBill,
+              ...updatedBillRaw,
+              items: oldBill?.items || updatedBillRaw.items || [],
+            };
+            const updated = prev.map((b) => (b.id === merged.id ? merged : b));
+            try {
+              localStorage.setItem(STORAGE_KEYS.LOADING_BILLS, JSON.stringify(updated));
+            } catch {}
+            return updated;
+          });
+
+          // Show Toast for visitor when their own bill status changes
+          if (role === 'visitor' && currentUser) {
+            const isMyBill =
+              updatedBillRaw.visitor_id === currentUser.id ||
+              updatedBillRaw.visitor_name === currentUser.name;
+            if (isMyBill) {
+              if (updatedBillRaw.status === 'approved') {
+                onShowToast?.('برگه شما تایید شد', 'success');
+              } else if (updatedBillRaw.status === 'cancelled') {
+                const reasonText = updatedBillRaw.cancel_reason ? `: ${updatedBillRaw.cancel_reason}` : '';
+                onShowToast?.(`برگه شما لغو شد${reasonText}`, 'error');
+              }
+            }
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'orders' },
+        (payload) => {
+          const updatedOrder = payload.new as Order;
+          if (!updatedOrder || !updatedOrder.id) return;
+
+          setOrders((prev) => {
+            const updated = prev.map((o) =>
+              o.id === updatedOrder.id
+                ? {
+                    ...o,
+                    ...updatedOrder,
+                    status: updatedOrder.status,
+                    loading_bill_id: updatedOrder.loading_bill_id,
+                  }
+                : o
+            );
+            try {
+              localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(updated));
+            } catch {}
+            return updated;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      clearInterval(interval);
+      if (billsChannel && supabase) {
+        supabase.removeChannel(billsChannel);
+      }
+    };
   }, [
     setProducts,
     setOrders,
@@ -515,5 +636,73 @@ export function useSupabaseSync({
     setVisitors,
     setLoadingBills,
     setInventoryTransactions,
+    setProductLikes,
+    role,
+    currentUser,
+    onShowToast,
   ]);
+
+  // 2. LocalStorage Cross-Tab Realtime Sync (Works seamlessly in local / offline storage mode)
+  useEffect(() => {
+    const handleStorageEvent = (e: StorageEvent) => {
+      if (!e.key) return;
+
+      // When loading bills are updated by another tab
+      if (e.key === STORAGE_KEYS.LOADING_BILLS && e.newValue) {
+        try {
+          const newBills: LoadingBill[] = JSON.parse(e.newValue);
+          if (Array.isArray(newBills)) {
+            setLoadingBills((prev) => {
+              const prevIds = new Set(prev.map((b) => b.id));
+              const newlyInserted = newBills.find((b) => !prevIds.has(b.id));
+
+              // Toast for warehouse/admin when a new bill was added in another tab
+              if (newlyInserted && (role === 'warehouse' || role === 'admin')) {
+                onShowToast?.(`برگه جدید از ${newlyInserted.visitor_name}`, 'info');
+              }
+
+              // Toast for visitor when a bill status changed in another tab
+              newBills.forEach((newB) => {
+                const oldB = prev.find((b) => b.id === newB.id);
+                if (oldB && oldB.status !== newB.status) {
+                  if (role === 'visitor' && currentUser) {
+                    const isMyBill =
+                      newB.visitor_id === currentUser.id ||
+                      newB.visitor_name === currentUser.name;
+                    if (isMyBill) {
+                      if (newB.status === 'approved') {
+                        onShowToast?.('برگه شما تایید شد', 'success');
+                      } else if (newB.status === 'cancelled') {
+                        const reasonText = newB.cancel_reason ? `: ${newB.cancel_reason}` : '';
+                        onShowToast?.(`برگه شما لغو شد${reasonText}`, 'error');
+                      }
+                    }
+                  }
+                }
+              });
+
+              return newBills;
+            });
+          }
+        } catch (err) {
+          console.warn('Storage event parsing for loading bills failed:', err);
+        }
+      }
+
+      // When orders are updated by another tab
+      if (e.key === STORAGE_KEYS.ORDERS && e.newValue) {
+        try {
+          const newOrders: Order[] = JSON.parse(e.newValue);
+          if (Array.isArray(newOrders)) {
+            setOrders(newOrders);
+          }
+        } catch (err) {
+          console.warn('Storage event parsing for orders failed:', err);
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageEvent);
+    return () => window.removeEventListener('storage', handleStorageEvent);
+  }, [setLoadingBills, setOrders, role, currentUser, onShowToast]);
 }

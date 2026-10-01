@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Order, OrderStatus, Visitor } from '../../types';
+import { Order, OrderStatus, Visitor, OrderChannel } from '../../types';
 import {
   Search,
   Truck,
@@ -19,10 +19,12 @@ import {
   Store,
   Trash2,
   X,
+  AlertTriangle,
 } from 'lucide-react';
 import { isToday, isWithinDays, formatPrice, formatOrderDate } from './helpers';
 import { OrderOverrideModal } from './OrderOverrideModal';
 import { OrderInvoiceModal } from '../invoice/OrderInvoiceModal';
+import { getOrderChannel } from '../../context/utils';
 
 interface OrdersTabProps {
   orders: Order[];
@@ -36,6 +38,7 @@ interface OrdersTabProps {
     updateCustomerPermanent?: boolean
   ) => { success: boolean; message: string; targetVisitorName?: string };
   onDeleteOrder?: (orderId: string) => Promise<{ success: boolean; message: string }> | { success: boolean; message: string };
+  onOpenBill?: (billId: string) => void;
 }
 
 export const OrdersTab: React.FC<OrdersTabProps> = ({
@@ -46,10 +49,12 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
   onRequestReassignment,
   onAssignOrderVisitor,
   onDeleteOrder,
+  onOpenBill,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter);
-  const [channelFilter, setChannelFilter] = useState<'all' | 'direct' | 'visitor'>('all');
+  type ChannelFilterType = 'all' | 'visitor_field' | 'store_self' | 'store_direct';
+  const [channelFilter, setChannelFilter] = useState<ChannelFilterType>('all');
   const [timeFilter, setTimeFilter] = useState<'all' | 'today' | 'week'>('all');
 
   // Override modal state
@@ -69,43 +74,58 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
   // Invoice view / print modal state
   const [invoiceModalOrder, setInvoiceModalOrder] = useState<Order | null>(null);
 
-  // Status Chip config
+  // Status Chip config (with 'loading' added between assigned and delegated)
   const statusChips = [
     { id: 'all', label: 'همه سفارش‌ها' },
     { id: 'assigned', label: 'آماده ارسال' },
+    { id: 'loading', label: 'در برگه بارگیری' },
     { id: 'delegated', label: 'در حال واگذاری' },
     { id: 'delivered', label: 'تحویل شده' },
     { id: 'undelivered', label: 'عدم تحویل' },
   ];
 
-  // Channel metrics
-  const directOrdersCount = useMemo(() => {
-    return orders.filter(
-      (o) =>
-        o.assigned_visitor_id === 'direct' ||
-        !o.assigned_visitor_id ||
-        o.visitor_name?.includes('مستقیم')
-    ).length;
-  }, [orders]);
+  // Channel Chip config based on getOrderChannel
+  const channelChips: {
+    id: ChannelFilterType;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+  }[] = [
+    { id: 'all', label: 'همه', icon: Filter },
+    { id: 'visitor_field', label: 'ویزیتور در محل', icon: Truck },
+    { id: 'store_self', label: 'ثبت توسط فروشگاه', icon: Store },
+    { id: 'store_direct', label: 'خرید مستقیم', icon: Building2 },
+  ];
 
-  const visitorOrdersCount = useMemo(() => {
-    return orders.length - directOrdersCount;
-  }, [orders.length, directOrdersCount]);
+  // Channel metrics based on getOrderChannel
+  const channelCounts = useMemo(() => {
+    let visitorField = 0;
+    let storeSelf = 0;
+    let storeDirect = 0;
+
+    orders.forEach((o) => {
+      const ch = getOrderChannel(o);
+      if (ch === 'visitor_field') visitorField++;
+      else if (ch === 'store_self') storeSelf++;
+      else if (ch === 'store_direct') storeDirect++;
+    });
+
+    return {
+      all: orders.length,
+      visitor_field: visitorField,
+      store_self: storeSelf,
+      store_direct: storeDirect,
+    };
+  }, [orders]);
 
   // Filtered orders
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
-      const isDirect =
-        order.assigned_visitor_id === 'direct' ||
-        !order.assigned_visitor_id ||
-        order.visitor_name?.includes('مستقیم');
-
-      // 1. Channel Filter (Direct vs Visitor)
-      if (channelFilter === 'direct' && !isDirect) {
-        return false;
-      }
-      if (channelFilter === 'visitor' && isDirect) {
-        return false;
+      // 1. Channel Filter based on getOrderChannel
+      if (channelFilter !== 'all') {
+        const orderChannel = getOrderChannel(order);
+        if (orderChannel !== channelFilter) {
+          return false;
+        }
       }
 
       // 2. Status Filter
@@ -127,7 +147,8 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
         const matchId = order.id.toLowerCase().includes(term);
         const matchShop = order.supermarket_name.toLowerCase().includes(term);
         const matchVisitor = order.visitor_name?.toLowerCase().includes(term) ?? false;
-        if (!matchId && !matchShop && !matchVisitor) return false;
+        const matchBill = order.loading_bill_id?.toLowerCase().includes(term) ?? false;
+        if (!matchId && !matchShop && !matchVisitor && !matchBill) return false;
       }
 
       return true;
@@ -216,64 +237,38 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
 
       {/* Top Filter Bar */}
       <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-3.5 shadow-sm">
-        {/* Sales Channel Tabs (Direct vs Visitors) */}
+        {/* Sales Channel Tabs based on getOrderChannel */}
         <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-800/80">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs text-slate-400 font-medium ml-1">کانال فروش:</span>
-            <button
-              type="button"
-              onClick={() => setChannelFilter('all')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
-                channelFilter === 'all'
-                  ? 'bg-slate-100 text-slate-950 shadow-sm'
-                  : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
-              }`}
-            >
-              <span>همه کانال‌ها</span>
-              <span className="px-1.5 py-0.2 rounded-full text-[11px] font-mono bg-slate-800 text-slate-300">
-                {orders.length}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setChannelFilter('direct')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
-                channelFilter === 'direct'
-                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/30 font-bold'
-                  : 'bg-amber-950/30 text-amber-300 hover:bg-amber-950/60 border border-amber-800/50'
-              }`}
-            >
-              <Building2 className="w-3.5 h-3.5" />
-              <span>خرید مستقیم (دفتر مرکزی)</span>
-              <span className="px-1.5 py-0.2 rounded-full text-[11px] font-mono font-bold bg-amber-400 text-slate-950">
-                {directOrdersCount}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setChannelFilter('visitor')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
-                channelFilter === 'visitor'
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
-                  : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
-              }`}
-            >
-              <Truck className="w-3.5 h-3.5" />
-              <span>سفارشات ویزیتورها</span>
-              <span className="px-1.5 py-0.2 rounded-full text-[11px] font-mono bg-slate-800 text-slate-300">
-                {visitorOrdersCount}
-              </span>
-            </button>
+            <span className="text-xs text-slate-400 font-medium ml-1">کانال ثبت:</span>
+            {channelChips.map((chip) => {
+              const Icon = chip.icon;
+              const count = channelCounts[chip.id];
+              const isActive = channelFilter === chip.id;
+              return (
+                <button
+                  key={chip.id}
+                  type="button"
+                  onClick={() => setChannelFilter(chip.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                    isActive
+                      ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30 font-bold'
+                      : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  <span>{chip.label}</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded-full text-[11px] font-mono ${
+                      isActive ? 'bg-white/20 text-white font-bold' : 'bg-slate-800 text-slate-300'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
-
-          {/* Quick Notice */}
-          {directOrdersCount > 0 && (
-            <span className="text-[11px] text-amber-400/90 hidden sm:inline-block">
-              {directOrdersCount} سفارش مستقیم در انتظار پردازش
-            </span>
-          )}
         </div>
 
         {/* Status Chips */}
@@ -355,14 +350,9 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
             <h3 className="font-bold text-sm text-slate-100">
               فهرست فاکتورها و سفارشات پخش مویرگی
             </h3>
-            {channelFilter === 'direct' && (
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold">
-                کانال خرید مستقیم
-              </span>
-            )}
-            {channelFilter === 'visitor' && (
+            {channelFilter !== 'all' && (
               <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 font-bold">
-                کانال ویزیتوری
+                {channelChips.find((c) => c.id === channelFilter)?.label}
               </span>
             )}
           </div>
@@ -389,10 +379,32 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
               </thead>
               <tbody className="divide-y divide-slate-800/60">
                 {filteredOrders.map((order) => {
-                  const isDirect =
-                    order.assigned_visitor_id === 'direct' ||
-                    !order.assigned_visitor_id ||
-                    order.visitor_name?.includes('مستقیم');
+                  const orderChannel = getOrderChannel(order);
+                  const isDirect = orderChannel === 'store_direct';
+
+                  const channelBadgeMap: Record<
+                    OrderChannel,
+                    { label: string; bg: string; icon: React.ComponentType<{ className?: string }> }
+                  > = {
+                    visitor_field: {
+                      label: 'ویزیتور در محل',
+                      bg: 'bg-blue-500/15 text-blue-300 border-blue-500/30',
+                      icon: Truck,
+                    },
+                    store_self: {
+                      label: 'ثبت توسط فروشگاه',
+                      bg: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+                      icon: Store,
+                    },
+                    store_direct: {
+                      label: 'خرید مستقیم',
+                      bg: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+                      icon: Building2,
+                    },
+                  };
+
+                  const chBadge = channelBadgeMap[orderChannel];
+                  const ChIcon = chBadge.icon;
 
                   const statusMap: Record<OrderStatus, { text: string; bg: string }> = {
                     assigned: {
@@ -400,7 +412,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                       bg: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
                     },
                     loading: {
-                      text: 'در حال بارگیری',
+                      text: 'در برگه بارگیری',
                       bg: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30',
                     },
                     delegated: {
@@ -408,7 +420,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                       bg: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
                     },
                     delivered: {
-                      text: 'تحویل داده شد',
+                      text: 'تحویل شده',
                       bg: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
                     },
                     undelivered: {
@@ -426,22 +438,40 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                         isDirect ? 'bg-amber-500/[0.02]' : ''
                       }`}
                     >
-                      <td className="py-3 px-4 font-bold text-blue-400 font-mono">{order.id}</td>
+                      <td className="py-3 px-4">
+                        <div className="flex flex-col items-start gap-1">
+                          <span className="font-bold text-blue-400 font-mono text-xs">{order.id}</span>
+                          {order.loading_bill_id && (
+                            <button
+                              type="button"
+                              onClick={() => onOpenBill?.(order.loading_bill_id!)}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/35 hover:border-indigo-400/60 transition cursor-pointer"
+                              title={`مشاهده برگه بارگیری ${order.loading_bill_id}`}
+                            >
+                              <FileText className="w-3 h-3 text-indigo-400 shrink-0" />
+                              <span>برگه: {order.loading_bill_id}</span>
+                            </button>
+                          )}
+                        </div>
+                      </td>
                       <td className="py-3 px-4 font-medium text-slate-200">
                         {order.supermarket_name}
                       </td>
                       <td className="py-3 px-4">
-                        {isDirect ? (
-                          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold w-fit">
-                            <Building2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                            <span>پخش مرکزی (مستقیم)</span>
+                        <div className="flex flex-col items-start gap-1">
+                          <div
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold border ${chBadge.bg}`}
+                          >
+                            <ChIcon className="w-3.5 h-3.5 shrink-0" />
+                            <span>{chBadge.label}</span>
                           </div>
-                        ) : (
-                          <div className="flex items-center gap-1.5 text-slate-300">
-                            <Truck className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                            <span>{order.visitor_name}</span>
-                          </div>
-                        )}
+                          {orderChannel !== 'store_direct' && order.visitor_name && (
+                            <span className="text-[11px] text-slate-400 flex items-center gap-1 pr-0.5">
+                              <span>ویزیتور:</span>
+                              <strong className="text-slate-200 font-medium">{order.visitor_name}</strong>
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3 px-4 font-bold text-slate-100">
                         {formatPrice(order.total_amount)}
@@ -474,10 +504,21 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                             <button
                               type="button"
                               onClick={() => handleOpenOverride(order, 'delivered')}
-                              className="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 text-xs font-semibold transition cursor-pointer"
-                              title="تایید تحویل سفارش توسط مدیریت"
+                              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1 border ${
+                                order.status === 'loading'
+                                  ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/50'
+                                  : 'bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30'
+                              }`}
+                              title={
+                                order.status === 'loading'
+                                  ? 'هشدار: این سفارش در برگه بارگیری است! تغییر دستی ممکن است با کسر موجودی انبار ناسازگار شود.'
+                                  : 'تایید تحویل سفارش توسط مدیریت'
+                              }
                             >
-                              تایید تحویل
+                              {order.status === 'loading' && (
+                                <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
+                              )}
+                              <span>تایید تحویل</span>
                             </button>
                           )}
 
@@ -486,10 +527,21 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                             <button
                               type="button"
                               onClick={() => handleOpenOverride(order, 'undelivered')}
-                              className="px-2.5 py-1 rounded-lg bg-rose-600/15 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 text-xs font-semibold transition cursor-pointer"
-                              title="تغییر وضعیت به عدم تحویل با ثبت دلیل"
+                              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1 border ${
+                                order.status === 'loading'
+                                  ? 'bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border-rose-800/60'
+                                  : 'bg-rose-600/15 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30'
+                              }`}
+                              title={
+                                order.status === 'loading'
+                                  ? 'هشدار: این سفارش در برگه بارگیری است! تغییر دستی ممکن است با کسر موجودی انبار ناسازگار شود.'
+                                  : 'تغییر وضعیت به عدم تحویل با ثبت دلیل'
+                              }
                             >
-                              عدم تحویل
+                              {order.status === 'loading' && (
+                                <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" />
+                              )}
+                              <span>عدم تحویل</span>
                             </button>
                           )}
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Order,
+  OrderChannel,
   ReassignmentRequest,
   OrderStatus,
   Product,
@@ -202,6 +203,17 @@ export function useOrders({
       const orderIsoDate = new Date().toISOString();
       const totalAmount = payload.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
+      // Determine explicit order channel:
+      // direct -> store_direct, registered by visitor -> visitor_field, store self with visitor -> store_self
+      let orderChannel: OrderChannel;
+      if (isDirectOrder) {
+        orderChannel = 'store_direct';
+      } else if (orderSource === 'visitor') {
+        orderChannel = 'visitor_field';
+      } else {
+        orderChannel = 'store_self';
+      }
+
       const newOrder: Order = {
         id: orderId,
         supermarket_id: supermarket.id,
@@ -211,6 +223,7 @@ export function useOrders({
         status: 'assigned',
         total_amount: totalAmount,
         order_source: orderSource,
+        order_channel: orderChannel,
         order_date: orderIsoDate,
         items: payload.items.map((i, idx) => ({
           id: `item-${Date.now()}-${idx}`,
@@ -298,6 +311,7 @@ export function useOrders({
               p_visitor_name: newOrder.visitor_name,
               p_status: newOrder.status,
               p_total_amount: newOrder.total_amount,
+              p_order_channel: newOrder.order_channel,
               p_items: payload.items.map((i) => ({
                 productId: i.productId,
                 name: i.name,
@@ -319,6 +333,7 @@ export function useOrders({
                 status: newOrder.status,
                 total_amount: newOrder.total_amount,
                 order_source: newOrder.order_source || 'supermarket',
+                order_channel: newOrder.order_channel,
                 order_date: newOrder.order_date,
               }, { onConflict: 'id' });
 
@@ -333,6 +348,7 @@ export function useOrders({
                   status: newOrder.status,
                   total_amount: newOrder.total_amount,
                   order_source: newOrder.order_source || 'supermarket',
+                  order_channel: newOrder.order_channel,
                   order_date: newOrder.order_date,
                 }, { onConflict: 'id' });
               }

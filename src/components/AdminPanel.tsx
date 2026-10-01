@@ -215,8 +215,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               )}
               {item.id === 'orders' && pendingBillsCount > 0 && (
                 <span
-                  className="px-1.5 py-0.5 rounded-full font-black text-[11px] bg-amber-400 text-slate-950 font-mono shadow-sm animate-pulse"
-                  title={`${pendingBillsCount} برگه بارگیری در انتظار تایید انبار`}
+                  className="px-2 py-0.5 rounded-full font-black text-[11px] bg-amber-400 text-slate-950 font-mono shadow-sm animate-pulse"
+                  title={`${pendingBillsCount} فاکتور منتظر بررسی ادمین`}
                 >
                   {pendingBillsCount}
                 </span>
@@ -273,16 +273,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               onClick={() => {
                 setOrdersViewMode('bills');
                 setHighlightedBillId(null);
-                setBillsStatusFilterHint('all');
+                setBillsStatusFilterHint('pending');
               }}
               className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 cursor-pointer ${
                 ordersViewMode === 'bills'
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <Truck className="w-4 h-4" />
-              <span>برگه‌های بارگیری</span>
+              <FileText className="w-4 h-4" />
+              <span>فاکتورهای ویزیتورها</span>
               <span
                 className={`px-1.5 py-0.5 rounded-full text-xs font-mono ${
                   ordersViewMode === 'bills' ? 'bg-white/20 text-white font-bold' : 'bg-slate-800 text-slate-400'

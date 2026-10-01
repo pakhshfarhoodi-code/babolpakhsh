@@ -77,6 +77,7 @@ export const Header: React.FC<HeaderProps> = () => {
   // Counter metrics
   const pendingReassignments = orders.filter((o) => o.status === 'delegated').length;
   const pendingLoadingBills = loadingBills.filter((b) => b.status === 'pending').length;
+  const awaitingExitBills = loadingBills.filter((b) => b.status === 'approved').length;
 
   // 1. Supermarket Portal Header
   if (role === 'supermarket') {

@@ -29,6 +29,7 @@ import {
   getVisitorSalesSummaries,
   getCategorySalesSummaries,
 } from './helpers';
+import { SupplementaryReports } from './SupplementaryReports';
 
 interface ReportsTabProps {
   inventoryTransactions: InventoryTransaction[];
@@ -231,7 +232,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
                 <span>حواله‌های تجمیعی بارگیری ویزیتورها</span>
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                نمایش مجموع ارزش خرید ویزیتور (نرخ پایه شرکت) در برابر مجموع مبالغ فاکتور فروش به مشتریان
+                فهرست فاکتورهای ترخیص و بارگیری ویزیتورها و وضعیت حواله‌ها
               </p>
             </div>
             <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-950 border border-blue-800 text-blue-300">
@@ -248,17 +249,14 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
               {loadingBills.map((bill) => {
                 const isExpanded = expandedBillId === bill.id;
 
-                // Compute total visitor buy cost vs total store invoice amount
-                // Prioritize total_visitor_cost and total_store_amount, then snapshot prices, fallback to current product
+                // Compute total visitor buy cost
                 let totalVisitorBuyCost = bill.total_visitor_cost ?? 0;
-                let totalStoreInvoiceAmount = bill.total_store_amount ?? 0;
                 let totalItemsCount = 0;
 
                 const billItems = bill.items || [];
-                const needsRecalc = !bill.total_visitor_cost || !bill.total_store_amount;
+                const needsRecalc = !bill.total_visitor_cost;
                 if (needsRecalc) {
                   totalVisitorBuyCost = 0;
-                  totalStoreInvoiceAmount = 0;
                 }
 
                 billItems.forEach((it) => {
@@ -270,7 +268,6 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
                     const visitorPrice = it.visitor_price ?? (prod?.visitor_price || Math.round(storePrice * 0.85));
 
                     totalVisitorBuyCost += visitorPrice * it.quantity;
-                    totalStoreInvoiceAmount += storePrice * it.quantity;
                   }
                 });
 
@@ -298,18 +295,9 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
                       <div className="flex flex-wrap items-center gap-3 text-xs">
                         {/* 1. Total Visitor Purchase Cost */}
                         <div className="p-2 rounded-xl bg-blue-950/60 border border-blue-800/60 text-right">
-                          <span className="text-[10px] text-blue-300 block font-semibold">مجموع قیمت خرید ویزیتور:</span>
+                          <span className="text-[10px] text-blue-300 block font-semibold">مجموع خرید ویزیتور:</span>
                           <span className="font-black font-mono text-blue-400 text-sm">
                             {formatPrice(totalVisitorBuyCost)}{' '}
-                            <span className="text-[10px] font-normal text-slate-400">تومان</span>
-                          </span>
-                        </div>
-
-                        {/* 2. Total Store Invoice Amount */}
-                        <div className="p-2 rounded-xl bg-emerald-950/60 border border-emerald-800/60 text-right">
-                          <span className="text-[10px] text-emerald-300 block font-semibold">مجموع فاکتور فروشگاه‌ها:</span>
-                          <span className="font-black font-mono text-emerald-400 text-sm">
-                            {formatPrice(totalStoreInvoiceAmount)}{' '}
                             <span className="text-[10px] font-normal text-slate-400">تومان</span>
                           </span>
                         </div>
@@ -343,7 +331,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
                         <div className="flex items-center justify-between text-xs text-slate-400">
                           <span className="font-bold text-slate-200 flex items-center gap-1.5">
                             <Package className="w-3.5 h-3.5 text-blue-400" />
-                            <span>ریز اقلام و نرخ‌های دوگانه حواله:</span>
+                            <span>ریز اقلام حواله بارگیری:</span>
                           </span>
                           <span>مجموع اقلام: {totalItemsCount} عدد/بسته</span>
                         </div>
@@ -356,8 +344,6 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
                                 <th className="p-2.5 text-center">تعداد</th>
                                 <th className="p-2.5 text-blue-400">نرخ خرید ویزیتور</th>
                                 <th className="p-2.5 text-blue-300">مجموع خرید ویزیتور</th>
-                                <th className="p-2.5 text-emerald-400">نرخ فروش به مغازه</th>
-                                <th className="p-2.5 text-emerald-300">مجموع فروش به مغازه</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-900 bg-slate-950">
@@ -377,10 +363,6 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
                                     <td className="p-2.5 font-mono text-blue-400">{formatPrice(visitorPrice)}</td>
                                     <td className="p-2.5 font-mono font-bold text-blue-300">
                                       {formatPrice(visitorPrice * item.quantity)}
-                                    </td>
-                                    <td className="p-2.5 font-mono text-emerald-400">{formatPrice(storePrice)}</td>
-                                    <td className="p-2.5 font-mono font-bold text-emerald-300">
-                                      {formatPrice(storePrice * item.quantity)}
                                     </td>
                                   </tr>
                                 );
@@ -718,6 +700,9 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
           </div>
         </div>
       )}
+
+      {/* Supplementary Reports (Muted accordion at the very bottom of the page) */}
+      <SupplementaryReports loadingBills={loadingBills} visitors={visitors} />
     </div>
   );
 };

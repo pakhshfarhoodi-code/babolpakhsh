@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { isToday, formatPrice } from './helpers';
 import { OrderInvoiceModal } from '../invoice/OrderInvoiceModal';
+import { VisitorInvoiceSection } from './VisitorInvoiceSection';
 
 interface TodayTabProps {
   currentVisitor: Visitor;
@@ -40,7 +41,7 @@ interface TodayTabProps {
   onOpenUndeliveredModal: (order: Order) => void;
   onOpenDelegateModal: (order: Order) => void;
   onRespondHandover: (requestId: string, accept: boolean) => void;
-  onCreateLoadingBill: (
+  onCreateLoadingBill?: (
     visitorId: string,
     orderIds: string[]
   ) => Promise<{ success: boolean; message: string; billId?: string }> | { success: boolean; message: string; billId?: string };
@@ -65,12 +66,8 @@ export const TodayTab: React.FC<TodayTabProps> = ({
   const [activeMenuOrderId, setActiveMenuOrderId] = useState<string | null>(null);
   const [invoiceOrder, setInvoiceOrder] = useState<Order | null>(null);
 
-  // Loading Bill accordion & selection
-  const [isBillSectionOpen, setIsBillSectionOpen] = useState(false);
-  const [selectedOrdersForBill, setSelectedOrdersForBill] = useState<string[]>([]);
-  const [billSuccessMessage, setBillSuccessMessage] = useState<string | null>(null);
-  const [billErrorMessage, setBillErrorMessage] = useState<string | null>(null);
-  const [isGeneratingBill, setIsGeneratingBill] = useState(false);
+  // Visitor Invoice section open state
+  const [isInvoiceSectionOpen, setIsInvoiceSectionOpen] = useState(true);
 
   // Supermarket lookup map built from allSupermarkets (full database list)
   const supermarketListToUse = allSupermarkets && allSupermarkets.length > 0 ? allSupermarkets : supermarkets;
@@ -113,44 +110,6 @@ export const TodayTab: React.FC<TodayTabProps> = ({
         isToday(o.order_date)
     ).length;
   }, [orders, currentVisitor?.id]);
-
-  // Loading bill handler
-  const handleGenerateBill = async () => {
-    const targetOrderIds =
-      selectedOrdersForBill.length > 0
-        ? selectedOrdersForBill
-        : pendingOrders.map((o) => o.id);
-
-    if (targetOrderIds.length === 0 || isGeneratingBill) return;
-
-    setIsGeneratingBill(true);
-    setBillErrorMessage(null);
-    setBillSuccessMessage(null);
-
-    try {
-      const res = await onCreateLoadingBill(currentVisitor?.id || '', targetOrderIds);
-      if (res && res.success) {
-        setSelectedOrdersForBill([]);
-        setBillSuccessMessage(res.message);
-        setTimeout(() => setBillSuccessMessage(null), 5000);
-      } else {
-        setBillErrorMessage(res?.message || 'خطا در صدور برگه بارگیری.');
-        setTimeout(() => setBillErrorMessage(null), 6000);
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'خطای غیرمنتظره در ثبت برگه بارگیری.';
-      setBillErrorMessage(msg);
-      setTimeout(() => setBillErrorMessage(null), 6000);
-    } finally {
-      setIsGeneratingBill(false);
-    }
-  };
-
-  const toggleOrderSelection = (orderId: string) => {
-    setSelectedOrdersForBill((prev) =>
-      prev.includes(orderId) ? prev.filter((id) => id !== orderId) : [...prev, orderId]
-    );
-  };
 
   return (
     <div className="space-y-4 pb-20 sm:pb-8">
@@ -260,22 +219,6 @@ export const TodayTab: React.FC<TodayTabProps> = ({
         </div>
       )}
 
-      {/* Bill Success Feedback */}
-      {billSuccessMessage && (
-        <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2 animate-in fade-in">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>{billSuccessMessage}</span>
-        </div>
-      )}
-
-      {/* Bill Error Feedback */}
-      {billErrorMessage && (
-        <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2 animate-in fade-in">
-          <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-          <span>{billErrorMessage}</span>
-        </div>
-      )}
-
       {/* 4. Active Delivery Orders Section */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
@@ -299,7 +242,15 @@ export const TodayTab: React.FC<TodayTabProps> = ({
         ) : (
           <div className="space-y-3">
             {activeDeliveryOrders.map((order) => {
-              const shop = supermarketMap.get(order.supermarket_id);
+              const shop =
+                (order.supermarket_id ? supermarketMap.get(order.supermarket_id) : undefined) ||
+                allSupermarkets?.find((s) => s.id === order.supermarket_id);
+
+              const rawOrder = order as Order & { customer_label?: string };
+              const orderCustomerLabel = rawOrder.customer_label;
+              const displayStoreName =
+                order.supermarket_name || orderCustomerLabel || shop?.name || 'مشتری نامشخص';
+              const isDeletedStore = !order.supermarket_id && !orderCustomerLabel;
               const isMenuOpen = activeMenuOrderId === order.id;
 
               return (
@@ -312,7 +263,7 @@ export const TodayTab: React.FC<TodayTabProps> = ({
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-sm text-slate-100 truncate">
-                          {order.supermarket_name}
+                          {displayStoreName}
                         </span>
                         <span className="text-xs font-mono text-slate-500">{order.id}</span>
                         {order.status === 'loading' && (() => {
@@ -322,9 +273,17 @@ export const TodayTab: React.FC<TodayTabProps> = ({
 
                           if (bill?.status === 'approved') {
                             return (
-                              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-950/90 text-emerald-300 border border-emerald-700/60 font-medium inline-flex items-center gap-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-950/90 text-blue-300 border border-blue-700/60 font-medium inline-flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
                                 <span>تایید شده</span>
+                              </span>
+                            );
+                          }
+                          if (bill?.status === 'loaded') {
+                            return (
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-950/90 text-emerald-300 border border-emerald-700/60 font-medium inline-flex items-center gap-1">
+                                <Truck className="w-3 h-3 text-emerald-400" />
+                                <span>بارگیری شد</span>
                               </span>
                             );
                           }
@@ -346,21 +305,21 @@ export const TodayTab: React.FC<TodayTabProps> = ({
                       </div>
 
                       {/* Address / Shop Info */}
-                      {!order.supermarket_id ? (
+                      {isDeletedStore ? (
                         <div className="flex items-center gap-1.5 text-xs text-rose-400 mt-1 flex-wrap">
                           <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                           <span className="font-semibold">فروشگاه حذف شده است</span>
                         </div>
-                      ) : !shop ? (
-                        <div className="flex items-center gap-1 text-xs text-slate-400 mt-1 min-w-0">
-                          <span className="px-2 py-0.5 rounded-md bg-slate-800/80 border border-slate-700/60 text-slate-300 text-[11px] font-medium">
-                            فروشگاه خارج از لیست شما
-                          </span>
-                        </div>
-                      ) : shop.address ? (
+                      ) : shop?.address ? (
                         <div className="flex items-center gap-1 text-xs text-slate-400 mt-1 min-w-0" title={shop.address}>
                           <MapPin className="w-3 h-3 text-emerald-400 shrink-0" />
                           <span className="truncate">{shop.address}</span>
+                        </div>
+                      ) : orderCustomerLabel ? (
+                        <div className="flex items-center gap-1 text-xs text-purple-300 mt-1 min-w-0">
+                          <span className="px-2 py-0.5 rounded-md bg-purple-950/60 border border-purple-800/40 text-[11px] font-medium">
+                            مشتری آزاد: {orderCustomerLabel}
+                          </span>
                         </div>
                       ) : (
                         <div className="flex items-center gap-1 text-xs text-slate-500 mt-1 min-w-0">
@@ -494,118 +453,13 @@ export const TodayTab: React.FC<TodayTabProps> = ({
         )}
       </div>
 
-      {/* 5. Loading Bill Section (Accordion / Bottom card when pending orders exist) */}
-      {pendingOrders.length > 0 && (
-        <div className="rounded-2xl bg-slate-900 border border-slate-800 overflow-hidden shadow-sm">
-          <button
-            type="button"
-            onClick={() => setIsBillSectionOpen((prev) => !prev)}
-            className="w-full p-4 flex items-center justify-between text-right hover:bg-slate-800/40 transition cursor-pointer"
-          >
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
-                <FileText className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-xs sm:text-sm font-bold text-slate-100">
-                  صدور برگه بارگیری و حواله سردخانه
-                </h3>
-                <p className="text-xs text-slate-400">
-                  ارسال فاکتورهای آماده برای تحویل‌گیری بار از انبار مرکزی
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 text-slate-400">
-              <span className="text-xs font-semibold hidden sm:inline-block">
-                {selectedOrdersForBill.length > 0
-                  ? `${selectedOrdersForBill.length} سفارش انتخاب شده`
-                  : 'انتخاب سریع همه'}
-              </span>
-              {isBillSectionOpen ? (
-                <ChevronUp className="w-4 h-4 text-slate-400" />
-              ) : (
-                <ChevronDown className="w-4 h-4 text-slate-400" />
-              )}
-            </div>
-          </button>
-
-          {isBillSectionOpen && (
-            <div className="p-4 pt-1 border-t border-slate-800 space-y-3 bg-slate-950/40 animate-in fade-in">
-              <div className="flex items-center justify-between text-xs text-slate-400 pb-1">
-                <span>سفارشات مورد نظر برای صدور حواله را انتخاب کنید:</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (selectedOrdersForBill.length === pendingOrders.length) {
-                      setSelectedOrdersForBill([]);
-                    } else {
-                      setSelectedOrdersForBill(pendingOrders.map((o) => o.id));
-                    }
-                  }}
-                  className="text-blue-400 hover:underline cursor-pointer"
-                >
-                  {selectedOrdersForBill.length === pendingOrders.length
-                    ? 'عدم انتخاب همه'
-                    : 'انتخاب همه'}
-                </button>
-              </div>
-
-              <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                {pendingOrders.map((ord) => {
-                  const isChecked =
-                    selectedOrdersForBill.length === 0 ||
-                    selectedOrdersForBill.includes(ord.id);
-
-                  return (
-                    <label
-                      key={ord.id}
-                      className={`flex items-center justify-between p-2.5 rounded-xl border text-xs cursor-pointer transition ${
-                        isChecked
-                          ? 'bg-blue-950/40 border-blue-500/40 text-slate-200'
-                          : 'bg-slate-900 border-slate-800 text-slate-400'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => toggleOrderSelection(ord.id)}
-                          className="w-4 h-4 rounded text-blue-600 bg-slate-900 border-slate-700 focus:ring-0 cursor-pointer"
-                        />
-                        <span className="font-bold truncate">{ord.supermarket_name}</span>
-                        <span className="font-mono text-xs text-slate-500">{ord.id}</span>
-                      </div>
-                      <span className="font-bold text-slate-300 shrink-0">
-                        {formatPrice(ord.total_amount)} تومان
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-
-              <div className="pt-2 flex justify-end">
-                <button
-                  type="button"
-                  onClick={handleGenerateBill}
-                  disabled={isGeneratingBill}
-                  className={`w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-white font-bold text-xs transition shadow-md cursor-pointer ${
-                    isGeneratingBill
-                      ? 'bg-indigo-800 text-indigo-300 cursor-not-allowed opacity-75'
-                      : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/25 active:scale-98'
-                  }`}
-                >
-                  <FileText className="w-4 h-4" />
-                  <span>
-                    {isGeneratingBill
-                      ? 'در حال صدور برگه بارگیری...'
-                      : `صدور برگه بارگیری (${selectedOrdersForBill.length || pendingOrders.length} فاکتور)`}
-                  </span>
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+      {/* 5. Visitor Invoice Section: فاکتور بار من */}
+      <VisitorInvoiceSection
+        currentVisitor={currentVisitor}
+        orders={orders}
+        isOpen={isInvoiceSectionOpen}
+        onToggleOpen={() => setIsInvoiceSectionOpen((prev) => !prev)}
+      />
 
       {/* Official B2B Order Invoice Modal with PDF & Print */}
       <OrderInvoiceModal

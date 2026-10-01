@@ -78,7 +78,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
   const statusChips = [
     { id: 'all', label: 'همه سفارش‌ها' },
     { id: 'assigned', label: 'آماده ارسال' },
-    { id: 'loading', label: 'در برگه بارگیری' },
+    { id: 'loading', label: 'در فاکتور بارگیری' },
     { id: 'delegated', label: 'در حال واگذاری' },
     { id: 'delivered', label: 'تحویل شده' },
     { id: 'undelivered', label: 'عدم تحویل' },

@@ -1,6 +1,10 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { LoadingBill, Order, Product, OrderChannel } from '../../types';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { LoadingBill, LoadingBillItem, Order, Product, Visitor, InvoiceAudit } from '../../types';
 import { useApp } from '../../context/AppContext';
+import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { formatPrice } from './helpers';
+import { formatOrderDate } from '../visitor/helpers';
+import { VisitorInvoicePrintModal } from '../visitor/VisitorInvoicePrintModal';
 import {
   Search,
   Truck,
@@ -8,22 +12,77 @@ import {
   User,
   Package,
   CheckCircle2,
-  Ban,
   AlertTriangle,
   ChevronDown,
   ChevronUp,
   FileText,
-  ExternalLink,
-  Store,
   Building2,
-  DollarSign,
-  Boxes,
+  Store,
   X,
   AlertCircle,
   Filter,
+  Plus,
+  Edit2,
+  Trash2,
+  History,
+  Printer,
+  Ban,
+  Info,
+  Calendar,
+  Layers,
 } from 'lucide-react';
-import { formatPrice } from './helpers';
-import { aggregateBillItems } from '../warehouse/helpers';
+
+export interface BillAgeInfo {
+  hours: number;
+  minutes: number;
+  formattedText: string;
+  isOverdue: boolean;
+}
+
+export const getBillAgeInfo = (dateStr?: string | null): BillAgeInfo => {
+  if (!dateStr) {
+    return { hours: 0, minutes: 0, formattedText: 'نامشخص', isOverdue: false };
+  }
+  const createdTime = Date.parse(dateStr);
+  if (isNaN(createdTime)) {
+    return { hours: 0, minutes: 0, formattedText: 'نامشخص', isOverdue: false };
+  }
+  const diffMs = Math.max(0, Date.now() - createdTime);
+  const totalMinutes = Math.floor(diffMs / (1000 * 60));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  let formattedText = '';
+  if (hours > 24) {
+    const days = Math.floor(hours / 24);
+    formattedText = `${days} روز پیش`;
+  } else if (hours > 0) {
+    formattedText = `${hours} ساعت و ${minutes} دقیقه پیش`;
+  } else {
+    formattedText = `${minutes} دقیقه پیش`;
+  }
+
+  const isOverdue = hours >= 3;
+
+  return { hours, minutes, formattedText, isOverdue };
+};
+
+export const formatBillDateTime = (dateStr?: string | null): string => {
+  if (!dateStr) return 'نامشخص';
+  try {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    return new Intl.DateTimeFormat('fa-IR', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+  } catch {
+    return dateStr;
+  }
+};
 
 interface LoadingBillsTabProps {
   initialBillId?: string | null;
@@ -31,82 +90,59 @@ interface LoadingBillsTabProps {
   onNavigateToOrder?: (orderId: string) => void;
 }
 
-export function getBillAgeInfo(createdAt: string): {
-  hours: number;
-  minutes: number;
-  formattedText: string;
-  isOverdue: boolean;
-} {
-  let createdDate: Date | null = null;
-  const parsed = Date.parse(createdAt);
-  if (!isNaN(parsed)) {
-    createdDate = new Date(parsed);
-  } else {
-    createdDate = new Date();
-  }
-
-  const diffMs = Math.max(0, Date.now() - createdDate.getTime());
-  const totalMinutes = Math.floor(diffMs / (1000 * 60));
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-
-  let formattedText = '';
-  if (hours === 0 && minutes < 2) {
-    formattedText = 'چند لحظه پیش';
-  } else if (hours === 0) {
-    formattedText = `${minutes} دقیقه در انتظار`;
-  } else if (minutes === 0) {
-    formattedText = `${hours} ساعت در انتظار`;
-  } else {
-    formattedText = `${hours} ساعت و ${minutes} دقیقه در انتظار`;
-  }
-
-  return {
-    hours,
-    minutes,
-    formattedText,
-    isOverdue: hours >= 4,
-  };
-}
-
-export function formatBillDateTime(isoOrDateStr: string): string {
-  if (!isoOrDateStr) return '-';
-  const parsed = Date.parse(isoOrDateStr);
-  if (!isNaN(parsed)) {
-    const d = new Date(parsed);
-    return new Intl.DateTimeFormat('fa-IR', {
-      month: 'numeric',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(d);
-  }
-  return isoOrDateStr;
-}
-
 export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
   initialBillId = null,
-  initialStatusFilter = 'all',
+  initialStatusFilter = 'pending',
   onNavigateToOrder,
 }) => {
-  const { loadingBills, orders, products, cancelLoadingBill, currentUser } = useApp();
+  const { loadingBills, orders, products, visitors, currentUser, showToast, retryFetch } = useApp();
 
-  const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter || 'all');
+  // Active status filter (default 'pending' as specified)
+  const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter || 'pending');
   const [searchTerm, setSearchTerm] = useState('');
-  const [expandedBillId, setExpandedBillId] = useState<string | null>(initialBillId || null);
+  const [selectedBillId, setSelectedBillId] = useState<string | null>(initialBillId || null);
 
-  // Cancellation modal state
-  const [cancelModalBill, setCancelModalBill] = useState<LoadingBill | null>(null);
-  const [cancelReason, setCancelReason] = useState('');
-  const [cancelError, setCancelError] = useState<string | null>(null);
+  // View switch: 'by_product' (به تفکیک کالا) vs 'by_customer' (به تفکیک مشتری)
+  const [viewMode, setViewMode] = useState<'by_product' | 'by_customer'>('by_product');
+
+  // Modals state
+  // 1. Add Agreed Line (admin_manual)
+  const [isAgreementModalOpen, setIsAgreementModalOpen] = useState(false);
+  const [agreementProductId, setAgreementProductId] = useState('');
+  const [agreementQty, setAgreementQty] = useState(1);
+  const [agreementCustomerLabel, setAgreementCustomerLabel] = useState('');
+  const [agreementLineNote, setAgreementLineNote] = useState('');
+  const [agreementUnitPrice, setAgreementUnitPrice] = useState<number | ''>('');
+  const [isSubmittingAgreement, setIsSubmittingAgreement] = useState(false);
+
+  // 2. Edit line modal (Qty / Price / Reason)
+  const [editingLine, setEditingLine] = useState<LoadingBillItem | null>(null);
+  const [editQty, setEditQty] = useState(1);
+  const [editUnitPrice, setEditUnitPrice] = useState<number | ''>('');
+  const [editReason, setEditReason] = useState('');
+  const [isUpdatingLine, setIsUpdatingLine] = useState(false);
+
+  // 3. Finalize / Approve modal
+  const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
+
+  // 4. Cancel bill modal
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [cancelReasonInput, setCancelReasonInput] = useState('');
   const [isCancelling, setIsCancelling] = useState(false);
-  const [toastFeedback, setToastFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // Sync expandedBillId when initialBillId changes
+  // 5. Print modal
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+
+  // 6. Audit trail state
+  const [auditLogs, setAuditLogs] = useState<InvoiceAudit[]>([]);
+  const [isLoadingAudit, setIsLoadingAudit] = useState(false);
+  const [isAuditAccordionOpen, setIsAuditAccordionOpen] = useState(false);
+
+  // Synchronize initial bill id if passed
   useEffect(() => {
     if (initialBillId) {
-      setExpandedBillId(initialBillId);
-      // Ensure the bill is visible by resetting status filter if needed
+      setSelectedBillId(initialBillId);
       const targetBill = loadingBills.find((b) => b.id === initialBillId);
       if (targetBill && statusFilter !== 'all' && targetBill.status !== statusFilter) {
         setStatusFilter('all');
@@ -114,629 +150,1509 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
     }
   }, [initialBillId, loadingBills, statusFilter]);
 
-  // Pre-index orders by loading_bill_id for high performance
-  const ordersByBillId = useMemo(() => {
-    const map = new Map<string, Order[]>();
-    orders.forEach((o) => {
-      if (o.loading_bill_id) {
-        const list = map.get(o.loading_bill_id) || [];
-        list.push(o);
-        map.set(o.loading_bill_id, list);
-      }
-    });
-    return map;
-  }, [orders]);
+  // Selected bill object
+  const activeBill = useMemo(() => {
+    if (!selectedBillId) return null;
+    return loadingBills.find((b) => b.id === selectedBillId) || null;
+  }, [selectedBillId, loadingBills]);
 
-  // Status Filter options
+  // Load audit trail when activeBill changes
+  const fetchAuditLogs = useCallback(async (billId: string) => {
+    if (!isSupabaseConfigured || !supabase) return;
+    setIsLoadingAudit(true);
+    try {
+      // Query invoice_audit_logs view first, fallback to invoice_audit table
+      let res = await supabase
+        .from('invoice_audit_logs')
+        .select('*')
+        .eq('invoice_id', billId)
+        .order('created_at', { ascending: false });
+
+      if (res.error) {
+        res = await supabase
+          .from('invoice_audit')
+          .select('*')
+          .eq('invoice_id', billId)
+          .order('created_at', { ascending: false });
+      }
+
+      if (!res.error && res.data) {
+        setAuditLogs(res.data as InvoiceAudit[]);
+      }
+    } catch {
+      // Non-fatal audit log fetch error
+    } finally {
+      setIsLoadingAudit(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeBill?.id) {
+      fetchAuditLogs(activeBill.id);
+    } else {
+      setAuditLogs([]);
+    }
+  }, [activeBill?.id, fetchAuditLogs]);
+
+  // Products map
+  const productMap = useMemo(() => {
+    const map = new Map<string, Product>();
+    products.forEach((p) => map.set(p.id, p));
+    return map;
+  }, [products]);
+
+  // Filter options
   const statusChips = [
-    { id: 'all', label: 'همه برگه‌ها' },
-    { id: 'pending', label: 'در انتظار تایید انبار' },
-    { id: 'approved', label: 'تایید شده (ترخیص)' },
+    { id: 'pending', label: 'منتظر بررسی' },
+    { id: 'approved', label: 'تایید شده (آماده خروج)' },
+    { id: 'loaded', label: 'خروج از انبار شده' },
+    { id: 'draft', label: 'پیش‌نویس ویزیتورها' },
     { id: 'cancelled', label: 'لغو شده' },
+    { id: 'all', label: 'همه فاکتورها' },
   ];
 
-  // Counts for status chips
+  // Status counts
   const statusCounts = useMemo(() => {
     let pending = 0;
     let approved = 0;
+    let loaded = 0;
+    let draft = 0;
     let cancelled = 0;
+
     loadingBills.forEach((b) => {
       if (b.status === 'pending') pending++;
       else if (b.status === 'approved') approved++;
+      else if (b.status === 'loaded') loaded++;
+      else if (b.status === 'draft') draft++;
       else if (b.status === 'cancelled') cancelled++;
     });
+
     return {
       all: loadingBills.length,
       pending,
       approved,
+      loaded,
+      draft,
       cancelled,
     };
   }, [loadingBills]);
 
-  // Filtered Loading Bills
+  // Filtered bills list
   const filteredBills = useMemo(() => {
     return loadingBills.filter((bill) => {
-      // 1. Status Filter
       if (statusFilter !== 'all' && bill.status !== statusFilter) {
         return false;
       }
-
-      // 2. Search Filter
       if (searchTerm.trim()) {
         const term = searchTerm.toLowerCase().trim();
         const matchId = bill.id.toLowerCase().includes(term);
+        const matchInvoiceNo = bill.invoice_no?.toLowerCase().includes(term);
         const matchVisitor = bill.visitor_name.toLowerCase().includes(term);
-
-        // Check if any order or supermarket inside matches
-        const billOrders = ordersByBillId.get(bill.id) || [];
-        const matchShop = billOrders.some(
-          (o) =>
-            o.supermarket_name.toLowerCase().includes(term) ||
-            o.id.toLowerCase().includes(term)
-        );
-
-        if (!matchId && !matchVisitor && !matchShop) {
-          return false;
-        }
+        if (!matchId && !matchInvoiceNo && !matchVisitor) return false;
       }
-
       return true;
     });
-  }, [loadingBills, statusFilter, searchTerm, ordersByBillId]);
+  }, [loadingBills, statusFilter, searchTerm]);
 
-  // Handle Cancel Bill Submission
-  const handleConfirmCancel = async () => {
-    if (!cancelModalBill) return;
-    if (!cancelReason.trim()) {
-      setCancelError('وارد کردن دلیل لغو برگه بارگیری الزامی است.');
-      return;
+  // Aggregated items for the selected bill (Strictly visitor purchase price, no retail prices, no margin)
+  const aggregatedBillItems = useMemo(() => {
+    if (!activeBill?.items) return [];
+
+    const map = new Map<
+      string,
+      {
+        productId: string;
+        productName: string;
+        unit: string;
+        totalQuantity: number;
+        visitorPrice: number;
+        totalAmount: number;
+        currentStock: number;
+        availableStock: number;
+        isShortage: boolean;
+        shortageCount: number;
+        lines: LoadingBillItem[];
+      }
+    >();
+
+    for (const it of activeBill.items) {
+      const prod = productMap.get(it.product_id);
+      const unit = prod?.unit || 'بسته';
+      const curStock = prod ? prod.stock : 0;
+      const resStock = prod ? prod.reserved_stock : 0;
+      const availStock = curStock - resStock;
+      const vPrice = Number(it.visitor_price ?? prod?.visitor_price ?? Math.round(Number(prod?.price || 0) * 0.85));
+
+      const existing = map.get(it.product_id);
+      if (existing) {
+        existing.totalQuantity += it.quantity;
+        existing.totalAmount += it.quantity * existing.visitorPrice;
+        existing.lines.push(it);
+      } else {
+        map.set(it.product_id, {
+          productId: it.product_id,
+          productName: it.product_name,
+          unit,
+          totalQuantity: it.quantity,
+          visitorPrice: vPrice,
+          totalAmount: it.quantity * vPrice,
+          currentStock: curStock,
+          availableStock: availStock,
+          isShortage: false,
+          shortageCount: 0,
+          lines: [it],
+        });
+      }
     }
+
+    // Calculate shortage based on physical stock vs bill requirement
+    const result = Array.from(map.values()).map((item) => {
+      const isShortage = item.currentStock < item.totalQuantity;
+      const shortageCount = isShortage ? item.totalQuantity - item.currentStock : 0;
+      return {
+        ...item,
+        isShortage,
+        shortageCount,
+      };
+    });
+
+    return result;
+  }, [activeBill?.items, productMap]);
+
+  // Grand totals
+  const billTotalAmount = useMemo(() => {
+    return aggregatedBillItems.reduce((acc, it) => acc + it.totalAmount, 0);
+  }, [aggregatedBillItems]);
+
+  const billTotalUnits = useMemo(() => {
+    return aggregatedBillItems.reduce((acc, it) => acc + it.totalQuantity, 0);
+  }, [aggregatedBillItems]);
+
+  const hasAnyShortage = useMemo(() => {
+    return aggregatedBillItems.some((it) => it.isShortage);
+  }, [aggregatedBillItems]);
+
+  // Customer Grouped items for View Mode 2 («به تفکیک مشتری»)
+  const customerGroupedItems = useMemo(() => {
+    if (!activeBill?.items) return [];
+
+    const groupMap = new Map<
+      string,
+      {
+        id: string;
+        name: string;
+        orderId?: string | null;
+        source: 'order' | 'visitor_manual' | 'admin_manual';
+        items: LoadingBillItem[];
+        totalAmount: number;
+      }
+    >();
+
+    for (const it of activeBill.items) {
+      let groupKey = '';
+      let groupName = '';
+      const src = it.source || 'order';
+
+      if (it.order_id) {
+        groupKey = `order-${it.order_id}`;
+        const relatedOrder = orders.find((o) => o.id === it.order_id);
+        groupName = relatedOrder?.supermarket_name || it.customer_label || `سفارش ${it.order_id}`;
+      } else if (it.customer_label) {
+        groupKey = `manual-${it.customer_label}`;
+        groupName = it.customer_label;
+      } else {
+        groupKey = `manual-unknown-${src}`;
+        groupName = src === 'admin_manual' ? 'توافق حضوری / تلفنی ادمین' : 'مشتری آزاد ویزیتور';
+      }
+
+      const itemPrice = Number(it.visitor_price || 0);
+      const rowAmount = it.quantity * itemPrice;
+
+      const existing = groupMap.get(groupKey);
+      if (existing) {
+        existing.items.push(it);
+        existing.totalAmount += rowAmount;
+      } else {
+        groupMap.set(groupKey, {
+          id: groupKey,
+          name: groupName,
+          orderId: it.order_id,
+          source: src,
+          items: [it],
+          totalAmount: rowAmount,
+        });
+      }
+    }
+
+    return Array.from(groupMap.values());
+  }, [activeBill?.items, orders]);
+
+  // Handlers for Operations
+
+  // 1. Add Agreed Line (admin_manual - telephone or in-person agreement)
+  const handleAddAgreementLine = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeBill || !agreementProductId || agreementQty <= 0 || isSubmittingAgreement) return;
+
+    setIsSubmittingAgreement(true);
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const { data, error } = await supabase.rpc('invoice_add_manual_line', {
+          p_invoice_id: activeBill.id,
+          p_product_id: agreementProductId,
+          p_qty: agreementQty,
+          p_customer_label: agreementCustomerLabel.trim() || 'توافق حضوری / تلفنی ادمین',
+          p_source: 'admin_manual',
+          p_line_note: agreementLineNote.trim() || null,
+          p_unit_price: agreementUnitPrice !== '' ? Number(agreementUnitPrice) : null,
+          p_actor: currentUser.name || 'ادمین',
+        });
+
+        if (error) {
+          showToast(error.message || 'خطا در افزودن قلم توافقی.', 'error');
+          return;
+        }
+
+        if (!data || (data as { success?: boolean; message?: string }).success === false) {
+          const msg = (data as { message?: string })?.message || 'خطا در ثبت قلم توافقی.';
+          showToast(msg, 'error');
+          return;
+        }
+
+        showToast('قلم توافقی با موفقیت به فاکتور ویزیتور افزوده شد.', 'success');
+        setAgreementProductId('');
+        setAgreementQty(1);
+        setAgreementCustomerLabel('');
+        setAgreementLineNote('');
+        setAgreementUnitPrice('');
+        setIsAgreementModalOpen(false);
+        retryFetch();
+        if (activeBill) fetchAuditLogs(activeBill.id);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'خطای غیرمنتظره در ثبت قلم توافقی.';
+      showToast(msg, 'error');
+    } finally {
+      setIsSubmittingAgreement(false);
+    }
+  };
+
+  // 2. Update Line (Quantity / Price with Reason via invoice_update_line)
+  const handleUpdateLine = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLine || editQty <= 0 || isUpdatingLine) return;
+
+    setIsUpdatingLine(true);
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const { data, error } = await supabase.rpc('invoice_update_line', {
+          p_line_id: editingLine.id,
+          p_qty: editQty,
+          p_unit_price: editUnitPrice !== '' ? Number(editUnitPrice) : null,
+          p_actor: currentUser.name || 'ادمین',
+          p_reason: editReason.trim() || 'اصلاح ادمین',
+        });
+
+        if (error) {
+          showToast(error.message || 'خطا در ویرایش قلم فاکتور.', 'error');
+          return;
+        }
+
+        if (!data || (data as { success?: boolean; message?: string }).success === false) {
+          const msg = (data as { message?: string })?.message || 'خطا در ویرایش قلم فاکتور.';
+          showToast(msg, 'error');
+          return;
+        }
+
+        showToast('ردیف فاکتور با موفقیت اصلاح شد و دفعات اصلاح ثبت گردید.', 'success');
+        setEditingLine(null);
+        retryFetch();
+        if (activeBill) fetchAuditLogs(activeBill.id);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'خطا در به‌روزرسانی ردیف فاکتور.';
+      showToast(msg, 'error');
+    } finally {
+      setIsUpdatingLine(false);
+    }
+  };
+
+  // 3. Remove Line with Reason (calls invoice_delete_line with fallback to invoice_remove_line)
+  const handleRemoveLine = async (lineId: string, lineName?: string) => {
+    const reason = window.prompt(
+      `علت حذف ردیف «${lineName || 'کالا'}» از فاکتور را وارد نمایید (اختیاری):`,
+      'کسری موجودی / تصمیم ادمین'
+    );
+    if (reason === null) return; // user cancelled
+
+    try {
+      if (isSupabaseConfigured && supabase) {
+        // Try invoice_delete_line first as specified in prompt
+        let res = await supabase.rpc('invoice_delete_line', {
+          p_line_id: lineId,
+          p_actor: currentUser.name || 'ادمین',
+          p_reason: reason.trim() || 'حذف توسط ادمین',
+        });
+
+        if (res.error) {
+          // Fallback to invoice_remove_line
+          res = await supabase.rpc('invoice_remove_line', {
+            p_line_id: lineId,
+            p_actor: currentUser.name || 'ادمین',
+            p_reason: reason.trim() || 'حذف توسط ادمین',
+          });
+        }
+
+        if (res.error) {
+          showToast(res.error.message || 'خطا در حذف قلم از فاکتور.', 'error');
+          return;
+        }
+
+        if (!res.data || (res.data as { success?: boolean; message?: string }).success === false) {
+          const msg = (res.data as { message?: string })?.message || 'خطا در حذف قلم.';
+          showToast(msg, 'error');
+          return;
+        }
+
+        showToast('ردیف با موفقیت از فاکتور حذف و رزرو آزاد گردید.', 'success');
+        retryFetch();
+        if (activeBill) fetchAuditLogs(activeBill.id);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'خطای غیرمنتظره در حذف قلم.';
+      showToast(msg, 'error');
+    }
+  };
+
+  // 4. Approve Loading Bill / Lock Prices: approve_loading_bill_transaction
+  const handleConfirmApprove = async () => {
+    if (!activeBill || isApproving) return;
+
+    setIsApproving(true);
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const { data, error } = await supabase.rpc('approve_loading_bill_transaction', {
+          p_loading_bill_id: activeBill.id,
+          p_approved_by: currentUser.name || 'ادمین',
+        });
+
+        if (error) {
+          showToast(error.message || 'خطا در تایید قیمت‌ها و فاکتور.', 'error');
+          return;
+        }
+
+        if (!data || (data as { success?: boolean; message?: string }).success === false) {
+          const msg = (data as { message?: string })?.message || 'خطا در تایید قیمت‌ها و فاکتور.';
+          showToast(msg, 'error');
+          return;
+        }
+
+        const res = data as { message?: string; invoice_no?: string };
+        showToast(
+          res.message || `فاکتور تایید شد و شماره رسمی ${res.invoice_no || ''} صادر گردید.`,
+          'success'
+        );
+        setIsApproveModalOpen(false);
+        retryFetch();
+        if (activeBill) fetchAuditLogs(activeBill.id);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'خطای غیرمنتظره در تایید فاکتور.';
+      showToast(msg, 'error');
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
+  // 5. Cancel Invoice with Mandatory Reason: cancel_invoice
+  const handleConfirmCancel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeBill || !cancelReasonInput.trim() || isCancelling) return;
 
     setIsCancelling(true);
     try {
-      const res = await cancelLoadingBill(
-        cancelModalBill.id,
-        currentUser?.name || 'مدیریت ارشد',
-        cancelReason.trim()
-      );
+      if (isSupabaseConfigured && supabase) {
+        const { data, error } = await supabase.rpc('cancel_invoice', {
+          p_invoice_id: activeBill.id,
+          p_actor: currentUser.name || 'ادمین',
+          p_reason: cancelReasonInput.trim(),
+        });
 
-      if (res && res.success) {
-        setToastFeedback({ type: 'success', message: res.message });
-        setCancelModalBill(null);
-        setCancelReason('');
-        setCancelError(null);
-      } else {
-        setCancelError(res?.message || 'خطا در لغو برگه بارگیری.');
+        if (error) {
+          showToast(error.message || 'خطا در لغو فاکتور.', 'error');
+          return;
+        }
+
+        if (!data || (data as { success?: boolean; message?: string }).success === false) {
+          const msg = (data as { message?: string })?.message || 'خطا در لغو فاکتور.';
+          showToast(msg, 'error');
+          return;
+        }
+
+        showToast('فاکتور با موفقیت لغو شد و سفارش‌ها به وضعیت آماده ارسال بازگشتند.', 'success');
+        setCancelReasonInput('');
+        setIsCancelModalOpen(false);
+        retryFetch();
+        if (activeBill) fetchAuditLogs(activeBill.id);
       }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'خطای غیرمنتظره در لغو برگه.';
-      setCancelError(msg);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'خطای غیرمنتظره در لغو فاکتور.';
+      showToast(msg, 'error');
     } finally {
       setIsCancelling(false);
-      setTimeout(() => setToastFeedback(null), 5000);
     }
   };
 
-  const channelMap: Record<OrderChannel, { label: string; bg: string; icon: React.ComponentType<{ className?: string }> }> = {
-    visitor_field: {
-      label: 'ویزیتور در محل',
-      bg: 'bg-blue-500/15 text-blue-300 border-blue-500/30',
-      icon: Truck,
-    },
-    store_self: {
-      label: 'ثبت توسط فروشگاه',
-      bg: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
-      icon: Store,
-    },
-    store_direct: {
-      label: 'خرید مستقیم',
-      bg: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
-      icon: Building2,
-    },
+  // Status badge helper
+  const renderStatusBadge = (status: LoadingBill['status']) => {
+    switch (status) {
+      case 'pending':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-950/80 text-amber-300 border border-amber-600/40 animate-pulse">
+            <Clock className="w-3.5 h-3.5" />
+            <span>منتظر بررسی ادمین</span>
+          </span>
+        );
+      case 'approved':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-950/80 text-blue-300 border border-blue-600/40">
+            <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" />
+            <span>تایید شده (قیمت‌ها قفل)</span>
+          </span>
+        );
+      case 'loaded':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-600/40">
+            <Truck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>خروج از انبار انجام شده</span>
+          </span>
+        );
+      case 'draft':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700">
+            <FileText className="w-3.5 h-3.5 text-slate-400" />
+            <span>پیش‌نویس ویزیتور</span>
+          </span>
+        );
+      case 'cancelled':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-950/80 text-rose-300 border border-rose-600/40">
+            <Ban className="w-3.5 h-3.5 text-rose-400" />
+            <span>لغو شده</span>
+          </span>
+        );
+      default:
+        return null;
+    }
   };
 
-  return (
-    <div className="space-y-4">
-      {/* Toast Feedback */}
-      {toastFeedback && (
-        <div
-          className={`p-3 rounded-2xl flex items-center gap-2 text-xs font-semibold shadow-lg animate-in fade-in ${
-            toastFeedback.type === 'success'
-              ? 'bg-emerald-950/90 border border-emerald-500/50 text-emerald-300'
-              : 'bg-rose-950/90 border border-rose-500/50 text-rose-300'
-          }`}
-        >
-          {toastFeedback.type === 'success' ? (
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-          ) : (
-            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
-          )}
-          <span>{toastFeedback.message}</span>
-        </div>
-      )}
+  // Helper to format audit detail text
+  const formatAuditDetails = (log: InvoiceAudit) => {
+    const details = log.details as Record<string, unknown> | null;
+    if (!details) return log.action;
 
-      {/* Top Filter & Search Bar */}
-      <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-3.5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* Status Chips */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs text-slate-400 font-medium ml-1">وضعیت برگه:</span>
-            {statusChips.map((chip) => {
-              const count = statusCounts[chip.id as keyof typeof statusCounts];
-              const isActive = statusFilter === chip.id;
-              return (
-                <button
-                  key={chip.id}
-                  type="button"
-                  onClick={() => setStatusFilter(chip.id)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
-                    isActive
-                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 font-bold'
-                      : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
-                  }`}
-                >
-                  <span>{chip.label}</span>
-                  <span
-                    className={`px-1.5 py-0.5 rounded-full text-[11px] font-mono ${
-                      isActive ? 'bg-white/20 text-white font-bold' : 'bg-slate-800 text-slate-300'
-                    }`}
-                  >
-                    {count}
-                  </span>
-                  {chip.id === 'pending' && count > 0 && !isActive && (
-                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Search Box */}
-          <div className="relative w-full sm:w-72">
-            <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-500 pointer-events-none" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="جستجوی شماره برگه، ویزیتور یا نام فروشگاه..."
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Main Container */}
-      <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-sm">
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Truck className="w-4 h-4 text-indigo-400" />
-            <h3 className="font-bold text-sm text-slate-100">فهرست حواله‌های بارگیری و ترخیص سردخانه</h3>
-            {statusFilter === 'pending' && (
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold">
-                در انتظار ترخیص انبار
-              </span>
+    switch (log.action) {
+      case 'invoice_update_line':
+        return (
+          <div className="space-y-0.5">
+            <p className="font-semibold text-slate-200">
+              ویرایش ردیف: {String(details.product_name || 'کالا')}
+            </p>
+            <p className="text-slate-400">
+              تعداد قدیم: <span className="font-mono text-slate-300">{String(details.old_qty ?? '-')}</span> ➔ جدید: <span className="font-mono text-emerald-400 font-bold">{String(details.new_qty ?? '-')}</span>
+              {details.new_price ? (
+                <> | نرخ توافقی: <span className="font-mono text-blue-300">{formatPrice(Number(details.new_price))} تومان</span></>
+              ) : null}
+            </p>
+            {Boolean(details.reason) && (
+              <p className="text-amber-300/80 text-[11px]">علت ویرایش: {String(details.reason)}</p>
             )}
           </div>
-          <span className="text-xs text-slate-400">{filteredBills.length} برگه یافت شد</span>
+        );
+      case 'invoice_add_manual_line':
+        return (
+          <div className="space-y-0.5">
+            <p className="font-semibold text-purple-300">
+              افزودن قلم توافقی: {String(details.product_name || 'کالای دستی')} ({String(details.quantity)} عدد)
+            </p>
+            <p className="text-slate-400">
+              مشتری: <span className="text-slate-200">{String(details.customer_label || 'عمومی')}</span>
+              {Boolean(details.line_note) && <> | توضیح: <span className="text-slate-300">{String(details.line_note)}</span></>}
+            </p>
+          </div>
+        );
+      case 'invoice_remove_line':
+      case 'invoice_delete_line':
+        return (
+          <div className="space-y-0.5">
+            <p className="font-semibold text-rose-300">حذف قلم از فاکتور</p>
+            {Boolean(details.reason) && (
+              <p className="text-slate-400">علت: {String(details.reason)}</p>
+            )}
+          </div>
+        );
+      case 'finalize_invoice':
+      case 'approve_loading_bill_transaction':
+        return (
+          <div className="space-y-0.5">
+            <p className="font-semibold text-emerald-300">تایید قیمت‌ها و صدور شماره فاکتور</p>
+            {Boolean(details.invoice_no) && (
+              <p className="font-mono text-blue-300 font-bold">شماره فاکتور رسمی: {String(details.invoice_no)}</p>
+            )}
+          </div>
+        );
+      case 'cancel_invoice':
+        return (
+          <div className="space-y-0.5">
+            <p className="font-semibold text-rose-400">لغو کامل فاکتور</p>
+            {Boolean(details.reason) && (
+              <p className="text-slate-400">علت لغو: {String(details.reason)}</p>
+            )}
+          </div>
+        );
+      case 'submit_invoice':
+        return <p className="text-amber-300">ارسال فاکتور توسط ویزیتور جهت بررسی ادمین</p>;
+      case 'create_draft':
+        return <p className="text-slate-400">ایجاد پیش‌نویس اولیه فاکتور بارگیری</p>;
+      case 'confirm_loading_exit':
+        return <p className="text-emerald-400 font-semibold">تایید ترخیص و خروج نهایی بار از انبار</p>;
+      default:
+        return <p className="text-slate-400">{JSON.stringify(details)}</p>;
+    }
+  };
+
+  const isEditable = activeBill && (activeBill.status === 'pending' || activeBill.status === 'approved');
+
+  return (
+    <div className="space-y-5" dir="rtl">
+      {/* 1. Header Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base sm:text-lg font-black text-slate-100 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-blue-400" />
+            <span>فاکتورهای ویزیتورها</span>
+          </h2>
+          <p className="text-xs text-slate-400 mt-0.5">
+            بررسی اقلام بارگیری، تایید نرخ خرید ویزیتور، ثبت اقلام توافقی و چاپ حواله رسمی
+          </p>
         </div>
 
-        {filteredBills.length === 0 ? (
-          <div className="py-12 text-center text-slate-500 text-xs">
-            برگه بارگیری مطابق با فیلتر انتخابی یافت نشد.
-          </div>
-        ) : (
-          <div className="divide-y divide-slate-800/80">
-            {filteredBills.map((bill) => {
-              const isExpanded = expandedBillId === bill.id;
-              const isPending = bill.status === 'pending';
-              const isCancelled = bill.status === 'cancelled';
-              const isApproved = bill.status === 'approved';
-
-              const ageInfo = getBillAgeInfo(bill.created_at);
-
-              // Associated orders
-              const billOrders = ordersByBillId.get(bill.id) || [];
-              const uniqueStoreCount = new Set(billOrders.map((o) => o.supermarket_id).filter(Boolean)).size || billOrders.length;
-              const ordersCount = bill.orders_count || billOrders.length;
-
-              // Aggregated items
-              const aggregatedItems = aggregateBillItems(bill, products);
-              const totalItemsCount = aggregatedItems.reduce((sum, it) => sum + it.totalQuantity, 0);
-
-              // Calculate financial amounts: Prefer total_visitor_cost & total_store_amount, fallback to item snapshots, fallback to current product
-              let totalVisitorCost = bill.total_visitor_cost ?? 0;
-              let totalStoreAmount = bill.total_store_amount ?? 0;
-
-              if (!bill.total_visitor_cost || !bill.total_store_amount) {
-                let calcVisitor = 0;
-                let calcStore = 0;
-                if (bill.items) {
-                  for (const it of bill.items) {
-                    const prod = products.find((p) => p.id === it.product_id);
-                    const fallbackStore = prod ? Number(prod.price) : 0;
-                    const fallbackVisitor = prod?.visitor_price ?? Math.round(fallbackStore * 0.85);
-
-                    const storePrice = it.store_price ?? fallbackStore;
-                    const visitorPrice = it.visitor_price ?? fallbackVisitor;
-
-                    calcStore += storePrice * it.quantity;
-                    calcVisitor += visitorPrice * it.quantity;
-                  }
-                }
-                if (!bill.total_visitor_cost) totalVisitorCost = calcVisitor;
-                if (!bill.total_store_amount) totalStoreAmount = calcStore;
-              }
-
-              const visitorGrossMargin = Math.max(0, totalStoreAmount - totalVisitorCost);
-
-              return (
-                <div
-                  key={bill.id}
-                  className={`transition-colors ${
-                    isExpanded
-                      ? 'bg-slate-950/60'
-                      : isPending && ageInfo.isOverdue
-                      ? 'bg-rose-950/10 hover:bg-rose-950/20'
-                      : 'hover:bg-slate-800/30'
-                  }`}
-                >
-                  {/* Summary Row */}
-                  <div
-                    onClick={() => setExpandedBillId(isExpanded ? null : bill.id)}
-                    className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer select-none"
-                  >
-                    {/* Right: Bill No & Visitor */}
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="font-mono font-bold text-xs text-indigo-300 bg-indigo-950/90 px-2.5 py-1 rounded-lg border border-indigo-800/60 shrink-0">
-                        {bill.id}
-                      </span>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="font-bold text-xs text-slate-100 truncate">{bill.visitor_name}</p>
-                          <span className="text-[11px] text-slate-400 font-mono hidden xs:inline">
-                            • {formatBillDateTime(bill.created_at)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
-                          <span>{ordersCount} سفارش</span>
-                          <span>•</span>
-                          <span>{uniqueStoreCount} فروشگاه</span>
-                          <span>•</span>
-                          <span>{totalItemsCount} عدد کالا</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Left: Status Badges, Bill Age & Controls */}
-                    <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
-                      {/* Bill Age for Pending */}
-                      {isPending && (
-                        <div
-                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs border ${
-                            ageInfo.isOverdue
-                              ? 'bg-rose-950/60 text-rose-300 border-rose-800/80 font-bold animate-pulse'
-                              : 'bg-amber-950/40 text-amber-300 border-amber-800/60 font-semibold'
-                          }`}
-                          title={ageInfo.isOverdue ? 'بیش از ۴ ساعت در انتظار تایید انبار است!' : 'زمان انتظار'}
-                        >
-                          {ageInfo.isOverdue ? (
-                            <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                          ) : (
-                            <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                          )}
-                          <span>{ageInfo.formattedText}</span>
-                        </div>
-                      )}
-
-                      {/* Main Status Badge */}
-                      {isApproved && (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>ترخیص شده</span>
-                        </span>
-                      )}
-
-                      {isCancelled && (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1">
-                          <Ban className="w-3.5 h-3.5" />
-                          <span>لغو شده</span>
-                        </span>
-                      )}
-
-                      {isPending && (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 flex items-center gap-1">
-                          <Clock className="w-3.5 h-3.5" />
-                          <span>در انتظار انبار</span>
-                        </span>
-                      )}
-
-                      {/* Arrow */}
-                      <span className="p-1 rounded-lg text-slate-400 hover:text-slate-200">
-                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Expanded Accordion Details */}
-                  {isExpanded && (
-                    <div className="p-4 pt-2 border-t border-slate-800/80 bg-slate-950/70 space-y-4 animate-in fade-in">
-                      {/* Financial KPI Row */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        {/* 1. Visitor Buy Cost */}
-                        <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-right">
-                          <span className="text-[11px] text-blue-300 block font-semibold">مجموع بهای خرید ویزیتور:</span>
-                          <span className="font-black font-mono text-blue-400 text-sm mt-0.5 block">
-                            {formatPrice(totalVisitorCost)} <span className="text-[10px] font-normal text-slate-400">تومان</span>
-                          </span>
-                        </div>
-
-                        {/* 2. Supermarkets Invoice Amount */}
-                        <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-right">
-                          <span className="text-[11px] text-emerald-300 block font-semibold">مجموع فاکتور فروشگاه‌ها:</span>
-                          <span className="font-black font-mono text-emerald-400 text-sm mt-0.5 block">
-                            {formatPrice(totalStoreAmount)} <span className="text-[10px] font-normal text-slate-400">تومان</span>
-                          </span>
-                        </div>
-
-                        {/* 3. Gross Margin */}
-                        <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-right">
-                          <span className="text-[11px] text-purple-300 block font-semibold">کارمزد ناخالص توزیع:</span>
-                          <span className="font-black font-mono text-purple-400 text-sm mt-0.5 block">
-                            {formatPrice(visitorGrossMargin)} <span className="text-[10px] font-normal text-slate-400">تومان</span>
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Audit Notice: Approved / Cancelled */}
-                      {isApproved && (
-                        <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                            <span>
-                              این برگه با موفقیت توسط <strong>{bill.approved_by || 'انباردار'}</strong> تایید و اقلام از موجودی فیزیکی سردخانه ترخیص گردیده‌اند.
-                            </span>
-                          </div>
-                          {bill.approved_at && (
-                            <span className="text-[11px] text-slate-400 font-mono">زمان تایید: {bill.approved_at}</span>
-                          )}
-                        </div>
-                      )}
-
-                      {isCancelled && (
-                        <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-800/60 text-rose-300 text-xs space-y-1.5">
-                          <div className="flex items-center gap-2 font-bold text-rose-400">
-                            <Ban className="w-4 h-4 shrink-0" />
-                            <span>برگه بارگیری لغو شده است</span>
-                          </div>
-                          <p className="text-slate-200 text-xs pr-6">
-                            علت لغو: <strong className="text-rose-200">{bill.cancel_reason || 'دلیلی ثبت نشده است.'}</strong>
-                          </p>
-                          {(bill.cancelled_by || bill.cancelled_at) && (
-                            <div className="text-[11px] text-slate-400 pr-6 flex items-center gap-3 pt-1 border-t border-rose-900/40">
-                              {bill.cancelled_by && <span>لغو توسط: {bill.cancelled_by}</span>}
-                              {bill.cancelled_at && <span>زمان: {bill.cancelled_at}</span>}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* (الف) جدول اقلام تجمیعی به تفکیک کالا */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-bold text-slate-200 flex items-center gap-1.5">
-                            <Package className="w-3.5 h-3.5 text-indigo-400" />
-                            <span>(الف) ریز اقلام تجمیعی بارگیری ({aggregatedItems.length} قلم کالا):</span>
-                          </span>
-                          <span className="text-slate-400">مجموع: {totalItemsCount} واحد</span>
-                        </div>
-
-                        <div className="overflow-x-auto rounded-xl border border-slate-800">
-                          <table className="w-full text-right text-xs">
-                            <thead className="bg-slate-900 text-slate-400 border-b border-slate-800">
-                              <tr>
-                                <th className="p-2.5 font-semibold">نام کالا</th>
-                                <th className="p-2.5 font-semibold text-center">تعداد درخواستی</th>
-                                <th className="p-2.5 font-semibold">موجودی انبار</th>
-                                <th className="p-2.5 font-semibold text-blue-400">نرخ ویزیتور</th>
-                                <th className="p-2.5 font-semibold text-blue-300">مجموع ویزیتور</th>
-                                <th className="p-2.5 font-semibold text-emerald-400">نرخ فروشگاه</th>
-                                <th className="p-2.5 font-semibold text-emerald-300">مجموع فروشگاه</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-800/80 bg-slate-950">
-                              {aggregatedItems.map((item) => {
-                                const prod = products.find((p) => p.id === item.productId);
-                                const fallbackStore = prod ? Number(prod.price) : 0;
-                                const fallbackVisitor = prod?.visitor_price ?? Math.round(fallbackStore * 0.85);
-
-                                // Find a billItem snapshot if available
-                                const rawItem = bill.items?.find((i) => i.product_id === item.productId);
-                                const storePrice = rawItem?.store_price ?? fallbackStore;
-                                const visitorPrice = rawItem?.visitor_price ?? fallbackVisitor;
-
-                                return (
-                                  <tr key={item.productId} className="hover:bg-slate-900/40">
-                                    <td className="p-2.5 font-semibold text-slate-100 flex items-center gap-1.5">
-                                      <span>{item.productName}</span>
-                                      {item.isShortage && isPending && (
-                                        <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/30">
-                                          کسری
-                                        </span>
-                                      )}
-                                    </td>
-                                    <td className="p-2.5 text-center font-mono font-bold text-slate-200">
-                                      {item.totalQuantity} <span className="font-normal text-slate-400">{item.unit}</span>
-                                    </td>
-                                    <td className="p-2.5 text-slate-300 font-mono text-[11px]">
-                                      {item.currentStock} {item.unit}
-                                    </td>
-                                    <td className="p-2.5 font-mono text-blue-400">{formatPrice(visitorPrice)}</td>
-                                    <td className="p-2.5 font-mono font-bold text-blue-300">
-                                      {formatPrice(visitorPrice * item.totalQuantity)}
-                                    </td>
-                                    <td className="p-2.5 font-mono text-emerald-400">{formatPrice(storePrice)}</td>
-                                    <td className="p-2.5 font-mono font-bold text-emerald-300">
-                                      {formatPrice(storePrice * item.totalQuantity)}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-
-                      {/* (ب) لیست سفارش‌های داخل برگه */}
-                      <div className="space-y-2 pt-2 border-t border-slate-800">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-bold text-slate-200 flex items-center gap-1.5">
-                            <Store className="w-3.5 h-3.5 text-blue-400" />
-                            <span>(ب) سفارش‌های مندرج در این برگه ({billOrders.length} فاکتور):</span>
-                          </span>
-                        </div>
-
-                        {billOrders.length === 0 ? (
-                          <div className="p-3 text-center text-xs text-slate-500 bg-slate-900 rounded-xl">
-                            سفارشی برای این برگه بارگیری یافت نشد.
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
-                            {billOrders.map((ord) => {
-                              const ch = ord.order_channel || 'visitor_field';
-                              const chInfo = channelMap[ch as OrderChannel] || channelMap.visitor_field;
-                              const ChIcon = chInfo.icon;
-
-                              return (
-                                <div
-                                  key={ord.id}
-                                  className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between gap-3 hover:border-slate-700 transition"
-                                >
-                                  <div className="min-w-0 space-y-1">
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-mono font-bold text-xs text-blue-400">{ord.id}</span>
-                                      <span className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-semibold border ${chInfo.bg}`}>
-                                        <ChIcon className="w-2.5 h-2.5" />
-                                        <span>{chInfo.label}</span>
-                                      </span>
-                                    </div>
-                                    <p className="font-medium text-slate-200 truncate">{ord.supermarket_name}</p>
-                                    <p className="text-[11px] font-mono font-bold text-emerald-400">
-                                      {formatPrice(ord.total_amount)} تومان
-                                    </p>
-                                  </div>
-
-                                  {onNavigateToOrder && (
-                                    <button
-                                      type="button"
-                                      onClick={() => onNavigateToOrder(ord.id)}
-                                      className="px-2.5 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/30 text-xs font-semibold transition cursor-pointer flex items-center gap-1 shrink-0"
-                                      title="مشاهده جزئیات سفارش در تب سفارش‌ها"
-                                    >
-                                      <span>مشاهده</span>
-                                      <ExternalLink className="w-3 h-3" />
-                                    </button>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Footer Actions: Cancel Bill for Pending */}
-                      {isPending && (
-                        <div className="pt-3 border-t border-slate-800 flex items-center justify-between gap-3">
-                          <p className="text-[11px] text-slate-400">
-                            تایید نهایی خروج فیزیکی این حواله در پنل انباردار سردخانه انجام می‌پذیرد.
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCancelModalBill(bill);
-                              setCancelReason('');
-                              setCancelError(null);
-                            }}
-                            className="min-h-[38px] px-4 py-2 rounded-xl bg-rose-950/60 hover:bg-rose-900/80 border border-rose-800/80 text-rose-300 hover:text-rose-100 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer active:scale-98 shadow-sm"
-                          >
-                            <Ban className="w-4 h-4 text-rose-400" />
-                            <span>لغو برگه بارگیری</span>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+        {/* Pending Counter alert banner if pending exists */}
+        {statusCounts.pending > 0 && (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-bold animate-pulse">
+            <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>{statusCounts.pending} فاکتور منتظر بررسی شما</span>
           </div>
         )}
       </div>
 
-      {/* Cancellation Modal */}
-      {cancelModalBill && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
-          <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2 text-rose-400 font-bold text-sm">
-                <Ban className="w-4 h-4" />
-                <span>لغو برگه بارگیری {cancelModalBill.id}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setCancelModalBill(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer"
+      {/* 2. Status Filter Chips with Counts */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+        {statusChips.map((chip) => {
+          const isActive = statusFilter === chip.id;
+          const count = (statusCounts as Record<string, number>)[chip.id] || 0;
+
+          return (
+            <button
+              key={chip.id}
+              type="button"
+              onClick={() => {
+                setStatusFilter(chip.id);
+                setSelectedBillId(null);
+              }}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 cursor-pointer ${
+                isActive
+                  ? chip.id === 'pending'
+                    ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                    : 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
+                  : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <span>{chip.label}</span>
+              <span
+                className={`px-1.5 py-0.2 rounded-full font-mono text-[11px] ${
+                  isActive
+                    ? chip.id === 'pending'
+                      ? 'bg-slate-950/20 text-slate-950 font-black'
+                      : 'bg-white/20 text-white'
+                    : 'bg-slate-800 text-slate-400'
+                }`}
               >
-                <X className="w-4 h-4" />
-              </button>
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 3. Main Master-Detail Split Screen */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        {/* Left Column: Bills List (4 cols on lg) */}
+        <div className={`space-y-3 ${activeBill ? 'lg:col-span-4' : 'lg:col-span-12'}`}>
+          {/* Search Box */}
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute right-3 top-3 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="جستجوی نام ویزیتور، شماره فاکتور یا شناسه..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pr-9 pl-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-200 text-xs focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          {filteredBills.length === 0 ? (
+            <div className="p-8 text-center rounded-2xl bg-slate-900/60 border border-slate-800 text-slate-400 text-xs space-y-1">
+              <p className="font-bold text-slate-300">هیچ فاکتوری در این وضعیت یافت نشد.</p>
+              <p className="text-slate-500">فیلتر دیگری را انتخاب یا عبارت جستجو را تغییر دهید.</p>
+            </div>
+          ) : (
+            <div className="space-y-2.5 max-h-[75vh] overflow-y-auto pr-1">
+              {filteredBills.map((bill) => {
+                const isSelected = selectedBillId === bill.id;
+                const ageInfo = bill.status === 'pending' ? getBillAgeInfo(bill.submitted_at || bill.created_at) : null;
+
+                return (
+                  <div
+                    key={bill.id}
+                    onClick={() => setSelectedBillId(bill.id)}
+                    className={`p-3.5 rounded-2xl border transition cursor-pointer space-y-2 shadow-xs ${
+                      isSelected
+                        ? 'bg-blue-950/30 border-blue-500 shadow-md shadow-blue-500/10'
+                        : 'bg-slate-900 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-sm text-slate-100">
+                            {bill.visitor_name}
+                          </span>
+                          {bill.invoice_no ? (
+                            <span className="px-2 py-0.5 rounded-md bg-slate-950 font-mono text-xs font-bold text-blue-300 border border-slate-800">
+                              {bill.invoice_no}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] font-mono text-slate-500">{bill.id}</span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-1">
+                          تاریخ: {formatBillDateTime(bill.submitted_at || bill.created_at)}
+                        </p>
+                      </div>
+
+                      <div className="text-left shrink-0">
+                        {renderStatusBadge(bill.status)}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-800/80">
+                      <div className="text-slate-400">
+                        <span>مبلغ خرید ویزیتور: </span>
+                        <span className="font-mono font-bold text-slate-200">
+                          {formatPrice(Number(bill.total_visitor_cost || 0))} تومان
+                        </span>
+                      </div>
+
+                      {/* Revision count or Pending age */}
+                      <div className="flex items-center gap-1.5">
+                        {(bill.revision_count ?? 0) > 0 && (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] font-bold">
+                            {bill.revision_count} ویرایش
+                          </span>
+                        )}
+                        {ageInfo && (
+                          <span className="text-[11px] text-amber-400 flex items-center gap-1 font-mono">
+                            <Clock className="w-3 h-3" />
+                            <span>{ageInfo.formattedText}</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Right Column: Selected Invoice Detail Page (8 cols on lg) */}
+        {activeBill ? (
+          <div className="lg:col-span-8 bg-slate-900 rounded-3xl border border-slate-800 p-4 sm:p-6 space-y-6 shadow-xl">
+            {/* Top Detail Header: Visitor Name, Invoice No, Status, Revision Count */}
+            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-800 pb-4">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h3 className="text-base sm:text-lg font-black text-slate-100">
+                    فاکتور بارگیری {activeBill.visitor_name}
+                  </h3>
+                  {activeBill.invoice_no ? (
+                    <span className="px-2.5 py-0.5 rounded-lg bg-blue-950 text-blue-300 border border-blue-600/40 font-mono font-bold text-xs">
+                      {activeBill.invoice_no}
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-lg bg-slate-950 text-slate-400 font-mono text-xs border border-slate-800">
+                      {activeBill.id}
+                    </span>
+                  )}
+                  {renderStatusBadge(activeBill.status)}
+                </div>
+
+                <div className="flex items-center gap-3 text-xs text-slate-400 flex-wrap">
+                  <span>تاریخ ارسال: <strong className="text-slate-300">{formatOrderDate(activeBill.submitted_at || activeBill.created_at)}</strong></span>
+                  {activeBill.status === 'pending' && (
+                    <>
+                      <span>•</span>
+                      <span className="text-amber-400 flex items-center gap-1 font-semibold">
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>سن فاکتور: {getBillAgeInfo(activeBill.submitted_at || activeBill.created_at).formattedText}</span>
+                      </span>
+                    </>
+                  )}
+                  <span>•</span>
+                  <span className="px-2 py-0.5 rounded-full bg-slate-950 text-slate-300 border border-slate-800 font-bold">
+                    {activeBill.revision_count ?? 0} بار ویرایش شده
+                  </span>
+                  {activeBill.finalized_by && (
+                    <>
+                      <span>•</span>
+                      <span>تاییدکننده: <strong className="text-emerald-300">{activeBill.finalized_by}</strong></span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Toolbar: Approve, Cancel, Print (Only allowed states) */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* 1. Official Print / Preview Button */}
+                {activeBill.status === 'approved' || activeBill.status === 'loaded' ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsPrintModalOpen(true)}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-md shadow-blue-600/20 cursor-pointer"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>چاپ فاکتور نهایی</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsPrintModalOpen(true)}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-950/60 hover:bg-blue-900/60 text-blue-300 text-xs font-bold border border-blue-500/40 transition cursor-pointer"
+                    title="پیش‌نمایش سند قبل از تایید نهایی"
+                  >
+                    <FileText className="w-4 h-4 text-blue-400" />
+                    <span>پیش‌نمایش پیش‌نویس (غیرنهایی)</span>
+                  </button>
+                )}
+
+                {/* 2. Cancel Invoice Button: Only if not loaded and not already cancelled */}
+                {activeBill.status !== 'loaded' && activeBill.status !== 'cancelled' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCancelReasonInput('');
+                      setIsCancelModalOpen(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 text-xs font-bold border border-rose-500/30 transition cursor-pointer"
+                  >
+                    <Ban className="w-3.5 h-3.5 text-rose-400" />
+                    <span>لغو فاکتور</span>
+                  </button>
+                )}
+
+                {/* 3. Approve Invoice Button: Only when status === 'pending' */}
+                {activeBill.status === 'pending' && (
+                  <button
+                    type="button"
+                    onClick={() => setIsApproveModalOpen(true)}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold transition shadow-md shadow-emerald-600/20 cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>تایید قیمت‌ها و فاکتور</span>
+                  </button>
+                )}
+              </div>
             </div>
 
-            <p className="text-xs text-slate-300 leading-relaxed">
-              با لغو این حواله، سفارش‌های متصل به آن مجدداً به وضعیت آماده ارسال بازمی‌گردند و امکان صدور برگه جدید توسط ویزیتور فراهم می‌شود. موجودی انبار تغییری نخواهد کرد.
-            </p>
-
-            <div className="space-y-1.5 text-xs">
-              <label className="font-semibold text-slate-200 block">
-                علت لغو برگه بارگیری <span className="text-rose-400">*</span>:
-              </label>
-              <textarea
-                value={cancelReason}
-                onChange={(e) => {
-                  setCancelReason(e.target.value);
-                  if (cancelError) setCancelError(null);
-                }}
-                rows={3}
-                placeholder="مثال: عدم حضور راننده، کسری موجودی سردخانه، مغایرت فاکتورها..."
-                className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 transition resize-none"
-              />
-              {cancelError && (
-                <p className="text-xs text-rose-400 flex items-center gap-1 pt-0.5">
-                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                  <span>{cancelError}</span>
+            {/* Warning if warehouse stock shortage */}
+            {hasAnyShortage && activeBill.status !== 'loaded' && (
+              <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs space-y-1">
+                <div className="flex items-center gap-2 font-bold text-rose-400">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>هشدار کمبود موجودی فیزیکی در انبار:</span>
+                </div>
+                <p className="text-slate-300">
+                  یک یا چند قلم از این فاکتور با کسری موجودی فیزیکی مواجه است. پیش از تایید، تعداد را کاهش دهید یا قلم مربوطه را حذف کنید.
                 </p>
+              </div>
+            )}
+
+            {/* Switchable View Tabs: «به تفکیک کالا» vs «به تفکیک مشتری» */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2 p-1 rounded-2xl bg-slate-950 border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('by_product')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                    viewMode === 'by_product'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  به تفکیک کالا (نمای تجمیعی)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('by_customer')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                    viewMode === 'by_customer'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  به تفکیک مشتری (ریز توزیع و توافقات)
+                </button>
+              </div>
+
+              {/* Add Agreed Line button (only when editable) */}
+              {isEditable && (
+                <button
+                  type="button"
+                  onClick={() => setIsAgreementModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/30 text-xs font-bold transition cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ افزودن قلم توافقی (تلفنی / حضوری)</span>
+                </button>
               )}
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-2">
+            {/* VIEW MODE 1: «به تفکیک کالا» (Strictly visitor purchase price, no store price, no profit) */}
+            {viewMode === 'by_product' && (
+              <div className="space-y-4">
+                <div className="overflow-x-auto rounded-2xl border border-slate-800">
+                  <table className="w-full text-right text-xs">
+                    <thead>
+                      <tr className="bg-slate-950 text-slate-400 border-b border-slate-800 font-semibold">
+                        <th className="py-3 px-3.5 w-10 text-center">ردیف</th>
+                        <th className="py-3 px-3.5">نام کالا</th>
+                        <th className="py-3 px-3 text-center w-20">واحد</th>
+                        <th className="py-3 px-3 text-center w-24">تعداد کل</th>
+                        <th className="py-3 px-3.5 text-left w-28">قیمت خرید ویزیتور</th>
+                        <th className="py-3 px-3.5 text-left w-32">مبلغ کل (تومان)</th>
+                        {isEditable && <th className="py-3 px-3 text-center w-24">عملیات</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/80">
+                      {aggregatedBillItems.map((item, idx) => (
+                        <tr
+                          key={item.productId}
+                          className={`transition ${
+                            item.isShortage ? 'bg-rose-950/20 border-rose-500/30' : 'hover:bg-slate-800/20'
+                          }`}
+                        >
+                          <td className="py-3 px-3.5 text-center text-slate-500 font-mono">
+                            {idx + 1}
+                          </td>
+                          <td className="py-3 px-3.5">
+                            <span className="font-bold text-slate-100">{item.productName}</span>
+                            {item.isShortage && (
+                              <div className="text-[11px] text-rose-400 font-bold mt-0.5 flex items-center gap-1">
+                                <AlertTriangle className="w-3 h-3 shrink-0" />
+                                <span>کسری موجودی: {item.shortageCount} واحد (موجودی انبار: {item.currentStock})</span>
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-center text-slate-400">{item.unit}</td>
+                          <td className="py-3 px-3 text-center font-black text-sm text-slate-100 font-mono">
+                            {item.totalQuantity}
+                          </td>
+                          <td className="py-3 px-3.5 text-left font-mono text-slate-300">
+                            {formatPrice(item.visitorPrice)}
+                          </td>
+                          <td className="py-3 px-3.5 text-left font-mono font-bold text-blue-400">
+                            {formatPrice(item.totalAmount)}
+                          </td>
+                          {isEditable && (
+                            <td className="py-3 px-3 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                {item.lines.length === 1 ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingLine(item.lines[0]);
+                                        setEditQty(item.lines[0].quantity);
+                                        setEditUnitPrice(item.lines[0].visitor_price ?? '');
+                                        setEditReason('');
+                                      }}
+                                      className="p-1.5 rounded-lg hover:bg-slate-800 text-blue-400 transition cursor-pointer"
+                                      title="ویرایش تعداد یا قیمت خرید ویزیتور"
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveLine(item.lines[0].id, item.productName)}
+                                      className="p-1.5 rounded-lg hover:bg-slate-800 text-rose-400 transition cursor-pointer"
+                                      title="حذف قلم"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => setViewMode('by_customer')}
+                                    className="text-[11px] text-blue-400 hover:underline cursor-pointer"
+                                  >
+                                    ریز {item.lines.length} ردیف
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-slate-950 font-black border-t-2 border-slate-800 text-slate-100">
+                        <td colSpan={3} className="py-3.5 px-3.5 text-right">
+                          جمع کل اقلام فاکتور ویزیتور:
+                        </td>
+                        <td className="py-3.5 px-3 text-center text-blue-400 text-sm font-mono">
+                          {billTotalUnits}
+                        </td>
+                        <td className="py-3.5 px-3.5"></td>
+                        <td className="py-3.5 px-3.5 text-left font-mono text-base text-emerald-400" colSpan={isEditable ? 2 : 1}>
+                          {formatPrice(billTotalAmount)} تومان
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* VIEW MODE 2: «به تفکیک مشتری» (Showing customer label, source badge, line_note) */}
+            {viewMode === 'by_customer' && (
+              <div className="space-y-4">
+                {customerGroupedItems.length === 0 ? (
+                  <div className="p-6 text-center text-slate-400 text-xs">
+                    هیچ ردیفی در این فاکتور یافت نشد.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {customerGroupedItems.map((group) => (
+                      <div
+                        key={group.id}
+                        className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4 space-y-3"
+                      >
+                        <div className="flex items-center justify-between border-b border-slate-800/80 pb-2 flex-wrap gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-sm text-slate-100">{group.name}</span>
+                            {group.source === 'order' && (
+                              <span className="px-2 py-0.5 rounded-md bg-blue-900/40 text-blue-300 border border-blue-700/50 text-[10px] font-bold">
+                                سامانه (سفارش {group.orderId})
+                              </span>
+                            )}
+                            {group.source === 'visitor_manual' && (
+                              <span className="px-2 py-0.5 rounded-md bg-purple-900/40 text-purple-300 border border-purple-700/50 text-[10px] font-bold">
+                                ویزیتور (فروش صحرایی / آزاد)
+                              </span>
+                            )}
+                            {group.source === 'admin_manual' && (
+                              <span className="px-2 py-0.5 rounded-md bg-amber-900/40 text-amber-300 border border-amber-700/50 text-[10px] font-bold">
+                                قلم توافقی ادمین (تلفنی / حضوری)
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="text-left font-mono font-bold text-xs text-slate-300">
+                            مجموع: {formatPrice(group.totalAmount)} تومان
+                          </div>
+                        </div>
+
+                        {/* Items under this customer */}
+                        <div className="space-y-1.5">
+                          {group.items.map((it) => (
+                            <div
+                              key={it.id}
+                              className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900 text-xs text-slate-200 flex-wrap gap-2"
+                            >
+                              <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                                <span className="font-bold text-slate-100">{it.product_name}</span>
+                                {it.line_note && (
+                                  <span className="text-[11px] text-amber-300/90 bg-amber-950/40 px-2 py-0.5 rounded border border-amber-800/40">
+                                    توضیح: {it.line_note}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-3 shrink-0">
+                                <span className="font-mono font-bold text-slate-100">
+                                  {it.quantity} عدد
+                                </span>
+                                <span className="font-mono text-slate-400">
+                                  فی: {formatPrice(Number(it.visitor_price || 0))}
+                                </span>
+
+                                {isEditable && (
+                                  <div className="flex items-center gap-1 mr-2 border-r border-slate-800 pr-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingLine(it);
+                                        setEditQty(it.quantity);
+                                        setEditUnitPrice(it.visitor_price ?? '');
+                                        setEditReason('');
+                                      }}
+                                      className="p-1 rounded hover:bg-slate-800 text-blue-400 transition cursor-pointer"
+                                      title="ویرایش تعداد یا نرخ توافقی"
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveLine(it.id, it.product_name)}
+                                      className="p-1 rounded hover:bg-slate-800 text-rose-400 transition cursor-pointer"
+                                      title="حذف قلم"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 4. Audit Trail Accordion: تاریخچه تغییرات فاکتور (کی، چه ادیتی کرد، مقدار قدیم و جدید) */}
+            <div className="border border-slate-800 rounded-2xl bg-slate-950/40 overflow-hidden">
               <button
                 type="button"
-                disabled={isCancelling}
-                onClick={() => setCancelModalBill(null)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition cursor-pointer"
+                onClick={() => setIsAuditAccordionOpen(!isAuditAccordionOpen)}
+                className="w-full p-3.5 flex items-center justify-between text-right text-xs font-bold text-slate-300 hover:bg-slate-900/60 transition cursor-pointer"
               >
-                انصراف
+                <div className="flex items-center gap-2">
+                  <History className="w-4 h-4 text-blue-400" />
+                  <span>تاریخچه تغییرات و سوابق اصلاحات فاکتور ({auditLogs.length} رویداد)</span>
+                </div>
+                {isAuditAccordionOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </button>
+
+              {isAuditAccordionOpen && (
+                <div className="p-3.5 border-t border-slate-800 space-y-2 text-xs">
+                  {isLoadingAudit ? (
+                    <p className="text-slate-400 text-center py-2">در حال دریافت سوابق...</p>
+                  ) : auditLogs.length === 0 ? (
+                    <p className="text-slate-500 text-center py-2">هیچ رویدادی در تاریخچه این فاکتور ثبت نشده است.</p>
+                  ) : (
+                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                      {auditLogs.map((log) => (
+                        <div
+                          key={log.id}
+                          className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 flex items-start justify-between gap-3"
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-100">{log.actor_name}</span>
+                              <span className="px-2 py-0.5 rounded-md bg-slate-800 font-mono text-[10px] text-blue-300">
+                                {log.action}
+                              </span>
+                            </div>
+                            <div className="text-xs">
+                              {formatAuditDetails(log)}
+                            </div>
+                          </div>
+                          <span className="text-[10px] text-slate-500 shrink-0 font-mono">
+                            {formatBillDateTime(log.created_at)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="lg:col-span-8 p-12 text-center rounded-3xl bg-slate-900/40 border border-slate-800 text-slate-400 space-y-3">
+            <FileText className="w-12 h-12 text-slate-600 mx-auto" />
+            <h3 className="font-bold text-slate-200">فاکتوری انتخاب نشده است</h3>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto">
+              لطفاً برای مشاهده اقلام، بررسی توافقات و تایید نهایی، یکی از فاکتورهای لیست سمت راست را انتخاب کنید.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Modal 1: Add Agreement Line (admin_manual) */}
+      {isAgreementModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-950/80 backdrop-blur-sm"
+          onClick={() => setIsAgreementModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl text-xs space-y-4"
+            onClick={(e) => e.stopPropagation()}
+            dir="rtl"
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-sm text-slate-100 flex items-center gap-2">
+                <Plus className="w-4 h-4 text-purple-400" />
+                <span>افزودن قلم توافقی (سفارش تلفنی / توافق حضوری)</span>
+              </h3>
               <button
                 type="button"
-                disabled={isCancelling}
-                onClick={handleConfirmCancel}
-                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition shadow-md shadow-rose-600/30 cursor-pointer active:scale-98 flex items-center gap-1.5"
+                onClick={() => setIsAgreementModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-200 cursor-pointer"
               >
-                <Ban className="w-3.5 h-3.5" />
-                <span>{isCancelling ? 'در حال لغو...' : 'ثبت قطعی و لغو برگه'}</span>
+                ✕
               </button>
+            </div>
+
+            <form onSubmit={handleAddAgreementLine} className="space-y-3.5">
+              <div>
+                <label className="block text-slate-400 mb-1 font-semibold">انتخاب کالا:</label>
+                <select
+                  value={agreementProductId}
+                  onChange={(e) => setAgreementProductId(e.target.value)}
+                  required
+                  className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-200 focus:outline-none focus:border-purple-500"
+                >
+                  <option value="">-- کالا را انتخاب کنید --</option>
+                  {products
+                    .filter((p) => p.is_active)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} - موجودی انبار: {p.stock - p.reserved_stock} {p.unit}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1 font-semibold">تعداد مورد توافق:</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={agreementQty}
+                    onChange={(e) => setAgreementQty(Math.max(1, parseInt(e.target.value) || 1))}
+                    required
+                    className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-200 focus:outline-none focus:border-purple-500 font-mono text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1 font-semibold">
+                    نرخ خرید ویزیتور (تومان):
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="پیش‌فرض کالا"
+                    value={agreementUnitPrice}
+                    onChange={(e) => setAgreementUnitPrice(e.target.value ? Number(e.target.value) : '')}
+                    className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-200 focus:outline-none focus:border-purple-500 font-mono text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1 font-semibold">
+                  نام مشتری / فروشگاه (اختیاری):
+                </label>
+                <input
+                  type="text"
+                  placeholder="مثال: آقای رضایی / سوپرمارکت بهار"
+                  value={agreementCustomerLabel}
+                  onChange={(e) => setAgreementCustomerLabel(e.target.value)}
+                  className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-200 focus:outline-none focus:border-purple-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1 font-semibold">
+                  توضیح اختیاری (مثلاً تلفنی، فوری، حضوری):
+                </label>
+                <input
+                  type="text"
+                  placeholder="مثال: سفارش تلفنی - هماهنگ شده با متصدی"
+                  value={agreementLineNote}
+                  onChange={(e) => setAgreementLineNote(e.target.value)}
+                  className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-200 focus:outline-none focus:border-purple-500"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAgreementModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold cursor-pointer"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingAgreement || !agreementProductId}
+                  className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold transition shadow-md cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmittingAgreement ? 'در حال ثبت...' : 'افزودن قلم به فاکتور'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 2: Edit Line (Quantity and/or Price with reason) */}
+      {editingLine && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-950/80 backdrop-blur-sm"
+          onClick={() => setEditingLine(null)}
+        >
+          <div
+            className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl text-xs space-y-4"
+            onClick={(e) => e.stopPropagation()}
+            dir="rtl"
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-sm text-slate-100 flex items-center gap-2">
+                <Edit2 className="w-4 h-4 text-blue-400" />
+                <span>ویرایش تعداد و قیمت قلم فاکتور</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingLine(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-200 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateLine} className="space-y-3.5">
+              <p className="text-slate-200 font-bold">{editingLine.product_name}</p>
+
+              <div>
+                <label className="block text-slate-400 mb-1">تعداد کالا:</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={editQty}
+                  onChange={(e) => setEditQty(Math.max(1, parseInt(e.target.value) || 1))}
+                  required
+                  className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-200 font-mono text-sm focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1">قیمت خرید ویزیتور (تومان):</label>
+                <input
+                  type="number"
+                  placeholder="بدون تغییر"
+                  value={editUnitPrice}
+                  onChange={(e) => setEditUnitPrice(e.target.value ? Number(e.target.value) : '')}
+                  className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-200 font-mono text-sm focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1">علت ویرایش (اختیاری):</label>
+                <input
+                  type="text"
+                  placeholder="مثال: توافق نرخ جدید / کسری انبار"
+                  value={editReason}
+                  onChange={(e) => setEditReason(e.target.value)}
+                  className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-200 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingLine(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold cursor-pointer"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingLine}
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold transition shadow-md cursor-pointer disabled:opacity-50"
+                >
+                  {isUpdatingLine ? 'در حال ثبت...' : 'ذخیره اصلاحات'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 3: Approve Loading Bill & Lock Prices Confirmation Modal */}
+      {isApproveModalOpen && activeBill && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-950/80 backdrop-blur-sm"
+          onClick={() => setIsApproveModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl text-xs space-y-4"
+            onClick={(e) => e.stopPropagation()}
+            dir="rtl"
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-sm text-slate-100 flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                <span>تایید قیمت‌ها و فاکتور بارگیری</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsApproveModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-200 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs">
+                <p className="font-bold flex items-center gap-1.5 text-amber-400">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>قیمت‌ها و فاکتور قفل می‌شوند</span>
+                </p>
+                <p className="mt-1 text-slate-300">
+                  با تایید، شماره فاکتور رسمی صادر شده و جهت ترخیص نهایی آماده می‌گردد. خروج از انبار توسط مسئول انبار انجام خواهد شد.
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5 font-mono text-xs">
+                <div className="flex justify-between text-slate-400">
+                  <span>تعداد کل اقلام فاکتور:</span>
+                  <span className="text-slate-100 font-bold">{billTotalUnits} عدد</span>
+                </div>
+                <div className="flex justify-between text-slate-400">
+                  <span>مجموع مبلغ خرید ویزیتور:</span>
+                  <span className="text-emerald-400 font-bold">{formatPrice(billTotalAmount)} تومان</span>
+                </div>
+              </div>
+
+              {hasAnyShortage && (
+                <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-semibold">
+                  هشدار: اقلامی در این فاکتور با کسری موجودی انبار مواجه هستند!
+                </div>
+              )}
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsApproveModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold cursor-pointer"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmApprove}
+                  disabled={isApproving}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition shadow-md shadow-emerald-600/20 cursor-pointer disabled:opacity-50"
+                >
+                  {isApproving ? 'در حال ثبت تایید...' : 'تایید قیمت‌ها و صدور رسمی'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal 4: Cancel Invoice with Mandatory Reason */}
+      {isCancelModalOpen && activeBill && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-950/80 backdrop-blur-sm"
+          onClick={() => setIsCancelModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl text-xs space-y-4"
+            onClick={(e) => e.stopPropagation()}
+            dir="rtl"
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-sm text-slate-100 flex items-center gap-2">
+                <Ban className="w-5 h-5 text-rose-400" />
+                <span>لغو فاکتور بارگیری</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsCancelModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-200 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmCancel} className="space-y-3.5">
+              <p className="text-slate-300">
+                با لغو فاکتور، رزرو اقلام آزاد شده و سفارش‌های متصل به وضعیت «آماده ارسال» بازمی‌گردند.
+              </p>
+
+              <div>
+                <label className="block text-slate-400 mb-1 font-semibold">
+                  علت لغو فاکتور (الزامی):
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  placeholder="علت لغو فاکتور را وارد کنید..."
+                  value={cancelReasonInput}
+                  onChange={(e) => setCancelReasonInput(e.target.value)}
+                  className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-200 focus:outline-none focus:border-rose-500"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCancelModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold cursor-pointer"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCancelling || !cancelReasonInput.trim()}
+                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold transition shadow-md cursor-pointer disabled:opacity-50"
+                >
+                  {isCancelling ? 'در حال ثبت لغو...' : 'تایید لغو فاکتور'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Official Visitor Invoice Print & PDF Modal (only when approved or loaded) */}
+      {isPrintModalOpen && activeBill && (
+        <VisitorInvoicePrintModal
+          isOpen={isPrintModalOpen}
+          onClose={() => setIsPrintModalOpen(false)}
+          bill={activeBill}
+          visitor={
+            visitors.find((v) => v.id === activeBill.visitor_id) || {
+              id: activeBill.visitor_id,
+              name: activeBill.visitor_name,
+              phone: '',
+              region: 'مرکزی',
+              is_active: true,
+            }
+          }
+          products={products}
+        />
       )}
     </div>
   );

@@ -115,6 +115,7 @@ export interface Order {
   order_channel?: OrderChannel;
   reassignment_id?: string | null;
   loading_bill_id?: string | null;
+  invoice_revised_at?: string | null;
   order_date: string;
   items?: OrderItem[];
   stock_deducted?: boolean;
@@ -143,15 +144,21 @@ export interface ReassignmentRequest {
   timestamp: string;
 }
 
-export type LoadingBillStatus = 'pending' | 'approved' | 'cancelled';
+export type LoadingBillStatus = 'draft' | 'pending' | 'approved' | 'loaded' | 'cancelled';
+
+export type LoadingBillItemSource = 'order' | 'visitor_manual' | 'admin_manual';
 
 export interface LoadingBillItem {
   id: string;
   loading_bill_id: string;
-  order_id: string;
+  order_id?: string | null;
   product_id: string;
   product_name: string;
   quantity: number;
+  original_quantity?: number;
+  source?: LoadingBillItemSource;
+  customer_label?: string | null;
+  line_note?: string | null;
   visitor_price?: number;
   store_price?: number;
   created_at?: string;
@@ -159,10 +166,16 @@ export interface LoadingBillItem {
 
 export interface LoadingBill {
   id: string;
+  invoice_no?: string | null;
   visitor_id: string;
   visitor_name: string;
   status: LoadingBillStatus;
   created_at: string;
+  submitted_at?: string | null;
+  finalized_at?: string | null;
+  finalized_by?: string | null;
+  revision_count?: number;
+  admin_note?: string | null;
   items?: LoadingBillItem[];
   orders_count?: number;
   total_visitor_cost?: number;
@@ -172,6 +185,20 @@ export interface LoadingBill {
   cancelled_by?: string;
   cancelled_at?: string;
   cancel_reason?: string;
+}
+
+export interface InvoiceAudit {
+  id: string;
+  invoice_id: string;
+  action: string;
+  actor_name: string;
+  details?: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface AppSetting {
+  key: string;
+  value: unknown;
 }
 
 export type InventoryTransactionType = 'reserve' | 'release_reserve' | 'load_out' | 'return' | 'manual_adjustment' | 'manual_delivery_override';

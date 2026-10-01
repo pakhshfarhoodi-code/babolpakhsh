@@ -14,6 +14,7 @@ import {
   Truck,
   Clock,
   FileCheck,
+  FileText,
 } from 'lucide-react';
 import {
   LOW_STOCK_THRESHOLD,
@@ -215,16 +216,16 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center border border-amber-500/30">
-                  <Truck className="w-5 h-5" />
+                  <FileText className="w-5 h-5" />
                 </div>
                 <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                  {pendingBills.length} برگه در انتظار
+                  {pendingBills.length} فاکتور منتظر شما
                 </span>
               </div>
 
-              <h3 className="font-bold text-sm text-slate-100">برگه‌های منتظر تایید انبار</h3>
+              <h3 className="font-bold text-sm text-slate-100">{pendingBills.length} فاکتور منتظر شما</h3>
               <p className="text-xs text-slate-400 leading-relaxed">
-                حواله‌های تجمیعی ویزیتورها منتظر بررسی موجودی و تایید خروج از سردخانه هستند.
+                فاکتورهای ارسالی ویزیتورها منتظر بررسی اقلام، اعمال توافقات و تایید نهایی هستند.
               </p>
 
               <div className="pt-1">
@@ -244,9 +245,9 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             <button
               type="button"
               onClick={() => onNavigateToLoadingBills?.('pending')}
-              className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-98 text-white text-xs font-bold transition shadow-md shadow-indigo-600/20 cursor-pointer"
+              className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-98 text-white text-xs font-bold transition shadow-md shadow-blue-600/20 cursor-pointer"
             >
-              <span>مشاهده برگه‌های در انتظار انبار</span>
+              <span>بررسی فاکتورهای ویزیتورها</span>
               <ArrowLeft className="w-4 h-4" />
             </button>
           </div>

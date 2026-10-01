@@ -146,16 +146,25 @@ export const TeamTab: React.FC<TeamTabProps> = ({
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Check if invoice or order was previously issued for the supermarket being deleted
-  const supermarketHasInvoices = useMemo(() => {
-    if (!deletingSupermarket) return false;
-    return orders.some((o) => o.supermarket_id === deletingSupermarket.id);
+  const supermarketOrdersCount = useMemo(() => {
+    if (!deletingSupermarket) return 0;
+    return orders.filter((o) => o.supermarket_id === deletingSupermarket.id).length;
   }, [deletingSupermarket, orders]);
 
-  // Check if invoice or order was previously issued for the visitor being deleted
-  const visitorHasInvoices = useMemo(() => {
-    if (!deletingVisitor) return false;
-    return orders.some((o) => o.assigned_visitor_id === deletingVisitor.id);
+  const supermarketHasInvoices = supermarketOrdersCount > 0;
+
+  // Check dependent stores and orders for the visitor being deleted
+  const visitorSupermarketsCount = useMemo(() => {
+    if (!deletingVisitor) return 0;
+    return supermarkets.filter((s) => s.assigned_visitor_id === deletingVisitor.id).length;
+  }, [deletingVisitor, supermarkets]);
+
+  const visitorOrdersCount = useMemo(() => {
+    if (!deletingVisitor) return 0;
+    return orders.filter((o) => o.assigned_visitor_id === deletingVisitor.id).length;
   }, [deletingVisitor, orders]);
+
+  const visitorHasInvoices = visitorOrdersCount > 0;
 
   // Staff Account Creation State
   const [isAddStaffOpen, setIsAddStaffOpen] = useState(false);
@@ -327,13 +336,25 @@ export const TeamTab: React.FC<TeamTabProps> = ({
     try {
       const res = await deleteSupermarket(deletingSupermarket.id);
       if (res.success) {
+        setToastNotification({
+          type: 'success',
+          message: `فروشگاه «${deletingSupermarket.name}» با موفقیت حذف گردید.`,
+        });
         setDeletingSupermarket(null);
       } else {
         setDeleteError(res.message);
+        setToastNotification({
+          type: 'error',
+          message: res.message || 'خطا در حذف مشتری.',
+        });
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'خطای ناشناخته در حذف مشتری';
       setDeleteError(msg);
+      setToastNotification({
+        type: 'error',
+        message: msg,
+      });
     } finally {
       setIsDeletingSupermarket(false);
     }
@@ -410,9 +431,18 @@ export const TeamTab: React.FC<TeamTabProps> = ({
         setDeletingVisitor(null);
       } else {
         setDeleteVisitorError(res.message || 'خطا در حذف ویزیتور');
+        setToastNotification({
+          type: 'error',
+          message: res.message || 'خطا در حذف ویزیتور.',
+        });
       }
     } catch (err: unknown) {
-      setDeleteVisitorError('خطایی در فرایند حذف ویزیتور به وجود آمد.');
+      const msg = err instanceof Error ? err.message : 'خطایی در فرایند حذف ویزیتور به وجود آمد.';
+      setDeleteVisitorError(msg);
+      setToastNotification({
+        type: 'error',
+        message: msg,
+      });
     } finally {
       setIsDeletingVisitor(false);
     }
@@ -921,7 +951,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                             value={shop.assigned_visitor_id || 'direct'}
                             onChange={async (e) => {
                               const newVisId = e.target.value;
-                              await updateSupermarket(shop.id, {
+                              const res = await updateSupermarket(shop.id, {
                                 name: shop.name,
                                 owner: shop.owner,
                                 phone: shop.phone,
@@ -930,6 +960,17 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                                 username: shop.username,
                                 is_active: shop.is_active,
                               });
+                              if (!res.success) {
+                                setToastNotification({
+                                  type: 'error',
+                                  message: res.message || 'خطا در تغییر ویزیتور اختصاصی فروشگاه.',
+                                });
+                              } else {
+                                setToastNotification({
+                                  type: 'success',
+                                  message: 'ویزیتور اختصاصی فروشگاه با موفقیت تغییر یافت.',
+                                });
+                              }
                             }}
                             className={`rounded-lg pr-2.5 pl-6 py-1 text-xs font-bold border focus:outline-none transition cursor-pointer text-right appearance-none ${
                               shop.assigned_visitor_id === 'direct' || !assignedVisitor
@@ -1461,6 +1502,19 @@ export const TeamTab: React.FC<TeamTabProps> = ({
               </div>
             </div>
 
+            {/* Dependent stats breakdown */}
+            <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs space-y-1.5">
+              <div className="flex items-center justify-between text-slate-300">
+                <span>تعداد سفارش‌های ثبت‌شده برای این فروشگاه:</span>
+                <span className="font-bold font-mono text-amber-400 bg-amber-950/60 px-2 py-0.5 rounded-md border border-amber-800/40">
+                  {supermarketOrdersCount} سفارش
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                سوابق فاکتورهای پیشین در سیستم حفظ شده و شناسه فروشگاه به عنوان بایگانی نامشخص علامت‌گذاری می‌شود.
+              </p>
+            </div>
+
             {/* Warning if invoice/order previously issued */}
             {supermarketHasInvoices && (
               <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs space-y-1">
@@ -1469,7 +1523,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                   <span>هشدار: قبلاً برای این مشتری / فروشگاه فاکتور صادر شده است!</span>
                 </div>
                 <p className="text-[11px] text-amber-200/90 leading-relaxed pr-5">
-                  اطلاعات و سوابق فاکتورهای پیشین در آرشیو ثبت می‌ماند، اما حساب کاربری مشتری به طور کامل حذف خواهد شد.
+                  اطلاعات و سوابق اقلام فاکتورهای پیشین در آرشیو ثبت می‌ماند، اما حساب کاربری مشتری به طور کامل حذف خواهد شد.
                 </p>
               </div>
             )}
@@ -1669,6 +1723,25 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                   توجه: با حذف ویزیتور، فروشگاه‌های تحت پوشش وی باقی می‌مانند و می‌توانید آن‌ها را به ویزیتور دیگری اختصاص دهید.
                 </p>
               </div>
+            </div>
+
+            {/* Dependent stats breakdown */}
+            <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs space-y-2">
+              <div className="flex items-center justify-between text-slate-300">
+                <span>فروشگاه‌های تحت پوشش این ویزیتور:</span>
+                <span className="font-bold font-mono text-purple-400 bg-purple-950/60 px-2 py-0.5 rounded-md border border-purple-800/40">
+                  {visitorSupermarketsCount} فروشگاه
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-slate-300">
+                <span>سفارش‌های ثبت‌شده با این ویزیتور:</span>
+                <span className="font-bold font-mono text-blue-400 bg-blue-950/60 px-2 py-0.5 rounded-md border border-blue-800/40">
+                  {visitorOrdersCount} سفارش
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                پس از حذف، فروشگاه‌های تحت پوشش به حالت «خرید مستقیم از پخش مرکزی» درآمده و سوابق سفارشات حفظ می‌گردند.
+              </p>
             </div>
 
             {/* Warning if invoice/order previously issued for this visitor */}

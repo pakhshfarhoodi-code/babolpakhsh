@@ -31,8 +31,10 @@ function getNormalizedPath(): string {
   return '/';
 }
 
+import { AlertTriangle, RefreshCw, Loader2 } from 'lucide-react';
+
 export const App: React.FC = () => {
-  const { role, setRole, isLoggedIn } = useApp();
+  const { role, setRole, isLoggedIn, isOnlineDb, isDataReady, fetchError, retryFetch } = useApp();
   const [currentPath, setCurrentPath] = useState<string>(getNormalizedPath);
   const [adminActiveTab, setAdminActiveTab] = useState<'overview' | 'orders' | 'products' | 'team' | 'reports'>(() => {
     if (typeof window !== 'undefined') {
@@ -125,6 +127,69 @@ export const App: React.FC = () => {
         initialRole="supermarket"
         allowedRoles={['supermarket']}
       />
+    );
+  }
+
+  // Database-first Fetch Error Screen
+  if (isOnlineDb && fetchError) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-blue-600 selection:text-white">
+        <Header currentPath={currentPath} onNavigate={navigateTo} />
+        <main className="flex-1 max-w-xl w-full mx-auto px-4 py-16 flex items-center justify-center">
+          <div className="w-full bg-rose-950/40 border border-rose-800/80 rounded-3xl p-8 text-center shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-rose-900/50 rounded-2xl flex items-center justify-center mx-auto mb-5 border border-rose-700/60 shadow-lg text-rose-400">
+              <AlertTriangle className="w-8 h-8 animate-bounce" />
+            </div>
+            <h2 className="text-xl sm:text-2xl font-black text-rose-200 mb-2">
+              اتصال به سرور برقرار نشد
+            </h2>
+            <p className="text-xs sm:text-sm text-rose-300/80 mb-6 font-medium leading-relaxed">
+              ارتباط با پایگاه داده Supabase برقرار نشد. لطفاً وضعیت اینترنت را بررسی کرده و مجدداً تلاش فرمایید.
+            </p>
+            <button
+              type="button"
+              onClick={retryFetch}
+              className="px-6 py-3 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white font-bold shadow-lg shadow-rose-950/50 transition cursor-pointer active:scale-95 flex items-center justify-center gap-2 mx-auto"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>تلاش مجدد</span>
+            </button>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // Database-first Loading Skeleton
+  if (isOnlineDb && !isDataReady) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-blue-600 selection:text-white">
+        <Header currentPath={currentPath} onNavigate={navigateTo} />
+        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-8 space-y-6">
+          <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-slate-900/60 border border-slate-800 animate-pulse">
+            <div className="flex items-center gap-3">
+              <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
+              <div className="h-5 w-48 bg-slate-800 rounded-lg"></div>
+            </div>
+            <div className="h-5 w-24 bg-slate-800 rounded-lg"></div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div
+                key={i}
+                className="h-28 rounded-2xl bg-slate-900/40 border border-slate-800/80 p-4 flex flex-col justify-between animate-pulse"
+              >
+                <div className="h-4 w-24 bg-slate-800 rounded"></div>
+                <div className="h-8 w-32 bg-slate-800 rounded-lg"></div>
+              </div>
+            ))}
+          </div>
+          <div className="h-96 rounded-2xl bg-slate-900/40 border border-slate-800/80 p-6 flex flex-col gap-4 animate-pulse">
+            <div className="h-6 w-40 bg-slate-800 rounded"></div>
+            <div className="h-full bg-slate-800/30 rounded-xl"></div>
+          </div>
+        </main>
+      </div>
     );
   }
 

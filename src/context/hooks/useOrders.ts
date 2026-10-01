@@ -46,81 +46,40 @@ export function useOrders({
   addInventoryTransactions,
 }: UseOrdersProps) {
   const [orders, setOrders] = useState<Order[]>(() => {
+    if (isSupabaseConfigured) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.ORDERS);
     if (!saved) return [];
     try {
       const parsed: Order[] = JSON.parse(saved);
       if (!Array.isArray(parsed)) return [];
-      return parsed.filter(
-        (o) =>
-          Boolean(o.supermarket_id) &&
-          !o.items?.some((it) => LEGACY_MOCK_NAMES.has(it.name?.trim()))
-      );
+      return parsed
+        .filter(
+          (o) =>
+            Boolean(o.id) &&
+            !o.items?.some((it) => LEGACY_MOCK_NAMES.has(it.name?.trim()))
+        )
+        .map((o) => ({
+          ...o,
+          supermarket_name: o.supermarket_name || 'فروشگاه نامشخص',
+        }));
     } catch {
       return [];
     }
   });
 
   const [reassignmentRequests, setReassignmentRequests] = useState<ReassignmentRequest[]>(() => {
+    if (isSupabaseConfigured) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.REASSIGNMENTS);
     return saved ? JSON.parse(saved) : [];
   });
 
   useEffect(() => {
+    if (isSupabaseConfigured) return;
     localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
   }, [orders]);
 
-  // Self-healing: Automatically purge orphan orders from deleted supermarkets
   useEffect(() => {
-    if (supermarkets.length > 0) {
-      const validSupermarketIds = new Set(supermarkets.map((s) => s.id));
-      setOrders((prev) => {
-        const orphanOrders = prev.filter(
-          (o) => !o.supermarket_id || !validSupermarketIds.has(o.supermarket_id)
-        );
-        if (orphanOrders.length > 0) {
-          const orphanIds = orphanOrders.map((o) => o.id);
-          // Release reserved stock for unfulfilled orphan orders
-          orphanOrders.forEach((ord) => {
-            if (ord.status !== 'delivered' && ord.status !== 'undelivered') {
-              const items = ord.items || [];
-              if (items.length > 0) {
-                setProducts((prodPrev) =>
-                  prodPrev.map((p) => {
-                    const item = items.find((i) => i.product_id === p.id);
-                    if (item) {
-                      return {
-                        ...p,
-                        reserved_stock: Math.max(0, p.reserved_stock - item.quantity),
-                      };
-                    }
-                    return p;
-                  })
-                );
-              }
-            }
-          });
-          // Delete from Supabase in background
-          if (isSupabaseConfigured && supabase) {
-            supabase.from('order_items').delete().in('order_id', orphanIds).then(() => {
-              supabase.from('orders').delete().in('id', orphanIds).then(() => {
-                console.log('Purged orphan orders:', orphanIds);
-              });
-            });
-            supabase.from('reassignment_requests').delete().in('order_id', orphanIds).then(() => {});
-          }
-          const next = prev.filter(
-            (o) => Boolean(o.supermarket_id) && validSupermarketIds.has(o.supermarket_id)
-          );
-          localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(next));
-          return next;
-        }
-        return prev;
-      });
-    }
-  }, [supermarkets, setProducts]);
-
-  useEffect(() => {
+    if (isSupabaseConfigured) return;
     localStorage.setItem(STORAGE_KEYS.REASSIGNMENTS, JSON.stringify(reassignmentRequests));
   }, [reassignmentRequests]);
 
@@ -263,9 +222,11 @@ export function useOrders({
       addInventoryTransactions(newTxList);
       setOrders((prev) => {
         const next = [newOrder, ...prev.filter((o) => o.id !== newOrder.id)];
-        try {
-          localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(next));
-        } catch {}
+        if (!isSupabaseConfigured) {
+          try {
+            localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(next));
+          } catch {}
+        }
         return next;
       });
 
@@ -841,7 +802,11 @@ export function useOrders({
       // Remove from local state
       setOrders((prev) => {
         const next = prev.filter((o) => o.id !== orderId);
-        localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(next));
+        if (!isSupabaseConfigured) {
+          try {
+            localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(next));
+          } catch {}
+        }
         return next;
       });
 

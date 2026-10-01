@@ -155,6 +155,9 @@ interface AppContextType {
   createStaffAccount: (payload: CreateStaffAccountPayload) => Promise<CreateStaffAccountResult>;
   resetToDefaults: () => void;
   isOnlineDb: boolean;
+  isDataReady: boolean;
+  fetchError: string | null;
+  retryFetch: () => void;
   theme: 'dark' | 'light';
   toggleTheme: () => void;
 }
@@ -194,8 +197,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const DUMMY_VISITOR_IDS = new Set(['vis-1', 'vis-2', 'vis-3']);
 
+  // Database-first state readiness and error management
+  const [isDataReady, setIsDataReady] = useState<boolean>(() => !isSupabaseConfigured);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [reloadCounter, setReloadCounter] = useState<number>(0);
+
+  const retryFetch = useCallback(() => {
+    setFetchError(null);
+    setIsDataReady(false);
+    setReloadCounter((c) => c + 1);
+  }, []);
+
   // Visitors & Supermarkets
   const [visitors, setVisitors] = useState<Visitor[]>(() => {
+    if (isSupabaseConfigured) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.VISITORS);
     if (!saved) return [];
     try {
@@ -207,12 +222,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   useEffect(() => {
+    if (isSupabaseConfigured) return;
     localStorage.setItem(STORAGE_KEYS.VISITORS, JSON.stringify(visitors));
   }, [visitors]);
 
   const DUMMY_SUPERMARKET_IDS = new Set(['shop-1', 'shop-2', 'shop-3', 'shop-4', 'shop-5']);
 
   const [supermarkets, setSupermarkets] = useState<Supermarket[]>(() => {
+    if (isSupabaseConfigured) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.SUPERMARKETS);
     if (!saved) return [];
     try {
@@ -224,6 +241,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   useEffect(() => {
+    if (isSupabaseConfigured) return;
     localStorage.setItem(STORAGE_KEYS.SUPERMARKETS, JSON.stringify(supermarkets));
   }, [supermarkets]);
 
@@ -285,6 +303,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     role: auth.role,
     currentUser: auth.currentUser,
     onShowToast: showToast,
+    setIsDataReady,
+    setFetchError,
+    reloadCounter,
   });
 
   // Reset to default factory state
@@ -305,14 +326,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateSupermarket = useCallback(async (id: string, payload: UpdateSupermarketPayload): Promise<{ success: boolean; message: string }> => {
     try {
       if (isSupabaseConfigured && supabase) {
-        // In PostgreSQL schema, supermarkets.assigned_visitor_id is a foreign key to visitors(id).
-        // If 'direct', empty string, or invalid visitor ID is provided, it must be sent as null to prevent foreign key violation.
-        const validVisitorId =
-          payload.assigned_visitor_id &&
-          payload.assigned_visitor_id !== 'direct' &&
-          visitors.some((v) => v.id === payload.assigned_visitor_id)
-            ? payload.assigned_visitor_id
-            : null;
+        // If assigned_visitor_id is specified and not 'direct'/'', verify it exists in visitors list
+        let validVisitorId: string | null = null;
+        if (payload.assigned_visitor_id && payload.assigned_visitor_id !== 'direct') {
+          const visitorExists = visitors.some((v) => v.id === payload.assigned_visitor_id);
+          if (!visitorExists) {
+            return {
+              success: false,
+              message: 'ویزیتور انتخاب‌شده در سیستم یافت نشد.',
+            };
+          }
+          validVisitorId = payload.assigned_visitor_id;
+        }
 
         const updateData: Record<string, unknown> = {
           name: payload.name.trim(),
@@ -326,13 +351,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           updateData.username = payload.username.trim();
         }
 
-        const { error: smError } = await supabase
+        const { data: updatedRows, error: smError } = await supabase
           .from('supermarkets')
           .update(updateData)
-          .eq('id', id);
+          .eq('id', id)
+          .select();
 
         if (smError) {
           return { success: false, message: `خطا در ویرایش سوپرمارکت در سرور: ${smError.message}` };
+        }
+
+        if (!updatedRows || updatedRows.length === 0) {
+          return { success: false, message: 'ذخیره در سرور انجام نشد (عدم دسترسی یا عدم وجود رکورد).' };
         }
 
         // Also update profiles table phone, name, and username
@@ -346,8 +376,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           .eq('id', id);
       }
 
+      // Update supermarkets in local state only after server confirmation (or offline mode)
       setSupermarkets((prev) =>
-        prev.map((s) => (s.id === id ? { ...s, ...payload } : s))
+        prev.map((s) => (s.id === id ? { ...s, ...payload, assigned_visitor_id: payload.assigned_visitor_id || 'direct' } : s))
       );
 
       return { success: true, message: 'مشخصات فروشگاه با موفقیت ویرایش شد.' };
@@ -357,11 +388,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [visitors, setSupermarkets]);
 
-  // Delete Supermarket (both local and Supabase, along with associated orders)
-  // Delete Supermarket (both local and Supabase, unlinking orders so historical invoices remain valid and deletion never reverts)
+  // Delete Supermarket (both local and Supabase, unlinking orders so historical invoices remain valid and orders are never deleted)
   const deleteSupermarket = useCallback(async (id: string): Promise<{ success: boolean; message: string }> => {
     try {
-      // 1. Record tombstone immediately to block any auto-sync resurrection
+      // 1. Record tombstone immediately
       addDeletedId(STORAGE_KEYS.DELETED_SUPERMARKET_IDS, id);
 
       // 2. Identify orders referencing this supermarket
@@ -390,21 +420,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (isSupabaseConfigured && supabase) {
         // Unlink supermarket_id from orders so foreign key constraint does not block supermarket deletion
-        // and historical invoices maintain their items and snapshot of supermarket_name
+        // Historical invoices maintain their items and snapshot of supermarket_name
         const { error: orderUnlinkErr } = await supabase
           .from('orders')
           .update({ supermarket_id: null })
           .eq('supermarket_id', id);
 
         if (orderUnlinkErr) {
-          console.warn('Orders unlink error on Supabase, attempting fallback purge:', orderUnlinkErr.message);
-          const smOrderIds = smOrders.map((o) => o.id);
-          if (smOrderIds.length > 0) {
-            await supabase.from('order_items').delete().in('order_id', smOrderIds);
-            await supabase.from('reassignment_requests').delete().in('order_id', smOrderIds);
-            await supabase.from('orders').delete().in('id', smOrderIds);
-          }
-          await supabase.from('orders').delete().eq('supermarket_id', id);
+          return { success: false, message: `خطا در آزادسازی سوابق سفارش‌های فروشگاه: ${orderUnlinkErr.message}` };
         }
 
         // Delete from supermarkets table
@@ -414,22 +437,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           .eq('id', id);
 
         if (smError) {
-          console.warn('Supermarket delete warning, executing force cleanup:', smError.message);
-          await supabase.from('orders').delete().eq('supermarket_id', id);
-          await supabase.from('supermarkets').delete().eq('id', id);
+          return { success: false, message: `خطا در حذف فروشگاه از سرور: ${smError.message}` };
         }
 
         // Delete from profiles table
-        await supabase
+        const { error: profError } = await supabase
           .from('profiles')
           .delete()
           .eq('id', id);
+
+        if (profError) {
+          console.warn('Profile delete warning on Supabase:', profError.message);
+        }
       }
 
       // Update supermarkets in local state
       setSupermarkets((prev) => {
         const next = prev.filter((s) => s.id !== id);
-        localStorage.setItem(STORAGE_KEYS.SUPERMARKETS, JSON.stringify(next));
+        if (!isSupabaseConfigured) {
+          try {
+            localStorage.setItem(STORAGE_KEYS.SUPERMARKETS, JSON.stringify(next));
+          } catch {}
+        }
         return next;
       });
 
@@ -438,11 +467,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const next = prev.map((o) =>
           o.supermarket_id === id ? { ...o, supermarket_id: '' } : o
         );
-        localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(next));
+        if (!isSupabaseConfigured) {
+          try {
+            localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(next));
+          } catch {}
+        }
         return next;
       });
 
-      return { success: true, message: 'مشتری با موفقیت حذف گردید و سوابق بایگانی شد.' };
+      return { success: true, message: 'مشتری با موفقیت حذف گردید و سوابق سفارشات بایگانی شد.' };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در حذف مشتری';
       return { success: false, message: msg };
@@ -585,8 +618,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (isSupabaseConfigured && supabase) {
         // Unlink assigned_visitor_id in supermarkets and orders to prevent FK constraint failure
-        await supabase.from('supermarkets').update({ assigned_visitor_id: null }).eq('assigned_visitor_id', id);
-        await supabase.from('orders').update({ assigned_visitor_id: null }).eq('assigned_visitor_id', id);
+        const { error: smUnlinkErr } = await supabase.from('supermarkets').update({ assigned_visitor_id: null }).eq('assigned_visitor_id', id);
+        if (smUnlinkErr) {
+          return { success: false, message: `خطا در آزادسازی فروشگاه‌های تحت پوشش ویزیتور: ${smUnlinkErr.message}` };
+        }
+
+        const { error: ordUnlinkErr } = await supabase.from('orders').update({ assigned_visitor_id: null }).eq('assigned_visitor_id', id);
+        if (ordUnlinkErr) {
+          return { success: false, message: `خطا در آزادسازی سفارش‌های تحت پوشش ویزیتور: ${ordUnlinkErr.message}` };
+        }
 
         // Unlink in loading_bills
         await supabase.from('loading_bills').update({ visitor_id: null }).eq('visitor_id', id);
@@ -601,25 +641,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Delete from visitors table
         const { error: visError } = await supabase.from('visitors').delete().eq('id', id);
         if (visError) {
-          console.warn('Visitor delete error on Supabase, attempting fallback:', visError.message);
-          await supabase.from('loading_bills').delete().eq('visitor_id', id);
-          await supabase.from('visitors').delete().eq('id', id);
+          return { success: false, message: `خطا در حذف ویزیتور از سرور: ${visError.message}` };
         }
 
         // Delete profile
-        await supabase.from('profiles').delete().eq('id', id);
+        const { error: profError } = await supabase.from('profiles').delete().eq('id', id);
+        if (profError) {
+          console.warn('Profile delete warning:', profError.message);
+        }
       }
 
       setVisitors((prev) => {
         const next = prev.filter((v) => v.id !== id);
-        localStorage.setItem(STORAGE_KEYS.VISITORS, JSON.stringify(next));
+        if (!isSupabaseConfigured) {
+          try {
+            localStorage.setItem(STORAGE_KEYS.VISITORS, JSON.stringify(next));
+          } catch {}
+        }
         return next;
       });
 
       // Update supermarkets: set assigned_visitor_id to 'direct'
       setSupermarkets((prev) => {
-        const next = prev.map((s) => s.assigned_visitor_id === id ? { ...s, assigned_visitor_id: 'direct' } : s);
-        localStorage.setItem(STORAGE_KEYS.SUPERMARKETS, JSON.stringify(next));
+        const next = prev.map((s) => (s.assigned_visitor_id === id ? { ...s, assigned_visitor_id: 'direct' } : s));
+        if (!isSupabaseConfigured) {
+          try {
+            localStorage.setItem(STORAGE_KEYS.SUPERMARKETS, JSON.stringify(next));
+          } catch {}
+        }
         return next;
       });
 
@@ -630,7 +679,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ? { ...o, assigned_visitor_id: null, visitor_name: 'پخش مرکزی (مستقیم)' }
             : o
         );
-        localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(next));
+        if (!isSupabaseConfigured) {
+          try {
+            localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(next));
+          } catch {}
+        }
         return next;
       });
 
@@ -900,6 +953,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     createStaffAccount,
     resetToDefaults,
     isOnlineDb: isSupabaseConfigured,
+    isDataReady,
+    fetchError,
+    retryFetch,
     theme,
     toggleTheme,
     showToast,
@@ -924,6 +980,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     deleteVisitor,
     resetVisitorPassword,
     createStaffAccount,
+    isDataReady,
+    fetchError,
+    retryFetch,
     catalog.categories,
     catalog.brands,
     catalog.units,

@@ -31,6 +31,7 @@ export function useCatalog() {
   const PRESET_CAT_IDS = new Set(['cat-1', 'cat-2', 'cat-3', 'cat-4', 'cat-5']);
 
   const [categories, setCategories] = useState<Category[]>(() => {
+    if (isSupabaseConfigured) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
     if (!saved) return [];
     try {
@@ -42,6 +43,7 @@ export function useCatalog() {
   });
 
   const [brands, setBrands] = useState<string[]>(() => {
+    if (isSupabaseConfigured) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.BRANDS);
     if (!saved) return [];
     try {
@@ -53,6 +55,7 @@ export function useCatalog() {
   });
 
   const [products, setProducts] = useState<Product[]>(() => {
+    if (isSupabaseConfigured) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
     const marketTestIds = getMarketTestIds();
     if (!saved) return [];
@@ -74,6 +77,7 @@ export function useCatalog() {
   });
 
   const [productLikes, setProductLikes] = useState<ProductLike[]>(() => {
+    if (isSupabaseConfigured) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.PRODUCT_LIKES);
     if (!saved) return [];
     try {
@@ -85,6 +89,7 @@ export function useCatalog() {
   });
 
   const [units, setUnits] = useState<string[]>(() => {
+    if (isSupabaseConfigured) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.UNITS);
     if (!saved) return [];
     try {
@@ -96,26 +101,31 @@ export function useCatalog() {
   });
 
   const [priceHistories, setPriceHistories] = useState<ProductPriceHistory[]>(() => {
+    if (isSupabaseConfigured) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.PRICE_HISTORIES);
     return saved ? JSON.parse(saved) : [];
   });
 
   useEffect(() => {
+    if (isSupabaseConfigured) return;
     try {
       localStorage.setItem(STORAGE_KEYS.PRODUCT_LIKES, JSON.stringify(productLikes));
     } catch {}
   }, [productLikes]);
 
-  // Local storage persistence
+  // Local storage persistence (Only in mock / offline mode)
   useEffect(() => {
+    if (isSupabaseConfigured) return;
     localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories));
   }, [categories]);
 
   useEffect(() => {
+    if (isSupabaseConfigured) return;
     localStorage.setItem(STORAGE_KEYS.BRANDS, JSON.stringify(brands));
   }, [brands]);
 
   useEffect(() => {
+    if (isSupabaseConfigured) return;
     localStorage.setItem(STORAGE_KEYS.UNITS, JSON.stringify(units));
   }, [units]);
 
@@ -137,10 +147,12 @@ export function useCatalog() {
   }, [products]);
 
   useEffect(() => {
+    if (isSupabaseConfigured) return;
     localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
   }, [products]);
 
   useEffect(() => {
+    if (isSupabaseConfigured) return;
     localStorage.setItem(STORAGE_KEYS.PRICE_HISTORIES, JSON.stringify(priceHistories));
   }, [priceHistories]);
 
@@ -233,10 +245,12 @@ export function useCatalog() {
 
     setProducts((prev) => {
       const next = [...prev, productToAdd];
-      try {
-        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(next));
-      } catch {
-        // storage quota fallback
+      if (!isSupabaseConfigured) {
+        try {
+          localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(next));
+        } catch {
+          // storage quota fallback
+        }
       }
       return next;
     });
@@ -387,9 +401,11 @@ export function useCatalog() {
 
     setProducts((prev) => {
       const next = prev.map((p) => (p.id === productId ? updatedProd : p));
-      try {
-        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(next));
-      } catch {}
+      if (!isSupabaseConfigured) {
+        try {
+          localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(next));
+        } catch {}
+      }
       return next;
     });
 
@@ -652,30 +668,37 @@ export function useCatalog() {
     setProducts(updatedProducts);
 
     // Save immediately to local storage so even if refreshed instantly, products are never lost!
-    try {
-      localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(updatedProducts));
-    } catch {
-      // ignore quota
-    }
+    if (!isSupabaseConfigured) {
+      try {
+        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(updatedProducts));
+      } catch {}
 
-    if (newHistories.length > 0) {
-      setPriceHistories((prev) => {
-        const next = [...newHistories, ...prev];
-        try {
-          localStorage.setItem(STORAGE_KEYS.PRICE_HISTORIES, JSON.stringify(next));
-        } catch {}
-        return next;
-      });
-    }
+      if (newHistories.length > 0) {
+        setPriceHistories((prev) => {
+          const next = [...newHistories, ...prev];
+          try {
+            localStorage.setItem(STORAGE_KEYS.PRICE_HISTORIES, JSON.stringify(next));
+          } catch {}
+          return next;
+        });
+      }
 
-    if (newBrandsSet.size > 0) {
-      setBrands((prev) => {
-        const combined = Array.from(new Set([...prev, ...Array.from(newBrandsSet)]));
-        try {
-          localStorage.setItem(STORAGE_KEYS.BRANDS, JSON.stringify(combined));
-        } catch {}
-        return combined;
-      });
+      if (newBrandsSet.size > 0) {
+        setBrands((prev) => {
+          const combined = Array.from(new Set([...prev, ...Array.from(newBrandsSet)]));
+          try {
+            localStorage.setItem(STORAGE_KEYS.BRANDS, JSON.stringify(combined));
+          } catch {}
+          return combined;
+        });
+      }
+    } else {
+      if (newHistories.length > 0) {
+        setPriceHistories((prev) => [...newHistories, ...prev]);
+      }
+      if (newBrandsSet.size > 0) {
+        setBrands((prev) => Array.from(new Set([...prev, ...Array.from(newBrandsSet)])));
+      }
     }
 
     // Persist products, categories, and brands to Supabase
@@ -790,9 +813,11 @@ export function useCatalog() {
     // Update local state and persist to localStorage
     setProducts((prev) => {
       const next = prev.filter((p) => p.id !== productId);
-      try {
-        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(next));
-      } catch {}
+      if (!isSupabaseConfigured) {
+        try {
+          localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(next));
+        } catch {}
+      }
       return next;
     });
 
@@ -809,11 +834,7 @@ export function useCatalog() {
         // 5. Delete product row from Supabase
         const { error } = await supabase.from('products').delete().eq('id', productId);
         if (error) {
-          console.warn('Supabase product delete warning, performing cascade cleanup:', error.message);
-          await supabase.from('inventory_transactions').delete().eq('product_id', productId);
-          await supabase.from('loading_bill_items').delete().eq('product_id', productId);
-          await supabase.from('order_items').delete().eq('product_id', productId);
-          await supabase.from('products').delete().eq('id', productId);
+          console.warn('Supabase product delete error:', error.message);
         }
       } catch (err) {
         console.error('Error during product deletion on Supabase:', err);
@@ -834,9 +855,11 @@ export function useCatalog() {
     const idsToDelete = new Set(productIds);
     setProducts((prev) => {
       const next = prev.filter((p) => !idsToDelete.has(p.id));
-      try {
-        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(next));
-      } catch {}
+      if (!isSupabaseConfigured) {
+        try {
+          localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(next));
+        } catch {}
+      }
       return next;
     });
 
@@ -848,10 +871,7 @@ export function useCatalog() {
         await supabase.from('product_price_history').delete().in('product_id', productIds);
         const { error } = await supabase.from('products').delete().in('id', productIds);
         if (error) {
-          await supabase.from('inventory_transactions').delete().in('product_id', productIds);
-          await supabase.from('loading_bill_items').delete().in('product_id', productIds);
-          await supabase.from('order_items').delete().in('product_id', productIds);
-          await supabase.from('products').delete().in('id', productIds);
+          console.warn('Supabase bulk product delete error:', error.message);
         }
       } catch (err) {
         console.error('Error deleting products from Supabase:', err);
@@ -985,9 +1005,11 @@ export function useCatalog() {
     };
     setCategories((prev) => {
       const next = [...prev, newCat];
-      try {
-        localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(next));
-      } catch {}
+      if (!isSupabaseConfigured) {
+        try {
+          localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(next));
+        } catch {}
+      }
       return next;
     });
 
@@ -1022,9 +1044,11 @@ export function useCatalog() {
     }
     setCategories((prev) => {
       const next = prev.map((c) => (c.id === categoryId ? { ...c, name: trimmed } : c));
-      try {
-        localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(next));
-      } catch {}
+      if (!isSupabaseConfigured) {
+        try {
+          localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(next));
+        } catch {}
+      }
       return next;
     });
 
@@ -1086,9 +1110,11 @@ export function useCatalog() {
     }
     setBrands((prev) => {
       const next = [...prev, trimmed];
-      try {
-        localStorage.setItem(STORAGE_KEYS.BRANDS, JSON.stringify(next));
-      } catch {}
+      if (!isSupabaseConfigured) {
+        try {
+          localStorage.setItem(STORAGE_KEYS.BRANDS, JSON.stringify(next));
+        } catch {}
+      }
       return next;
     });
 

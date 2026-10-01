@@ -161,3 +161,31 @@ export const getOrderChannel = (order: Partial<Order>): OrderChannel => {
   return 'store_self';
 };
 
+// Purge operational localStorage keys when database-first Supabase is configured
+export const purgeOperationalLocalStorage = (): void => {
+  if (typeof window === 'undefined') return;
+  const keysToPurge = [
+    STORAGE_KEYS.PRODUCTS,
+    STORAGE_KEYS.ORDERS,
+    STORAGE_KEYS.REASSIGNMENTS,
+    STORAGE_KEYS.LOADING_BILLS,
+    STORAGE_KEYS.TRANSACTIONS,
+    STORAGE_KEYS.PRICE_HISTORIES,
+    STORAGE_KEYS.UNITS,
+    STORAGE_KEYS.SUPERMARKETS,
+    STORAGE_KEYS.VISITORS,
+    STORAGE_KEYS.PRODUCT_LIKES,
+    STORAGE_KEYS.MARKET_TEST_PRODUCT_IDS,
+    STORAGE_KEYS.DELETED_PRODUCT_IDS,
+    STORAGE_KEYS.DELETED_SUPERMARKET_IDS,
+    STORAGE_KEYS.DELETED_VISITOR_IDS,
+    STORAGE_KEYS.CATEGORIES,
+    STORAGE_KEYS.BRANDS,
+  ];
+  keysToPurge.forEach((k) => {
+    try {
+      localStorage.removeItem(k);
+    } catch {}
+  });
+};
+

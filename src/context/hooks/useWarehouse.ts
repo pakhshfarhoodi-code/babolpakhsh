@@ -21,20 +21,24 @@ export function useWarehouse({
   setOrders,
 }: UseWarehouseProps) {
   const [loadingBills, setLoadingBills] = useState<LoadingBill[]>(() => {
+    if (isSupabaseConfigured) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.LOADING_BILLS);
     return saved ? JSON.parse(saved) : INITIAL_LOADING_BILLS;
   });
 
   const [inventoryTransactions, setInventoryTransactions] = useState<InventoryTransaction[]>(() => {
+    if (isSupabaseConfigured) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
     return saved ? JSON.parse(saved) : INITIAL_INVENTORY_TRANSACTIONS;
   });
 
   useEffect(() => {
+    if (isSupabaseConfigured) return;
     localStorage.setItem(STORAGE_KEYS.LOADING_BILLS, JSON.stringify(loadingBills));
   }, [loadingBills]);
 
   useEffect(() => {
+    if (isSupabaseConfigured) return;
     localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(inventoryTransactions));
   }, [inventoryTransactions]);
 
@@ -172,9 +176,11 @@ export function useWarehouse({
       // If Supabase succeeded or in offline mode: commit to local state and localStorage
       setLoadingBills((prev) => {
         const next = [bill, ...prev.filter((b) => b.id !== billId)];
-        try {
-          localStorage.setItem(STORAGE_KEYS.LOADING_BILLS, JSON.stringify(next));
-        } catch {}
+        if (!isSupabaseConfigured) {
+          try {
+            localStorage.setItem(STORAGE_KEYS.LOADING_BILLS, JSON.stringify(next));
+          } catch {}
+        }
         return next;
       });
 
@@ -182,9 +188,11 @@ export function useWarehouse({
         const next = prev.map((o) =>
           orderIds.includes(o.id) ? { ...o, status: 'loading' as const, loading_bill_id: billId } : o
         );
-        try {
-          localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(next));
-        } catch {}
+        if (!isSupabaseConfigured) {
+          try {
+            localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(next));
+          } catch {}
+        }
         return next;
       });
 
@@ -247,9 +255,11 @@ export function useWarehouse({
               }
             : b
         );
-        try {
-          localStorage.setItem(STORAGE_KEYS.LOADING_BILLS, JSON.stringify(next));
-        } catch {}
+        if (!isSupabaseConfigured) {
+          try {
+            localStorage.setItem(STORAGE_KEYS.LOADING_BILLS, JSON.stringify(next));
+          } catch {}
+        }
         return next;
       });
 
@@ -257,9 +267,11 @@ export function useWarehouse({
         const next = prev.map((o) =>
           o.loading_bill_id === billId ? { ...o, status: 'assigned' as const, loading_bill_id: null } : o
         );
-        try {
-          localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(next));
-        } catch {}
+        if (!isSupabaseConfigured) {
+          try {
+            localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(next));
+          } catch {}
+        }
         return next;
       });
 
@@ -531,9 +543,11 @@ export function useWarehouse({
       const idSet = new Set(txIds);
       setInventoryTransactions((prev) => {
         const next = prev.filter((tx) => !idSet.has(tx.id));
-        try {
-          localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(next));
-        } catch {}
+        if (!isSupabaseConfigured) {
+          try {
+            localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(next));
+          } catch {}
+        }
         return next;
       });
 

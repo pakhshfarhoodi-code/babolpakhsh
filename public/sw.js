@@ -1,6 +1,6 @@
-// Babol Pakhsh Service Worker for Offline Resilience
-const BUILD_TIME = '__BUILD_TIMESTAMP__';
-const CACHE_NAME = `babolpakhsh-cache-${BUILD_TIME}`;
+// Babol Pakhsh Service Worker - Database-First & Fast Deploy
+const CACHE_VERSION = 'farhoodi-b2b-dbfirst-v3';
+const CACHE_NAME = `babolpakhsh-${CACHE_VERSION}`;
 
 const STATIC_ASSETS = [
   './',
@@ -41,14 +41,30 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
-  const isHtmlRequest =
+
+  // CRITICAL: Never intercept or cache Supabase database, realtime, or auth requests
+  if (
+    url.hostname.includes('supabase.co') ||
+    url.pathname.includes('/rest/v1') ||
+    url.pathname.includes('/auth/v1') ||
+    url.pathname.includes('/realtime/v1') ||
+    url.protocol === 'ws:' ||
+    url.protocol === 'wss:'
+  ) {
+    return;
+  }
+
+  const isCodeOrDocRequest =
     event.request.mode === 'navigate' ||
     url.pathname.endsWith('.html') ||
+    url.pathname.endsWith('.js') ||
+    url.pathname.endsWith('.mjs') ||
+    url.pathname.endsWith('.css') ||
     url.pathname === '/' ||
     url.pathname.endsWith('/');
 
-  if (isHtmlRequest) {
-    // Network-first with cache fallback for HTML documents
+  if (isCodeOrDocRequest) {
+    // Network-First with cache fallback for HTML, JS and CSS to ensure instant updates on deployment
     event.respondWith(
       fetch(event.request)
         .then((networkResponse) => {
@@ -65,7 +81,7 @@ self.addEventListener('fetch', (event) => {
         })
     );
   } else {
-    // Cache-first with network fallback for hashed JS/CSS assets, fonts, icons
+    // Cache-First with network fallback for fonts, static icons, and images
     event.respondWith(
       caches.match(event.request).then((cachedResponse) => {
         if (cachedResponse) {

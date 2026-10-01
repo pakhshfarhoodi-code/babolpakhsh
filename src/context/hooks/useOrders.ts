@@ -207,26 +207,41 @@ export function useOrders({
       // In Supabase mode, attempt atomic RPC create_order_transaction
       if (isSupabaseConfigured && supabase) {
         // Ensure supermarket profile/row exists before foreign key constraint check
+        // Only insert if row does not exist at all; never overwrite existing row or assigned_visitor_id
         if (newOrder.supermarket_id) {
-          const sm = supermarkets.find((s) => s.id === newOrder.supermarket_id) || supermarket;
-          if (sm) {
-            await supabase.from('profiles').upsert({
-              id: sm.id,
-              name: sm.name,
-              role: 'supermarket',
-              phone: sm.phone || '',
-              username: (sm as any).username || sm.id,
-            }, { onConflict: 'id' });
+          const { data: existingSm } = await supabase
+            .from('supermarkets')
+            .select('id')
+            .eq('id', newOrder.supermarket_id)
+            .maybeSingle();
 
-            await supabase.from('supermarkets').upsert({
-              id: sm.id,
-              name: sm.name,
-              owner: sm.owner || 'مدیریت فروشگاه',
-              phone: sm.phone || '',
-              address: sm.address || 'تهران',
-              assigned_visitor_id: null,
-              is_active: sm.is_active ?? true,
-            }, { onConflict: 'id' });
+          if (!existingSm) {
+            const sm = supermarkets.find((s) => s.id === newOrder.supermarket_id) || supermarket;
+            if (sm) {
+              await supabase.from('profiles').upsert(
+                {
+                  id: sm.id,
+                  name: sm.name,
+                  role: 'supermarket',
+                  phone: sm.phone || '',
+                  username: (sm as any).username || (sm.phone ? sm.phone : sm.id),
+                },
+                { onConflict: 'id', ignoreDuplicates: true }
+              );
+
+              // Do NOT send assigned_visitor_id, and use ignoreDuplicates: true to never overwrite existing record
+              await supabase.from('supermarkets').upsert(
+                {
+                  id: sm.id,
+                  name: sm.name,
+                  owner: sm.owner || '',
+                  phone: sm.phone || '',
+                  address: sm.address || '',
+                  is_active: sm.is_active ?? true,
+                },
+                { onConflict: 'id', ignoreDuplicates: true }
+              );
+            }
           }
         }
 

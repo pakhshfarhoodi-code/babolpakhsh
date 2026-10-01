@@ -530,9 +530,9 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
       password: string;
     }): Promise<{ success: boolean; message: string; supermarket?: Supermarket }> => {
       const trimmedName = data.name.trim();
-      const trimmedOwner = data.owner.trim() || 'مدیر فروشگاه';
+      const trimmedOwner = data.owner.trim() || '';
       const trimmedPhone = normalizeDigits(data.phone.trim());
-      const trimmedAddress = data.address.trim() || 'تهران - منطقه توزیع زنجیره سرد';
+      const trimmedAddress = data.address.trim() || '';
       const assignedVisitorId = data.assigned_visitor_id || 'direct';
       const trimmedUsername = normalizeDigits(data.username.trim());
       const trimmedPassword = normalizeDigits(data.password.trim());
@@ -603,31 +603,37 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
           }
         }
 
-        const { error: profileError } = await supabase.from('profiles').upsert({
-          id: authUserId,
-          name: trimmedName,
-          role: 'supermarket',
-          phone: trimmedPhone,
-          username: trimmedUsername,
-          password: trimmedPassword,
-          is_active: true,
-        });
+        const { error: profileError } = await supabase.from('profiles').upsert(
+          {
+            id: authUserId,
+            name: trimmedName,
+            role: 'supermarket',
+            phone: trimmedPhone,
+            username: trimmedUsername,
+            password: trimmedPassword,
+            is_active: true,
+          },
+          { onConflict: 'id', ignoreDuplicates: true }
+        );
 
         if (profileError) {
           console.error('Profile upsert error on Supabase:', profileError.message);
         }
 
-        const { error: smError } = await supabase.from('supermarkets').upsert({
-          id: authUserId,
-          name: trimmedName,
-          owner: trimmedOwner,
-          phone: trimmedPhone,
-          address: trimmedAddress,
-          assigned_visitor_id: validVisitorId,
-          is_active: true,
-          username: trimmedUsername,
-          password: trimmedPassword,
-        });
+        const { error: smError } = await supabase.from('supermarkets').upsert(
+          {
+            id: authUserId,
+            name: trimmedName,
+            owner: trimmedOwner,
+            phone: trimmedPhone,
+            address: trimmedAddress,
+            assigned_visitor_id: validVisitorId,
+            is_active: true,
+            username: trimmedUsername,
+            password: trimmedPassword,
+          },
+          { onConflict: 'id', ignoreDuplicates: true }
+        );
 
         if (smError) {
           console.error('Supermarket upsert error on Supabase:', smError.message);

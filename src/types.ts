@@ -230,14 +230,14 @@ export interface CreateStaffAccountResult {
 }
 
 export interface UpdateSupermarketPayload {
-  name: string;
-  owner: string;
-  phone: string;
-  address: string;
-  assigned_visitor_id: string;
+  name?: string;
+  owner?: string;
+  phone?: string;
+  address?: string;
+  assigned_visitor_id?: string | null;
   username?: string;
   password?: string;
-  is_active: boolean;
+  is_active?: boolean;
 }
 
 export interface UpdateVisitorPayload {

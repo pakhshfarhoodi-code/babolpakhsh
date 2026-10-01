@@ -952,13 +952,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                             onChange={async (e) => {
                               const newVisId = e.target.value;
                               const res = await updateSupermarket(shop.id, {
-                                name: shop.name,
-                                owner: shop.owner,
-                                phone: shop.phone,
-                                address: shop.address,
                                 assigned_visitor_id: newVisId,
-                                username: shop.username,
-                                is_active: shop.is_active,
                               });
                               if (!res.success) {
                                 setToastNotification({

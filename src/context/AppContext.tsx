@@ -326,59 +326,81 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateSupermarket = useCallback(async (id: string, payload: UpdateSupermarketPayload): Promise<{ success: boolean; message: string }> => {
     try {
       if (isSupabaseConfigured && supabase) {
-        // If assigned_visitor_id is specified and not 'direct'/'', verify it exists in visitors list
-        let validVisitorId: string | null = null;
-        if (payload.assigned_visitor_id && payload.assigned_visitor_id !== 'direct') {
-          const visitorExists = visitors.some((v) => v.id === payload.assigned_visitor_id);
-          if (!visitorExists) {
-            return {
-              success: false,
-              message: 'ویزیتور انتخاب‌شده در سیستم یافت نشد.',
-            };
-          }
-          validVisitorId = payload.assigned_visitor_id;
-        }
+        const updateData: Record<string, unknown> = {};
 
-        const updateData: Record<string, unknown> = {
-          name: payload.name.trim(),
-          owner: payload.owner.trim(),
-          phone: payload.phone.trim(),
-          address: payload.address.trim(),
-          assigned_visitor_id: validVisitorId,
-          is_active: payload.is_active,
-        };
-        if (payload.username) {
+        if (payload.name !== undefined) updateData.name = payload.name.trim();
+        if (payload.owner !== undefined) updateData.owner = payload.owner.trim();
+        if (payload.phone !== undefined) updateData.phone = payload.phone.trim();
+        if (payload.address !== undefined) updateData.address = payload.address.trim();
+        if (payload.is_active !== undefined) updateData.is_active = payload.is_active;
+        if (payload.username !== undefined && payload.username.trim()) {
           updateData.username = payload.username.trim();
         }
 
-        const { data: updatedRows, error: smError } = await supabase
-          .from('supermarkets')
-          .update(updateData)
-          .eq('id', id)
-          .select();
-
-        if (smError) {
-          return { success: false, message: `خطا در ویرایش سوپرمارکت در سرور: ${smError.message}` };
+        // Only touch assigned_visitor_id if explicitly supplied in payload
+        if (payload.assigned_visitor_id !== undefined) {
+          let validVisitorId: string | null = null;
+          if (payload.assigned_visitor_id && payload.assigned_visitor_id !== 'direct') {
+            const visitorExists = visitors.some((v) => v.id === payload.assigned_visitor_id);
+            if (!visitorExists) {
+              return {
+                success: false,
+                message: 'ویزیتور انتخاب‌شده در سیستم یافت نشد.',
+              };
+            }
+            validVisitorId = payload.assigned_visitor_id;
+          }
+          updateData.assigned_visitor_id = validVisitorId;
         }
 
-        if (!updatedRows || updatedRows.length === 0) {
-          return { success: false, message: 'ذخیره در سرور انجام نشد (عدم دسترسی یا عدم وجود رکورد).' };
+        if (Object.keys(updateData).length > 0) {
+          const { data: updatedRows, error: smError } = await supabase
+            .from('supermarkets')
+            .update(updateData)
+            .eq('id', id)
+            .select();
+
+          if (smError) {
+            return { success: false, message: `خطا در ویرایش سوپرمارکت در سرور: ${smError.message}` };
+          }
+
+          if (!updatedRows || updatedRows.length === 0) {
+            return { success: false, message: 'ذخیره در سرور انجام نشد (عدم دسترسی یا عدم وجود رکورد).' };
+          }
         }
 
-        // Also update profiles table phone, name, and username
-        await supabase
-          .from('profiles')
-          .update({
-            name: payload.name.trim(),
-            phone: payload.phone.trim(),
-            ...(payload.username && { username: payload.username.trim() }),
-          })
-          .eq('id', id);
+        // Also update profiles table ONLY with explicitly provided fields
+        const profileUpdates: Record<string, unknown> = {};
+        if (payload.name !== undefined) profileUpdates.name = payload.name.trim();
+        if (payload.phone !== undefined) profileUpdates.phone = payload.phone.trim();
+        if (payload.username !== undefined && payload.username.trim()) {
+          profileUpdates.username = payload.username.trim();
+        }
+
+        if (Object.keys(profileUpdates).length > 0) {
+          await supabase
+            .from('profiles')
+            .update(profileUpdates)
+            .eq('id', id);
+        }
       }
 
-      // Update supermarkets in local state only after server confirmation (or offline mode)
+      // Update supermarkets in local state only for explicitly changed fields
       setSupermarkets((prev) =>
-        prev.map((s) => (s.id === id ? { ...s, ...payload, assigned_visitor_id: payload.assigned_visitor_id || 'direct' } : s))
+        prev.map((s) => {
+          if (s.id !== id) return s;
+          const next = { ...s };
+          if (payload.name !== undefined) next.name = payload.name;
+          if (payload.owner !== undefined) next.owner = payload.owner;
+          if (payload.phone !== undefined) next.phone = payload.phone;
+          if (payload.address !== undefined) next.address = payload.address;
+          if (payload.is_active !== undefined) next.is_active = payload.is_active;
+          if (payload.username !== undefined) next.username = payload.username;
+          if (payload.assigned_visitor_id !== undefined) {
+            next.assigned_visitor_id = payload.assigned_visitor_id || 'direct';
+          }
+          return next;
+        })
       );
 
       return { success: true, message: 'مشخصات فروشگاه با موفقیت ویرایش شد.' };
@@ -873,12 +895,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const currentSm = supermarkets.find((s) => s.id === ord.supermarket_id);
           if (currentSm) {
             updateSupermarket(currentSm.id, {
-              name: currentSm.name,
-              owner: currentSm.owner,
-              phone: currentSm.phone,
-              address: currentSm.address,
               assigned_visitor_id: targetVisitorId,
-              is_active: currentSm.is_active ?? true,
             }).catch(() => {});
           }
         }

@@ -336,12 +336,22 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
         if (authError || !authData?.user) {
           console.error('[Supabase signInWithPassword Error]:', authError);
           const rawMsg = (authError?.message || '').toLowerCase();
-          let displayMsg = 'شماره یا رمز عبور نادرست است';
-          if (rawMsg.includes('email not confirmed')) {
-            displayMsg = 'حساب کاربری هنوز تایید نشده است. لطفاً با مدیر تماس بگیرید.';
-          } else if (rawMsg.includes('user not found')) {
-            displayMsg = 'کاربری با این شماره در سیستم یافت نشد.';
+          const errCode = (authError as { code?: string })?.code || '';
+          const isInvalidCredentials =
+            errCode === 'invalid_credentials' ||
+            rawMsg.includes('invalid login credentials') ||
+            rawMsg.includes('invalid_credentials') ||
+            rawMsg.includes('invalid credentials');
+
+          let displayMsg: string;
+          if (isInvalidCredentials) {
+            displayMsg = 'شماره یا رمز عبور نادرست است';
+          } else {
+            const codeOrStatus = errCode || authError?.status;
+            const codeSuffix = codeOrStatus ? ` (کد: ${codeOrStatus})` : '';
+            displayMsg = `${authError?.message || 'خطا در احراز هویت کاربر'}${codeSuffix}`;
           }
+
           return {
             success: false,
             message: displayMsg,
@@ -357,9 +367,10 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
 
         if (profError || !profile) {
           await supabase.auth.signOut();
+          const errDetail = profError?.message ? ` (${profError.message})` : '';
           return {
             success: false,
-            message: 'پروفایل کاربری یافت نشد.',
+            message: `پروفایل کاربری یافت نشد.${errDetail}`,
           };
         }
 
@@ -403,9 +414,10 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
         return { success: true };
       } catch (err: unknown) {
         console.warn('Login request error:', err);
+        const errMsg = err instanceof Error ? err.message : 'خطای غیرمنتظره در برقراری ارتباط با سرور';
         return {
           success: false,
-          message: 'شماره یا رمز عبور نادرست است',
+          message: errMsg,
         };
       }
     },

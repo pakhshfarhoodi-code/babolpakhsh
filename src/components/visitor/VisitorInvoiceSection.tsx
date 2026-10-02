@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { LoadingBill, LoadingBillItem, Order, Visitor, Product } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
@@ -46,6 +46,9 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
   const [isLoadingDraft, setIsLoadingDraft] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isTickingOrders, setIsTickingOrders] = useState(false);
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const draftRequestInFlight = useRef(false);
+  const lastAttemptedStatusRef = useRef<string | null>(null);
 
   // Manual items modal state
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
@@ -93,48 +96,83 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
 
   // Fetch or create draft on open
   const fetchOrCreateDraft = useCallback(async () => {
+    if (draftRequestInFlight.current) return;
     if (!currentVisitor.id) return;
+
     setIsLoadingDraft(true);
 
     try {
       if (isSupabaseConfigured && supabase) {
+        draftRequestInFlight.current = true;
         const { data, error } = await supabase.rpc('get_or_create_draft', {
           p_visitor_id: currentVisitor.id,
         });
 
         if (error) {
-          showToast(error.message || 'خطا در بارگذاری پیش‌نویس فاکتور.', 'error');
+          const errorMsg = error.message || String(error);
+          if (
+            errorMsg.toLowerCase().includes('duplicate key') ||
+            (error as { code?: string })?.code === '23505'
+          ) {
+            setDraftError(null);
+            retryFetch();
+            return;
+          }
+          setDraftError(errorMsg || 'خطا در بارگذاری پیش‌نویس فاکتور.');
+          showToast(errorMsg || 'خطا در بارگذاری پیش‌نویس فاکتور.', 'error');
           return;
         }
 
         if (!data || (data as { success?: boolean; message?: string }).success === false) {
           const msg = (data as { message?: string })?.message || 'خطا در ایجاد پیش‌نویس فاکتور.';
+          if (msg.toLowerCase().includes('duplicate key')) {
+            setDraftError(null);
+            retryFetch();
+            return;
+          }
+          setDraftError(msg);
           showToast(msg, 'error');
           return;
         }
 
+        setDraftError(null);
         // Refetch latest bills to guarantee database truth
         retryFetch();
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'خطای غیرمنتظره در دریافت فاکتور.';
+      if (msg.toLowerCase().includes('duplicate key')) {
+        setDraftError(null);
+        retryFetch();
+        return;
+      }
+      setDraftError(msg);
       showToast(msg, 'error');
     } finally {
+      draftRequestInFlight.current = false;
       setIsLoadingDraft(false);
     }
   }, [currentVisitor.id, showToast, retryFetch]);
 
   // Trigger get_or_create_draft when section is opened
   useEffect(() => {
-    if (isOpen && (!activeBill || activeBill.status === 'cancelled' || activeBill.status === 'loaded')) {
-      const hasActiveDraftOrPending = visitorBills.some(
-        (b) => b.status === 'draft' || b.status === 'pending' || b.status === 'approved'
-      );
-      if (!hasActiveDraftOrPending) {
-        fetchOrCreateDraft();
-      }
+    if (!isOpen || !currentVisitor.id) return;
+
+    const hasActiveDraftOrPending = visitorBills.some(
+      (b) => b.status === 'draft' || b.status === 'pending' || b.status === 'approved'
+    );
+    if (hasActiveDraftOrPending) {
+      return;
     }
-  }, [isOpen, activeBill, visitorBills, fetchOrCreateDraft]);
+
+    const currentStatuses = `${currentVisitor.id}:${visitorBills.map((b) => `${b.id}:${b.status}`).join(',')}`;
+    if (lastAttemptedStatusRef.current === currentStatuses) {
+      return;
+    }
+
+    lastAttemptedStatusRef.current = currentStatuses;
+    fetchOrCreateDraft();
+  }, [isOpen, currentVisitor.id, visitorBills.length]);
 
   // Active products map for details and stock
   const productMap = useMemo(() => {
@@ -593,6 +631,28 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
 
           {activeSubTab === 'current' ? (
             <>
+              {/* Draft error banner with retry button */}
+              {draftError && (
+                <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                    <span>{draftError}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDraftError(null);
+                      fetchOrCreateDraft();
+                    }}
+                    disabled={isLoadingDraft}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold transition cursor-pointer disabled:opacity-50"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>تلاش مجدد</span>
+                  </button>
+                </div>
+              )}
+
               {/* If bill is cancelled, show reason banner */}
               {activeBill?.status === 'cancelled' && (
                 <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs space-y-1">

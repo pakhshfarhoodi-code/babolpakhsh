@@ -149,15 +149,55 @@ export function useOrders({
         }
       }
 
-      // Generate structured invoice ID according to business formula
-      const orderId = generateStructuredInvoiceNumber({
-        orderSource,
-        visitorId: finalAssignedVisitorId === 'direct' ? undefined : finalAssignedVisitorId,
-        supermarketId: supermarket.id,
-        visitors,
-        supermarkets,
-        existingOrders: orders,
-      });
+      let orderId: string;
+      if (isSupabaseConfigured && supabase) {
+        const { data: orderNumberData, error: orderNumberError } = await supabase.rpc(
+          'next_order_number',
+          {
+            p_source: orderSource,
+            p_supermarket_id: supermarket.id,
+            p_visitor_id: finalAssignedVisitorId === 'direct' ? null : finalAssignedVisitorId,
+          }
+        );
+
+        if (orderNumberError) {
+          return {
+            success: false,
+            message: orderNumberError.message || 'خطا در دریافت شماره سفارش از سرور.',
+          };
+        }
+
+        if (
+          orderNumberData &&
+          typeof orderNumberData === 'object' &&
+          (orderNumberData as { success?: boolean; message?: string }).success === false
+        ) {
+          return {
+            success: false,
+            message:
+              (orderNumberData as { message?: string }).message || 'خطا در صدور شماره سفارش از سرور.',
+          };
+        }
+
+        if (!orderNumberData || typeof orderNumberData !== 'string') {
+          return {
+            success: false,
+            message: 'خطا در ایجاد شماره سفارش از سرور.',
+          };
+        }
+
+        orderId = orderNumberData.trim();
+      } else {
+        // Generate structured invoice ID according to business formula (Offline / mock mode only)
+        orderId = generateStructuredInvoiceNumber({
+          orderSource,
+          visitorId: finalAssignedVisitorId === 'direct' ? undefined : finalAssignedVisitorId,
+          supermarketId: supermarket.id,
+          visitors,
+          supermarkets,
+          existingOrders: orders,
+        });
+      }
 
       const orderIsoDate = new Date().toISOString();
       const totalAmount = payload.items.reduce((sum, item) => sum + item.price * item.quantity, 0);

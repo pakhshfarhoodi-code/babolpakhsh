@@ -54,6 +54,8 @@ export const NewOrderModal: React.FC<Props> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [cart, setCart] = useState<Record<string, number>>({});
   const [feedback, setFeedback] = useState<{ type: 'error' | 'success'; message: string } | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [createdOrder, setCreatedOrder] = useState<Order | null>(null);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
 
@@ -201,6 +203,8 @@ export const NewOrderModal: React.FC<Props> = ({
   }, [cartItems]);
 
   const handleSubmit = async () => {
+    if (isSubmittingRef.current || isSubmitting) return;
+
     if (!currentSupermarket?.id || !currentVisitor?.id) {
       setFeedback({ type: 'error', message: 'لطفاً سوپرمارکت و ویزیتور را مشخص کنید.' });
       return;
@@ -211,26 +215,36 @@ export const NewOrderModal: React.FC<Props> = ({
       return;
     }
 
-    const res = await createOrder({
-      supermarketId: currentSupermarket.id,
-      visitorId: currentVisitor.id,
-      orderSource: 'visitor',
-      items: cartItems.map((c) => ({
-        productId: c.productId,
-        name: c.name,
-        price: c.price,
-        quantity: c.quantity,
-      })),
-    });
+    isSubmittingRef.current = true;
+    setIsSubmitting(true);
 
-    if (res.success) {
-      setFeedback({ type: 'success', message: res.message });
-      if (res.order) {
-        setCreatedOrder(res.order);
+    try {
+      const res = await createOrder({
+        supermarketId: currentSupermarket.id,
+        visitorId: currentVisitor.id,
+        orderSource: 'visitor',
+        items: cartItems.map((c) => ({
+          productId: c.productId,
+          name: c.name,
+          price: c.price,
+          quantity: c.quantity,
+        })),
+      });
+
+      if (res.success) {
+        setFeedback({ type: 'success', message: res.message });
+        if (res.order) {
+          setCreatedOrder(res.order);
+        }
+        setCart({});
+      } else {
+        setFeedback({ type: 'error', message: res.message });
       }
-      setCart({});
-    } else {
-      setFeedback({ type: 'error', message: res.message });
+    } catch {
+      setFeedback({ type: 'error', message: 'خطای ارتباط با سرور در ثبت سفارش.' });
+    } finally {
+      isSubmittingRef.current = false;
+      setIsSubmitting(false);
     }
   };
 
@@ -587,12 +601,18 @@ export const NewOrderModal: React.FC<Props> = ({
               </div>
 
               <button
-                disabled={cartItems.length === 0}
+                disabled={isSubmitting || cartItems.length === 0}
                 onClick={handleSubmit}
                 className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-bold text-xs transition shadow-lg shadow-blue-600/20 flex items-center justify-center gap-1.5 cursor-pointer"
               >
-                <CheckCircle className="w-4 h-4" />
-                <span>ثبت نهایی و رزرو در سردخانه</span>
+                {isSubmitting ? (
+                  <span>در حال ثبت سفارش...</span>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    <span>ثبت نهایی و رزرو در سردخانه</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { Product, Order, Supermarket } from '../types';
 import { ProductRow } from './shop/ProductRow';
@@ -92,6 +92,7 @@ export const SupermarketPortal: React.FC = () => {
   // Mobile cart sheet state
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+  const isSubmittingOrderRef = useRef(false);
   const [orderError, setOrderError] = useState<string | null>(null);
   const [placedOrderId, setPlacedOrderId] = useState<string | null>(null);
   const [placedOrderObject, setPlacedOrderObject] = useState<Order | null>(null);
@@ -303,6 +304,8 @@ export const SupermarketPortal: React.FC = () => {
 
   // Checkout submission
   const handleCheckoutSubmit = async () => {
+    if (isSubmittingOrderRef.current || isSubmittingOrder) return;
+
     const items = Object.entries(cart)
       .map(([productId, quantity]) => {
         const numQty = Number(quantity);
@@ -319,6 +322,7 @@ export const SupermarketPortal: React.FC = () => {
 
     if (items.length === 0) return;
 
+    isSubmittingOrderRef.current = true;
     setIsSubmittingOrder(true);
     setOrderError(null);
 
@@ -346,6 +350,7 @@ export const SupermarketPortal: React.FC = () => {
     } catch {
       setOrderError('خطای ارتباط با سرور. لطفاً مجدداً تلاش کنید.');
     } finally {
+      isSubmittingOrderRef.current = false;
       setIsSubmittingOrder(false);
     }
   };

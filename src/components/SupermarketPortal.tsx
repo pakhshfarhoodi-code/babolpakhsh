@@ -1,8 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { Product, Order, Supermarket } from '../types';
-import { ProductRow } from './shop/ProductRow';
-import { FilterSheet } from './shop/FilterSheet';
+import { ProductCatalog } from './shop/ProductCatalog';
 import { CartBar } from './shop/CartBar';
 import { CartSheet } from './shop/CartSheet';
 import { ReorderCard } from './shop/ReorderCard';
@@ -82,12 +81,6 @@ export const SupermarketPortal: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('pakhsh_supermarket_active_tab', activeTab);
   }, [activeTab]);
-
-  // Search & Filter state
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
-  const [selectedBrand, setSelectedBrand] = useState<string>('all');
-  const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
 
   // Mobile cart sheet state
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
@@ -173,42 +166,6 @@ export const SupermarketPortal: React.FC = () => {
     return getTopPurchasedProducts(orders, products, storeId, 5);
   }, [orders, products, storeId]);
 
-  // Brands available in currently selected category (only active products)
-  const availableBrandsInCategory = useMemo(() => {
-    const brandsSet = new Set<string>();
-    products.forEach((p) => {
-      if (!p.is_active) return;
-      if (selectedCategoryId !== 'all' && p.category_id !== selectedCategoryId) return;
-      if (p.brand && p.brand.trim()) {
-        brandsSet.add(p.brand.trim());
-      }
-    });
-    return Array.from(brandsSet);
-  }, [products, selectedCategoryId]);
-
-  // Reset selected brand if no longer present in chosen category
-  useEffect(() => {
-    if (selectedBrand !== 'all' && !availableBrandsInCategory.includes(selectedBrand)) {
-      setSelectedBrand('all');
-    }
-  }, [selectedCategoryId, availableBrandsInCategory, selectedBrand]);
-
-  // Filtered Products for Catalog
-  const filteredProducts = useMemo(() => {
-    return products.filter((p) => {
-      if (!p.is_active) return false;
-      if (selectedCategoryId !== 'all' && p.category_id !== selectedCategoryId) return false;
-      if (selectedBrand !== 'all' && p.brand !== selectedBrand) return false;
-      if (searchTerm.trim()) {
-        const term = searchTerm.toLowerCase().trim();
-        const matchName = p.name.toLowerCase().includes(term);
-        const matchBrand = p.brand && p.brand.toLowerCase().includes(term);
-        if (!matchName && !matchBrand) return false;
-      }
-      return true;
-    });
-  }, [products, selectedCategoryId, selectedBrand, searchTerm]);
-
   // Cart Calculations
   const totalCartCount = useMemo(() => {
     return Object.values(cart).reduce((sum: number, qty: number) => sum + (Number(qty) || 0), 0);
@@ -291,16 +248,6 @@ export const SupermarketPortal: React.FC = () => {
     },
     [products, cart, handleQuantityChange, showToast]
   );
-
-  // Clear all filters
-  const handleClearAllFilters = useCallback(() => {
-    setSearchTerm('');
-    setSelectedCategoryId('all');
-    setSelectedBrand('all');
-  }, []);
-
-  const isAnyFilterActive =
-    searchTerm.trim() !== '' || selectedCategoryId !== 'all' || selectedBrand !== 'all';
 
   // Checkout submission
   const handleCheckoutSubmit = async () => {
@@ -474,136 +421,22 @@ export const SupermarketPortal: React.FC = () => {
       {activeTab === 'catalog' ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
           {/* Products Column (2 cols on desktop) */}
-          <div className="lg:col-span-2 space-y-3.5">
-            {/* 3. Search & Filter Bar */}
-            <div className="space-y-2 bg-slate-900/60 p-2.5 sm:p-3 rounded-2xl border border-slate-800/80">
-              {/* Row 1: Search input + Brand filter button */}
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <Search className="w-4 h-4 absolute right-3 top-3 text-slate-500" />
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="جستجوی نام یا برند کالا..."
-                    className="w-full h-10 bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-8 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-                  />
-                  {searchTerm && (
-                    <button
-                      type="button"
-                      onClick={() => setSearchTerm('')}
-                      className="absolute left-2.5 top-2.5 text-slate-400 hover:text-slate-200 p-1"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-
-                {/* Filter Sheet Trigger Button */}
-                <button
-                  type="button"
-                  onClick={() => setIsFilterSheetOpen(true)}
-                  className={`h-10 px-3 rounded-xl border font-bold text-xs flex items-center gap-1.5 transition shrink-0 cursor-pointer ${
-                    selectedBrand !== 'all'
-                      ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50'
-                      : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
-                  }`}
-                  title="فیلتر بر اساس برند"
-                >
-                  <SlidersHorizontal className="w-4 h-4 text-emerald-400" />
-                  <span>فیلتر</span>
-                  {selectedBrand !== 'all' && (
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                  )}
-                </button>
-              </div>
-
-              {/* Row 2: Category chips horizontal scroll */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
-                <button
-                  type="button"
-                  onClick={() => setSelectedCategoryId('all')}
-                  className={`h-8 px-3 rounded-xl whitespace-nowrap font-semibold transition cursor-pointer shrink-0 ${
-                    selectedCategoryId === 'all'
-                      ? 'bg-emerald-600 text-white shadow-xs'
-                      : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
-                  }`}
-                >
-                  همه
-                </button>
-
-                {categories.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => setSelectedCategoryId(c.id)}
-                    className={`h-8 px-3 rounded-xl whitespace-nowrap font-semibold transition cursor-pointer shrink-0 ${
-                      selectedCategoryId === c.id
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
-                    }`}
-                  >
-                    {c.name}
-                  </button>
-                ))}
-              </div>
-
-              {/* Clear filters link if active */}
-              {isAnyFilterActive && (
-                <div className="pt-1 flex items-center justify-between text-xs text-slate-400 border-t border-slate-800/60">
-                  <div className="flex items-center gap-2">
-                    {selectedBrand !== 'all' && (
-                      <span className="bg-slate-800 px-2 py-0.5 rounded-lg text-emerald-400">
-                        برند: {selectedBrand}
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleClearAllFilters}
-                    className="text-xs text-rose-400 hover:underline cursor-pointer"
-                  >
-                    حذف فیلترها
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Top Purchased Products (Shown only if store has previous orders) */}
-            <ReorderCard
-              topProducts={topProducts}
+          <div className="lg:col-span-2">
+            <ProductCatalog
+              products={products}
               cart={cart}
-              onAddProductToCart={handleAddTopProduct}
+              onChangeQuantity={handleQuantityChange}
+              onExceedLimit={handleExceedLimit}
+              priceMode="store"
+              defaultInStockOnly={false}
+              topProductsCard={
+                <ReorderCard
+                  topProducts={topProducts}
+                  cart={cart}
+                  onAddProductToCart={handleAddTopProduct}
+                />
+              }
             />
-
-            {/* 4. Products Grid */}
-            {filteredProducts.length === 0 ? (
-              <div className="py-16 text-center text-slate-400 space-y-3 bg-slate-900/40 border border-slate-800/60 rounded-3xl p-6">
-                <Package className="w-12 h-12 mx-auto text-slate-600" />
-                <p className="text-xs font-bold text-slate-300">کالایی با فیلترهای انتخابی یافت نشد.</p>
-                {isAnyFilterActive && (
-                  <button
-                    type="button"
-                    onClick={handleClearAllFilters}
-                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition cursor-pointer"
-                  >
-                    حذف فیلترها
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3">
-                {filteredProducts.map((product) => (
-                  <ProductRow
-                    key={product.id}
-                    product={product}
-                    quantity={cart[product.id] || 0}
-                    onChangeQuantity={(qty) => handleQuantityChange(product.id, qty)}
-                    onExceedLimit={handleExceedLimit}
-                  />
-                ))}
-              </div>
-            )}
           </div>
 
           {/* Desktop Cart Sidebar (1 col on lg+) */}
@@ -651,16 +484,6 @@ export const SupermarketPortal: React.FC = () => {
           )}
         </div>
       )}
-
-      {/* Brand Filter Bottom Sheet */}
-      <FilterSheet
-        isOpen={isFilterSheetOpen}
-        onClose={() => setIsFilterSheetOpen(false)}
-        availableBrands={availableBrandsInCategory}
-        selectedBrand={selectedBrand}
-        onSelectBrand={setSelectedBrand}
-        onClearFilter={() => setSelectedBrand('all')}
-      />
 
       {/* Mobile Sticky Cart Bar */}
       <CartBar

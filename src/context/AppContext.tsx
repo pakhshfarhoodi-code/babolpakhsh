@@ -166,6 +166,7 @@ interface AppContextType {
   isDataReady: boolean;
   fetchError: string | null;
   retryFetch: () => void;
+  refreshData: () => void;
   theme: 'dark' | 'light';
   toggleTheme: () => void;
 }
@@ -213,6 +214,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const retryFetch = useCallback(() => {
     setFetchError(null);
     setIsDataReady(false);
+    setReloadCounter((c) => c + 1);
+  }, []);
+
+  const refreshData = useCallback(() => {
     setReloadCounter((c) => c + 1);
   }, []);
 
@@ -996,6 +1001,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     isDataReady,
     fetchError,
     retryFetch,
+    refreshData,
     theme,
     toggleTheme,
     showToast,
@@ -1022,6 +1028,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     isDataReady,
     fetchError,
     retryFetch,
+    refreshData,
     catalog.categories,
     catalog.brands,
     catalog.units,

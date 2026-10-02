@@ -30,7 +30,7 @@ export const PendingBillCard: React.FC<PendingBillCardProps> = ({
   onApprove,
   onCancel,
 }) => {
-  const { retryFetch } = useApp();
+  const { refreshData } = useApp();
 
   // Mode: Checklist mode toggled on/off
   const [isChecklistMode, setIsChecklistMode] = useState<boolean>(false);
@@ -177,7 +177,7 @@ export const PendingBillCard: React.FC<PendingBillCardProps> = ({
           <p className="text-slate-500">برای دریافت مجدد اقلام از پایگاه داده، دکمه تلاش مجدد را بزنید.</p>
           <button
             type="button"
-            onClick={retryFetch}
+            onClick={refreshData}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs transition cursor-pointer"
           >
             <RotateCw className="w-3.5 h-3.5 text-blue-400" />

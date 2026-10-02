@@ -95,7 +95,7 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
   initialStatusFilter = 'pending',
   onNavigateToOrder,
 }) => {
-  const { loadingBills, orders, products, visitors, currentUser, showToast, retryFetch } = useApp();
+  const { loadingBills, orders, products, visitors, currentUser, showToast, refreshData } = useApp();
 
   // Active status filter (default 'pending' as specified)
   const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter || 'pending');
@@ -362,7 +362,7 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
         groupName = it.customer_label;
       } else {
         groupKey = `manual-unknown-${src}`;
-        groupName = src === 'admin_manual' ? 'توافق حضوری / تلفنی ادمین' : 'مشتری آزاد ویزیتور';
+        groupName = src === 'admin_manual' ? 'توافق حضوری / تلفنی ادمین' : 'اقلام مازاد ویزیتور';
       }
 
       const itemPrice = Number(it.visitor_price || 0);
@@ -426,7 +426,7 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
         setAgreementLineNote('');
         setAgreementUnitPrice('');
         setIsAgreementModalOpen(false);
-        retryFetch();
+        refreshData();
         if (activeBill) fetchAuditLogs(activeBill.id);
       }
     } catch (err) {
@@ -466,7 +466,7 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
 
         showToast('ردیف فاکتور با موفقیت اصلاح شد و دفعات اصلاح ثبت گردید.', 'success');
         setEditingLine(null);
-        retryFetch();
+        refreshData();
         if (activeBill) fetchAuditLogs(activeBill.id);
       }
     } catch (err) {
@@ -515,7 +515,7 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
         }
 
         showToast('ردیف با موفقیت از فاکتور حذف و رزرو آزاد گردید.', 'success');
-        retryFetch();
+        refreshData();
         if (activeBill) fetchAuditLogs(activeBill.id);
       }
     } catch (err) {
@@ -553,7 +553,7 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
           'success'
         );
         setIsApproveModalOpen(false);
-        retryFetch();
+        refreshData();
         if (activeBill) fetchAuditLogs(activeBill.id);
       }
     } catch (err) {
@@ -592,7 +592,7 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
         showToast('فاکتور با موفقیت لغو شد و سفارش‌ها به وضعیت آماده ارسال بازگشتند.', 'success');
         setCancelReasonInput('');
         setIsCancelModalOpen(false);
-        retryFetch();
+        refreshData();
         if (activeBill) fetchAuditLogs(activeBill.id);
       }
     } catch (err) {
@@ -1159,7 +1159,7 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
                             )}
                             {group.source === 'visitor_manual' && (
                               <span className="px-2 py-0.5 rounded-md bg-purple-900/40 text-purple-300 border border-purple-700/50 text-[10px] font-bold">
-                                ویزیتور (فروش صحرایی / آزاد)
+                                ویزیتور (اقلام مازاد)
                               </span>
                             )}
                             {group.source === 'admin_manual' && (

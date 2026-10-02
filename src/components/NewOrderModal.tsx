@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { ProductRow } from './shop/ProductRow';
 import { FilterSheet } from './shop/FilterSheet';
-import { formatPrice } from './shop/shopUtils';
+import { formatPrice, filterCatalogProducts } from './shop/shopUtils';
 import { Order, Supermarket, Visitor } from '../types';
 import { OrderInvoiceModal } from './invoice/OrderInvoiceModal';
 import { FileText, Printer } from 'lucide-react';
@@ -50,6 +50,7 @@ export const NewOrderModal: React.FC<Props> = ({
 
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
   const [selectedBrand, setSelectedBrand] = useState<string>('all');
+  const [inStockOnly, setInStockOnly] = useState<boolean>(false);
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [cart, setCart] = useState<Record<string, number>>({});
@@ -146,22 +147,24 @@ export const NewOrderModal: React.FC<Props> = ({
   });
 
   const filteredProducts = useMemo(() => {
-    return products.filter((p) => {
-      if (!p.is_active) return false;
-      if (selectedCategoryId !== 'all' && p.category_id !== selectedCategoryId) return false;
-      if (selectedBrand !== 'all' && p.brand !== selectedBrand) return false;
-      if (searchTerm) {
-        const term = searchTerm.toLowerCase();
-        const matchName = p.name.toLowerCase().includes(term);
-        const matchBrand = p.brand?.toLowerCase().includes(term);
-        if (!matchName && !matchBrand) return false;
-      }
-      return true;
+    return filterCatalogProducts(products, {
+      categoryId: selectedCategoryId,
+      brand: selectedBrand,
+      searchTerm,
+      inStockOnly,
     });
-  }, [products, selectedCategoryId, selectedBrand, searchTerm]);
+  }, [products, selectedCategoryId, selectedBrand, searchTerm, inStockOnly]);
 
   const handleSetQuantity = useCallback((productId: string, newQty: number) => {
     setFeedback(null);
+    const targetProd = products.find((p) => p.id === productId);
+    if (targetProd?.is_market_test) {
+      setFeedback({
+        type: 'error',
+        message: 'کالاهای دارای برچسب «به زودی» در حال حاضر قابل سفارش نیستند.',
+      });
+      return;
+    }
     setCart((prev) => {
       if (newQty <= 0) {
         const next = { ...prev };
@@ -170,7 +173,7 @@ export const NewOrderModal: React.FC<Props> = ({
       }
       return { ...prev, [productId]: newQty };
     });
-  }, []);
+  }, [products]);
 
   const handleExceedLimit = useCallback((maxAvailable: number) => {
     setFeedback({
@@ -212,6 +215,18 @@ export const NewOrderModal: React.FC<Props> = ({
 
     if (cartItems.length === 0) {
       setFeedback({ type: 'error', message: 'هیچ کالایی به سبد اضافه نشده است.' });
+      return;
+    }
+
+    const hasMarketTest = cartItems.some((item) => {
+      const p = products.find((prod) => prod.id === item.productId);
+      return p?.is_market_test;
+    });
+    if (hasMarketTest) {
+      setFeedback({
+        type: 'error',
+        message: 'کالاهای دارای برچسب «به زودی» در حال حاضر قابل سفارش نیستند.',
+      });
       return;
     }
 
@@ -507,9 +522,10 @@ export const NewOrderModal: React.FC<Props> = ({
                 <span>{selectedBrand === 'all' ? 'فیلتر برند' : `برند: ${selectedBrand}`}</span>
               </button>
 
-              {/* Category Pills */}
+              {/* Category Pills & In-Stock Toggle */}
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full text-xs no-scrollbar">
                 <button
+                  type="button"
                   onClick={() => setSelectedCategoryId('all')}
                   className={`px-3 py-1.5 rounded-lg text-xs whitespace-nowrap transition cursor-pointer font-medium ${
                     selectedCategoryId === 'all'
@@ -519,9 +535,26 @@ export const NewOrderModal: React.FC<Props> = ({
                 >
                   همه دسته‌ها
                 </button>
+
+                {/* "موجود" Toggle Chip */}
+                <button
+                  type="button"
+                  onClick={() => setInStockOnly((prev) => !prev)}
+                  className={`px-3 py-1.5 rounded-lg text-xs whitespace-nowrap font-semibold transition cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                    inStockOnly
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                  }`}
+                  title={inStockOnly ? 'نمایش همه کالاها (شامل به زودی)' : 'مخفی‌سازی کالاهای تست بازار (به زودی)'}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${inStockOnly ? 'bg-white' : 'bg-emerald-400'}`} />
+                  <span>موجود</span>
+                </button>
+
                 {categories.map((c) => (
                   <button
                     key={c.id}
+                    type="button"
                     onClick={() => setSelectedCategoryId(c.id)}
                     className={`px-3 py-1.5 rounded-lg text-xs whitespace-nowrap transition cursor-pointer font-medium ${
                       selectedCategoryId === c.id

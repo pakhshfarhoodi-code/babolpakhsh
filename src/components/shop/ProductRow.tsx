@@ -11,6 +11,7 @@ interface ProductRowProps {
   quantity: number;
   onChangeQuantity: (qty: number) => void;
   onExceedLimit?: (maxAvailable: number) => void;
+  priceMode?: 'store' | 'visitor';
 }
 
 export const ProductRow: React.FC<ProductRowProps> = ({
@@ -18,16 +19,22 @@ export const ProductRow: React.FC<ProductRowProps> = ({
   quantity,
   onChangeQuantity,
   onExceedLimit,
+  priceMode = 'store',
 }) => {
   const { productLikes, toggleProductLike, currentUser, selectedSupermarketId, supermarkets } = useApp();
   const [imageError, setImageError] = useState(false);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [isLiking, setIsLiking] = useState(false);
+  const [likeError, setLikeError] = useState<string | null>(null);
 
   const isMarketTest = Boolean(product.is_market_test);
   const available = Math.max(0, product.stock - product.reserved_stock);
   const isOutOfStock = !isMarketTest && available <= 0;
   const isLowStock = !isMarketTest && !isOutOfStock && available <= LOW_STOCK_THRESHOLD;
+
+  const displayPrice = priceMode === 'visitor'
+    ? Number(product.visitor_price ?? Math.round(Number(product.price || 0) * 0.85))
+    : product.price;
 
   const currentShop = supermarkets.find(
     (s) => s.id === selectedSupermarketId || (currentUser.id && s.id === currentUser.id)
@@ -47,7 +54,12 @@ export const ProductRow: React.FC<ProductRowProps> = ({
     e.stopPropagation();
     if (isLiking) return;
     setIsLiking(true);
-    await toggleProductLike(product.id, shopInfo);
+    setLikeError(null);
+    const res = await toggleProductLike(product.id, shopInfo);
+    if (!res.success) {
+      setLikeError(res.message);
+      setTimeout(() => setLikeError(null), 4000);
+    }
     setIsLiking(false);
   };
 
@@ -127,7 +139,7 @@ export const ProductRow: React.FC<ProductRowProps> = ({
 
             <div className="flex items-center gap-1.5 pt-0.5">
               <span className={`text-sm font-extrabold market-test-price ${isMarketTest ? 'text-violet-300' : 'text-emerald-400'}`}>
-                {formatPrice(product.price)}
+                {formatPrice(displayPrice)}
               </span>
               <span className="text-xs text-slate-500">/ {product.unit}</span>
             </div>
@@ -155,16 +167,22 @@ export const ProductRow: React.FC<ProductRowProps> = ({
                   }`}
                 />
                 <span>{hasLiked ? 'علاقه‌مندی ثبت شد' : 'علاقه‌مند به خرید'}</span>
-                {itemLikes.length > 0 && (
+                {currentUser?.role === 'admin' && itemLikes.length > 0 && (
                   <span className="text-[10px] bg-slate-900/90 border border-violet-800/80 px-1.5 py-0.2 rounded-full font-mono text-violet-300">
                     {itemLikes.length.toLocaleString('fa-IR')}
                   </span>
                 )}
               </button>
 
-              <p className="text-[10px] market-test-subtext text-violet-300/80 text-center sm:text-left leading-tight max-w-[170px]">
-                لایک کنید تا پس از موجود شدن اطلاع‌رسانی گردد.
-              </p>
+              {likeError ? (
+                <div className="text-[10px] text-rose-300 bg-rose-950/90 border border-rose-800/80 px-2 py-0.5 rounded-lg text-center leading-tight">
+                  {likeError}
+                </div>
+              ) : (
+                <p className="text-[10px] market-test-subtext text-violet-300/80 text-center sm:text-left leading-tight max-w-[170px]">
+                  لایک کنید تا پس از موجود شدن اطلاع‌رسانی گردد.
+                </p>
+              )}
             </div>
           ) : (
             <QuantityStepper
@@ -240,10 +258,12 @@ export const ProductRow: React.FC<ProductRowProps> = ({
             <div className="p-4 sm:p-5 bg-slate-900 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-xs text-slate-400 block mb-0.5">قیمت خرید فروشگاه:</span>
+                  <span className="text-xs text-slate-400 block mb-0.5">
+                    {priceMode === 'visitor' ? 'قیمت خرید ویزیتور:' : 'قیمت خرید فروشگاه:'}
+                  </span>
                   <div className="flex items-baseline gap-1">
                     <span className={`text-xl font-black font-mono ${isMarketTest ? 'text-violet-400' : 'text-emerald-400'}`}>
-                      {formatPrice(product.price)}
+                      {formatPrice(displayPrice)}
                     </span>
                     <span className="text-xs text-slate-400">/ {product.unit}</span>
                   </div>

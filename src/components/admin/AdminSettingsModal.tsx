@@ -22,7 +22,7 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { currentUser, showToast, retryFetch } = useApp();
+  const { currentUser, showToast, refreshData } = useApp();
   const [requireWarehouseStep, setRequireWarehouseStep] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -111,7 +111,7 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
           : 'مرحله تایید انبار غیرفعال شد (فاکتورها بلافاصله پس از تایید ادمین ترخیص می‌شوند).',
         'success'
       );
-      retryFetch();
+      refreshData();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'خطا در ذخیره تنظیمات.';
       showToast(msg, 'error');

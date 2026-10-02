@@ -24,7 +24,12 @@ import {
   User,
   History,
   Info,
+  Bell,
+  Package,
+  X,
 } from 'lucide-react';
+
+import { ProductCatalog } from '../shop/ProductCatalog';
 
 interface VisitorInvoiceSectionProps {
   currentVisitor: Visitor;
@@ -39,7 +44,7 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
   isOpen,
   onToggleOpen,
 }) => {
-  const { loadingBills, products, showToast, retryFetch } = useApp();
+  const { loadingBills, products, showToast, refreshData } = useApp();
 
   // Active Draft / Current Invoice state
   const [activeBill, setActiveBill] = useState<LoadingBill | null>(null);
@@ -50,14 +55,21 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
   const draftRequestInFlight = useRef(false);
   const lastAttemptedStatusRef = useRef<string | null>(null);
 
-  // Manual items modal state
-  const [isManualModalOpen, setIsManualModalOpen] = useState(false);
-  const [manualProductId, setManualProductId] = useState<string>('');
-  const [manualQty, setManualQty] = useState<number>(1);
-  const [manualCustomerLabel, setManualCustomerLabel] = useState<string>('');
-  const [isForSelf, setIsForSelf] = useState<boolean>(false);
-  const [manualLineNote, setManualLineNote] = useState<string>('');
-  const [isSubmittingManual, setIsSubmittingManual] = useState(false);
+  // Optimistic order selection and rapid-toggle synchronization
+  const [optimisticOrderIds, setOptimisticOrderIds] = useState<Set<string> | null>(null);
+  const pendingDraftOrdersRef = useRef<Set<string> | null>(null);
+  const isSyncingOrdersRef = useRef<boolean>(false);
+  const lastSyncedOrdersRef = useRef<string | null>(null);
+  const manuallyToggledOrderIdsRef = useRef<Set<string>>(new Set());
+
+  // Collapsed order items state (default is open, so collapsed set starts empty)
+  const [collapsedOrderIds, setCollapsedOrderIds] = useState<Set<string>>(new Set());
+
+  // Surplus items modal state (using shared ProductCatalog)
+  const [isSurplusModalOpen, setIsSurplusModalOpen] = useState(false);
+  const [surplusCart, setSurplusCart] = useState<Record<string, number>>({});
+  const [surplusCustomerLabel, setSurplusCustomerLabel] = useState<string>('');
+  const [isSubmittingSurplus, setIsSubmittingSurplus] = useState(false);
 
   // Edit quantity modal state
   const [editingItem, setEditingItem] = useState<LoadingBillItem | null>(null);
@@ -115,7 +127,7 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
             (error as { code?: string })?.code === '23505'
           ) {
             setDraftError(null);
-            retryFetch();
+            refreshData();
             return;
           }
           setDraftError(errorMsg || 'خطا در بارگذاری پیش‌نویس فاکتور.');
@@ -127,7 +139,7 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
           const msg = (data as { message?: string })?.message || 'خطا در ایجاد پیش‌نویس فاکتور.';
           if (msg.toLowerCase().includes('duplicate key')) {
             setDraftError(null);
-            retryFetch();
+            refreshData();
             return;
           }
           setDraftError(msg);
@@ -135,15 +147,60 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
           return;
         }
 
+        const isNewDraft = Boolean((data as { is_new?: boolean })?.is_new);
+        const billId =
+          (data as { bill_id?: string })?.bill_id ||
+          (data as { bill?: { id: string } })?.bill?.id;
+
+        if (isNewDraft && billId) {
+          // Automatic draft_set_orders: all eligible orders assigned to this visitor
+          const { data: dbOrders } = await supabase
+            .from('orders')
+            .select('id')
+            .eq('assigned_visitor_id', currentVisitor.id)
+            .eq('status', 'assigned')
+            .is('loading_bill_id', null);
+
+          const eligibleIds =
+            dbOrders && dbOrders.length > 0
+              ? dbOrders.map((o: { id: string }) => o.id)
+              : orders
+                  .filter(
+                    (o) =>
+                      o.assigned_visitor_id === currentVisitor.id &&
+                      o.status === 'assigned' &&
+                      (!o.loading_bill_id || o.loading_bill_id === billId)
+                  )
+                  .map((o) => o.id);
+
+          if (eligibleIds.length > 0) {
+            const { data: setOrdData, error: setOrdErr } = await supabase.rpc(
+              'draft_set_orders',
+              {
+                p_invoice_id: billId,
+                p_order_ids: eligibleIds,
+              }
+            );
+
+            if (setOrdErr || (setOrdData as { success?: boolean })?.success === false) {
+              const errMsg =
+                setOrdErr?.message ||
+                (setOrdData as { message?: string })?.message ||
+                'خطا در ثبت خودکار سفارش‌ها.';
+              showToast(errMsg, 'error');
+            }
+          }
+        }
+
         setDraftError(null);
-        // Refetch latest bills to guarantee database truth
-        retryFetch();
+        // Refresh data cleanly without resets
+        refreshData();
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'خطای غیرمنتظره در دریافت فاکتور.';
       if (msg.toLowerCase().includes('duplicate key')) {
         setDraftError(null);
-        retryFetch();
+        refreshData();
         return;
       }
       setDraftError(msg);
@@ -152,7 +209,7 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
       draftRequestInFlight.current = false;
       setIsLoadingDraft(false);
     }
-  }, [currentVisitor.id, showToast, retryFetch]);
+  }, [currentVisitor.id, showToast, refreshData, orders]);
 
   // Trigger get_or_create_draft when section is opened
   useEffect(() => {
@@ -191,15 +248,175 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
     );
   }, [orders, currentVisitor.id, activeBill]);
 
-  // Selected order IDs in active draft
+  // Selected order IDs in active draft (with optimistic selection priority)
   const selectedOrderIdsInDraft = useMemo(() => {
+    if (optimisticOrderIds !== null) {
+      return optimisticOrderIds;
+    }
     if (!activeBill?.items) return new Set<string>();
     const set = new Set<string>();
     activeBill.items.forEach((it) => {
       if (it.order_id) set.add(it.order_id);
     });
     return set;
+  }, [optimisticOrderIds, activeBill]);
+
+  // Synchronize optimistic selection back to database truth when idle
+  useEffect(() => {
+    if (!isSyncingOrdersRef.current && pendingDraftOrdersRef.current === null) {
+      setOptimisticOrderIds(null);
+    }
   }, [activeBill]);
+
+  // Sequential background synchronization for rapid order toggles (latest choice wins)
+  const syncDraftOrders = useCallback(async () => {
+    if (isSyncingOrdersRef.current) return;
+    if (!activeBill?.id) return;
+
+    isSyncingOrdersRef.current = true;
+    try {
+      while (pendingDraftOrdersRef.current !== null && activeBill?.id) {
+        const targetIds = Array.from(pendingDraftOrdersRef.current);
+        const targetKey = targetIds.slice().sort().join(',');
+
+        if (lastSyncedOrdersRef.current === targetKey) {
+          pendingDraftOrdersRef.current = null;
+          break;
+        }
+
+        const invoiceId = activeBill.id;
+        const { data, error } = await supabase.rpc('draft_set_orders', {
+          p_invoice_id: invoiceId,
+          p_order_ids: targetIds,
+        });
+
+        if (error || !data || (data as { success?: boolean }).success === false) {
+          const msg =
+            error?.message || (data as { message?: string })?.message || 'خطا در ذخیره سفارش‌ها.';
+          showToast(msg, 'error');
+          // Revert optimistic selection on error
+          setOptimisticOrderIds(null);
+          pendingDraftOrdersRef.current = null;
+          return;
+        }
+
+        lastSyncedOrdersRef.current = targetKey;
+
+        const currentPendingKey = pendingDraftOrdersRef.current
+          ? Array.from(pendingDraftOrdersRef.current).slice().sort().join(',')
+          : null;
+
+        if (currentPendingKey === targetKey) {
+          pendingDraftOrdersRef.current = null;
+          refreshData();
+        }
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'خطای غیرمنتظره در ذخیره سفارش‌ها.';
+      showToast(msg, 'error');
+      setOptimisticOrderIds(null);
+      pendingDraftOrdersRef.current = null;
+    } finally {
+      isSyncingOrdersRef.current = false;
+    }
+  }, [activeBill?.id, showToast, refreshData]);
+
+  // Handle toggling an order's inclusion in draft bill (Optimistic, non-blocking, no success toast)
+  const handleToggleOrder = (orderId: string) => {
+    if (!activeBill || activeBill.status !== 'draft') return;
+
+    manuallyToggledOrderIdsRef.current.add(orderId);
+
+    const currentSelected = new Set(
+      optimisticOrderIds ?? Array.from(selectedOrderIdsInDraft)
+    );
+
+    if (currentSelected.has(orderId)) {
+      currentSelected.delete(orderId);
+    } else {
+      currentSelected.add(orderId);
+    }
+
+    const nextSet = new Set(currentSelected);
+    setOptimisticOrderIds(nextSet);
+    pendingDraftOrdersRef.current = nextSet;
+    syncDraftOrders();
+  };
+
+  // Identify new orders arrived after draft creation that are not yet in the draft
+  const newArrivedOrders = useMemo(() => {
+    if (!activeBill || activeBill.status !== 'draft') return [];
+    const draftCreatedAt = activeBill.created_at ? new Date(activeBill.created_at).getTime() : 0;
+
+    return eligibleOrders.filter((ord) => {
+      if (selectedOrderIdsInDraft.has(ord.id)) return false;
+      if (manuallyToggledOrderIdsRef.current.has(ord.id)) return false;
+
+      const ordDate = ord.order_date;
+      if (draftCreatedAt > 0 && ordDate) {
+        return new Date(ordDate).getTime() > draftCreatedAt;
+      }
+      return false;
+    });
+  }, [activeBill, eligibleOrders, selectedOrderIdsInDraft]);
+
+  // Handle "Add All" for newly arrived orders
+  const handleAddAllNewOrders = () => {
+    if (!activeBill || activeBill.status !== 'draft') return;
+
+    const currentSelected = new Set(
+      optimisticOrderIds ?? Array.from(selectedOrderIdsInDraft)
+    );
+
+    newArrivedOrders.forEach((o) => {
+      currentSelected.add(o.id);
+      manuallyToggledOrderIdsRef.current.delete(o.id);
+    });
+
+    const nextSet = new Set(currentSelected);
+    setOptimisticOrderIds(nextSet);
+    pendingDraftOrdersRef.current = nextSet;
+    syncDraftOrders();
+  };
+
+  // Toggle order items accordion collapse
+  const toggleOrderCollapse = (orderId: string) => {
+    setCollapsedOrderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(orderId)) {
+        next.delete(orderId);
+      } else {
+        next.add(orderId);
+      }
+      return next;
+    });
+  };
+
+  // Calculate order items and total exclusively with visitor purchasing price (zero store retail price)
+  const getOrderVisitorDetails = useCallback(
+    (ord: Order) => {
+      let orderTotal = 0;
+      const items = (ord.items || []).map((it) => {
+        const prod = productMap.get(it.product_id);
+        const unit = prod?.unit || 'بسته';
+        const visitorPrice = Number(
+          prod?.visitor_price ?? (prod?.price ? Math.round(Number(prod.price) * 0.85) : it.price)
+        );
+        const lineTotal = it.quantity * visitorPrice;
+        orderTotal += lineTotal;
+        return {
+          id: it.id || `${ord.id}-${it.product_id}`,
+          name: it.name,
+          quantity: it.quantity,
+          unit,
+          visitorPrice,
+          lineTotal,
+        };
+      });
+      return { items, orderTotal };
+    },
+    [productMap]
+  );
 
   // Aggregated items for visitor (strictly visitor purchasing price, no retail prices, no margins)
   const aggregatedItems = useMemo(() => {
@@ -262,98 +479,88 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
     return aggregatedItems.reduce((sum, it) => sum + it.totalQuantity, 0);
   }, [aggregatedItems]);
 
-  // Handle toggling an order's inclusion in draft bill
-  const handleToggleOrder = async (orderId: string) => {
-    if (!activeBill || activeBill.status !== 'draft' || isTickingOrders) return;
+  // Handle quantity change for surplus items in ProductCatalog modal
+  const handleSurplusQuantityChange = useCallback(
+    (productId: string, qty: number) => {
+      const prod = productMap.get(productId) || products.find((p) => p.id === productId);
+      const available = prod ? Math.max(0, prod.stock - prod.reserved_stock) : 0;
+      const validQty = Math.max(0, Math.min(qty, available));
 
-    const currentSelected = Array.from(selectedOrderIdsInDraft);
-    const isCurrentlySelected = currentSelected.includes(orderId);
-    const updated = isCurrentlySelected
-      ? currentSelected.filter((id) => id !== orderId)
-      : [...currentSelected, orderId];
+      setSurplusCart((prev) => {
+        if (validQty <= 0) {
+          const next = { ...prev };
+          delete next[productId];
+          return next;
+        }
+        return { ...prev, [productId]: validQty };
+      });
+    },
+    [productMap, products]
+  );
 
-    setIsTickingOrders(true);
+  // Surplus totals calculation
+  const totalSurplusCount = useMemo(() => {
+    return Object.values(surplusCart).reduce((sum, q) => sum + (Number(q) || 0), 0);
+  }, [surplusCart]);
+
+  const totalSurplusAmount = useMemo(() => {
+    return Object.entries(surplusCart).reduce((sum, [pId, qty]) => {
+      const prod = productMap.get(pId) || products.find((p) => p.id === pId);
+      const vPrice = Number(
+        prod?.visitor_price ?? (prod?.price ? Math.round(Number(prod.price) * 0.85) : 0)
+      );
+      return sum + (Number(qty) || 0) * vPrice;
+    }, 0);
+  }, [surplusCart, productMap, products]);
+
+  // Handle surplus items submission to draft bill
+  const handleSurplusSubmit = async () => {
+    if (!activeBill || isSubmittingSurplus || totalSurplusCount <= 0) return;
+
+    setIsSubmittingSurplus(true);
+    const finalLabel = surplusCustomerLabel.trim() || 'موجودی همراه ویزیتور';
+    const entries = Object.entries(surplusCart).filter(([_, qty]) => Number(qty) > 0);
+
+    let successCount = 0;
 
     try {
       if (isSupabaseConfigured && supabase) {
-        const { data, error } = await supabase.rpc('draft_set_orders', {
-          p_invoice_id: activeBill.id,
-          p_order_ids: updated,
-        });
+        for (const [productId, qty] of entries) {
+          const { data, error } = await supabase.rpc('invoice_add_manual_line', {
+            p_invoice_id: activeBill.id,
+            p_product_id: productId,
+            p_qty: qty,
+            p_customer_label: finalLabel,
+            p_source: 'visitor_manual',
+            p_line_note: null,
+            p_unit_price: null,
+            p_actor: currentVisitor.name,
+          });
 
-        if (error) {
-          showToast(error.message || 'خطا در ثبت سفارش‌های پیش‌نویس.', 'error');
-          return;
+          if (error || !data || (data as { success?: boolean }).success === false) {
+            const msg =
+              error?.message ||
+              (data as { message?: string })?.message ||
+              `خطا در افزودن کالا به اقلام مازاد.`;
+            showToast(msg, 'error');
+          } else {
+            successCount++;
+          }
         }
 
-        if (!data || (data as { success?: boolean; message?: string }).success === false) {
-          const msg = (data as { message?: string })?.message || 'خطا در به‌روزرسانی سفارش‌ها.';
-          showToast(msg, 'error');
-          return;
+        if (successCount > 0) {
+          showToast(`${successCount} قلم مازاد با موفقیت به فاکتور بار افزوده شد.`, 'success');
+          setSurplusCart({});
+          setSurplusCustomerLabel('');
+          setIsSurplusModalOpen(false);
+          refreshData();
         }
-
-        showToast(
-          isCurrentlySelected ? 'سفارش از فاکتور بار حذف شد.' : 'سفارش به فاکتور بار افزوده شد.',
-          'success'
-        );
-        retryFetch();
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'خطای غیرمنتظره در ذخیره سفارش‌ها.';
+      const msg = err instanceof Error ? err.message : 'خطای غیرمنتظره در ثبت اقلام مازاد.';
       showToast(msg, 'error');
     } finally {
-      setIsTickingOrders(false);
-    }
-  };
-
-  // Handle adding manual item
-  const handleAddManualLine = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!activeBill || !manualProductId || manualQty <= 0 || isSubmittingManual) return;
-
-    setIsSubmittingManual(true);
-    const finalLabel = isForSelf
-      ? 'موجودی همراه ویزیتور'
-      : manualCustomerLabel.trim() || 'مشتری آزاد';
-
-    try {
-      if (isSupabaseConfigured && supabase) {
-        const { data, error } = await supabase.rpc('invoice_add_manual_line', {
-          p_invoice_id: activeBill.id,
-          p_product_id: manualProductId,
-          p_qty: manualQty,
-          p_customer_label: finalLabel,
-          p_source: 'visitor_manual',
-          p_line_note: manualLineNote.trim() || null,
-          p_unit_price: null,
-          p_actor: currentVisitor.name,
-        });
-
-        if (error) {
-          showToast(error.message || 'خطا در افزودن ردیف دستی.', 'error');
-          return;
-        }
-
-        if (!data || (data as { success?: boolean; message?: string }).success === false) {
-          const msg = (data as { message?: string })?.message || 'خطا در افزودن قلم توافقی.';
-          showToast(msg, 'error');
-          return;
-        }
-
-        showToast('قلم آزاد با موفقیت به فاکتور بار افزوده شد.', 'success');
-        setManualProductId('');
-        setManualQty(1);
-        setManualCustomerLabel('');
-        setIsForSelf(false);
-        setManualLineNote('');
-        setIsManualModalOpen(false);
-        retryFetch();
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'خطای غیرمنتظره در ثبت قلم دستی.';
-      showToast(msg, 'error');
-    } finally {
-      setIsSubmittingManual(false);
+      setIsSubmittingSurplus(false);
     }
   };
 
@@ -385,7 +592,7 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
 
         showToast('تعداد کالا در فاکتور با موفقیت اصلاح شد.', 'success');
         setEditingItem(null);
-        retryFetch();
+        refreshData();
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'خطا در به‌روزرسانی ردیف.';
@@ -419,7 +626,7 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
         }
 
         showToast('ردیف با موفقیت از فاکتور بار حذف شد.', 'success');
-        retryFetch();
+        refreshData();
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'خطای غیرمنتظره در حذف قلم.';
@@ -461,7 +668,7 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
         }
 
         showToast('فاکتور بار با موفقیت به ادمین و انبار ارسال شد.', 'success');
-        retryFetch();
+        refreshData();
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'خطای غیرمنتظره در ارسال فاکتور.';
@@ -699,7 +906,7 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
                   <div className="p-8 text-center rounded-2xl bg-slate-900/60 border border-slate-800 text-slate-400 text-xs space-y-2">
                     <p className="font-semibold text-slate-300">هنوز قلمی در فاکتور بار اضافه نشده است.</p>
                     <p className="text-slate-500">
-                      از بخش زیر سفارش‌های آماده ارسال را انتخاب کنید یا با دکمه «+ افزودن اقلام مشتری آزاد» کالا اضافه نمایید.
+                      از بخش زیر سفارش‌های آماده ارسال را انتخاب کنید یا با دکمه «+ افزودن اقلام مازاد» کالا اضافه نمایید.
                     </p>
                   </div>
                 ) : (
@@ -733,7 +940,7 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
                                     )}
                                     {item.manualLines.length > 0 && (
                                       <span className="text-purple-400 font-medium">
-                                        ({item.manualLines.length} قلم آزاد)
+                                        ({item.manualLines.length} قلم مازاد)
                                       </span>
                                     )}
                                   </div>
@@ -758,7 +965,7 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
                                   <td className="py-1.5 px-4 text-purple-200" colSpan={1}>
                                     <div className="flex items-center gap-2">
                                       <span className="px-2 py-0.5 rounded-md bg-purple-900/40 text-purple-300 font-bold border border-purple-700/50">
-                                        {ml.customer_label || 'مشتری آزاد'}
+                                        {ml.customer_label || 'اقلام مازاد'}
                                       </span>
                                       {ml.line_note && (
                                         <span className="text-slate-400">توضیح: {ml.line_note}</span>
@@ -827,16 +1034,20 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
                   </div>
                 )}
 
-                {/* Manual Item Add Button */}
+                {/* Surplus Item Add Button */}
                 {!isReadOnly && (
                   <div className="flex justify-end">
                     <button
                       type="button"
-                      onClick={() => setIsManualModalOpen(true)}
-                      className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 font-bold text-xs border border-purple-500/30 transition cursor-pointer"
+                      onClick={() => {
+                        setSurplusCart({});
+                        setSurplusCustomerLabel('');
+                        setIsSurplusModalOpen(true);
+                      }}
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 font-bold text-xs sm:text-sm border border-purple-500/30 transition cursor-pointer shadow-sm active:scale-95"
                     >
                       <Plus className="w-4 h-4" />
-                      <span>افزودن اقلام مشتری آزاد / فروش صحرایی</span>
+                      <span>افزودن اقلام مازاد</span>
                     </button>
                   </div>
                 )}
@@ -856,49 +1067,135 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
                   </span>
                 </div>
 
+                {/* New Orders Arrived Banner */}
+                {newArrivedOrders.length > 0 && !isReadOnly && (
+                  <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-1.5 rounded-xl bg-amber-500/20 text-amber-400">
+                        <Bell className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-xs sm:text-sm font-bold block">
+                          {newArrivedOrders.length} سفارش جدید رسیده
+                        </span>
+                        <span className="text-[11px] text-amber-400/80">
+                          این سفارش‌ها پس از ایجاد پیش‌نویس ثبت شده‌اند.
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddAllNewOrders}
+                      className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition cursor-pointer shadow-sm active:scale-95"
+                    >
+                      افزودن همه
+                    </button>
+                  </div>
+                )}
+
                 {eligibleOrders.length === 0 ? (
                   <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 text-center text-slate-400 text-xs">
                     سفارش آماده بارگیری جدیدی برای این ویزیتور در وضعیت «آماده ارسال» موجود نیست.
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-64 overflow-y-auto pr-1">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-[30rem] overflow-y-auto pr-1">
                     {eligibleOrders.map((ord) => {
                       const isChecked = selectedOrderIdsInDraft.has(ord.id);
+                      const isCollapsed = collapsedOrderIds.has(ord.id);
+                      const { items: orderVisitorItems, orderTotal: orderVisitorTotal } =
+                        getOrderVisitorDetails(ord);
+
                       return (
-                        <label
+                        <div
                           key={ord.id}
-                          className={`flex items-start justify-between gap-3 p-3 rounded-2xl border transition cursor-pointer ${
+                          className={`p-3 rounded-2xl border transition ${
                             isChecked
-                              ? 'bg-blue-950/30 border-blue-500/40 text-slate-100'
-                              : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
-                          } ${isReadOnly ? 'pointer-events-none opacity-80' : ''}`}
+                              ? 'bg-blue-950/20 border-blue-500/40 text-slate-100 shadow-sm'
+                              : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:border-slate-700'
+                          } ${isReadOnly ? 'opacity-80' : ''}`}
                         >
-                          <div className="flex items-start gap-2.5 min-w-0">
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              disabled={isReadOnly || isTickingOrders}
-                              onChange={() => handleToggleOrder(ord.id)}
-                              className="mt-0.5 w-4 h-4 rounded text-blue-600 bg-slate-950 border-slate-700 focus:ring-0 cursor-pointer"
-                            />
-                            <div className="min-w-0">
-                              <p className="font-bold text-xs truncate">{ord.supermarket_name}</p>
-                              <span className="text-[11px] font-mono text-slate-500">{ord.id}</span>
-                              {ord.items && ord.items.length > 0 && (
-                                <p className="text-[11px] text-slate-400 mt-1 line-clamp-1">
-                                  {ord.items.map((it) => `${it.name} (${it.quantity})`).join('، ')}
+                          <div className="flex items-start justify-between gap-3">
+                            <label className="flex items-start gap-2.5 min-w-0 cursor-pointer flex-1 select-none">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                disabled={isReadOnly}
+                                onChange={() => handleToggleOrder(ord.id)}
+                                className="mt-0.5 w-4 h-4 rounded text-blue-600 bg-slate-950 border-slate-700 focus:ring-0 cursor-pointer shrink-0"
+                              />
+                              <div className="min-w-0">
+                                <p className="font-bold text-xs sm:text-sm truncate text-slate-200">
+                                  {ord.supermarket_name}
                                 </p>
+                                <span className="text-[11px] font-mono text-slate-500 block">
+                                  {ord.id}
+                                </span>
+                              </div>
+                            </label>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <div className="text-left">
+                                <span className="text-xs sm:text-sm font-bold text-emerald-400">
+                                  {formatPrice(orderVisitorTotal)}
+                                </span>
+                                <span className="text-[10px] text-slate-400 block">
+                                  تومان (خرید ویزیتور)
+                                </span>
+                              </div>
+
+                              {isChecked && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    toggleOrderCollapse(ord.id);
+                                  }}
+                                  className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition cursor-pointer"
+                                  title={isCollapsed ? 'نمایش اقلام' : 'بستن اقلام'}
+                                >
+                                  {isCollapsed ? (
+                                    <ChevronDown className="w-4 h-4" />
+                                  ) : (
+                                    <ChevronUp className="w-4 h-4" />
+                                  )}
+                                </button>
                               )}
                             </div>
                           </div>
 
-                          <div className="text-left shrink-0">
-                            <span className="text-xs font-bold text-slate-200">
-                              {formatPrice(ord.total_amount)}
-                            </span>
-                            <span className="text-[10px] text-slate-400 block">تومان</span>
-                          </div>
-                        </label>
+                          {/* Collapsible items under ticked customer (Default open) */}
+                          {isChecked && !isCollapsed && orderVisitorItems.length > 0 && (
+                            <div className="mt-2.5 pt-2 border-t border-slate-800/80 space-y-1.5">
+                              <div className="text-[10px] font-bold text-slate-400 flex items-center justify-between pb-1 border-b border-slate-800/40 px-1">
+                                <span>نام کالا</span>
+                                <div className="flex items-center gap-4">
+                                  <span>تعداد</span>
+                                  <span className="w-24 text-left">مبلغ (خرید ویزیتور)</span>
+                                </div>
+                              </div>
+                              {orderVisitorItems.map((it) => (
+                                <div
+                                  key={it.id}
+                                  className="flex items-center justify-between text-xs py-1 px-1 rounded hover:bg-slate-800/40 transition"
+                                >
+                                  <span className="truncate max-w-[50%] text-slate-200 font-medium text-[11px]">
+                                    {it.name}
+                                  </span>
+                                  <div className="flex items-center gap-4 shrink-0">
+                                    <span className="text-slate-300 font-mono text-[11px]">
+                                      {it.quantity} {it.unit}
+                                    </span>
+                                    <span className="w-24 text-left font-mono font-medium text-emerald-400 text-[11px]">
+                                      {formatPrice(it.lineTotal)}{' '}
+                                      <span className="text-[9px] text-slate-500">ت</span>
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       );
                     })}
                   </div>
@@ -994,128 +1291,102 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
         </div>
       )}
 
-      {/* Modal: Add Manual Customer / Field Sale Line */}
-      {isManualModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-950/80 backdrop-blur-sm"
-          onClick={() => setIsManualModalOpen(false)}
-        >
-          <div
-            className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl text-xs space-y-4"
-            onClick={(e) => e.stopPropagation()}
-            dir="rtl"
-          >
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="font-bold text-sm text-slate-100 flex items-center gap-2">
-                <Plus className="w-4 h-4 text-purple-400" />
-                <span>افزودن اقلام مشتری آزاد یا فروش صحرایی</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsManualModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-200"
-              >
-                ✕
-              </button>
+      {/* Full-Page Modal: Add Surplus Items (ProductCatalog with visitor purchasing price & in-stock default) */}
+      {isSurplusModalOpen && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/95 backdrop-blur-md">
+          {/* Header */}
+          <div className="p-4 sm:p-5 border-b border-slate-800 bg-slate-900 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-purple-600/20 text-purple-400 border border-purple-500/30">
+                <Package className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm sm:text-base text-slate-100">
+                  افزودن اقلام مازاد به فاکتور بار
+                </h3>
+                <p className="text-xs text-slate-400">
+                  اقلام را با قیمت خرید ویزیتور و به تعداد دلخواه (شامل اعشاری) انتخاب نمایید
+                </p>
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={() => setIsSurplusModalOpen(false)}
+              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition cursor-pointer"
+              title="بستن"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
 
-            <form onSubmit={handleAddManualLine} className="space-y-3.5">
-              {/* Product Selection */}
-              <div>
-                <label className="block text-slate-400 mb-1 font-semibold">انتخاب کالا:</label>
-                <select
-                  value={manualProductId}
-                  onChange={(e) => setManualProductId(e.target.value)}
-                  required
-                  className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-200 focus:outline-none focus:border-purple-500"
-                >
-                  <option value="">-- کالا را انتخاب کنید --</option>
-                  {products
-                    .filter((p) => p.is_active)
-                    .map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} - موجودی آزاد: {p.stock - p.reserved_stock} {p.unit}
-                      </option>
-                    ))}
-                </select>
-              </div>
+          {/* Catalog Scrollable Area */}
+          <div className="flex-1 overflow-y-auto p-3 sm:p-6 max-w-5xl mx-auto w-full">
+            <ProductCatalog
+              products={products}
+              cart={surplusCart}
+              onChangeQuantity={handleSurplusQuantityChange}
+              onExceedLimit={(max) =>
+                showToast(`موجودی آزاد کالا به ${max.toLocaleString('fa-IR')} واحد محدود شد.`)
+              }
+              priceMode="visitor"
+              defaultInStockOnly={true}
+            />
+          </div>
 
-              {/* Quantity */}
-              <div>
-                <label className="block text-slate-400 mb-1 font-semibold">تعداد مورد نیاز:</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={manualQty}
-                  onChange={(e) => setManualQty(Math.max(1, parseInt(e.target.value) || 1))}
-                  required
-                  className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-200 focus:outline-none focus:border-purple-500 font-mono text-sm"
-                />
-              </div>
-
-              {/* For Self / Field Sale Switch */}
-              <div className="p-3 rounded-2xl bg-purple-950/30 border border-purple-800/40 flex items-center justify-between">
-                <div>
-                  <span className="font-bold text-purple-200">برای خودم (فروش صحرایی)</span>
-                  <p className="text-[11px] text-purple-400 mt-0.5">
-                    برچسب «موجودی همراه ویزیتور» دریافت خواهد کرد
-                  </p>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={isForSelf}
-                  onChange={(e) => setIsForSelf(e.target.checked)}
-                  className="w-5 h-5 rounded text-purple-600 bg-slate-950 border-purple-500 focus:ring-0 cursor-pointer"
-                />
-              </div>
-
-              {/* Customer Name (Optional) */}
-              {!isForSelf && (
-                <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">
-                    نام مشتری (اختیاری):
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="مثال: آقای رضایی یا سوپرمارکت بهار"
-                    value={manualCustomerLabel}
-                    onChange={(e) => setManualCustomerLabel(e.target.value)}
-                    className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-200 focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-              )}
-
-              {/* Note (Optional) */}
-              <div>
-                <label className="block text-slate-400 mb-1 font-semibold">
-                  توضیح آزاد (اختیاری):
+          {/* Bottom Action Bar */}
+          <div className="p-3 sm:p-4 border-t border-slate-800 bg-slate-900 shrink-0 shadow-2xl">
+            <div className="max-w-5xl mx-auto space-y-3">
+              {/* Customer Label (Optional) */}
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <label className="text-xs font-semibold text-slate-400 shrink-0">
+                  نام مشتری (اختیاری):
                 </label>
                 <input
                   type="text"
-                  placeholder="مثال: سفارش تلفنی، تحویل عصر"
-                  value={manualLineNote}
-                  onChange={(e) => setManualLineNote(e.target.value)}
-                  className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-200 focus:outline-none focus:border-purple-500"
+                  placeholder="در صورت خالی بودن، «موجودی همراه ویزیتور» ثبت می‌شود"
+                  value={surplusCustomerLabel}
+                  onChange={(e) => setSurplusCustomerLabel(e.target.value)}
+                  className="flex-1 h-9 px-3 rounded-xl bg-slate-950 border border-slate-700 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-purple-500"
                 />
               </div>
 
-              <div className="pt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsManualModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold transition cursor-pointer"
-                >
-                  انصراف
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmittingManual || !manualProductId}
-                  className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold transition shadow-md cursor-pointer disabled:opacity-50"
-                >
-                  {isSubmittingManual ? 'در حال افزودن...' : 'افزودن به فاکتور'}
-                </button>
+              {/* Summary and Submit */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-slate-800/60">
+                <div className="flex items-center gap-4 text-xs">
+                  <div>
+                    <span className="text-slate-400">تعداد اقلام: </span>
+                    <span className="font-bold font-mono text-purple-300">
+                      {totalSurplusCount.toLocaleString('fa-IR')}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400">جمع مبلغ (خرید ویزیتور): </span>
+                    <span className="font-bold font-mono text-emerald-400 text-sm">
+                      {formatPrice(totalSurplusAmount)}
+                    </span>
+                    <span className="text-[10px] text-slate-400 mr-1">تومان</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsSurplusModalOpen(false)}
+                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition cursor-pointer"
+                  >
+                    انصراف
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSurplusSubmit}
+                    disabled={isSubmittingSurplus || totalSurplusCount <= 0}
+                    className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-95 text-white font-bold text-xs transition shadow-lg shadow-purple-600/30 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSubmittingSurplus ? 'در حال افزودن اقلام...' : 'افزودن به فاکتور'}
+                  </button>
+                </div>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}

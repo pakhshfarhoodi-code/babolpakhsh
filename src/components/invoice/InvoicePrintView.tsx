@@ -113,7 +113,7 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
         customerName = it.customer_label;
       } else {
         groupKey = `manual-general-${src}`;
-        customerName = src === 'admin_manual' ? 'توافق تلفنی / حضوری ادمین' : 'مشتری آزاد / فروش صحرایی ویزیتور';
+        customerName = src === 'admin_manual' ? 'توافق تلفنی / حضوری ادمین' : 'اقلام مازاد ویزیتور';
       }
 
       const existing = customerGroupsMap.get(groupKey);
@@ -379,7 +379,7 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
                       )}
                       {group.source === 'visitor_manual' && (
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800">
-                          فروش صحرایی / مشتری آزاد
+                          اقلام مازاد ویزیتور
                         </span>
                       )}
                       {group.source === 'admin_manual' && (

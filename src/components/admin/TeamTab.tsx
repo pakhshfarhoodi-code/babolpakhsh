@@ -1012,16 +1012,6 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                             </div>
                             <div className="flex items-center gap-2.5 mt-1.5 text-slate-400 flex-wrap">
                               <span>مدیریت: <strong className="text-slate-300 font-semibold">{shop.owner}</strong></span>
-                              <div className="inline-flex items-center gap-1.5 text-amber-300 font-mono text-xs bg-amber-950/60 px-2.5 py-0.5 rounded-lg border border-amber-500/40 font-bold shadow-xs">
-                                <AtSign className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                                <span>
-                                  نام کاربری: {
-                                    shop.username && !shop.username.includes('-') && shop.username.length < 25
-                                      ? shop.username
-                                      : (shop.phone || 'مشخص نشده')
-                                  }
-                                </span>
-                              </div>
                             </div>
                           </div>
                         </div>

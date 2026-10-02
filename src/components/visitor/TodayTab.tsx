@@ -318,7 +318,7 @@ export const TodayTab: React.FC<TodayTabProps> = ({
                       ) : orderCustomerLabel ? (
                         <div className="flex items-center gap-1 text-xs text-purple-300 mt-1 min-w-0">
                           <span className="px-2 py-0.5 rounded-md bg-purple-950/60 border border-purple-800/40 text-[11px] font-medium">
-                            مشتری آزاد: {orderCustomerLabel}
+                            اقلام مازاد: {orderCustomerLabel}
                           </span>
                         </div>
                       ) : (

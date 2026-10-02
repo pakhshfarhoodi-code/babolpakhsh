@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Product, Category, ProductPriceHistory, ProductLike } from '../../types';
 import { INITIAL_CATEGORIES, INITIAL_BRANDS, INITIAL_PRODUCTS } from '../../data/initialData';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
@@ -87,6 +87,13 @@ export function useCatalog() {
       return [];
     }
   });
+
+  const productLikesRef = useRef<ProductLike[]>(productLikes);
+  useEffect(() => {
+    productLikesRef.current = productLikes;
+  }, [productLikes]);
+
+  const inFlightLikesRef = useRef<Set<string>>(new Set());
 
   const [units, setUnits] = useState<string[]>(() => {
     if (isSupabaseConfigured) return [];
@@ -472,52 +479,71 @@ export function useCatalog() {
         return { success: false, liked: false, message: 'اطلاعات فروشگاه یا کالا ناقص است.' };
       }
 
-      let isNowLiked = false;
+      if (inFlightLikesRef.current.has(productId)) {
+        return { success: false, liked: false, message: 'درخواست قبلی برای این کالا در حال پردازش است.' };
+      }
+
+      inFlightLikesRef.current.add(productId);
+
+      // 1) Read current like state from ref before any mutation
+      const currentLikes = productLikesRef.current;
+      const existingLike = currentLikes.find(
+        (pl) => pl.product_id === productId && pl.supermarket_id === supermarket.id
+      );
+      const wasLiked = Boolean(existingLike);
+      const shouldLike = !wasLiked;
       const targetProd = products.find((p) => p.id === productId);
 
-      setProductLikes((prev) => {
-        const existingIndex = prev.findIndex(
-          (pl) => pl.product_id === productId && pl.supermarket_id === supermarket.id
+      // 2) Optimistic UI update
+      let optimisticLikes: ProductLike[];
+      if (shouldLike) {
+        const newLike: ProductLike = {
+          id: `like-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          product_id: productId,
+          supermarket_id: supermarket.id,
+          supermarket_name: supermarket.name || 'فروشگاه',
+          supermarket_owner: supermarket.owner || '',
+          supermarket_phone: supermarket.phone || '',
+          created_at: new Date().toISOString(),
+        };
+        optimisticLikes = [newLike, ...currentLikes];
+      } else {
+        optimisticLikes = currentLikes.filter(
+          (pl) => !(pl.product_id === productId && pl.supermarket_id === supermarket.id)
         );
+      }
 
-        if (existingIndex >= 0) {
-          // Unlike
-          isNowLiked = false;
-          const next = prev.filter((_, idx) => idx !== existingIndex);
-          try {
-            localStorage.setItem(STORAGE_KEYS.PRODUCT_LIKES, JSON.stringify(next));
-          } catch {}
-          return next;
-        } else {
-          // Like
-          isNowLiked = true;
-          const newLike: ProductLike = {
-            id: `like-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-            product_id: productId,
-            supermarket_id: supermarket.id,
-            supermarket_name: supermarket.name || 'فروشگاه',
-            supermarket_owner: supermarket.owner || '',
-            supermarket_phone: supermarket.phone || '',
-            created_at: new Date().toISOString(),
-          };
-          const next = [newLike, ...prev];
-          try {
-            localStorage.setItem(STORAGE_KEYS.PRODUCT_LIKES, JSON.stringify(next));
-          } catch {}
-          return next;
-        }
-      });
+      setProductLikes(optimisticLikes);
+      productLikesRef.current = optimisticLikes;
+      if (!isSupabaseConfigured) {
+        try {
+          localStorage.setItem(STORAGE_KEYS.PRODUCT_LIKES, JSON.stringify(optimisticLikes));
+        } catch {}
+      }
 
+      // 3) Supabase sync with error checking and rollback
       if (isSupabaseConfigured && supabase) {
         try {
-          if (!isNowLiked) {
-            await supabase
+          if (!shouldLike) {
+            const { error: deleteError } = await supabase
               .from('product_likes')
               .delete()
               .eq('product_id', productId)
               .eq('supermarket_id', supermarket.id);
+
+            if (deleteError) {
+              // Rollback UI
+              setProductLikes(currentLikes);
+              productLikesRef.current = currentLikes;
+              inFlightLikesRef.current.delete(productId);
+              return {
+                success: false,
+                liked: wasLiked,
+                message: deleteError.message || 'خطا در لغو علاقه‌مندی به کالا در پایگاه داده.',
+              };
+            }
           } else {
-            await supabase.from('product_likes').upsert(
+            const { error: upsertError } = await supabase.from('product_likes').upsert(
               {
                 product_id: productId,
                 supermarket_id: supermarket.id,
@@ -528,16 +554,44 @@ export function useCatalog() {
               },
               { onConflict: 'product_id,supermarket_id' }
             );
+
+            if (upsertError) {
+              // Rollback UI
+              setProductLikes(currentLikes);
+              productLikesRef.current = currentLikes;
+              inFlightLikesRef.current.delete(productId);
+              return {
+                success: false,
+                liked: wasLiked,
+                message: upsertError.message || 'خطا در ثبت علاقه‌مندی به کالا در پایگاه داده.',
+              };
+            }
+          }
+
+          // Silent refetch of likes
+          const { data: refetchedLikes, error: refetchErr } = await supabase
+            .from('product_likes')
+            .select('*');
+          if (!refetchErr && refetchedLikes) {
+            setProductLikes(refetchedLikes);
+            productLikesRef.current = refetchedLikes;
           }
         } catch (err) {
-          console.warn('Supabase product_likes sync error:', err);
+          // Rollback UI
+          setProductLikes(currentLikes);
+          productLikesRef.current = currentLikes;
+          inFlightLikesRef.current.delete(productId);
+          const msg = err instanceof Error ? err.message : 'خطای غیرمنتظره در ارتباط با پایگاه داده.';
+          return { success: false, liked: wasLiked, message: msg };
         }
       }
 
+      inFlightLikesRef.current.delete(productId);
+
       return {
         success: true,
-        liked: isNowLiked,
-        message: isNowLiked
+        liked: shouldLike,
+        message: shouldLike
           ? `علاقه‌مندی شما به «${targetProd?.name || 'کالا'}» با موفقیت ثبت شد.`
           : `علاقه‌مندی به «${targetProd?.name || 'کالا'}» لغو گردید.`,
       };

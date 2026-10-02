@@ -168,3 +168,34 @@ export function buildCartFromOrder(
 
   return { cart: newCart, unavailableItems, reducedItems };
 }
+
+/**
+ * Common catalog filter logic for products (categories, brand, search, and inStockOnly toggle)
+ */
+export function filterCatalogProducts(
+  products: Product[],
+  options: {
+    categoryId?: string;
+    brand?: string;
+    searchTerm?: string;
+    inStockOnly?: boolean;
+  }
+): Product[] {
+  const { categoryId = 'all', brand = 'all', searchTerm = '', inStockOnly = false } = options;
+  const term = searchTerm.toLowerCase().trim();
+
+  return products.filter((p) => {
+    if (!p.is_active) return false;
+    // When inStockOnly is active, hide is_market_test ("به زودی") products
+    if (inStockOnly && p.is_market_test) return false;
+    if (categoryId !== 'all' && p.category_id !== categoryId) return false;
+    if (brand !== 'all' && p.brand !== brand) return false;
+    if (term) {
+      const matchName = p.name.toLowerCase().includes(term);
+      const matchBrand = p.brand && p.brand.toLowerCase().includes(term);
+      if (!matchName && !matchBrand) return false;
+    }
+    return true;
+  });
+}
+

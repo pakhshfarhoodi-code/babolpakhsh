@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { UserRole, CurrentUser, Visitor, Supermarket } from '../../types';
 import { INITIAL_PROFILES } from '../../data/initialData';
-import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { supabase, isSupabaseConfigured, getFunctionErrorMessage } from '../../lib/supabase';
 import {
   STORAGE_KEYS,
   generateUniqueId,
@@ -500,9 +500,10 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
           );
 
           if (edgeError || edgeData?.success === false) {
+            const errMsg = edgeData?.error || (await getFunctionErrorMessage(edgeError, 'خطا در ثبت فروشگاه در سرور.'));
             return {
               success: false,
-              message: edgeData?.error || edgeError?.message || 'خطا در ثبت فروشگاه در سرور.',
+              message: errMsg,
             };
           }
 

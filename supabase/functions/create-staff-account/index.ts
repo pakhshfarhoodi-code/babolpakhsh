@@ -44,10 +44,24 @@ Deno.serve(async (req: Request) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
-    const supabaseServiceRoleKey =
+    let supabaseServiceRoleKey =
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SERVICE_ROLE_KEY');
 
+    // Support new Supabase secret keys format if SUPABASE_SERVICE_ROLE_KEY is absent
+    if (!supabaseServiceRoleKey) {
+      const secretKeysRaw = Deno.env.get('SUPABASE_SECRET_KEYS');
+      if (secretKeysRaw) {
+        try {
+          const parsed = JSON.parse(secretKeysRaw);
+          supabaseServiceRoleKey = parsed.service_role || parsed.default || Object.values(parsed)[0];
+        } catch {
+          supabaseServiceRoleKey = secretKeysRaw;
+        }
+      }
+    }
+
     if (!supabaseUrl || !supabaseServiceRoleKey) {
+      console.error('[create-staff-account] Server configuration error: service_role key not found.');
       return new Response(
         JSON.stringify({
           success: false,
@@ -63,6 +77,7 @@ Deno.serve(async (req: Request) => {
     // 1. Authenticate the caller using their JWT from Authorization header
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
+      console.error('[create-staff-account] Missing Authorization header');
       return new Response(
         JSON.stringify({
           success: false,
@@ -86,10 +101,11 @@ Deno.serve(async (req: Request) => {
     } = await callerClient.auth.getUser();
 
     if (callerAuthError || !callerUser) {
+      console.error('[create-staff-account] Caller auth error:', callerAuthError?.message);
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'هویت کاربر فراخواننده احراز نشد یا توکن منقضی شده است.',
+          error: 'هویت کاربر فراخواننده احراز نشد یا توکن منقضی شده است. لطفاً یک‌بار خارج و مجدداً وارد شوید.',
         }),
         {
           status: 401,
@@ -103,17 +119,37 @@ Deno.serve(async (req: Request) => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    const { data: callerProfile, error: profileCheckError } = await adminClient
+    // Lookup profile by id first, fallback by phone from email
+    let callerProfile: { id: string; role: string } | null = null;
+    const { data: profileById, error: pIdErr } = await adminClient
       .from('profiles')
       .select('id, role')
       .eq('id', callerUser.id)
-      .single();
+      .maybeSingle();
 
-    if (profileCheckError || !callerProfile) {
+    if (profileById) {
+      callerProfile = profileById;
+    } else {
+      const phoneFromEmail = (callerUser.email || '').split('@')[0];
+      if (phoneFromEmail) {
+        const { data: profileByPhone } = await adminClient
+          .from('profiles')
+          .select('id, role')
+          .eq('phone', phoneFromEmail)
+          .maybeSingle();
+
+        if (profileByPhone) {
+          callerProfile = profileByPhone;
+        }
+      }
+    }
+
+    if (!callerProfile) {
+      console.error('[create-staff-account] Caller profile not found for user ID:', callerUser.id, pIdErr?.message);
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'پروفایل کاربر فراخواننده یافت نشد یا دسترسی غیرمجاز است.',
+          error: 'پروفایل کاربر فراخواننده در جدول profiles یافت نشد یا دسترسی غیرمجاز است.',
         }),
         {
           status: 403,

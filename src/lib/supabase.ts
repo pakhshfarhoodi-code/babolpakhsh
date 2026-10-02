@@ -14,3 +14,30 @@ export const isSupabaseConfigured = Boolean(
 export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
+
+export async function getFunctionErrorMessage(error: unknown, fallback: string = 'خطای سرور در پردازش درخواست'): Promise<string> {
+  if (!error) return fallback;
+  if (typeof error === 'object' && error !== null && 'context' in error) {
+    try {
+      const ctx = (error as { context?: Response }).context;
+      if (ctx && typeof ctx.json === 'function') {
+        const body = await ctx.clone().json();
+        if (body?.error) return String(body.error);
+        if (body?.message) return String(body.message);
+      }
+    } catch {
+      try {
+        const ctx = (error as { context?: Response }).context;
+        if (ctx && typeof ctx.text === 'function') {
+          const text = await ctx.clone().text();
+          if (text) return text;
+        }
+      } catch {}
+    }
+  }
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return fallback;
+}
+

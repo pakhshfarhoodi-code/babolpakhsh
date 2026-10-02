@@ -28,7 +28,7 @@ import {
   INITIAL_LOADING_BILLS,
   INITIAL_INVENTORY_TRANSACTIONS,
 } from '../data/initialData';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, getFunctionErrorMessage } from '../lib/supabase';
 import {
   STORAGE_KEYS,
   generateUniqueId,
@@ -500,9 +500,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         );
 
         if (delError || delData?.success === false) {
+          const errMsg = delData?.error || (await getFunctionErrorMessage(delError, 'خطا در حذف حساب کاربری فروشگاه از سرور.'));
           return {
             success: false,
-            message: delData?.error || delError?.message || 'خطا در حذف حساب کاربری فروشگاه از سرور.',
+            message: errMsg,
           };
         }
       }
@@ -590,9 +591,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
 
         if (error || data?.success === false) {
+          const errMsg = data?.error || (await getFunctionErrorMessage(error, 'خطا در بازنشانی رمز عبور در سرور.'));
           return {
             success: false,
-            message: data?.error || error?.message || 'خطا در بازنشانی رمز عبور در سرور.',
+            message: errMsg,
           };
         }
       }
@@ -708,9 +710,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         );
 
         if (delError || delData?.success === false) {
+          const errMsg = delData?.error || (await getFunctionErrorMessage(delError, 'خطا در حذف حساب کاربری ویزیتور از سرور.'));
           return {
             success: false,
-            message: delData?.error || delError?.message || 'خطا در حذف حساب کاربری ویزیتور از سرور.',
+            message: errMsg,
           };
         }
       }
@@ -780,9 +783,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
 
         if (error || data?.success === false) {
+          const errMsg = data?.error || (await getFunctionErrorMessage(error, 'خطا در بازنشانی رمز عبور در سرور.'));
           return {
             success: false,
-            message: data?.error || error?.message || 'خطا در بازنشانی رمز عبور در سرور.',
+            message: errMsg,
           };
         }
       }
@@ -844,6 +848,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     try {
+      let finalUserId: string | null = null;
+      let createdRole = payload.role;
+
+      // 1. First attempt: Edge Function create-staff-account
       const { data, error } = await supabase.functions.invoke('create-staff-account', {
         body: {
           action: 'create_staff',
@@ -855,14 +863,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         },
       });
 
-      if (error || data?.success === false) {
-        return {
-          success: false,
-          error: data?.error || error?.message || 'خطا در ایجاد حساب کاربری پرسنل در سرور.',
-        };
+      if (!error && data?.success) {
+        finalUserId = data.userId;
+        createdRole = data.role || payload.role;
+      } else {
+        // 2. Fallback: Direct database RPC (works without requiring Edge Function deployment)
+        const { data: rpcData, error: rpcErr } = await supabase.rpc('admin_create_staff', {
+          p_name: cleanName,
+          p_phone: cleanPhone,
+          p_role: payload.role,
+          p_region: cleanRegion,
+          p_password: cleanPassword,
+        });
+
+        if (!rpcErr && rpcData?.success) {
+          finalUserId = rpcData.userId;
+          createdRole = rpcData.role || payload.role;
+        } else {
+          const errMsg = rpcData?.error || rpcErr?.message || (await getFunctionErrorMessage(error, 'خطا در ایجاد حساب کاربری پرسنل در سرور.'));
+          return {
+            success: false,
+            error: errMsg,
+          };
+        }
       }
 
-      const finalUserId = data?.userId || createdVisitorId;
+      finalUserId = finalUserId || createdVisitorId;
 
       if (payload.role === 'visitor') {
         const newVis: Visitor = {

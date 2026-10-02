@@ -582,6 +582,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       if (isSupabaseConfigured && supabase) {
+        // 1. Try direct database RPC first
+        const { data: rpcData, error: rpcErr } = await supabase.rpc('admin_reset_user_password', {
+          p_user_id: id,
+          p_new_password: newPassword,
+        });
+
+        if (!rpcErr && rpcData?.success) {
+          return {
+            success: true,
+            message: rpcData.message || `رمز عبور فروشگاه «${target.name}» با موفقیت به ${newPassword} تغییر یافت.`,
+          };
+        }
+
+        // 2. Fallback: Edge Function
         const { data, error } = await supabase.functions.invoke('create-staff-account', {
           body: {
             action: 'reset_password',
@@ -591,7 +605,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
 
         if (error || data?.success === false) {
-          const errMsg = data?.error || (await getFunctionErrorMessage(error, 'خطا در بازنشانی رمز عبور در سرور.'));
+          const errMsg = data?.error || (await getFunctionErrorMessage(error, rpcData?.error || rpcErr?.message || 'خطا در بازنشانی رمز عبور در سرور.'));
           return {
             success: false,
             message: errMsg,
@@ -774,6 +788,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       if (isSupabaseConfigured && supabase) {
+        // 1. Try direct database RPC first
+        const { data: rpcData, error: rpcErr } = await supabase.rpc('admin_reset_user_password', {
+          p_user_id: id,
+          p_new_password: newPassword,
+        });
+
+        if (!rpcErr && rpcData?.success) {
+          return {
+            success: true,
+            message: rpcData.message || `رمز عبور ویزیتور «${target.name}» با موفقیت به ${newPassword} تغییر یافت.`,
+          };
+        }
+
+        // 2. Fallback: Edge Function
         const { data, error } = await supabase.functions.invoke('create-staff-account', {
           body: {
             action: 'reset_password',
@@ -783,7 +811,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
 
         if (error || data?.success === false) {
-          const errMsg = data?.error || (await getFunctionErrorMessage(error, 'خطا در بازنشانی رمز عبور در سرور.'));
+          const errMsg = data?.error || (await getFunctionErrorMessage(error, rpcData?.error || rpcErr?.message || 'خطا در بازنشانی رمز عبور در سرور.'));
           return {
             success: false,
             message: errMsg,
@@ -851,34 +879,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       let finalUserId: string | null = null;
       let createdRole = payload.role;
 
-      // 1. First attempt: Edge Function create-staff-account
-      const { data, error } = await supabase.functions.invoke('create-staff-account', {
-        body: {
-          action: 'create_staff',
-          name: cleanName,
-          phone: cleanPhone,
-          role: payload.role,
-          region: cleanRegion,
-          password: cleanPassword,
-        },
+      // 1. Primary: Direct database RPC (creates auth.users, auth.identities, profiles, visitors)
+      const { data: rpcData, error: rpcErr } = await supabase.rpc('admin_create_staff', {
+        p_name: cleanName,
+        p_phone: cleanPhone,
+        p_role: payload.role,
+        p_region: cleanRegion,
+        p_password: cleanPassword,
       });
 
-      if (!error && data?.success) {
-        finalUserId = data.userId;
-        createdRole = data.role || payload.role;
+      if (!rpcErr && rpcData?.success) {
+        finalUserId = rpcData.userId;
+        createdRole = rpcData.role || payload.role;
       } else {
-        // 2. Fallback: Direct database RPC (works without requiring Edge Function deployment)
-        const { data: rpcData, error: rpcErr } = await supabase.rpc('admin_create_staff', {
-          p_name: cleanName,
-          p_phone: cleanPhone,
-          p_role: payload.role,
-          p_region: cleanRegion,
-          p_password: cleanPassword,
+        // 2. Fallback: Edge Function create-staff-account
+        const { data, error } = await supabase.functions.invoke('create-staff-account', {
+          body: {
+            action: 'create_staff',
+            name: cleanName,
+            phone: cleanPhone,
+            role: payload.role,
+            region: cleanRegion,
+            password: cleanPassword,
+          },
         });
 
-        if (!rpcErr && rpcData?.success) {
-          finalUserId = rpcData.userId;
-          createdRole = rpcData.role || payload.role;
+        if (!error && data?.success) {
+          finalUserId = data.userId;
+          createdRole = data.role || payload.role;
         } else {
           const errMsg = rpcData?.error || rpcErr?.message || (await getFunctionErrorMessage(error, 'خطا در ایجاد حساب کاربری پرسنل در سرور.'));
           return {

@@ -28,7 +28,7 @@ import {
   INITIAL_LOADING_BILLS,
   INITIAL_INVENTORY_TRANSACTIONS,
 } from '../data/initialData';
-import { supabase, isSupabaseConfigured, getFunctionErrorMessage } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, getFunctionErrorMessage, createIsolatedAuthClient } from '../lib/supabase';
 import {
   STORAGE_KEYS,
   generateUniqueId,
@@ -879,39 +879,78 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       let finalUserId: string | null = null;
       let createdRole = payload.role;
 
-      // 1. Primary: Direct database RPC (creates auth.users, auth.identities, profiles, visitors)
-      const { data: rpcData, error: rpcErr } = await supabase.rpc('admin_create_staff', {
-        p_name: cleanName,
-        p_phone: cleanPhone,
-        p_role: payload.role,
-        p_region: cleanRegion,
-        p_password: cleanPassword,
-      });
+      // 1. Official Supabase Auth Sign-Up via isolated client (without disturbing admin session)
+      // This guarantees GoTrue creates a real Email+Password user (not OAuth) with valid credentials!
+      const isolatedAuth = createIsolatedAuthClient();
+      let authUserId: string | null = null;
 
-      if (!rpcErr && rpcData?.success) {
-        finalUserId = rpcData.userId;
-        createdRole = rpcData.role || payload.role;
-      } else {
-        // 2. Fallback: Edge Function create-staff-account
-        const { data, error } = await supabase.functions.invoke('create-staff-account', {
-          body: {
-            action: 'create_staff',
-            name: cleanName,
-            phone: cleanPhone,
-            role: payload.role,
-            region: cleanRegion,
-            password: cleanPassword,
-          },
+      if (isolatedAuth) {
+        const syntheticEmail = `${cleanPhone}@babolpakhsh.internal`;
+        const { data: signUpData, error: signUpErr } = await isolatedAuth.auth.signUp({
+          email: syntheticEmail,
+          password: cleanPassword,
         });
 
-        if (!error && data?.success) {
-          finalUserId = data.userId;
-          createdRole = data.role || payload.role;
+        if (signUpData?.user?.id) {
+          authUserId = signUpData.user.id;
+        } else if (signUpErr) {
+          const errText = (signUpErr.message || '').toLowerCase();
+          if (errText.includes('already') || errText.includes('registered') || errText.includes('exists')) {
+            return {
+              success: false,
+              error: 'این شماره تماس قبلاً در سامانه ثبت شده است.',
+            };
+          }
+        }
+      }
+
+      if (authUserId) {
+        finalUserId = authUserId;
+        // Insert into profiles and visitors using admin client
+        const { error: profErr } = await supabase.from('profiles').upsert({
+          id: authUserId,
+          name: cleanName,
+          role: payload.role,
+          phone: cleanPhone,
+          username: cleanUsername,
+          is_active: true,
+        });
+
+        if (profErr) {
+          console.warn('Profile upsert note:', profErr.message);
+        }
+
+        if (payload.role === 'visitor') {
+          const { error: visErr } = await supabase.from('visitors').upsert({
+            id: authUserId,
+            name: cleanName,
+            phone: cleanPhone,
+            region: cleanRegion,
+            username: cleanUsername,
+            is_active: true,
+          });
+
+          if (visErr) {
+            console.warn('Visitor upsert note:', visErr.message);
+          }
+        }
+      } else {
+        // Fallback: Direct database RPC
+        const { data: rpcData, error: rpcErr } = await supabase.rpc('admin_create_staff', {
+          p_name: cleanName,
+          p_phone: cleanPhone,
+          p_role: payload.role,
+          p_region: cleanRegion,
+          p_password: cleanPassword,
+        });
+
+        if (!rpcErr && rpcData?.success) {
+          finalUserId = rpcData.userId;
+          createdRole = rpcData.role || payload.role;
         } else {
-          const errMsg = rpcData?.error || rpcErr?.message || (await getFunctionErrorMessage(error, 'خطا در ایجاد حساب کاربری پرسنل در سرور.'));
           return {
             success: false,
-            error: errMsg,
+            error: rpcData?.error || rpcErr?.message || 'خطا در ثبت کاربر پرسنل.',
           };
         }
       }

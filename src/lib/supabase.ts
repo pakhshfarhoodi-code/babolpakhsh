@@ -41,3 +41,20 @@ export async function getFunctionErrorMessage(error: unknown, fallback: string =
   return fallback;
 }
 
+export function createIsolatedAuthClient() {
+  if (!isSupabaseConfigured || !supabaseUrl || !supabaseAnonKey) return null;
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      storage: {
+        getItem: () => null,
+        setItem: () => {},
+        removeItem: () => {},
+      },
+    },
+  });
+}
+
+

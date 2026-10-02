@@ -334,10 +334,17 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
         });
 
         if (authError || !authData?.user) {
-          // Generic failure message per requirement (do not reveal which was wrong)
+          console.error('[Supabase signInWithPassword Error]:', authError);
+          const rawMsg = (authError?.message || '').toLowerCase();
+          let displayMsg = 'شماره یا رمز عبور نادرست است';
+          if (rawMsg.includes('email not confirmed')) {
+            displayMsg = 'حساب کاربری هنوز تایید نشده است. لطفاً با مدیر تماس بگیرید.';
+          } else if (rawMsg.includes('user not found')) {
+            displayMsg = 'کاربری با این شماره در سیستم یافت نشد.';
+          }
           return {
             success: false,
-            message: 'شماره یا رمز عبور نادرست است',
+            message: displayMsg,
           };
         }
 

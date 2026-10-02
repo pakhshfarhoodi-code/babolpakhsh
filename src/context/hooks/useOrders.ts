@@ -486,27 +486,12 @@ export function useOrders({
 
       if (isSupabaseConfigured && supabase) {
         supabase
-          .from('reassignment_requests')
-          .insert({
-            id: reqId,
-            order_id: orderId,
-            supermarket_name: order.supermarket_name,
-            from_visitor_id: order.assigned_visitor_id,
-            from_visitor_name: fromVisitor?.name || order.visitor_name,
-            to_visitor_id: toVisitorId,
-            to_visitor_name: toVisitor ? toVisitor.name : 'عمومی (هر ویزیتوری)',
-            status: 'pending',
+          .rpc('request_order_reassignment', {
+            p_order_id: orderId,
+            p_to_visitor_id: toVisitorId || null,
           })
           .then(({ error }) => {
             if (error) console.error('خطا در ثبت درخواست واگذاری روی Supabase:', error);
-          });
-
-        supabase
-          .from('orders')
-          .update({ status: 'delegated', reassignment_id: reqId })
-          .eq('id', orderId)
-          .then(({ error }) => {
-            if (error) console.error('خطا در به‌روزرسانی وضعیت سفارش روی Supabase:', error);
           });
       }
     },
@@ -541,41 +526,17 @@ export function useOrders({
               return o;
             })
           );
+        }
 
-          if (isSupabaseConfigured && supabase) {
-            supabase
-              .from('reassignment_requests')
-              .update({ status: 'accepted' })
-              .eq('id', requestId)
-              .then(({ error }) => {
-                if (error) console.error('خطا در به‌روزرسانی درخواست واگذاری روی Supabase:', error);
-              });
-
-            supabase
-              .from('orders')
-              .update({
-                assigned_visitor_id: recipientVisitor.id,
-                visitor_name: recipientVisitor.name,
-                status: 'assigned',
-                reassignment_id: null,
-              })
-              .eq('id', req.order_id)
-              .then(({ error }) => {
-                if (error) console.error('خطا در انتقال سفارش روی Supabase:', error);
-              });
-
-            supabase
-              .from('order_visitor_history')
-              .insert({
-                order_id: req.order_id,
-                old_visitor_id: req.from_visitor_id,
-                new_visitor_id: recipientVisitor.id,
-                changed_by: recipientVisitor.name,
-              })
-              .then(({ error }) => {
-                if (error) console.warn('خطا در ثبت تاریخچه انتقال ویزیتور روی Supabase:', error);
-              });
-          }
+        if (isSupabaseConfigured && supabase) {
+          supabase
+            .rpc('respond_order_reassignment', {
+              p_request_id: requestId,
+              p_accept: true,
+            })
+            .then(({ error }) => {
+              if (error) console.error('خطا در تایید درخواست واگذاری روی Supabase:', error);
+            });
         }
       } else {
         setOrders((prev) =>
@@ -589,19 +550,12 @@ export function useOrders({
 
         if (isSupabaseConfigured && supabase) {
           supabase
-            .from('reassignment_requests')
-            .update({ status: 'rejected' })
-            .eq('id', requestId)
+            .rpc('respond_order_reassignment', {
+              p_request_id: requestId,
+              p_accept: false,
+            })
             .then(({ error }) => {
               if (error) console.error('خطا در رد درخواست واگذاری روی Supabase:', error);
-            });
-
-          supabase
-            .from('orders')
-            .update({ status: 'assigned', reassignment_id: null })
-            .eq('id', req.order_id)
-            .then(({ error }) => {
-              if (error) console.error('خطا در بازگردانی سفارش روی Supabase:', error);
             });
         }
       }

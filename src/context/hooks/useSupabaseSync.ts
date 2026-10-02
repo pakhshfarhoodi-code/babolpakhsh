@@ -124,41 +124,56 @@ export function useSupabaseSync({
         setReassignmentRequests(reassigns);
       }
 
-      // Fetch profiles to enrich username and phone
-      const { data: profiles } = await supabase.from('profiles').select('*');
+      // Fetch profiles with explicit columns (no password column selected)
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, name, role, phone, username, is_active, created_at');
       const profileMap = new Map<string, Record<string, any>>(
         (profiles || []).map((p) => [p.id, p])
       );
 
-      // 6. Supermarkets - DB is single source of truth, replaces state
-      const { data: sms, error: smsErr } = await supabase.from('supermarkets').select('*');
+      // 6. Supermarkets - DB is single source of truth, replaces state (explicit columns, no password)
+      const { data: sms, error: smsErr } = await supabase
+        .from('supermarkets')
+        .select('id, name, owner, phone, address, assigned_visitor_id, is_active, username, created_at');
       if (smsErr) throw smsErr;
 
-      const cleanSms: Supermarket[] = (sms || []).map((sm: Supermarket) => {
+      const cleanSms: Supermarket[] = (sms || []).map((sm: any) => {
         const prof = profileMap.get(sm.id);
         return {
-          ...sm,
+          id: sm.id,
+          name: sm.name,
+          owner: sm.owner || '',
+          phone: sm.phone || '',
+          address: sm.address || '',
           assigned_visitor_id: sm.assigned_visitor_id || 'direct',
-          username: prof?.username || sm.username || '',
-          password: prof?.password || sm.password || '123',
+          is_active: sm.is_active ?? true,
+          username: prof?.username || sm.username || sm.phone || '',
+          created_at: sm.created_at,
         };
       });
       setSupermarkets(cleanSms);
 
-      // 7. Visitors - DB is single source of truth, replaces state
-      const { data: visData, error: visErr } = await supabase.from('visitors').select('*');
+      // 7. Visitors - DB is single source of truth, replaces state (explicit columns, no password)
+      const { data: visData, error: visErr } = await supabase
+        .from('visitors')
+        .select('id, name, phone, region, is_active, username, created_at');
       if (visErr) throw visErr;
 
-      const cleanVis: Visitor[] = (visData || []).map((v: Visitor) => {
+      const cleanVis: Visitor[] = (visData || []).map((v: any) => {
         const prof = profileMap.get(v.id);
         let resolvedUsername = prof?.username || v.username || '';
         if (resolvedUsername && resolvedUsername.includes('-') && resolvedUsername.length > 25) {
           resolvedUsername = '';
         }
         return {
-          ...v,
-          username: resolvedUsername,
-          password: prof?.password || v.password || '123456',
+          id: v.id,
+          name: v.name,
+          phone: v.phone || '',
+          region: v.region || 'منطقه توزیع',
+          username: resolvedUsername || v.phone || '',
+          is_active: v.is_active ?? true,
+          created_at: v.created_at,
         };
       });
       setVisitors(cleanVis);

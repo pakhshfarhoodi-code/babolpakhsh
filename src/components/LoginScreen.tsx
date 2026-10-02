@@ -8,7 +8,7 @@ import {
   ThermometerSnowflake,
   LogIn,
   KeyRound,
-  User,
+  Phone,
   UserPlus,
   ArrowLeft,
   AlertCircle,
@@ -51,7 +51,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
     setErrorMessage('');
 
     if (!usernameInput.trim()) {
-      setErrorMessage('لطفاً نام کاربری، ایمیل یا شماره همراه خود را وارد کنید.');
+      setErrorMessage('لطفاً شماره موبایل خود را وارد کنید.');
       return;
     }
     if (!passwordInput.trim()) {
@@ -68,7 +68,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
       );
 
       if (!result.success) {
-        setErrorMessage(result.message || 'نام کاربری یا رمز عبور نامعتبر است.');
+        setErrorMessage(result.message || 'شماره یا رمز عبور نادرست است.');
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'خطا در برقراری ارتباط با سامانه.';
@@ -289,15 +289,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
                 theme === 'light' ? 'text-slate-900' : 'text-slate-300'
               }`}
             >
-              نام کاربری:
+              شماره موبایل:
             </label>
             <div className="relative">
               <input
                 id="login-username-input"
-                type="text"
-                autoComplete="username"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
                 dir="ltr"
-                placeholder=""
+                placeholder="۰۹۱۲۳۴۵۶۷۸۹"
                 value={usernameInput}
                 onChange={(e) => {
                   setUsernameInput(e.target.value);
@@ -309,12 +310,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
                     : 'bg-slate-950/90 border-slate-800 text-slate-100 focus:border-blue-500'
                 }`}
               />
-              <User
+              <Phone
                 className={`w-4 h-4 absolute left-3 top-3 pointer-events-none ${
                   theme === 'light' ? 'text-slate-500' : 'text-slate-500'
                 }`}
               />
             </div>
+            <p className={`text-[11px] mt-1 text-right ${theme === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>
+              شماره تلفن همراه ۱۱ رقمی حساب کاربری (مثال: ۰۹۱۲۳۴۵۶۷۸۹)
+            </p>
           </div>
 
           <div>

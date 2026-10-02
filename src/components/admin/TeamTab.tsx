@@ -27,6 +27,8 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { SupermarketRegisterModal } from '../SupermarketRegisterModal';
+import { normalizePhone, isValidMobile, MIN_PASSWORD_LENGTH } from '../../context/utils';
+import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 
 interface TeamTabProps {
   visitors: Visitor[];
@@ -40,6 +42,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
   orders,
 }) => {
   const {
+    currentUser,
     createStaffAccount,
     updateSupermarket,
     deleteSupermarket,
@@ -90,6 +93,87 @@ export const TeamTab: React.FC<TeamTabProps> = ({
       setResetPasswordError(msg);
     } finally {
       setIsResettingPassword(false);
+    }
+  };
+
+  // Admin Self Change Password State
+  const [isAdminChangePasswordOpen, setIsAdminChangePasswordOpen] = useState(false);
+  const [adminCurrentPassword, setAdminCurrentPassword] = useState('');
+  const [adminNewPassword, setAdminNewPassword] = useState('');
+  const [adminConfirmPassword, setAdminConfirmPassword] = useState('');
+  const [isAdminChangingPass, setIsAdminChangingPass] = useState(false);
+  const [adminChangePassError, setAdminChangePassError] = useState<string | null>(null);
+  const [adminChangePassSuccess, setAdminChangePassSuccess] = useState<string | null>(null);
+
+  const handleAdminChangePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdminChangePassError(null);
+    setAdminChangePassSuccess(null);
+
+    const cleanCurrent = adminCurrentPassword.trim();
+    const cleanPass = adminNewPassword.trim();
+    const cleanConfirm = adminConfirmPassword.trim();
+
+    if (!cleanCurrent) {
+      setAdminChangePassError('لطفاً رمز عبور فعلی خود را وارد نمایید.');
+      return;
+    }
+    if (!cleanPass) {
+      setAdminChangePassError('لطفاً رمز عبور جدید را وارد نمایید.');
+      return;
+    }
+    if (cleanPass.length < MIN_PASSWORD_LENGTH) {
+      setAdminChangePassError(`رمز عبور جدید باید حداقل ${MIN_PASSWORD_LENGTH} کاراکتر باشد.`);
+      return;
+    }
+    if (cleanPass !== cleanConfirm) {
+      setAdminChangePassError('رمز عبور جدید با تکرار آن مطابقت ندارد.');
+      return;
+    }
+
+    setIsAdminChangingPass(true);
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const phone = normalizePhone(currentUser.phone);
+        const email = `${phone}@babolpakhsh.internal`;
+
+        // 1. Verify current password
+        const { error: verifyErr } = await supabase.auth.signInWithPassword({
+          email,
+          password: cleanCurrent,
+        });
+
+        if (verifyErr) {
+          setAdminChangePassError('رمز عبور فعلی نادرست است.');
+          setIsAdminChangingPass(false);
+          return;
+        }
+
+        // 2. Update to new password
+        const { error: updateErr } = await supabase.auth.updateUser({
+          password: cleanPass,
+        });
+
+        if (updateErr) {
+          setAdminChangePassError(updateErr.message || 'خطا در بروزرسانی رمز عبور.');
+          setIsAdminChangingPass(false);
+          return;
+        }
+      }
+
+      setAdminChangePassSuccess('رمز عبور مدیر با موفقیت تغییر یافت.');
+      setAdminCurrentPassword('');
+      setAdminNewPassword('');
+      setAdminConfirmPassword('');
+      setTimeout(() => {
+        setIsAdminChangePasswordOpen(false);
+        setAdminChangePassSuccess(null);
+      }, 2000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطای غیرمنتظره در تغییر رمز عبور';
+      setAdminChangePassError(msg);
+    } finally {
+      setIsAdminChangingPass(false);
     }
   };
 
@@ -176,14 +260,12 @@ export const TeamTab: React.FC<TeamTabProps> = ({
     phone: string;
     role: 'admin' | 'warehouse' | 'visitor';
     region: string;
-    username: string;
     password: string;
   }>({
     name: '',
     phone: '',
     role: 'visitor',
     region: '',
-    username: '',
     password: '',
   });
 
@@ -193,30 +275,29 @@ export const TeamTab: React.FC<TeamTabProps> = ({
     setStaffSuccess(null);
 
     const name = staffForm.name.trim();
-    const phone = staffForm.phone.trim();
+    const cleanPhone = normalizePhone(staffForm.phone);
     const role = staffForm.role;
     const region = staffForm.region.trim();
-    const username = staffForm.username.trim();
-    const password = staffForm.password;
+    const password = staffForm.password.trim();
 
     if (!name) {
       setStaffError('لطفاً نام و نام خانوادگی عضو تیم را وارد کنید.');
       return;
     }
-    if (!phone) {
-      setStaffError('لطفاً شماره تماس را وارد کنید.');
+    if (!cleanPhone || !isValidMobile(cleanPhone)) {
+      setStaffError('لطفاً شماره موبایل معتبر ۱۱ رقمی وارد کنید (نمونه: ۰۹۱۲۳۴۵۶۷۸۹).');
       return;
     }
     if (role === 'visitor' && !region) {
       setStaffError('لطفاً منطقه فعالیت ویزیتور را مشخص کنید.');
       return;
     }
-    if (!username) {
-      setStaffError('لطفاً نام کاربری را وارد کنید.');
+    if (!password) {
+      setStaffError('لطفاً رمز عبور را وارد کنید.');
       return;
     }
-    if (password.length < 6) {
-      setStaffError('رمز عبور باید حداقل ۶ کاراکتر باشد.');
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setStaffError(`رمز عبور باید حداقل ${MIN_PASSWORD_LENGTH} کاراکتر باشد.`);
       return;
     }
 
@@ -224,17 +305,16 @@ export const TeamTab: React.FC<TeamTabProps> = ({
     try {
       const res = await createStaffAccount({
         name,
-        phone,
+        phone: cleanPhone,
         role,
         region: role === 'visitor' ? region : undefined,
-        username,
         password,
       });
 
       if (!res.success) {
         setStaffError(res.error || 'خطا در ایجاد حساب کاربری.');
       } else {
-        const successMsg = `حساب با نام کاربری ${res.username || username} ساخته شد.`;
+        const successMsg = `حساب با شماره ورود ${res.username || cleanPhone} ساخته شد.`;
         setStaffSuccess(successMsg);
         setTimeout(() => {
           setIsAddStaffOpen(false);
@@ -243,7 +323,6 @@ export const TeamTab: React.FC<TeamTabProps> = ({
             phone: '',
             role: 'visitor',
             region: '',
-            username: '',
             password: '',
           });
           setStaffSuccess(null);
@@ -530,19 +609,35 @@ export const TeamTab: React.FC<TeamTabProps> = ({
               </div>
             </div>
 
-            {/* Add Team Member Button */}
-            <button
-              type="button"
-              onClick={() => {
-                setStaffError(null);
-                setStaffSuccess(null);
-                setIsAddStaffOpen(true);
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold transition shadow-md shadow-blue-600/30 cursor-pointer"
-            >
-              <UserPlus className="w-3.5 h-3.5" />
-              <span>+ افزودن عضو تیم</span>
-            </button>
+            {/* Management Buttons */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminChangePassError(null);
+                  setAdminChangePassSuccess(null);
+                  setIsAdminChangePasswordOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs font-bold transition border border-slate-700 cursor-pointer"
+                title="تغییر رمز عبور ورود خود مدیر"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden sm:inline">تغییر رمز مدیر</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setStaffError(null);
+                  setStaffSuccess(null);
+                  setIsAddStaffOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold transition shadow-md shadow-blue-600/30 cursor-pointer"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>+ افزودن عضو تیم</span>
+              </button>
+            </div>
           </div>
 
           {/* Visitor Cards & Direct Channel */}
@@ -1184,45 +1279,26 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                 </div>
               )}
 
-              {/* Username & Password */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                    نام کاربری ورود <span className="text-rose-400">*</span>
-                  </label>
-                  <div className="relative">
-                    <AtSign className="w-3.5 h-3.5 absolute right-3 top-2.5 text-slate-500 pointer-events-none" />
-                    <input
-                      type="text"
-                      value={staffForm.username}
-                      onChange={(e) =>
-                        setStaffForm((prev) => ({ ...prev, username: e.target.value.trim() }))
-                      }
-                      placeholder=""
-                      disabled={isSubmittingStaff}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 text-left font-mono"
-                      dir="ltr"
-                    />
-                  </div>
+              {/* Password */}
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                  رمز عبور <span className="text-rose-400">*</span> (حداقل ۶ کاراکتر)
+                </label>
+                <div className="relative">
+                  <KeyRound className="w-3.5 h-3.5 absolute right-3 top-2.5 text-slate-500 pointer-events-none" />
+                  <input
+                    type="password"
+                    value={staffForm.password}
+                    onChange={(e) => setStaffForm((prev) => ({ ...prev, password: e.target.value }))}
+                    placeholder="••••••"
+                    disabled={isSubmittingStaff}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 text-left font-mono"
+                    dir="ltr"
+                  />
                 </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                    رمز عبور <span className="text-rose-400">*</span> (حداقل ۶ کاراکتر)
-                  </label>
-                  <div className="relative">
-                    <KeyRound className="w-3.5 h-3.5 absolute right-3 top-2.5 text-slate-500 pointer-events-none" />
-                    <input
-                      type="password"
-                      value={staffForm.password}
-                      onChange={(e) => setStaffForm((prev) => ({ ...prev, password: e.target.value }))}
-                      placeholder=""
-                      disabled={isSubmittingStaff}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 text-left font-mono"
-                      dir="ltr"
-                    />
-                  </div>
-                </div>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  شماره موبایل واردشده به عنوان نام کاربری ورود شخص استفاده می‌شود.
+                </p>
               </div>
 
               {/* Footer Buttons */}
@@ -1363,6 +1439,9 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                       dir="ltr"
                     />
                   </div>
+                  <p className="text-[11px] text-amber-400/90 mt-1">
+                    شماره ورود با تغییر شماره تماس عوض نمی‌شود.
+                  </p>
                 </div>
 
                 <div>
@@ -1388,17 +1467,16 @@ export const TeamTab: React.FC<TeamTabProps> = ({
 
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                  نام کاربری جهت ورود به سامانه
+                  شماره ورود به سامانه (ثابت)
                 </label>
                 <div className="relative">
-                  <AtSign className="w-3.5 h-3.5 absolute right-3 top-2.5 text-slate-500 pointer-events-none" />
+                  <Phone className="w-3.5 h-3.5 absolute right-3 top-2.5 text-slate-500 pointer-events-none" />
                   <input
                     type="text"
                     value={editForm.username}
-                    onChange={(e) => setEditForm((prev) => ({ ...prev, username: e.target.value.trim() }))}
-                    placeholder=""
-                    disabled={isUpdatingSupermarket}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
+                    readOnly
+                    disabled
+                    className="w-full bg-slate-900/60 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-400 font-mono cursor-not-allowed opacity-80"
                     dir="ltr"
                   />
                 </div>
@@ -1627,6 +1705,9 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                     className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-xs focus:outline-hidden focus:border-amber-500 font-mono"
                     required
                   />
+                  <p className="text-[11px] text-amber-400/90 mt-1">
+                    شماره ورود با تغییر شماره تماس عوض نمی‌شود.
+                  </p>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">منطقه فعالیت</label>
@@ -1641,13 +1722,13 @@ export const TeamTab: React.FC<TeamTabProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">نام کاربری جهت ورود</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">شماره ورود به سامانه (ثابت)</label>
                 <input
                   type="text"
                   value={visitorEditForm.username}
-                  onChange={(e) => setVisitorEditForm({ ...visitorEditForm, username: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-xs focus:outline-hidden focus:border-amber-500 font-mono"
-                  placeholder="آیدی ورود"
+                  readOnly
+                  disabled
+                  className="w-full px-3 py-2 rounded-xl bg-slate-900/60 border border-slate-800 text-slate-400 text-xs font-mono cursor-not-allowed opacity-80"
                 />
               </div>
 
@@ -1824,7 +1905,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
             </div>
 
             <p className="text-[11px] text-slate-400 leading-relaxed">
-              پس از تایید، کاربر می‌تواند با نام کاربری خود و رمز عبور <strong className="text-amber-300 font-mono">123456</strong> وارد سامانه شود.
+              پس از تایید، کاربر می‌تواند با شماره همراه ثبت‌شده خود و رمز عبور <strong className="text-amber-300 font-mono">123456</strong> وارد سامانه شود.
             </p>
 
             {resetPasswordError && (
@@ -1865,6 +1946,118 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Admin Change Self Password Modal */}
+      {isAdminChangePasswordOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center border border-amber-500/30">
+                  <KeyRound className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-100">تغییر رمز عبور مدیر</h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">احراز با رمز فعلی و ثبت رمز جدید</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAdminChangePasswordOpen(false);
+                  setAdminChangePassError(null);
+                  setAdminChangePassSuccess(null);
+                }}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAdminChangePasswordSubmit} className="space-y-3">
+              {adminChangePassError && (
+                <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{adminChangePassError}</span>
+                </div>
+              )}
+
+              {adminChangePassSuccess && (
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>{adminChangePassSuccess}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">رمز عبور فعلی</label>
+                <input
+                  type="password"
+                  value={adminCurrentPassword}
+                  onChange={(e) => setAdminCurrentPassword(e.target.value)}
+                  placeholder="رمز فعلی ورود"
+                  disabled={isAdminChangingPass}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-xs font-mono focus:outline-none focus:border-amber-500"
+                  dir="ltr"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">رمز عبور جدید</label>
+                <input
+                  type="password"
+                  value={adminNewPassword}
+                  onChange={(e) => setAdminNewPassword(e.target.value)}
+                  placeholder="حداقل ۶ کاراکتر"
+                  disabled={isAdminChangingPass}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-xs font-mono focus:outline-none focus:border-amber-500"
+                  dir="ltr"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">تکرار رمز عبور جدید</label>
+                <input
+                  type="password"
+                  value={adminConfirmPassword}
+                  onChange={(e) => setAdminConfirmPassword(e.target.value)}
+                  placeholder="تکرار رمز جدید"
+                  disabled={isAdminChangingPass}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-xs font-mono focus:outline-none focus:border-amber-500"
+                  dir="ltr"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsAdminChangePasswordOpen(false)}
+                  disabled={isAdminChangingPass}
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition cursor-pointer"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="submit"
+                  disabled={isAdminChangingPass}
+                  className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition cursor-pointer disabled:opacity-50"
+                >
+                  {isAdminChangingPass ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>در حال تغییر...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>ذخیره رمز جدید</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

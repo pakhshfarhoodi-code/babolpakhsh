@@ -29,7 +29,16 @@ import {
   INITIAL_INVENTORY_TRANSACTIONS,
 } from '../data/initialData';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { STORAGE_KEYS, generateUniqueId, toSyntheticEmail, addDeletedId } from './utils';
+import {
+  STORAGE_KEYS,
+  generateUniqueId,
+  toSyntheticEmail,
+  addDeletedId,
+  normalizeDigits,
+  normalizePhone,
+  isValidMobile,
+  MIN_PASSWORD_LENGTH,
+} from './utils';
 import { useAuth } from './hooks/useAuth';
 import { useCatalog } from './hooks/useCatalog';
 import { useWarehouse } from './hooks/useWarehouse';
@@ -52,7 +61,6 @@ interface AppContextType {
 
   isLoggedIn: boolean;
   currentUser: CurrentUser;
-  login: (profileId: string) => void;
   loginWithCredentials: (username: string, password: string, allowedRoles?: UserRole[]) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
   showToast: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
@@ -138,11 +146,11 @@ interface AppContextType {
   deleteUnit: (unitName: string) => { success: boolean; message: string };
   registerSupermarket: (data: {
     name: string;
-    owner: string;
+    owner?: string;
     phone: string;
-    address: string;
-    assigned_visitor_id: string;
-    username: string;
+    address?: string;
+    assigned_visitor_id?: string;
+    username?: string;
     password: string;
   }) => Promise<{ success: boolean; message: string; supermarket?: Supermarket }>;
   updateSupermarket: (id: string, payload: UpdateSupermarketPayload) => Promise<{ success: boolean; message: string }>;
@@ -325,17 +333,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Update Supermarket information (both local state and Supabase if online)
   const updateSupermarket = useCallback(async (id: string, payload: UpdateSupermarketPayload): Promise<{ success: boolean; message: string }> => {
     try {
+      let normalizedPhone: string | undefined = undefined;
+      if (payload.phone !== undefined) {
+        normalizedPhone = normalizePhone(payload.phone);
+        if (!isValidMobile(normalizedPhone)) {
+          return { success: false, message: 'شماره موبایل معتبر وارد کنید' };
+        }
+        // Check uniqueness in local state
+        const phoneExistsInState =
+          supermarkets.some((s) => s.id !== id && normalizePhone(s.phone) === normalizedPhone) ||
+          visitors.some((v) => v.id !== id && normalizePhone(v.phone) === normalizedPhone);
+        if (phoneExistsInState) {
+          return { success: false, message: 'این شماره تماس قبلاً برای حساب دیگری ثبت شده است.' };
+        }
+      }
+
       if (isSupabaseConfigured && supabase) {
+        if (normalizedPhone) {
+          // Check uniqueness in profiles table
+          const { data: dupProfile } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('phone', normalizedPhone)
+            .neq('id', id)
+            .maybeSingle();
+
+          if (dupProfile) {
+            return { success: false, message: 'این شماره تماس قبلاً برای حساب دیگری ثبت شده است.' };
+          }
+        }
+
         const updateData: Record<string, unknown> = {};
 
         if (payload.name !== undefined) updateData.name = payload.name.trim();
         if (payload.owner !== undefined) updateData.owner = payload.owner.trim();
-        if (payload.phone !== undefined) updateData.phone = payload.phone.trim();
+        if (normalizedPhone !== undefined) updateData.phone = normalizedPhone;
         if (payload.address !== undefined) updateData.address = payload.address.trim();
         if (payload.is_active !== undefined) updateData.is_active = payload.is_active;
-        if (payload.username !== undefined && payload.username.trim()) {
-          updateData.username = payload.username.trim();
-        }
+        // NOTE: As per requirement 6, do NOT update username column on phone change!
 
         // Only touch assigned_visitor_id if explicitly supplied in payload
         if (payload.assigned_visitor_id !== undefined) {
@@ -353,35 +388,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           updateData.assigned_visitor_id = validVisitorId;
         }
 
-        if (Object.keys(updateData).length > 0) {
-          const { data: updatedRows, error: smError } = await supabase
-            .from('supermarkets')
-            .update(updateData)
-            .eq('id', id)
-            .select();
+        const existingSm = supermarkets.find((s) => s.id === id);
+        if (auth.currentUser?.role === 'supermarket' && auth.currentUser.id === id) {
+          // Supermarket updating own store via secure update_my_store RPC
+          const { error: rpcErr } = await supabase.rpc('update_my_store', {
+            p_name: payload.name ?? existingSm?.name ?? '',
+            p_owner: payload.owner ?? existingSm?.owner ?? '',
+            p_address: payload.address ?? existingSm?.address ?? '',
+            p_phone: normalizedPhone ?? existingSm?.phone ?? '',
+          });
 
-          if (smError) {
-            return { success: false, message: `خطا در ویرایش سوپرمارکت در سرور: ${smError.message}` };
+          if (rpcErr) {
+            return { success: false, message: `خطا در ویرایش اطلاعات فروشگاه: ${rpcErr.message}` };
+          }
+        } else {
+          // Admin or authorized staff direct update
+          if (Object.keys(updateData).length > 0) {
+            const { data: updatedRows, error: smError } = await supabase
+              .from('supermarkets')
+              .update(updateData)
+              .eq('id', id)
+              .select();
+
+            if (smError) {
+              return { success: false, message: `خطا در ویرایش سوپرمارکت در سرور: ${smError.message}` };
+            }
+
+            if (!updatedRows || updatedRows.length === 0) {
+              return { success: false, message: 'ذخیره در سرور انجام نشد (عدم دسترسی یا عدم وجود رکورد).' };
+            }
           }
 
-          if (!updatedRows || updatedRows.length === 0) {
-            return { success: false, message: 'ذخیره در سرور انجام نشد (عدم دسترسی یا عدم وجود رکورد).' };
+          // Also update profiles table ONLY with explicitly provided fields (without changing username)
+          const profileUpdates: Record<string, unknown> = {};
+          if (payload.name !== undefined) profileUpdates.name = payload.name.trim();
+          if (normalizedPhone !== undefined) profileUpdates.phone = normalizedPhone;
+
+          if (Object.keys(profileUpdates).length > 0) {
+            await supabase
+              .from('profiles')
+              .update(profileUpdates)
+              .eq('id', id);
           }
-        }
-
-        // Also update profiles table ONLY with explicitly provided fields
-        const profileUpdates: Record<string, unknown> = {};
-        if (payload.name !== undefined) profileUpdates.name = payload.name.trim();
-        if (payload.phone !== undefined) profileUpdates.phone = payload.phone.trim();
-        if (payload.username !== undefined && payload.username.trim()) {
-          profileUpdates.username = payload.username.trim();
-        }
-
-        if (Object.keys(profileUpdates).length > 0) {
-          await supabase
-            .from('profiles')
-            .update(profileUpdates)
-            .eq('id', id);
         }
       }
 
@@ -392,10 +440,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const next = { ...s };
           if (payload.name !== undefined) next.name = payload.name;
           if (payload.owner !== undefined) next.owner = payload.owner;
-          if (payload.phone !== undefined) next.phone = payload.phone;
+          if (normalizedPhone !== undefined) next.phone = normalizedPhone;
           if (payload.address !== undefined) next.address = payload.address;
           if (payload.is_active !== undefined) next.is_active = payload.is_active;
-          if (payload.username !== undefined) next.username = payload.username;
           if (payload.assigned_visitor_id !== undefined) {
             next.assigned_visitor_id = payload.assigned_visitor_id || 'direct';
           }
@@ -408,7 +455,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در ویرایش مشتری';
       return { success: false, message: msg };
     }
-  }, [visitors, setSupermarkets]);
+  }, [visitors, supermarkets, setSupermarkets]);
 
   // Delete Supermarket (both local and Supabase, unlinking orders so historical invoices remain valid and orders are never deleted)
   const deleteSupermarket = useCallback(async (id: string): Promise<{ success: boolean; message: string }> => {
@@ -441,35 +488,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
 
       if (isSupabaseConfigured && supabase) {
-        // Unlink supermarket_id from orders so foreign key constraint does not block supermarket deletion
-        // Historical invoices maintain their items and snapshot of supermarket_name
-        const { error: orderUnlinkErr } = await supabase
-          .from('orders')
-          .update({ supermarket_id: null })
-          .eq('supermarket_id', id);
+        // Invoke delete_account on edge function to delete Auth user, profiles, and supermarkets rows (preserving orders)
+        const { data: delData, error: delError } = await supabase.functions.invoke(
+          'create-staff-account',
+          {
+            body: {
+              action: 'delete_account',
+              userId: id,
+            },
+          }
+        );
 
-        if (orderUnlinkErr) {
-          return { success: false, message: `خطا در آزادسازی سوابق سفارش‌های فروشگاه: ${orderUnlinkErr.message}` };
-        }
-
-        // Delete from supermarkets table
-        const { error: smError } = await supabase
-          .from('supermarkets')
-          .delete()
-          .eq('id', id);
-
-        if (smError) {
-          return { success: false, message: `خطا در حذف فروشگاه از سرور: ${smError.message}` };
-        }
-
-        // Delete from profiles table
-        const { error: profError } = await supabase
-          .from('profiles')
-          .delete()
-          .eq('id', id);
-
-        if (profError) {
-          console.warn('Profile delete warning on Supabase:', profError.message);
+        if (delError || delData?.success === false) {
+          return {
+            success: false,
+            message: delData?.error || delError?.message || 'خطا در حذف حساب کاربری فروشگاه از سرور.',
+          };
         }
       }
 
@@ -542,35 +576,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return { success: false, message: 'مشتری مورد نظر یافت نشد.' };
       }
 
-      setSupermarkets((prev) =>
-        prev.map((s) => (s.id === id ? { ...s, password: newPassword } : s))
-      );
+      if (!newPassword || newPassword.trim().length < MIN_PASSWORD_LENGTH) {
+        return { success: false, message: `رمز عبور باید حداقل ${MIN_PASSWORD_LENGTH} کاراکتر باشد.` };
+      }
 
       if (isSupabaseConfigured && supabase) {
-        // 1. Update profiles table with the new password
-        await supabase
-          .from('profiles')
-          .update({ password: newPassword })
-          .eq('id', id);
+        const { data, error } = await supabase.functions.invoke('create-staff-account', {
+          body: {
+            action: 'reset_password',
+            userId: id,
+            password: newPassword,
+          },
+        });
 
-        // 2. Update supermarkets table with the new password
-        await supabase
-          .from('supermarkets')
-          .update({ password: newPassword })
-          .eq('id', id);
-
-        // 3. Try to invoke edge function to update Supabase Auth user password if available
-        try {
-          await supabase.functions.invoke('create-staff-account', {
-            body: {
-              action: 'reset_password',
-              userId: id,
-              username: target.username,
-              password: newPassword,
-            },
-          });
-        } catch (fnErr) {
-          console.warn('Supabase password reset function invocation note:', fnErr);
+        if (error || data?.success === false) {
+          return {
+            success: false,
+            message: data?.error || error?.message || 'خطا در بازنشانی رمز عبور در سرور.',
+          };
         }
       }
 
@@ -582,19 +605,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در بازیابی رمز عبور';
       return { success: false, message: msg };
     }
-  }, [supermarkets, setSupermarkets]);
+  }, [supermarkets]);
 
   // Update Visitor information
   const updateVisitor = useCallback(async (id: string, payload: UpdateVisitorPayload): Promise<{ success: boolean; message: string }> => {
     try {
+      let normalizedPhone: string | undefined = undefined;
+      if (payload.phone !== undefined) {
+        normalizedPhone = normalizePhone(payload.phone);
+        if (!isValidMobile(normalizedPhone)) {
+          return { success: false, message: 'شماره موبایل معتبر وارد کنید' };
+        }
+        // Check uniqueness in local state
+        const phoneExistsInState =
+          visitors.some((v) => v.id !== id && normalizePhone(v.phone) === normalizedPhone) ||
+          supermarkets.some((s) => s.id !== id && normalizePhone(s.phone) === normalizedPhone);
+        if (phoneExistsInState) {
+          return { success: false, message: 'این شماره تماس قبلاً برای حساب دیگری ثبت شده است.' };
+        }
+      }
+
       if (isSupabaseConfigured && supabase) {
+        if (normalizedPhone) {
+          const { data: dupProfile } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('phone', normalizedPhone)
+            .neq('id', id)
+            .maybeSingle();
+
+          if (dupProfile) {
+            return { success: false, message: 'این شماره تماس قبلاً برای حساب دیگری ثبت شده است.' };
+          }
+        }
+
         const updateData: Record<string, unknown> = {};
         if (payload.name !== undefined) updateData.name = payload.name.trim();
-        if (payload.phone !== undefined) updateData.phone = payload.phone.trim();
+        if (normalizedPhone !== undefined) updateData.phone = normalizedPhone;
         if (payload.region !== undefined) updateData.region = payload.region.trim();
-        if (payload.username !== undefined) updateData.username = payload.username.trim();
         if (payload.is_active !== undefined) updateData.is_active = payload.is_active;
-        if (payload.password !== undefined) updateData.password = payload.password;
+        // NOTE: As per requirement 6, do NOT update username column on phone change!
 
         if (Object.keys(updateData).length > 0) {
           const { error: visError } = await supabase
@@ -608,9 +658,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           const profileUpdates: Record<string, unknown> = {};
           if (payload.name) profileUpdates.name = payload.name.trim();
-          if (payload.phone) profileUpdates.phone = payload.phone.trim();
-          if (payload.username) profileUpdates.username = payload.username.trim();
-          if (payload.password) profileUpdates.password = payload.password;
+          if (normalizedPhone) profileUpdates.phone = normalizedPhone;
 
           if (Object.keys(profileUpdates).length > 0) {
             await supabase
@@ -622,7 +670,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       setVisitors((prev) =>
-        prev.map((v) => (v.id === id ? { ...v, ...payload } : v))
+        prev.map((v) => {
+          if (v.id !== id) return v;
+          return {
+            ...v,
+            name: payload.name !== undefined ? payload.name.trim() : v.name,
+            phone: normalizedPhone !== undefined ? normalizedPhone : v.phone,
+            region: payload.region !== undefined ? payload.region.trim() : v.region,
+            is_active: payload.is_active !== undefined ? payload.is_active : v.is_active,
+          };
+        })
       );
 
       return { success: true, message: 'مشخصات ویزیتور با موفقیت بروزرسانی شد.' };
@@ -630,7 +687,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در ویرایش ویزیتور';
       return { success: false, message: msg };
     }
-  }, [setVisitors]);
+  }, [visitors, supermarkets, setVisitors]);
 
   // Delete Visitor
   const deleteVisitor = useCallback(async (id: string): Promise<{ success: boolean; message: string }> => {
@@ -639,37 +696,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addDeletedId(STORAGE_KEYS.DELETED_VISITOR_IDS, id);
 
       if (isSupabaseConfigured && supabase) {
-        // Unlink assigned_visitor_id in supermarkets and orders to prevent FK constraint failure
-        const { error: smUnlinkErr } = await supabase.from('supermarkets').update({ assigned_visitor_id: null }).eq('assigned_visitor_id', id);
-        if (smUnlinkErr) {
-          return { success: false, message: `خطا در آزادسازی فروشگاه‌های تحت پوشش ویزیتور: ${smUnlinkErr.message}` };
-        }
+        // Call edge function delete_account to delete Auth user, unbind foreign keys, delete visitor and profile
+        const { data: delData, error: delError } = await supabase.functions.invoke(
+          'create-staff-account',
+          {
+            body: {
+              action: 'delete_account',
+              userId: id,
+            },
+          }
+        );
 
-        const { error: ordUnlinkErr } = await supabase.from('orders').update({ assigned_visitor_id: null }).eq('assigned_visitor_id', id);
-        if (ordUnlinkErr) {
-          return { success: false, message: `خطا در آزادسازی سفارش‌های تحت پوشش ویزیتور: ${ordUnlinkErr.message}` };
-        }
-
-        // Unlink in loading_bills
-        await supabase.from('loading_bills').update({ visitor_id: null }).eq('visitor_id', id);
-
-        // Unlink in order_visitor_history
-        await supabase.from('order_visitor_history').update({ new_visitor_id: null }).eq('new_visitor_id', id);
-        await supabase.from('order_visitor_history').update({ old_visitor_id: null }).eq('old_visitor_id', id);
-
-        // Clean up or unlink reassignment requests
-        await supabase.from('reassignment_requests').delete().or(`from_visitor_id.eq.${id},to_visitor_id.eq.${id}`);
-
-        // Delete from visitors table
-        const { error: visError } = await supabase.from('visitors').delete().eq('id', id);
-        if (visError) {
-          return { success: false, message: `خطا در حذف ویزیتور از سرور: ${visError.message}` };
-        }
-
-        // Delete profile
-        const { error: profError } = await supabase.from('profiles').delete().eq('id', id);
-        if (profError) {
-          console.warn('Profile delete warning:', profError.message);
+        if (delError || delData?.success === false) {
+          return {
+            success: false,
+            message: delData?.error || delError?.message || 'خطا در حذف حساب کاربری ویزیتور از سرور.',
+          };
         }
       }
 
@@ -724,35 +766,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return { success: false, message: 'ویزیتور مورد نظر یافت نشد.' };
       }
 
-      setVisitors((prev) =>
-        prev.map((v) => (v.id === id ? { ...v, password: newPassword } : v))
-      );
+      if (!newPassword || newPassword.trim().length < MIN_PASSWORD_LENGTH) {
+        return { success: false, message: `رمز عبور باید حداقل ${MIN_PASSWORD_LENGTH} کاراکتر باشد.` };
+      }
 
       if (isSupabaseConfigured && supabase) {
-        // 1. Update profiles table with new password
-        await supabase
-          .from('profiles')
-          .update({ password: newPassword })
-          .eq('id', id);
+        const { data, error } = await supabase.functions.invoke('create-staff-account', {
+          body: {
+            action: 'reset_password',
+            userId: id,
+            password: newPassword,
+          },
+        });
 
-        // 2. Update visitors table with new password
-        await supabase
-          .from('visitors')
-          .update({ password: newPassword })
-          .eq('id', id);
-
-        // 3. Try edge function if available
-        try {
-          await supabase.functions.invoke('create-staff-account', {
-            body: {
-              action: 'reset_password',
-              userId: id,
-              username: target.username,
-              password: newPassword,
-            },
-          });
-        } catch (fnErr) {
-          console.warn('Supabase password reset function invocation note:', fnErr);
+        if (error || data?.success === false) {
+          return {
+            success: false,
+            message: data?.error || error?.message || 'خطا در بازنشانی رمز عبور در سرور.',
+          };
         }
       }
 
@@ -764,17 +795,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در بازیابی رمز عبور';
       return { success: false, message: msg };
     }
-  }, [visitors, setVisitors]);
+  }, [visitors]);
 
-  // Thin wrapper to invoke create-staff-account Edge Function
+  // Wrapper to invoke create-staff-account Edge Function
   const createStaffAccount = useCallback(async (payload: CreateStaffAccountPayload): Promise<CreateStaffAccountResult> => {
     const createdVisitorId = generateUniqueId('vis');
-    const cleanUsername = payload.username.trim().toLowerCase();
+    const cleanPhone = normalizePhone(payload.phone);
     const cleanName = payload.name.trim();
-    const cleanPhone = payload.phone.trim();
     const cleanRegion = (payload.region || 'مرکز استان').trim();
+    const cleanPassword = normalizeDigits(payload.password.trim());
+    const cleanUsername = cleanPhone;
 
-    if (!isSupabaseConfigured) {
+    if (!cleanPhone || !isValidMobile(cleanPhone)) {
+      return { success: false, error: 'شماره موبایل معتبر وارد کنید' };
+    }
+
+    if (!cleanPassword || cleanPassword.length < MIN_PASSWORD_LENGTH) {
+      return { success: false, error: `رمز عبور باید حداقل ${MIN_PASSWORD_LENGTH} کاراکتر باشد.` };
+    }
+
+    // Check uniqueness in local state
+    const phoneExistsInState =
+      visitors.some((v) => normalizePhone(v.phone) === cleanPhone) ||
+      supermarkets.some((s) => normalizePhone(s.phone) === cleanPhone);
+
+    if (phoneExistsInState) {
+      return { success: false, error: 'این شماره قبلاً ثبت شده است.' };
+    }
+
+    if (!isSupabaseConfigured || !supabase) {
       if (payload.role === 'visitor') {
         const newVis: Visitor = {
           id: createdVisitorId,
@@ -782,17 +831,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           phone: cleanPhone,
           region: cleanRegion,
           username: cleanUsername,
-          password: payload.password,
           is_active: true,
           created_at: new Date().toISOString(),
         };
-        setVisitors((prev) => {
-          const next = [...prev, newVis];
-          try {
-            localStorage.setItem(STORAGE_KEYS.VISITORS, JSON.stringify(next));
-          } catch {}
-          return next;
-        });
+        setVisitors((prev) => [...prev, newVis]);
       }
       return {
         success: true,
@@ -802,32 +844,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     try {
-      let finalUserId = createdVisitorId;
+      const { data, error } = await supabase.functions.invoke('create-staff-account', {
+        body: {
+          action: 'create_staff',
+          name: cleanName,
+          phone: cleanPhone,
+          role: payload.role,
+          region: cleanRegion,
+          password: cleanPassword,
+        },
+      });
 
-      // 1. Try invoking Edge Function if available
-      try {
-        const { data, error } = await supabase.functions.invoke('create-staff-account', {
-          body: payload,
-        });
-
-        if (!error && data?.success !== false) {
-          if (data?.userId || data?.id) {
-            finalUserId = data.userId || data.id;
-          }
-        }
-      } catch (edgeErr) {
-        console.warn('Edge function invoke skipped or failed, using direct table fallback:', edgeErr);
+      if (error || data?.success === false) {
+        return {
+          success: false,
+          error: data?.error || error?.message || 'خطا در ایجاد حساب کاربری پرسنل در سرور.',
+        };
       }
 
-      // 2. Direct table upsert in Supabase to guarantee credentials exist in profiles & visitors tables
-      await supabase.from('profiles').upsert({
-        id: finalUserId,
-        name: cleanName,
-        phone: cleanPhone,
-        role: payload.role,
-        username: cleanUsername,
-        password: payload.password,
-      });
+      const finalUserId = data?.userId || createdVisitorId;
 
       if (payload.role === 'visitor') {
         const newVis: Visitor = {
@@ -836,37 +871,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           phone: cleanPhone,
           region: cleanRegion,
           username: cleanUsername,
-          password: payload.password,
           is_active: true,
           created_at: new Date().toISOString(),
         };
 
-        await supabase.from('visitors').upsert({
-          id: finalUserId,
-          name: cleanName,
-          phone: cleanPhone,
-          region: cleanRegion,
-          username: cleanUsername,
-          password: payload.password,
-          is_active: true,
-        });
-
         setVisitors((prev) => {
           const exists = prev.some(
-            (v) => v.id === finalUserId || (v.username && v.username.toLowerCase() === cleanUsername)
+            (v) => v.id === finalUserId || normalizePhone(v.phone) === cleanPhone
           );
-          const next = exists
+          return exists
             ? prev.map((v) =>
-                v.id === finalUserId || (v.username && v.username.toLowerCase() === cleanUsername)
+                v.id === finalUserId || normalizePhone(v.phone) === cleanPhone
                   ? { ...v, ...newVis }
                   : v
               )
             : [...prev, newVis];
-
-          try {
-            localStorage.setItem(STORAGE_KEYS.VISITORS, JSON.stringify(next));
-          } catch {}
-          return next;
         });
       }
 
@@ -879,7 +898,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در ساخت حساب';
       return { success: false, error: msg };
     }
-  }, [setVisitors]);
+  }, [visitors, supermarkets, setVisitors]);
 
   // Direct Assignment / Reassignment by Admin
   const assignOrderVisitor = useCallback(
@@ -915,7 +934,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSelectedSupermarketId: auth.setSelectedSupermarketId,
     isLoggedIn: auth.isLoggedIn,
     currentUser: auth.currentUser,
-    login: auth.login,
     loginWithCredentials: auth.loginWithCredentials,
     logout: auth.logout,
     categories: catalog.categories,
@@ -985,7 +1003,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     auth.setSelectedSupermarketId,
     auth.isLoggedIn,
     auth.currentUser,
-    auth.login,
     auth.loginWithCredentials,
     auth.logout,
     auth.registerSupermarket,

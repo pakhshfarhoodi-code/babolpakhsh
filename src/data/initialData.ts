@@ -7,7 +7,6 @@ export const INITIAL_PROFILES: Profile[] = [
     role: 'admin',
     phone: '09120000000',
     username: 'pakhshfarhoodi@gmail.com',
-    password: '123',
   },
   {
     id: 'admin-main',
@@ -15,7 +14,6 @@ export const INITIAL_PROFILES: Profile[] = [
     role: 'admin',
     phone: '09120000001',
     username: 'admin',
-    password: '123',
   },
   {
     id: 'warehouse-main',
@@ -23,7 +21,6 @@ export const INITIAL_PROFILES: Profile[] = [
     role: 'warehouse',
     phone: '09120000002',
     username: 'warehouse',
-    password: '123',
   },
 ];
 

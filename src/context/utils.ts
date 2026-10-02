@@ -113,23 +113,41 @@ export const normalizeDigits = (str: string): string => {
   return result;
 };
 
-// Synthetic email generator for Supabase Auth that works reliably with English, Persian, numbers, or mixed usernames
-export const toSyntheticEmail = (username: string): string => {
-  const normalized = normalizeDigits(username.trim()).toLowerCase();
-  if (normalized.includes('@')) {
-    return normalized;
+// Security and Authentication Constants
+export const MIN_PASSWORD_LENGTH = 6;
+
+// Standard Iranian mobile phone normalizer: converts 0098/98/+98 or 9xxxxxxxxx to 09xxxxxxxxx
+export const normalizePhone = (str: string): string => {
+  if (!str) return '';
+  let clean = normalizeDigits(String(str).trim()).replace(/\D/g, '');
+  if (clean.startsWith('0098')) {
+    clean = '0' + clean.slice(4);
+  } else if (clean.startsWith('98') && clean.length >= 12) {
+    clean = '0' + clean.slice(2);
+  } else if (clean.startsWith('9') && clean.length === 10) {
+    clean = '0' + clean;
   }
-  // If clean ASCII with length >= 3
-  const clean = normalized.replace(/[^a-z0-9_-]/g, '');
-  if (clean.length >= 3) {
-    return `${clean}@babolpakhsh.internal`;
+  return clean;
+};
+
+// Validates whether input is a valid 11-digit Iranian mobile number (09xxxxxxxxx)
+export const isValidMobile = (str: string): boolean => {
+  const normalized = normalizePhone(str);
+  return /^09\d{9}$/.test(normalized);
+};
+
+// Synthetic email generator for Supabase Auth using normalized phone numbers
+export const toSyntheticEmail = (usernameOrPhone: string): string => {
+  const normalizedPhone = normalizePhone(usernameOrPhone);
+  if (isValidMobile(normalizedPhone)) {
+    return `${normalizedPhone}@babolpakhsh.internal`;
   }
-  // For Persian or non-ASCII strings, encode characters uniquely into hex representation
-  let hex = '';
-  for (let i = 0; i < normalized.length; i++) {
-    hex += normalized.charCodeAt(i).toString(16);
+  const cleanDigits = normalizeDigits(usernameOrPhone).trim().replace(/\D/g, '');
+  if (cleanDigits.length >= 10) {
+    const p = normalizePhone(cleanDigits);
+    return `${p}@babolpakhsh.internal`;
   }
-  return `u_${hex || 'shop'}@babolpakhsh.internal`;
+  return `${normalizedPhone || 'user'}@babolpakhsh.internal`;
 };
 
 // Fallback helper to determine order_channel for legacy orders without explicit channel

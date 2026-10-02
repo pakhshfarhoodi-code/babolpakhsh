@@ -15,7 +15,7 @@ export interface Profile {
   role: UserRole;
   phone: string;
   username: string;
-  password?: string;
+  is_active?: boolean;
   created_at?: string;
 }
 
@@ -71,7 +71,6 @@ export interface Visitor {
   phone: string;
   region: string;
   username?: string;
-  password?: string;
   is_active: boolean;
   created_at?: string;
 }
@@ -85,7 +84,6 @@ export interface Supermarket {
   assigned_visitor_id: string;
   is_active: boolean;
   username?: string;
-  password?: string;
   created_at?: string;
 }
 
@@ -218,7 +216,7 @@ export interface CreateStaffAccountPayload {
   phone: string;
   role: 'admin' | 'warehouse' | 'visitor';
   region?: string;
-  username: string;
+  username?: string;
   password: string;
 }
 
@@ -236,7 +234,6 @@ export interface UpdateSupermarketPayload {
   address?: string;
   assigned_visitor_id?: string | null;
   username?: string;
-  password?: string;
   is_active?: boolean;
 }
 
@@ -245,7 +242,6 @@ export interface UpdateVisitorPayload {
   phone?: string;
   region?: string;
   username?: string;
-  password?: string;
   is_active?: boolean;
 }
 

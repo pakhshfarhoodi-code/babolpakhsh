@@ -1,6 +1,21 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Store, User, Phone, MapPin, Truck, Check, X, AlertCircle, KeyRound, AtSign } from 'lucide-react';
+import {
+  Store,
+  User,
+  Phone,
+  MapPin,
+  Truck,
+  Check,
+  X,
+  AlertCircle,
+  KeyRound,
+  Eye,
+  EyeOff,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react';
+import { normalizePhone, isValidMobile, MIN_PASSWORD_LENGTH } from '../context/utils';
 
 interface SupermarketRegisterModalProps {
   isOpen: boolean;
@@ -19,14 +34,14 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
 
   const [name, setName] = useState('');
   const [owner, setOwner] = useState('');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [address, setAddress] = useState('');
   const [assignedVisitorId, setAssignedVisitorId] = useState(defaultVisitorId || 'direct');
+  const [showMoreInfo, setShowMoreInfo] = useState(false);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-
   const [isSuccessModal, setIsSuccessModal] = useState(false);
 
   // Sync assigned visitor when defaultVisitorId or isOpen changes
@@ -38,35 +53,34 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
 
   if (!isOpen) return null;
 
+  const isRegisteredByVisitor = Boolean(defaultVisitorId);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (!name.trim()) {
+    const cleanName = name.trim();
+    const cleanPhone = normalizePhone(phone);
+    const cleanPassword = password.trim();
+    const cleanAddress = address.trim();
+
+    if (!cleanName) {
       setError('لطفاً نام فروشگاه یا هایپرمارکت را وارد کنید.');
       return;
     }
-    if (!owner.trim()) {
-      setError('لطفاً نام و نام خانوادگی مدیر فروشگاه را وارد کنید.');
+    if (!cleanPhone || !isValidMobile(cleanPhone)) {
+      setError('شماره موبایل معتبر وارد کنید (نمونه: ۰۹۱۲۳۴۵۶۷۸۹).');
       return;
     }
-    if (!phone.trim()) {
-      setError('لطفاً شماره تماس معتبر وارد کنید.');
-      return;
-    }
-    if (!username.trim()) {
-      setError('لطفاً نام کاربری دلخواه جهت ورود به حساب کاربری را وارد نمایید.');
-      return;
-    }
-    if (!password.trim()) {
+    if (!cleanPassword) {
       setError('لطفاً رمز عبور را جهت ورود به حساب کاربری وارد نمایید.');
       return;
     }
-    if (password.trim().length < 3) {
-      setError('رمز عبور باید حداقل ۳ کاراکتر باشد.');
+    if (cleanPassword.length < MIN_PASSWORD_LENGTH) {
+      setError(`رمز عبور باید حداقل ${MIN_PASSWORD_LENGTH} کاراکتر باشد.`);
       return;
     }
-    if (!address.trim()) {
+    if (!cleanAddress) {
       setError('لطفاً آدرس دقیق جهت ارسال سفارشات را درج کنید.');
       return;
     }
@@ -74,13 +88,12 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
     setIsSubmitting(true);
     try {
       const result = await registerSupermarket({
-        name: name.trim(),
+        name: cleanName,
         owner: owner.trim(),
-        phone: phone.trim(),
-        address: address.trim(),
-        assigned_visitor_id: assignedVisitorId,
-        username: username.trim(),
-        password: password.trim(),
+        phone: cleanPhone,
+        address: cleanAddress,
+        assigned_visitor_id: isRegisteredByVisitor ? defaultVisitorId : assignedVisitorId,
+        password: cleanPassword,
       });
 
       if (result.success) {
@@ -103,6 +116,7 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
   };
 
   if (isSuccessModal) {
+    const registeredPhone = normalizePhone(phone);
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
         <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden p-6 text-center space-y-4">
@@ -113,7 +127,7 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
           <div className="space-y-1.5">
             <h3 className="text-base font-bold text-slate-100">حساب کاربری شما با موفقیت ایجاد و فعال شد</h3>
             <p className="text-xs text-slate-300 leading-relaxed">
-              حساب فروشگاه <strong className="text-amber-400">«{name}»</strong> فعال گردید. اکنون می‌توانید با نام کاربری <strong className="text-amber-300 font-mono">{username}</strong> و رمز عبور تعیین‌شده وارد سامانه شوید.
+              حساب فروشگاه <strong className="text-amber-400">«{name}»</strong> فعال گردید. اکنون می‌توانید با شماره موبایل <strong className="text-amber-300 font-mono dir-ltr">{registeredPhone}</strong> و رمز عبور تعیین‌شده وارد سامانه شوید.
             </p>
           </div>
 
@@ -140,6 +154,7 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-100">ثبت‌نام و عضویت فروشگاه</h2>
+              <p className="text-xs text-slate-400">ثبت مستقیم با شماره موبایل و رمز عبور</p>
             </div>
           </div>
           <button
@@ -159,6 +174,7 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
             </div>
           )}
 
+          {/* 1. Store Name */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5">
               نام فروشگاه / سوپرمارکت <span className="text-amber-400">*</span>
@@ -166,7 +182,7 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
             <div className="relative">
               <input
                 type="text"
-                placeholder=""
+                placeholder="مثلاً: هایپرمارکت ساحل"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500 transition"
@@ -175,101 +191,55 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                نام مدیریت یا مسئول <span className="text-amber-400">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder=""
-                  value={owner}
-                  onChange={(e) => setOwner(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500 transition"
-                />
-                <User className="w-4 h-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                شماره تلفن همراه <span className="text-amber-400">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  dir="ltr"
-                  placeholder=""
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500 font-mono text-left transition"
-                />
-                <Phone className="w-4 h-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                نام کاربری جهت ورود به حساب <span className="text-amber-400">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  dir="ltr"
-                  required
-                  placeholder=""
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500 font-mono text-left transition"
-                />
-                <AtSign className="w-4 h-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                رمز عبور حساب <span className="text-amber-400">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  type="password"
-                  dir="ltr"
-                  required
-                  placeholder=""
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500 font-mono text-left transition"
-                />
-                <KeyRound className="w-4 h-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
-              </div>
-            </div>
-          </div>
-
+          {/* 2. Mobile Phone with Helper Note */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-              ویزیتور مسئول یا نحوه خرید <span className="text-slate-400 font-normal">(اختیاری)</span>
+              شماره تلفن همراه <span className="text-amber-400">*</span>
             </label>
             <div className="relative">
-              <select
-                dir="rtl"
-                value={assignedVisitorId}
-                onChange={(e) => setAssignedVisitorId(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-3.5 pl-10 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500 transition appearance-none cursor-pointer text-right"
+              <input
+                type="tel"
+                inputMode="tel"
+                dir="ltr"
+                placeholder="۰۹۱۲۳۴۵۶۷۸۹"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500 font-mono text-left transition"
+              />
+              <Phone className="w-4 h-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
+            </div>
+            <p className="text-[11px] text-amber-400/90 mt-1">
+              این شماره به عنوان نام کاربری ورود شما به سامانه استفاده خواهد شد.
+            </p>
+          </div>
+
+          {/* 3. Password with show/hide toggle */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+              رمز عبور حساب <span className="text-amber-400">*</span> (حداقل ۶ کاراکتر)
+            </label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                dir="ltr"
+                required
+                placeholder="••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-3.5 pl-10 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500 font-mono text-left transition"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute left-3 top-2.5 p-1 text-slate-400 hover:text-slate-200 transition cursor-pointer"
+                title={showPassword ? 'پنهان کردن رمز' : 'نمایش رمز'}
               >
-                <option value="direct" className="bg-slate-900 text-slate-100 py-2 px-3">خرید مستقیم از پخش فرهودی</option>
-                {visitors.filter((v) => v.is_active !== false).map((v) => (
-                  <option key={v.id} value={v.id} className="bg-slate-900 text-slate-100 py-2 px-3">
-                    {v.name} — ({v.region})
-                  </option>
-                ))}
-              </select>
-              <Truck className="w-4 h-4 text-slate-500 absolute left-3 top-3.5 pointer-events-none" />
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 
+          {/* 4. Address */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5">
               آدرس دقیق فروشگاه <span className="text-amber-400">*</span>
@@ -277,13 +247,73 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
             <div className="relative">
               <textarea
                 rows={2}
-                placeholder=""
+                placeholder="خیابان، کوچه، پلاک..."
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500 transition resize-none"
               />
               <MapPin className="w-4 h-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
             </div>
+          </div>
+
+          {/* 5. Collapsed "اطلاعات بیشتر" section (Manager name + visitor) */}
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={() => setShowMoreInfo((prev) => !prev)}
+              className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 text-xs font-medium text-slate-300 hover:text-slate-100 hover:bg-slate-950 transition cursor-pointer"
+            >
+              <span>اطلاعات بیشتر (اختیاری)</span>
+              {showMoreInfo ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+            </button>
+
+            {showMoreInfo && (
+              <div className="mt-3 p-3.5 rounded-xl bg-slate-950/80 border border-slate-800/90 space-y-3.5 animate-in fade-in duration-150">
+                {/* Manager Name */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    نام مدیریت یا مسئول
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="نام و نام خانوادگی مدیر فروشگاه"
+                      value={owner}
+                      onChange={(e) => setOwner(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-100 focus:outline-none focus:border-amber-500 transition"
+                    />
+                    <User className="w-4 h-4 text-slate-500 absolute left-3 top-2.5 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* Assigned Visitor - ONLY shown if NOT registered by visitor */}
+                {!isRegisteredByVisitor && (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      ویزیتور مسئول یا نحوه خرید
+                    </label>
+                    <div className="relative">
+                      <select
+                        dir="rtl"
+                        value={assignedVisitorId}
+                        onChange={(e) => setAssignedVisitorId(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-800 rounded-xl pr-3.5 pl-10 py-2 text-xs text-slate-100 focus:outline-none focus:border-amber-500 transition appearance-none cursor-pointer text-right"
+                      >
+                        <option value="direct" className="bg-slate-900 text-slate-100 py-1.5 px-3">
+                          خرید مستقیم از پخش فرهودی
+                        </option>
+                        {visitors.filter((v) => v.is_active !== false).map((v) => (
+                          <option key={v.id} value={v.id} className="bg-slate-900 text-slate-100 py-1.5 px-3">
+                            {v.name} — ({v.region})
+                          </option>
+                        ))}
+                      </select>
+                      <Truck className="w-4 h-4 text-slate-500 absolute left-3 top-2.5 pointer-events-none" />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Footer Action */}

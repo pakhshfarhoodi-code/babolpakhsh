@@ -466,21 +466,11 @@ export function useWarehouse({
 
     if (isSupabaseConfigured && supabase) {
       supabase
-        .from('products')
-        .update({ stock: targetStock })
-        .eq('id', productId)
-        .then(({ error }) => {
-          if (error) console.error('خطا در به‌روزرسانی موجودی مرجوعی در Supabase:', error);
-        });
-
-      supabase
-        .from('inventory_transactions')
-        .insert({
-          id: txId,
-          product_id: productId,
-          transaction_type: 'return',
-          quantity: Math.abs(quantity),
-          reference_id: refReason,
+        .rpc('adjust_product_stock_transaction', {
+          p_product_id: productId,
+          p_quantity: Math.abs(quantity),
+          p_tx_type: 'return',
+          p_reference: refReason,
         })
         .then(({ error }) => {
           if (error) console.error('خطا در ثبت تراکنش مرجوعی در Supabase:', error);
@@ -528,23 +518,14 @@ export function useWarehouse({
 
     if (isSupabaseConfigured && supabase) {
       supabase
-        .from('products')
-        .update({ stock: targetStock })
-        .eq('id', productId)
-        .then(({ error }) => {
-          if (error) console.error('خطا در به‌روزرسانی موجودی انبار روی Supabase:', error);
-        });
-
-      supabase
-        .from('inventory_transactions')
-        .insert({
-          product_id: productId,
-          transaction_type: 'manual_adjustment',
-          quantity: additionalStock,
-          reference_id: 'ورود به انبار سردخانه',
+        .rpc('adjust_product_stock_transaction', {
+          p_product_id: productId,
+          p_quantity: additionalStock,
+          p_tx_type: 'manual_adjustment',
+          p_reference: 'ورود به انبار سردخانه',
         })
         .then(({ error }) => {
-          if (error) console.error('خطا در ثبت تراکنش انبار روی Supabase:', error);
+          if (error) console.error('خطا در به‌روزرسانی موجودی انبار روی Supabase:', error);
         });
     }
   }, [products, setProducts]);

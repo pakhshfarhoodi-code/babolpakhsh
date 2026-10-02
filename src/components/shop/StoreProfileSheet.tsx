@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { Supermarket, Visitor } from '../../types';
 import { useApp } from '../../context/AppContext';
+import { MIN_PASSWORD_LENGTH, normalizePhone } from '../../context/utils';
+import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import {
   X,
   Store,
@@ -32,6 +34,7 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
   const { visitors, updateSupermarket, resetSupermarketPassword } = useApp();
 
   const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -52,15 +55,20 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
     setError(null);
     setSuccess(null);
 
+    const cleanCurrent = currentPassword.trim();
     const cleanPass = newPassword.trim();
     const cleanConfirm = confirmPassword.trim();
 
+    if (!cleanCurrent) {
+      setError('لطفاً رمز عبور فعلی خود را وارد نمایید.');
+      return;
+    }
     if (!cleanPass) {
       setError('لطفاً رمز عبور جدید را وارد نمایید.');
       return;
     }
-    if (cleanPass.length < 4) {
-      setError('رمز عبور جدید باید حداقل ۴ کاراکتر باشد.');
+    if (cleanPass.length < MIN_PASSWORD_LENGTH) {
+      setError(`رمز عبور جدید باید حداقل ${MIN_PASSWORD_LENGTH} کاراکتر باشد.`);
       return;
     }
     if (cleanPass !== cleanConfirm) {
@@ -70,18 +78,44 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
 
     setIsSubmitting(true);
     try {
-      const res = await resetSupermarketPassword(store.id, cleanPass);
-      if (res.success) {
-        setSuccess('رمز عبور حساب کاربری فروشگاه با موفقیت تغییر یافت.');
-        setNewPassword('');
-        setConfirmPassword('');
-        setTimeout(() => {
-          setShowPasswordForm(false);
-          setSuccess(null);
-        }, 2000);
+      if (isSupabaseConfigured && supabase) {
+        // 1. Verify current password
+        const phone = normalizePhone(store.phone);
+        const email = `${phone}@babolpakhsh.internal`;
+
+        const { error: verifyErr } = await supabase.auth.signInWithPassword({
+          email,
+          password: cleanCurrent,
+        });
+
+        if (verifyErr) {
+          setError('رمز عبور فعلی نادرست است.');
+          setIsSubmitting(false);
+          return;
+        }
+
+        // 2. Update user password in Supabase Auth
+        const { error: updateErr } = await supabase.auth.updateUser({
+          password: cleanPass,
+        });
+
+        if (updateErr) {
+          setError(updateErr.message || 'خطا در تغییر رمز عبور در سرور.');
+          setIsSubmitting(false);
+          return;
+        }
       } else {
-        setError(res.message || 'خطا در تغییر رمز عبور.');
+        await resetSupermarketPassword(store.id, cleanPass);
       }
+
+      setSuccess('رمز عبور با موفقیت تغییر یافت.');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setTimeout(() => {
+        setShowPasswordForm(false);
+        setSuccess(null);
+      }, 2000);
     } catch {
       setError('خطایی در فرایند تغییر رمز عبور رخ داد.');
     } finally {
@@ -128,8 +162,8 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
           {store?.username && (
             <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80">
               <div className="flex items-center gap-2 text-slate-400">
-                <AtSign className="w-4 h-4 text-emerald-400" />
-                <span>نام کاربری ورود:</span>
+                <Phone className="w-4 h-4 text-emerald-400" />
+                <span>شماره ورود:</span>
               </div>
               <span className="font-mono font-bold text-emerald-300 dir-ltr">{store.username}</span>
             </div>
@@ -239,12 +273,25 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
 
               <div className="space-y-2">
                 <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">رمز عبور فعلی</label>
+                  <input
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    placeholder="رمز عبور فعلی ورود"
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 text-xs font-mono focus:outline-none focus:border-amber-500"
+                    dir="ltr"
+                  />
+                </div>
+
+                <div>
                   <label className="block text-[11px] font-semibold text-slate-300 mb-1">رمز عبور جدید</label>
                   <input
                     type="password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="حداقل ۴ کاراکتر"
+                    placeholder="حداقل ۶ کاراکتر"
                     disabled={isSubmitting}
                     className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 text-xs font-mono focus:outline-none focus:border-amber-500"
                     dir="ltr"

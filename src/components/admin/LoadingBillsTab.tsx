@@ -5,6 +5,7 @@ import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { formatPrice } from './helpers';
 import { formatOrderDate } from '../visitor/helpers';
 import { VisitorInvoicePrintModal } from '../visitor/VisitorInvoicePrintModal';
+import { DirectInvoiceSheet } from './DirectInvoiceSheet';
 import {
   Search,
   Truck,
@@ -176,7 +177,12 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
   // 5. Print modal
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
-  // 6. Audit trail state
+  // 6. Direct Invoice Sheet Modal
+  const [isDirectInvoiceOpen, setIsDirectInvoiceOpen] = useState(false);
+  const [directInvoiceMode, setDirectInvoiceMode] = useState<'visitor' | 'direct_store'>('visitor');
+  const [isDirectInvoiceMenuOpen, setIsDirectInvoiceMenuOpen] = useState(false);
+
+  // 7. Audit trail state
   const [auditLogs, setAuditLogs] = useState<InvoiceAudit[]>([]);
   const [isLoadingAudit, setIsLoadingAudit] = useState(false);
   const [isAuditAccordionOpen, setIsAuditAccordionOpen] = useState(false);
@@ -783,13 +789,74 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
           </p>
         </div>
 
-        {/* Pending Counter alert banner if pending exists */}
-        {statusCounts.pending > 0 && (
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-bold animate-pulse">
-            <Clock className="w-4 h-4 text-amber-400 shrink-0" />
-            <span>{statusCounts.pending} فاکتور منتظر بررسی شما</span>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {/* Direct Invoice Dropdown Menu */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsDirectInvoiceMenuOpen((prev) => !prev)}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold transition shadow-md shadow-emerald-600/30 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ صدور فاکتور مستقیم</span>
+              <ChevronDown className="w-3.5 h-3.5 mr-0.5" />
+            </button>
+
+            {isDirectInvoiceMenuOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-20"
+                  onClick={() => setIsDirectInvoiceMenuOpen(false)}
+                />
+                <div className="absolute left-0 mt-2 w-56 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl z-30 py-1.5 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDirectInvoiceMode('visitor');
+                      setIsDirectInvoiceOpen(true);
+                      setIsDirectInvoiceMenuOpen(false);
+                    }}
+                    className="w-full px-3.5 py-2.5 text-right text-xs font-semibold text-slate-200 hover:bg-slate-800 hover:text-emerald-400 flex items-center gap-2.5 transition cursor-pointer"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center">
+                      <Truck className="w-4 h-4" />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="font-bold">برای ویزیتور</span>
+                      <span className="text-[10px] text-slate-400">تخصیص سفارش و اقلام مازاد</span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDirectInvoiceMode('direct_store');
+                      setIsDirectInvoiceOpen(true);
+                      setIsDirectInvoiceMenuOpen(false);
+                    }}
+                    className="w-full px-3.5 py-2.5 text-right text-xs font-semibold text-slate-200 hover:bg-slate-800 hover:text-blue-400 flex items-center gap-2.5 transition cursor-pointer border-t border-slate-800/80"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-blue-500/15 text-blue-400 flex items-center justify-center">
+                      <Store className="w-4 h-4" />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="font-bold">برای فروشگاه</span>
+                      <span className="text-[10px] text-slate-400">صدور فاکتور و تحویل مستقیم</span>
+                    </div>
+                  </button>
+                </div>
+              </>
+            )}
           </div>
-        )}
+
+          {/* Pending Counter alert banner if pending exists */}
+          {statusCounts.pending > 0 && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-bold animate-pulse">
+              <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>{statusCounts.pending} فاکتور منتظر بررسی شما</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 2. Status Filter Chips with Counts */}
@@ -1856,6 +1923,19 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
             }
           }
           products={products}
+        />
+      )}
+
+      {/* Direct Invoice Sheet (Visitor or Store) */}
+      {isDirectInvoiceOpen && (
+        <DirectInvoiceSheet
+          isOpen={isDirectInvoiceOpen}
+          mode={directInvoiceMode}
+          priceMode={directInvoiceMode === 'direct_store' ? 'store' : 'visitor'}
+          onClose={() => setIsDirectInvoiceOpen(false)}
+          onSuccess={() => {
+            refreshData();
+          }}
         />
       )}
     </div>

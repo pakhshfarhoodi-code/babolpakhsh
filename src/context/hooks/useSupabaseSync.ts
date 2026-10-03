@@ -14,6 +14,31 @@ import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { LEGACY_MOCK_NAMES } from './useCatalog';
 import { STORAGE_KEYS, getOrderChannel, purgeOperationalLocalStorage } from '../utils';
 
+export type SyncTable =
+  | 'products'
+  | 'orders'
+  | 'categories'
+  | 'brands'
+  | 'reassignment_requests'
+  | 'supermarkets'
+  | 'visitors'
+  | 'loading_bills'
+  | 'inventory_transactions'
+  | 'product_likes';
+
+export const ALL_SYNC_TABLES: SyncTable[] = [
+  'products',
+  'orders',
+  'categories',
+  'brands',
+  'reassignment_requests',
+  'supermarkets',
+  'visitors',
+  'loading_bills',
+  'inventory_transactions',
+  'product_likes',
+];
+
 interface UseSupabaseSyncProps {
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
   setOrders: React.Dispatch<React.SetStateAction<Order[]>>;
@@ -54,233 +79,438 @@ export function useSupabaseSync({
 }: UseSupabaseSyncProps) {
   const isInitialFetchDoneRef = useRef(false);
 
-  // 1. Supabase Database-First Fetch & Sync
-  const loadFromSupabase = useCallback(async () => {
+  // 1. Memoized Stringified State Cache to avoid redundant React re-renders
+  const lastStateJsonRef = useRef<Record<SyncTable, string>>({
+    products: '',
+    orders: '',
+    categories: '',
+    brands: '',
+    reassignment_requests: '',
+    supermarkets: '',
+    visitors: '',
+    loading_bills: '',
+    inventory_transactions: '',
+    product_likes: '',
+  });
+
+  // 2. Debounce and Execution Lock Tracking
+  const dirtyTablesRef = useRef<Set<SyncTable>>(new Set());
+  const isFetchingRef = useRef<boolean>(false);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 3. Granular Table Fetch Functions with Explicit Column Projections
+
+  // A. Fetch Products
+  const fetchProducts = useCallback(async () => {
+    if (!supabase) return;
+    const { data: prods, error: prodsErr } = await supabase
+      .from('products')
+      .select('id, category_id, brand, name, price, visitor_price, consumer_price, stock, reserved_stock, unit, items_per_package, image_url, is_active, is_market_test, created_at');
+
+    if (prodsErr) throw prodsErr;
+
+    const validProds: Product[] = (prods || [])
+      .filter((p: Product) => !LEGACY_MOCK_NAMES.has(p.name?.trim()))
+      .map((p: Product) => ({
+        ...p,
+        is_active: p.is_active ?? true,
+        is_market_test: Boolean(p.is_market_test),
+      }));
+
+    const jsonStr = JSON.stringify(validProds);
+    if (validProds.length > 0) {
+      if (lastStateJsonRef.current.products !== jsonStr) {
+        lastStateJsonRef.current.products = jsonStr;
+        setProducts(validProds);
+        try {
+          localStorage.setItem(STORAGE_KEYS.PRODUCTS, jsonStr);
+        } catch {}
+      }
+    } else {
+      try {
+        const localSaved = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
+        if (localSaved) {
+          const parsed = JSON.parse(localSaved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const fallbackJson = JSON.stringify(parsed);
+            if (lastStateJsonRef.current.products !== fallbackJson) {
+              lastStateJsonRef.current.products = fallbackJson;
+              setProducts(parsed);
+            }
+          }
+        }
+      } catch {}
+    }
+  }, [setProducts]);
+
+  // B. Fetch Orders with Items
+  const fetchOrders = useCallback(async () => {
+    if (!supabase) return;
+    const { data: ords, error: ordsErr } = await supabase
+      .from('orders')
+      .select('id, supermarket_id, supermarket_name, assigned_visitor_id, visitor_name, status, total_amount, order_source, order_channel, reassignment_id, loading_bill_id, invoice_revised_at, order_date, stock_deducted, items:order_items(id, order_id, product_id, name, price, quantity, items_per_package, unit, created_at)');
+
+    if (ordsErr) throw ordsErr;
+
+    const cleanOrds: Order[] = (ords || [])
+      .filter(
+        (o: Order) =>
+          Boolean(o.id) &&
+          !o.items?.some((it) => LEGACY_MOCK_NAMES.has(it.name?.trim()))
+      )
+      .map((o: Order) => ({
+        ...o,
+        supermarket_id: o.supermarket_id || '',
+        supermarket_name: o.supermarket_name || 'فروشگاه نامشخص',
+        assigned_visitor_id: o.assigned_visitor_id || 'direct',
+        visitor_name:
+          o.visitor_name ||
+          (o.assigned_visitor_id && o.assigned_visitor_id !== 'direct'
+            ? 'ویزیتور'
+            : 'خرید مستقیم از پخش مرکزی'),
+        order_channel: getOrderChannel(o),
+      }));
+
+    const jsonStr = JSON.stringify(cleanOrds);
+    if (lastStateJsonRef.current.orders !== jsonStr) {
+      lastStateJsonRef.current.orders = jsonStr;
+      setOrders(cleanOrds);
+    }
+  }, [setOrders]);
+
+  // C. Fetch Categories
+  const fetchCategories = useCallback(async () => {
+    if (!supabase) return;
+    const { data: cats, error: catsErr } = await supabase
+      .from('categories')
+      .select('id, name, icon, sort_order, created_at')
+      .order('sort_order', { ascending: true });
+
+    if (catsErr) throw catsErr;
+
+    if (cats && cats.length > 0) {
+      const jsonStr = JSON.stringify(cats);
+      if (lastStateJsonRef.current.categories !== jsonStr) {
+        lastStateJsonRef.current.categories = jsonStr;
+        setCategories(cats);
+      }
+    }
+  }, [setCategories]);
+
+  // D. Fetch Brands
+  const fetchBrands = useCallback(async () => {
+    if (!supabase) return;
+    const { data: brs, error: brsErr } = await supabase.from('brands').select('name');
+    if (brsErr) throw brsErr;
+
+    if (brs && brs.length > 0) {
+      const dbBrandNames = Array.from(new Set(brs.map((b: { name: string }) => b.name).filter(Boolean)));
+      const jsonStr = JSON.stringify(dbBrandNames);
+      if (lastStateJsonRef.current.brands !== jsonStr) {
+        lastStateJsonRef.current.brands = jsonStr;
+        setBrands(dbBrandNames);
+      }
+    }
+  }, [setBrands]);
+
+  // E. Fetch Reassignment Requests
+  const fetchReassignmentRequests = useCallback(async () => {
+    if (!supabase) return;
+    const { data: reassigns, error: reassignErr } = await supabase
+      .from('reassignment_requests')
+      .select('id, order_id, supermarket_name, from_visitor_id, from_visitor_name, to_visitor_id, to_visitor_name, status, timestamp, reason')
+      .order('timestamp', { ascending: false });
+
+    if (reassignErr) throw reassignErr;
+
+    if (reassigns) {
+      const jsonStr = JSON.stringify(reassigns);
+      if (lastStateJsonRef.current.reassignment_requests !== jsonStr) {
+        lastStateJsonRef.current.reassignment_requests = jsonStr;
+        setReassignmentRequests(reassigns);
+      }
+    }
+  }, [setReassignmentRequests]);
+
+  // F. Fetch Supermarkets & Profiles
+  const fetchSupermarkets = useCallback(async () => {
+    if (!supabase) return;
+    const [smsRes, profRes] = await Promise.all([
+      supabase
+        .from('supermarkets')
+        .select('id, name, owner, phone, address, assigned_visitor_id, is_active, username, created_at'),
+      supabase
+        .from('profiles')
+        .select('id, username'),
+    ]);
+
+    if (smsRes.error) throw smsRes.error;
+
+    const profileMap = new Map<string, string>(
+      (profRes.data || []).map((p: { id: string; username?: string }) => [p.id, p.username || ''])
+    );
+
+    const cleanSms: Supermarket[] = (smsRes.data || []).map((sm: any) => {
+      const profUsername = profileMap.get(sm.id);
+      return {
+        id: sm.id,
+        name: sm.name,
+        owner: sm.owner || '',
+        phone: sm.phone || '',
+        address: sm.address || '',
+        assigned_visitor_id: sm.assigned_visitor_id || 'direct',
+        is_active: sm.is_active ?? true,
+        username: profUsername || sm.username || sm.phone || '',
+        created_at: sm.created_at,
+      };
+    });
+
+    const jsonStr = JSON.stringify(cleanSms);
+    if (lastStateJsonRef.current.supermarkets !== jsonStr) {
+      lastStateJsonRef.current.supermarkets = jsonStr;
+      setSupermarkets(cleanSms);
+    }
+  }, [setSupermarkets]);
+
+  // G. Fetch Visitors & Profiles
+  const fetchVisitors = useCallback(async () => {
+    if (!supabase) return;
+    const [visRes, profRes] = await Promise.all([
+      supabase
+        .from('visitors')
+        .select('id, name, phone, region, is_active, username, created_at'),
+      supabase
+        .from('profiles')
+        .select('id, username'),
+    ]);
+
+    if (visRes.error) throw visRes.error;
+
+    const profileMap = new Map<string, string>(
+      (profRes.data || []).map((p: { id: string; username?: string }) => [p.id, p.username || ''])
+    );
+
+    const cleanVis: Visitor[] = (visRes.data || []).map((v: any) => {
+      const profUsername = profileMap.get(v.id);
+      let resolvedUsername = profUsername || v.username || '';
+      if (resolvedUsername && resolvedUsername.includes('-') && resolvedUsername.length > 25) {
+        resolvedUsername = '';
+      }
+      return {
+        id: v.id,
+        name: v.name,
+        phone: v.phone || '',
+        region: v.region || 'منطقه توزیع',
+        username: resolvedUsername || v.phone || '',
+        is_active: v.is_active ?? true,
+        created_at: v.created_at,
+      };
+    });
+
+    const jsonStr = JSON.stringify(cleanVis);
+    if (lastStateJsonRef.current.visitors !== jsonStr) {
+      lastStateJsonRef.current.visitors = jsonStr;
+      setVisitors(cleanVis);
+    }
+  }, [setVisitors]);
+
+  // H. Fetch Loading Bills with Items
+  const fetchLoadingBills = useCallback(async () => {
+    if (!supabase) return;
+    let fetchedBills: LoadingBill[] = [];
+    const { data: billsData, error: billsErr } = await supabase
+      .from('loading_bills')
+      .select('id, invoice_no, visitor_id, visitor_name, status, orders_count, total_visitor_cost, total_store_amount, revision_count, last_revised_by, approved_by, approved_at, finalized_by, finalized_at, cancel_reason, admin_note, exit_approved_by, exit_approved_at, created_at, submitted_at, items:loading_bill_items(id, loading_bill_id, order_id, product_id, product_name, quantity, original_quantity, store_price, visitor_price, source, customer_label, line_note, created_at)')
+      .order('created_at', { ascending: false });
+
+    if (!billsErr && billsData) {
+      fetchedBills = billsData;
+    } else {
+      const { data: bData } = await supabase
+        .from('loading_bills')
+        .select('*')
+        .order('created_at', { ascending: false });
+      const { data: iData } = await supabase.from('loading_bill_items').select('*');
+
+      if (bData) {
+        fetchedBills = bData.map((b: LoadingBill) => ({
+          ...b,
+          items: iData ? iData.filter((it: { loading_bill_id: string }) => it.loading_bill_id === b.id) : [],
+        }));
+      }
+    }
+
+    const jsonStr = JSON.stringify(fetchedBills);
+    if (lastStateJsonRef.current.loading_bills !== jsonStr) {
+      lastStateJsonRef.current.loading_bills = jsonStr;
+      setLoadingBills(fetchedBills);
+    }
+  }, [setLoadingBills]);
+
+  // I. Fetch Inventory Transactions (Limited to Admin & Warehouse, max 500 rows)
+  const fetchInventoryTransactions = useCallback(async () => {
+    if (!supabase) return;
+    // Cap: Only fetch for staff roles (admin and warehouse) to save CPU and network bandwidth
+    if (role && role !== 'admin' && role !== 'warehouse') {
+      return;
+    }
+
+    const { data: txData, error: txErr } = await supabase
+      .from('inventory_transactions')
+      .select('id, product_id, product_name, transaction_type, quantity, reference_id, reason, created_at')
+      .order('created_at', { ascending: false })
+      .limit(500);
+
+    if (txErr) throw txErr;
+
+    if (txData) {
+      const validTxData = txData.filter(
+        (t: InventoryTransaction) =>
+          !LEGACY_MOCK_NAMES.has(t.product_name?.trim() || '') &&
+          !t.product_id?.startsWith('prod-')
+      );
+      const jsonStr = JSON.stringify(validTxData);
+      if (lastStateJsonRef.current.inventory_transactions !== jsonStr) {
+        lastStateJsonRef.current.inventory_transactions = jsonStr;
+        setInventoryTransactions(validTxData);
+      }
+    }
+  }, [setInventoryTransactions, role]);
+
+  // J. Fetch Product Likes
+  const fetchProductLikes = useCallback(async () => {
+    if (!supabase || !setProductLikes) return;
+    try {
+      const { data: likesData, error: likesErr } = await supabase
+        .from('product_likes')
+        .select('id, product_id, supermarket_id, supermarket_name, supermarket_owner, supermarket_phone, created_at');
+
+      if (!likesErr && likesData && Array.isArray(likesData)) {
+        const jsonStr = JSON.stringify(likesData);
+        if (lastStateJsonRef.current.product_likes !== jsonStr) {
+          lastStateJsonRef.current.product_likes = jsonStr;
+          setProductLikes(likesData);
+        }
+      }
+    } catch {
+      // optional table
+    }
+  }, [setProductLikes]);
+
+  // 4. Core Execution Coordinator
+  const executeDirtyFetches = useCallback(async () => {
     if (!isSupabaseConfigured || !supabase) {
       setIsDataReady?.(true);
       return;
     }
 
+    if (isFetchingRef.current) {
+      // Another fetch is already in flight. Queued tables will be picked up when it completes.
+      return;
+    }
+
+    isFetchingRef.current = true;
+
+    // Snapshot tables that need sync
+    const tablesToSync = new Set(dirtyTablesRef.current);
+    dirtyTablesRef.current.clear();
+
+    const tasks: Promise<void>[] = [];
+
+    if (tablesToSync.has('products')) tasks.push(fetchProducts());
+    if (tablesToSync.has('orders')) tasks.push(fetchOrders());
+    if (tablesToSync.has('categories')) tasks.push(fetchCategories());
+    if (tablesToSync.has('brands')) tasks.push(fetchBrands());
+    if (tablesToSync.has('reassignment_requests')) tasks.push(fetchReassignmentRequests());
+    if (tablesToSync.has('supermarkets')) tasks.push(fetchSupermarkets());
+    if (tablesToSync.has('visitors')) tasks.push(fetchVisitors());
+    if (tablesToSync.has('loading_bills')) tasks.push(fetchLoadingBills());
+    if (tablesToSync.has('inventory_transactions')) tasks.push(fetchInventoryTransactions());
+    if (tablesToSync.has('product_likes')) tasks.push(fetchProductLikes());
+
     try {
-      // 1. Products - DB is the primary source of truth, fallback to local cache if DB is empty
-      const { data: prods, error: prodsErr } = await supabase.from('products').select('*');
-      if (prodsErr) throw prodsErr;
+      const results = await Promise.allSettled(tasks);
+      const firstRejected = results.find((r) => r.status === 'rejected') as
+        | PromiseRejectedResult
+        | undefined;
 
-      const validProds: Product[] = (prods || [])
-        .filter((p: Product) => !LEGACY_MOCK_NAMES.has(p.name?.trim()))
-        .map((p: Product) => ({
-          ...p,
-          is_active: p.is_active ?? true,
-          is_market_test: Boolean(p.is_market_test),
-        }));
-
-      if (validProds.length > 0) {
-        setProducts(validProds);
-        try {
-          localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(validProds));
-        } catch {}
+      if (firstRejected) {
+        const msg =
+          firstRejected.reason instanceof Error
+            ? firstRejected.reason.message
+            : 'خطا در بارگیری داده‌ها از سرور';
+        console.warn('Supabase sync notice:', msg);
+        if (!isInitialFetchDoneRef.current) {
+          setFetchError?.(msg);
+        }
       } else {
-        // If DB returned 0 products (e.g. fresh DB before migration), keep locally imported products
-        try {
-          const localSaved = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
-          if (localSaved) {
-            const parsed = JSON.parse(localSaved);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              setProducts(parsed);
-            } else {
-              setProducts([]);
-            }
-          } else {
-            setProducts([]);
-          }
-        } catch {
-          setProducts([]);
-        }
+        setFetchError?.(null);
       }
 
-      // 2. Orders with items - DB is the single source of truth, replaces state
-      const { data: ords, error: ordsErr } = await supabase.from('orders').select('*, items:order_items(*)');
-      if (ordsErr) throw ordsErr;
-
-      const cleanOrds: Order[] = (ords || [])
-        .filter(
-          (o: Order) =>
-            Boolean(o.id) &&
-            !o.items?.some((it) => LEGACY_MOCK_NAMES.has(it.name?.trim()))
-        )
-        .map((o: Order) => ({
-          ...o,
-          supermarket_id: o.supermarket_id || '',
-          supermarket_name: o.supermarket_name || 'فروشگاه نامشخص',
-          assigned_visitor_id: o.assigned_visitor_id || 'direct',
-          visitor_name:
-            o.visitor_name ||
-            (o.assigned_visitor_id && o.assigned_visitor_id !== 'direct'
-              ? 'ویزیتور'
-              : 'خرید مستقیم از پخش مرکزی'),
-          order_channel: getOrderChannel(o),
-        }));
-      setOrders(cleanOrds);
-
-      // 3. Categories
-      const { data: cats } = await supabase
-        .from('categories')
-        .select('*')
-        .order('sort_order', { ascending: true });
-      if (cats && cats.length > 0) {
-        setCategories(cats);
-      }
-
-      // 4. Brands
-      const { data: brs } = await supabase.from('brands').select('name');
-      if (brs && brs.length > 0) {
-        const dbBrandNames = Array.from(new Set(brs.map((b: { name: string }) => b.name).filter(Boolean)));
-        setBrands(dbBrandNames);
-      }
-
-      // 5. Reassignment Requests
-      const { data: reassigns } = await supabase
-        .from('reassignment_requests')
-        .select('*')
-        .order('timestamp', { ascending: false });
-      if (reassigns) {
-        setReassignmentRequests(reassigns);
-      }
-
-      // Fetch profiles with explicit columns (no password column selected)
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, name, role, phone, username, is_active, created_at');
-      const profileMap = new Map<string, Record<string, any>>(
-        (profiles || []).map((p) => [p.id, p])
-      );
-
-      // 6. Supermarkets - DB is single source of truth, replaces state (explicit columns, no password)
-      const { data: sms, error: smsErr } = await supabase
-        .from('supermarkets')
-        .select('id, name, owner, phone, address, assigned_visitor_id, is_active, username, created_at');
-      if (smsErr) throw smsErr;
-
-      const cleanSms: Supermarket[] = (sms || []).map((sm: any) => {
-        const prof = profileMap.get(sm.id);
-        return {
-          id: sm.id,
-          name: sm.name,
-          owner: sm.owner || '',
-          phone: sm.phone || '',
-          address: sm.address || '',
-          assigned_visitor_id: sm.assigned_visitor_id || 'direct',
-          is_active: sm.is_active ?? true,
-          username: prof?.username || sm.username || sm.phone || '',
-          created_at: sm.created_at,
-        };
-      });
-      setSupermarkets(cleanSms);
-
-      // 7. Visitors - DB is single source of truth, replaces state (explicit columns, no password)
-      const { data: visData, error: visErr } = await supabase
-        .from('visitors')
-        .select('id, name, phone, region, is_active, username, created_at');
-      if (visErr) throw visErr;
-
-      const cleanVis: Visitor[] = (visData || []).map((v: any) => {
-        const prof = profileMap.get(v.id);
-        let resolvedUsername = prof?.username || v.username || '';
-        if (resolvedUsername && resolvedUsername.includes('-') && resolvedUsername.length > 25) {
-          resolvedUsername = '';
-        }
-        return {
-          id: v.id,
-          name: v.name,
-          phone: v.phone || '',
-          region: v.region || 'منطقه توزیع',
-          username: resolvedUsername || v.phone || '',
-          is_active: v.is_active ?? true,
-          created_at: v.created_at,
-        };
-      });
-      setVisitors(cleanVis);
-
-      // 8. Loading Bills (with loading_bill_items)
-      let fetchedBills: LoadingBill[] = [];
-      const { data: billsData, error: billsErr } = await supabase
-        .from('loading_bills')
-        .select('*, items:loading_bill_items(*)')
-        .order('created_at', { ascending: false });
-
-      if (!billsErr && billsData) {
-        fetchedBills = billsData;
-      } else {
-        const { data: bData } = await supabase
-          .from('loading_bills')
-          .select('*')
-          .order('created_at', { ascending: false });
-        const { data: iData } = await supabase.from('loading_bill_items').select('*');
-
-        if (bData) {
-          fetchedBills = bData.map((b: LoadingBill) => ({
-            ...b,
-            items: iData ? iData.filter((it: { loading_bill_id: string }) => it.loading_bill_id === b.id) : [],
-          }));
-        }
-      }
-      setLoadingBills(fetchedBills);
-
-      // 9. Inventory Transactions (limit 500)
-      const { data: txData } = await supabase
-        .from('inventory_transactions')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(500);
-
-      if (txData) {
-        const validTxData = txData.filter(
-          (t: InventoryTransaction) =>
-            !LEGACY_MOCK_NAMES.has(t.product_name?.trim() || '') &&
-            !t.product_id?.startsWith('prod-')
-        );
-        setInventoryTransactions(validTxData);
-      }
-
-      // 10. Product Likes (Market testing)
-      if (setProductLikes) {
-        try {
-          const { data: likesData } = await supabase.from('product_likes').select('*');
-          if (likesData && Array.isArray(likesData)) {
-            setProductLikes(likesData);
-          }
-        } catch {
-          // table optional
-        }
-      }
-
-      // Mark success
-      setFetchError?.(null);
       setIsDataReady?.(true);
       isInitialFetchDoneRef.current = true;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'خطا در ارتباط با پایگاه داده';
-      console.warn('Supabase fetch notice:', msg);
+      const msg = err instanceof Error ? err.message : 'خطا در ارتباط با سرور';
+      console.warn('Supabase sync global catch:', msg);
       if (!isInitialFetchDoneRef.current) {
         setFetchError?.(msg);
       }
+    } finally {
+      isFetchingRef.current = false;
+
+      // If new realtime events arrived while the query was running, trigger an immediate follow-up
+      if (dirtyTablesRef.current.size > 0 && typeof document !== 'undefined' && !document.hidden) {
+        executeDirtyFetches();
+      }
     }
   }, [
-    setProducts,
-    setOrders,
-    setCategories,
-    setBrands,
-    setReassignmentRequests,
-    setSupermarkets,
-    setVisitors,
-    setLoadingBills,
-    setInventoryTransactions,
-    setProductLikes,
+    fetchProducts,
+    fetchOrders,
+    fetchCategories,
+    fetchBrands,
+    fetchReassignmentRequests,
+    fetchSupermarkets,
+    fetchVisitors,
+    fetchLoadingBills,
+    fetchInventoryTransactions,
+    fetchProductLikes,
     setIsDataReady,
     setFetchError,
   ]);
 
-  // Initial load, reload on trigger, and background 60s fallback polling
+  // 5. Debounced Scheduler (800ms trailing debounce for background events)
+  const scheduleReload = useCallback(
+    (tables: SyncTable[] = ALL_SYNC_TABLES, immediate = false) => {
+      // Mark requested tables as dirty
+      tables.forEach((t) => dirtyTablesRef.current.add(t));
+
+      if (immediate) {
+        if (debounceTimerRef.current) {
+          clearTimeout(debounceTimerRef.current);
+          debounceTimerRef.current = null;
+        }
+        executeDirtyFetches();
+        return;
+      }
+
+      // If tab is hidden, postpone until tab becomes visible again
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
+
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+
+      debounceTimerRef.current = setTimeout(() => {
+        debounceTimerRef.current = null;
+        executeDirtyFetches();
+      }, 800);
+    },
+    [executeDirtyFetches]
+  );
+
+  // 6. Main Lifecycle Effect
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
       setIsDataReady?.(true);
@@ -290,24 +520,33 @@ export function useSupabaseSync({
     // Purge old operational localStorage keys once on startup in Supabase mode
     purgeOperationalLocalStorage();
 
-    loadFromSupabase();
+    // Initial full load (immediate, no debounce delay)
+    scheduleReload(ALL_SYNC_TABLES, true);
 
-    // 60-second backup polling
-    const interval = setInterval(loadFromSupabase, 60000);
+    // 60-second backup polling (skip execution if tab is hidden)
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        scheduleReload(ALL_SYNC_TABLES);
+      }
+    }, 60000);
 
-    // Event listeners: tab visibility, window focus, and online reconnection
+    // Visibility change handler: when user returns to tab, perform a fresh sync
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        loadFromSupabase();
+        scheduleReload(ALL_SYNC_TABLES);
       }
     };
 
+    // Window focus handler: sync if not hidden
     const handleWindowFocus = () => {
-      loadFromSupabase();
+      if (document.visibilityState === 'visible') {
+        scheduleReload(ALL_SYNC_TABLES);
+      }
     };
 
+    // Online reconnection handler
     const handleOnline = () => {
-      loadFromSupabase();
+      scheduleReload(ALL_SYNC_TABLES, true);
       onShowToast?.('اتصال اینترنت برقرار شد. اطلاعات به‌روزرسانی شدند.', 'success');
     };
 
@@ -315,13 +554,13 @@ export function useSupabaseSync({
     window.addEventListener('focus', handleWindowFocus);
     window.addEventListener('online', handleOnline);
 
-    // Realtime Supabase Channel Subscriptions for tables
+    // Granular Realtime Supabase Channel Subscriptions for tables
     const realtimeChannel = supabase
       .channel('app-db-realtime-sync')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'loading_bills' },
-        async (payload) => {
+        (payload) => {
           if (payload.eventType === 'INSERT') {
             const newBillRaw = payload.new as LoadingBill;
             if (role === 'warehouse' || role === 'admin') {
@@ -343,48 +582,66 @@ export function useSupabaseSync({
               }
             }
           }
-          loadFromSupabase();
+          // Only reload loading_bills table
+          scheduleReload(['loading_bills']);
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'orders' },
         () => {
-          loadFromSupabase();
+          // Only reload orders table
+          scheduleReload(['orders']);
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'supermarkets' },
         () => {
-          loadFromSupabase();
+          // Only reload supermarkets table
+          scheduleReload(['supermarkets']);
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'visitors' },
         () => {
-          loadFromSupabase();
+          // Only reload visitors table
+          scheduleReload(['visitors']);
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'products' },
         () => {
-          loadFromSupabase();
+          // Only reload products table
+          scheduleReload(['products']);
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'reassignment_requests' },
         () => {
-          loadFromSupabase();
+          // Only reload reassignment_requests table
+          scheduleReload(['reassignment_requests']);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'inventory_transactions' },
+        () => {
+          // Only reload inventory_transactions table
+          scheduleReload(['inventory_transactions']);
         }
       )
       .subscribe();
 
     return () => {
       clearInterval(interval);
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleWindowFocus);
       window.removeEventListener('online', handleOnline);
@@ -392,9 +649,16 @@ export function useSupabaseSync({
         supabase.removeChannel(realtimeChannel);
       }
     };
-  }, [loadFromSupabase, reloadCounter, role, currentUser, onShowToast, setIsDataReady]);
+  }, [scheduleReload, role, currentUser, onShowToast, setIsDataReady]);
 
-  // 2. LocalStorage Cross-Tab Realtime Sync (Only active in mock / local storage mode)
+  // 7. Manual Reload Trigger (when reloadCounter changes via refreshData)
+  useEffect(() => {
+    if (reloadCounter > 0) {
+      scheduleReload(ALL_SYNC_TABLES, true);
+    }
+  }, [reloadCounter, scheduleReload]);
+
+  // 8. LocalStorage Cross-Tab Realtime Sync (Only active in mock / local storage mode)
   useEffect(() => {
     if (isSupabaseConfigured) return;
 

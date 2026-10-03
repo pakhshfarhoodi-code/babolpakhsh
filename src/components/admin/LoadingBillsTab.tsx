@@ -30,6 +30,7 @@ import {
   Info,
   Calendar,
   Layers,
+  Check,
 } from 'lucide-react';
 
 export interface BillAgeInfo {
@@ -106,14 +107,55 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
   const [viewMode, setViewMode] = useState<'by_product' | 'by_customer'>('by_product');
 
   // Modals state
-  // 1. Add Agreed Line (admin_manual)
-  const [isAgreementModalOpen, setIsAgreementModalOpen] = useState(false);
+  // 1. Add Agreed Line (admin_manual - inline 14th row in table)
+  const [isAddingInline, setIsAddingInline] = useState(false);
+  const [inlineSearchQuery, setInlineSearchQuery] = useState('');
   const [agreementProductId, setAgreementProductId] = useState('');
   const [agreementQty, setAgreementQty] = useState<number | string>(1);
   const [agreementCustomerLabel, setAgreementCustomerLabel] = useState('');
   const [agreementLineNote, setAgreementLineNote] = useState('');
   const [agreementUnitPrice, setAgreementUnitPrice] = useState<number | ''>('');
   const [isSubmittingAgreement, setIsSubmittingAgreement] = useState(false);
+
+  // Selected product object for inline entry
+  const selectedInlineProduct = useMemo(
+    () => products.find((p) => p.id === agreementProductId),
+    [products, agreementProductId]
+  );
+
+  // Filtered products for searchable combobox in the inline row
+  const filteredInlineProducts = useMemo(() => {
+    const q = inlineSearchQuery.toLowerCase().trim();
+    if (!q) {
+      return products.filter((p) => p.is_active).slice(0, 15);
+    }
+    return products
+      .filter(
+        (p) =>
+          p.is_active &&
+          (p.name.toLowerCase().includes(q) ||
+            (p.brand && p.brand.toLowerCase().includes(q)) ||
+            (p.unit && p.unit.toLowerCase().includes(q)))
+      )
+      .slice(0, 20);
+  }, [products, inlineSearchQuery]);
+
+  const handleSelectInlineProduct = (p: Product) => {
+    setAgreementProductId(p.id);
+    setInlineSearchQuery(p.name);
+    const defaultVPrice = p.visitor_price ?? Math.round(p.price * 0.85);
+    setAgreementUnitPrice(defaultVPrice);
+  };
+
+  const handleCancelAddInline = () => {
+    setIsAddingInline(false);
+    setAgreementProductId('');
+    setInlineSearchQuery('');
+    setAgreementQty(1);
+    setAgreementCustomerLabel('');
+    setAgreementLineNote('');
+    setAgreementUnitPrice('');
+  };
 
   // 2. Edit line modal (Qty / Price / Reason)
   const [editingLine, setEditingLine] = useState<LoadingBillItem | null>(null);
@@ -423,11 +465,12 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
 
         showToast('قلم توافقی با موفقیت به فاکتور ویزیتور افزوده شد.', 'success');
         setAgreementProductId('');
+        setInlineSearchQuery('');
         setAgreementQty(1);
         setAgreementCustomerLabel('');
         setAgreementLineNote('');
         setAgreementUnitPrice('');
-        setIsAgreementModalOpen(false);
+        setIsAddingInline(false);
         refreshData();
         if (activeBill) fetchAuditLogs(activeBill.id);
       }
@@ -1017,18 +1060,6 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
                   به تفکیک مشتری (ریز توزیع و توافقات)
                 </button>
               </div>
-
-              {/* Add Agreed Line button (only when editable) */}
-              {isEditable && (
-                <button
-                  type="button"
-                  onClick={() => setIsAgreementModalOpen(true)}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/30 text-xs font-bold transition cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>+ افزودن قلم توافقی (تلفنی / حضوری)</span>
-                </button>
-              )}
             </div>
 
             {/* VIEW MODE 1: «به تفکیک کالا» (Strictly visitor purchase price, no store price, no profit) */}
@@ -1118,6 +1149,265 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
                           )}
                         </tr>
                       ))}
+
+                      {/* Row N+1: Inactive / Dormant agreed item row (خام) */}
+                      {isEditable && !isAddingInline && (
+                        <tr
+                          onClick={() => setIsAddingInline(true)}
+                          className="border-t-2 border-dashed border-purple-500/40 bg-purple-950/15 hover:bg-purple-950/35 transition cursor-pointer group"
+                          title="جهت جستجوی کالا و افزودن قلم توافقی کلیک کنید"
+                        >
+                          <td className="py-3 px-3.5 text-center text-purple-400 font-mono text-xs font-bold">
+                            {aggregatedBillItems.length + 1}
+                          </td>
+                          <td colSpan={isEditable ? 6 : 5} className="py-3 px-3.5">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2 text-purple-300 font-bold text-xs group-hover:text-purple-200">
+                                <div className="w-5 h-5 rounded-md bg-purple-600/30 flex items-center justify-center text-purple-300 border border-purple-500/40">
+                                  <Plus className="w-3.5 h-3.5" />
+                                </div>
+                                <span>+ افزودن قلم توافقی (سفارش تلفنی / توافق حضوری)...</span>
+                                <span className="text-[11px] text-purple-400/70 font-normal hidden sm:inline">
+                                  (کلیک کنید تا نام کالا را جستجو و وزن یا تعدادش را ثبت نمایید)
+                                </span>
+                              </div>
+                              <span className="text-[11px] font-bold text-purple-300 bg-purple-900/50 px-2.5 py-1 rounded-lg border border-purple-700/50 group-hover:border-purple-500 transition">
+                                ردیف {aggregatedBillItems.length + 1} (خام - کلیک جهت افزودن)
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+
+                      {/* Row N+1: Active inline form for adding agreed item */}
+                      {isEditable && isAddingInline && (
+                        <>
+                          <tr className="bg-purple-950/35 border-t-2 border-purple-500/70 transition shadow-inner">
+                            {/* Row Number */}
+                            <td className="py-3 px-3.5 text-center font-mono font-bold text-purple-300 text-xs align-top">
+                              <span className="w-6 h-6 rounded-full bg-purple-900/70 border border-purple-400/60 inline-flex items-center justify-center text-white">
+                                {aggregatedBillItems.length + 1}
+                              </span>
+                            </td>
+
+                            {/* Product Search & Selection */}
+                            <td className="py-3 px-3.5 align-top">
+                              <div className="space-y-1.5 min-w-[220px]">
+                                {selectedInlineProduct ? (
+                                  <div className="p-2 rounded-xl bg-slate-900 border border-purple-500/60 flex items-start justify-between gap-2 shadow-xs">
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="font-bold text-slate-100 text-xs">
+                                          {selectedInlineProduct.name}
+                                        </span>
+                                        {selectedInlineProduct.brand && (
+                                          <span className="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded">
+                                            {selectedInlineProduct.brand}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="text-[11px] text-purple-300 font-mono mt-0.5 flex items-center gap-2">
+                                        <span>
+                                          موجودی قابل فروش: {Math.round(Math.max(0, selectedInlineProduct.stock - selectedInlineProduct.reserved_stock) * 1000) / 1000} {selectedInlineProduct.unit}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setAgreementProductId('');
+                                        setInlineSearchQuery('');
+                                      }}
+                                      className="text-[11px] text-purple-400 hover:text-purple-200 underline font-semibold shrink-0 cursor-pointer pt-0.5"
+                                    >
+                                      تعویض کالا
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="space-y-1">
+                                    <div className="relative">
+                                      <input
+                                        type="text"
+                                        autoFocus
+                                        value={inlineSearchQuery}
+                                        onChange={(e) => setInlineSearchQuery(e.target.value)}
+                                        placeholder="جستجوی نام یا برند کالا..."
+                                        className="w-full bg-slate-950 border border-purple-500 rounded-xl py-2 pr-8 pl-3 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-purple-400"
+                                      />
+                                      <Search className="w-3.5 h-3.5 text-purple-400 absolute right-2.5 top-2.5 pointer-events-none" />
+                                    </div>
+
+                                    {/* Scrollable list of matching products */}
+                                    <div className="max-h-44 overflow-y-auto rounded-xl bg-slate-950 border border-slate-800 p-1 divide-y divide-slate-800/80 shadow-lg">
+                                      {filteredInlineProducts.length === 0 ? (
+                                        <div className="p-3 text-center text-xs text-slate-500">
+                                          کالایی با این نام یافت نشد.
+                                        </div>
+                                      ) : (
+                                        filteredInlineProducts.map((p) => {
+                                          const avail = Math.round(Math.max(0, p.stock - p.reserved_stock) * 1000) / 1000;
+                                          const vPrice = p.visitor_price ?? Math.round(p.price * 0.85);
+                                          return (
+                                            <div
+                                              key={p.id}
+                                              onClick={() => handleSelectInlineProduct(p)}
+                                              className="p-2 hover:bg-purple-950/70 rounded-lg cursor-pointer transition flex items-center justify-between gap-2 text-right"
+                                            >
+                                              <div className="min-w-0 flex-1">
+                                                <div className="font-semibold text-xs text-slate-200 truncate">
+                                                  {p.name}
+                                                </div>
+                                                <div className="text-[10px] text-slate-400 flex items-center gap-2 mt-0.5">
+                                                  {p.brand && <span>برند: {p.brand}</span>}
+                                                  <span className={avail <= 0 ? 'text-rose-400 font-bold' : 'text-emerald-400 font-mono'}>
+                                                    موجودی: {avail} {p.unit}
+                                                  </span>
+                                                </div>
+                                              </div>
+                                              <div className="font-mono text-purple-300 font-bold text-xs shrink-0">
+                                                {formatPrice(vPrice)}
+                                              </div>
+                                            </div>
+                                          );
+                                        })
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Unit / Weight column */}
+                            <td className="py-3 px-3 text-center font-bold text-slate-200 text-xs align-top pt-4">
+                              {selectedInlineProduct ? (
+                                <span className="px-2 py-1 rounded bg-slate-900 border border-slate-700 text-purple-300 font-mono text-[11px]">
+                                  {selectedInlineProduct.unit}
+                                </span>
+                              ) : (
+                                '-'
+                              )}
+                            </td>
+
+                            {/* Quantity / Weight input */}
+                            <td className="py-3 px-3 text-center align-top pt-3">
+                              <div className="space-y-1">
+                                <input
+                                  type="number"
+                                  min="0.001"
+                                  step="any"
+                                  value={agreementQty}
+                                  onChange={(e) => setAgreementQty(e.target.value)}
+                                  placeholder="تعداد / وزن"
+                                  className="w-20 p-2 text-center bg-slate-950 border border-purple-500/70 rounded-xl text-slate-100 font-mono font-bold text-xs focus:outline-none focus:border-purple-400"
+                                />
+                                {selectedInlineProduct && (
+                                  <span className="block text-[10px] text-slate-400">
+                                    برحسب {selectedInlineProduct.unit}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Visitor Price input */}
+                            <td className="py-3 px-3.5 text-left align-top pt-3">
+                              <div className="space-y-1">
+                                <div className="inline-flex items-center gap-1">
+                                  <input
+                                    type="number"
+                                    value={agreementUnitPrice}
+                                    onChange={(e) => setAgreementUnitPrice(e.target.value ? Number(e.target.value) : '')}
+                                    placeholder={
+                                      selectedInlineProduct
+                                        ? String(selectedInlineProduct.visitor_price ?? Math.round(selectedInlineProduct.price * 0.85))
+                                        : 'نرخ'
+                                    }
+                                    className="w-24 p-2 text-left bg-slate-950 border border-purple-500/70 rounded-xl text-slate-100 font-mono text-xs focus:outline-none focus:border-purple-400"
+                                  />
+                                  <span className="text-[10px] text-slate-400">تومان</span>
+                                </div>
+                                <span className="block text-[10px] text-slate-500 text-left">
+                                  فی خرید ویزیتور
+                                </span>
+                              </div>
+                            </td>
+
+                            {/* Total Row Amount */}
+                            <td className="py-3 px-3.5 text-left font-mono font-bold text-xs text-purple-300 align-top pt-4">
+                              {formatPrice(
+                                Math.round(
+                                  (Number(agreementQty) || 0) *
+                                    (agreementUnitPrice !== ''
+                                      ? Number(agreementUnitPrice)
+                                      : (selectedInlineProduct?.visitor_price ?? (selectedInlineProduct?.price ? Math.round(selectedInlineProduct.price * 0.85) : 0)))
+                                )
+                              )}
+                            </td>
+
+                            {/* Action Buttons */}
+                            <td className="py-3 px-3 text-center align-top pt-3">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={handleAddAgreementLine}
+                                  disabled={!agreementProductId || (Number(agreementQty) || 0) <= 0 || isSubmittingAgreement}
+                                  className="px-2.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs transition flex items-center gap-1 cursor-pointer shadow-sm"
+                                  title="افزودن این ردیف به فاکتور"
+                                >
+                                  {isSubmittingAgreement ? (
+                                    <span className="text-[10px]">...</span>
+                                  ) : (
+                                    <>
+                                      <Check className="w-3.5 h-3.5" />
+                                      <span>ثبت</span>
+                                    </>
+                                  )}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleCancelAddInline}
+                                  disabled={isSubmittingAgreement}
+                                  className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition cursor-pointer"
+                                  title="انصراف"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* Extra info row: Customer label and optional note */}
+                          <tr className="bg-purple-950/20 border-b-2 border-purple-500/40 text-xs">
+                            <td colSpan={7} className="py-2.5 px-3.5">
+                              <div className="flex items-center gap-3 flex-wrap">
+                                <div className="flex items-center gap-1.5 flex-1 min-w-[200px]">
+                                  <span className="text-slate-400 text-[11px] shrink-0 font-medium">
+                                    مشتری / فروشگاه (اختیاری):
+                                  </span>
+                                  <input
+                                    type="text"
+                                    placeholder="مثلاً: سوپرمارکت بهار / آقای رضایی"
+                                    value={agreementCustomerLabel}
+                                    onChange={(e) => setAgreementCustomerLabel(e.target.value)}
+                                    className="flex-1 bg-slate-950 border border-slate-700/80 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-purple-500"
+                                  />
+                                </div>
+                                <div className="flex items-center gap-1.5 flex-1 min-w-[200px]">
+                                  <span className="text-slate-400 text-[11px] shrink-0 font-medium">
+                                    توضیح (اختیاری):
+                                  </span>
+                                  <input
+                                    type="text"
+                                    placeholder="مثلاً: سفارش تلفنی فوری / توافق حضوری"
+                                    value={agreementLineNote}
+                                    onChange={(e) => setAgreementLineNote(e.target.value)}
+                                    className="flex-1 bg-slate-950 border border-slate-700/80 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-purple-500"
+                                  />
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        </>
+                      )}
                     </tbody>
                     <tfoot>
                       <tr className="bg-slate-950 font-black border-t-2 border-slate-800 text-slate-100">
@@ -1234,6 +1524,21 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
                     ))}
                   </div>
                 )}
+
+                {/* Bottom button in customer view to add agreement item */}
+                {isEditable && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewMode('by_product');
+                      setIsAddingInline(true);
+                    }}
+                    className="w-full p-3.5 rounded-2xl border-2 border-dashed border-purple-500/40 bg-purple-950/20 hover:bg-purple-950/40 text-purple-300 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-sm hover:border-purple-400"
+                  >
+                    <Plus className="w-4 h-4 text-purple-400" />
+                    <span>+ افزودن قلم توافقی جدید (تلفنی / حضوری) به انتهای برگه سفارش</span>
+                  </button>
+                )}
               </div>
             )}
 
@@ -1297,125 +1602,7 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
         )}
       </div>
 
-      {/* Modal 1: Add Agreement Line (admin_manual) */}
-      {isAgreementModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-950/80 backdrop-blur-sm"
-          onClick={() => setIsAgreementModalOpen(false)}
-        >
-          <div
-            className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl text-xs space-y-4"
-            onClick={(e) => e.stopPropagation()}
-            dir="rtl"
-          >
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="font-bold text-sm text-slate-100 flex items-center gap-2">
-                <Plus className="w-4 h-4 text-purple-400" />
-                <span>افزودن قلم توافقی (سفارش تلفنی / توافق حضوری)</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsAgreementModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-200 cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
 
-            <form onSubmit={handleAddAgreementLine} className="space-y-3.5">
-              <div>
-                <label className="block text-slate-400 mb-1 font-semibold">انتخاب کالا:</label>
-                <select
-                  value={agreementProductId}
-                  onChange={(e) => setAgreementProductId(e.target.value)}
-                  required
-                  className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-200 focus:outline-none focus:border-purple-500"
-                >
-                  <option value="">-- کالا را انتخاب کنید --</option>
-                  {products
-                    .filter((p) => p.is_active)
-                    .map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} - موجودی انبار: {Math.round(Math.max(0, p.stock - p.reserved_stock) * 1000) / 1000} {p.unit}
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">تعداد مورد توافق:</label>
-                  <input
-                    type="number"
-                    min="0.001"
-                    step="any"
-                    value={agreementQty}
-                    onChange={(e) => setAgreementQty(e.target.value)}
-                    required
-                    className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-200 focus:outline-none focus:border-purple-500 font-mono text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">
-                    نرخ خرید ویزیتور (تومان):
-                  </label>
-                  <input
-                    type="number"
-                    placeholder="پیش‌فرض کالا"
-                    value={agreementUnitPrice}
-                    onChange={(e) => setAgreementUnitPrice(e.target.value ? Number(e.target.value) : '')}
-                    className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-200 focus:outline-none focus:border-purple-500 font-mono text-sm"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-400 mb-1 font-semibold">
-                  نام مشتری / فروشگاه (اختیاری):
-                </label>
-                <input
-                  type="text"
-                  placeholder="مثال: آقای رضایی / سوپرمارکت بهار"
-                  value={agreementCustomerLabel}
-                  onChange={(e) => setAgreementCustomerLabel(e.target.value)}
-                  className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-200 focus:outline-none focus:border-purple-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 mb-1 font-semibold">
-                  توضیح اختیاری (مثلاً تلفنی، فوری، حضوری):
-                </label>
-                <input
-                  type="text"
-                  placeholder="مثال: سفارش تلفنی - هماهنگ شده با متصدی"
-                  value={agreementLineNote}
-                  onChange={(e) => setAgreementLineNote(e.target.value)}
-                  className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-200 focus:outline-none focus:border-purple-500"
-                />
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsAgreementModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold cursor-pointer"
-                >
-                  انصراف
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmittingAgreement || !agreementProductId}
-                  className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold transition shadow-md cursor-pointer disabled:opacity-50"
-                >
-                  {isSubmittingAgreement ? 'در حال ثبت...' : 'افزودن قلم به فاکتور'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Modal 2: Edit Line (Quantity and/or Price with reason) */}
       {editingLine && (

@@ -89,7 +89,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const actionItemsCount = useMemo(() => {
     const delegatedCount = orders.filter((o) => o.status === 'delegated').length;
-    const lowStockCount = products.filter((p) => p.stock - p.reserved_stock < LOW_STOCK_THRESHOLD).length;
+    const lowStockCount = products.filter((p) => (Math.round((p.stock - p.reserved_stock) * 1000) / 1000) < LOW_STOCK_THRESHOLD).length;
     const inactiveStoresCount = supermarkets.filter((s) => s.is_active !== false && isStoreInactiveFor30Days(s.id, orders)).length;
     return delegatedCount + lowStockCount + inactiveStoresCount + pendingBillsCount;
   }, [orders, products, supermarkets, pendingBillsCount]);

@@ -372,7 +372,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   // Filtered Products
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
-      const freeStock = product.stock - product.reserved_stock;
+      const freeStock = Math.round((product.stock - product.reserved_stock) * 1000) / 1000;
 
       // Low stock filter
       if (onlyLowStock && freeStock >= LOW_STOCK_THRESHOLD) {
@@ -777,7 +777,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
               </thead>
               <tbody className="divide-y divide-slate-800/60">
                 {filteredProducts.map((product) => {
-                  const freeStock = product.stock - product.reserved_stock;
+                  const freeStock = Math.round((product.stock - product.reserved_stock) * 1000) / 1000;
                   const isEditing = editingPriceId === product.id;
                   const categoryObj = categories.find((c) => c.id === product.category_id);
                   const isLow = freeStock < LOW_STOCK_THRESHOLD;
@@ -1225,8 +1225,12 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                     <input
                       type="number"
                       min="0"
+                      step="any"
                       value={newProdStock || ''}
-                      onChange={(e) => setNewProdStock(Number(e.target.value))}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        setNewProdStock(isNaN(val) ? 0 : Math.round(val * 1000) / 1000);
+                      }}
                       className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500 font-mono"
                     />
                   </div>
@@ -1573,8 +1577,12 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                     <input
                       type="number"
                       min="0"
+                      step="any"
                       value={editProdStock}
-                      onChange={(e) => setEditProdStock(Number(e.target.value))}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        setEditProdStock(isNaN(val) ? 0 : Math.round(val * 1000) / 1000);
+                      }}
                       className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500 font-mono font-bold"
                     />
                   </div>

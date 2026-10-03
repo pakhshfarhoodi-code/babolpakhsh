@@ -73,7 +73,7 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
 
   // Edit quantity modal state
   const [editingItem, setEditingItem] = useState<LoadingBillItem | null>(null);
-  const [editQty, setEditQty] = useState<number>(1);
+  const [editQty, setEditQty] = useState<number | string>(1);
   const [isUpdatingLine, setIsUpdatingLine] = useState(false);
 
   // View / Print modal state
@@ -445,7 +445,7 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
 
       const existing = map.get(it.product_id);
       if (existing) {
-        existing.totalQuantity += it.quantity;
+        existing.totalQuantity = Math.round((existing.totalQuantity + it.quantity) * 1000) / 1000;
         existing.totalAmount += it.quantity * existing.visitorPrice;
         if (it.source === 'visitor_manual' || it.source === 'admin_manual') {
           existing.manualLines.push(it);
@@ -476,15 +476,16 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
   }, [aggregatedItems]);
 
   const totalQuantity = useMemo(() => {
-    return aggregatedItems.reduce((sum, it) => sum + it.totalQuantity, 0);
+    const sum = aggregatedItems.reduce((acc, it) => acc + (Number(it.totalQuantity) || 0), 0);
+    return Math.round(sum * 1000) / 1000;
   }, [aggregatedItems]);
 
   // Handle quantity change for surplus items in ProductCatalog modal
   const handleSurplusQuantityChange = useCallback(
     (productId: string, qty: number) => {
       const prod = productMap.get(productId) || products.find((p) => p.id === productId);
-      const available = prod ? Math.max(0, prod.stock - prod.reserved_stock) : 0;
-      const validQty = Math.max(0, Math.min(qty, available));
+      const available = prod ? Math.round(Math.max(0, prod.stock - prod.reserved_stock) * 1000) / 1000 : 0;
+      const validQty = Math.round(Math.max(0, Math.min(qty, available)) * 1000) / 1000;
 
       setSurplusCart((prev) => {
         if (validQty <= 0) {
@@ -500,7 +501,8 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
 
   // Surplus totals calculation
   const totalSurplusCount = useMemo(() => {
-    return Object.values(surplusCart).reduce((sum, q) => sum + (Number(q) || 0), 0);
+    const sum = Object.values(surplusCart).reduce((acc, q) => acc + (Number(q) || 0), 0);
+    return Math.round(sum * 1000) / 1000;
   }, [surplusCart]);
 
   const totalSurplusAmount = useMemo(() => {
@@ -529,7 +531,7 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
           const { data, error } = await supabase.rpc('invoice_add_manual_line', {
             p_invoice_id: activeBill.id,
             p_product_id: productId,
-            p_qty: qty,
+            p_qty: Math.round((Number(qty) || 0) * 1000) / 1000,
             p_customer_label: finalLabel,
             p_source: 'visitor_manual',
             p_line_note: null,
@@ -566,14 +568,15 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
 
   // Handle updating line quantity
   const handleUpdateLine = async () => {
-    if (!editingItem || editQty <= 0 || isUpdatingLine) return;
+    const parsedEditQty = Math.round((parseFloat(String(editQty)) || 0) * 1000) / 1000;
+    if (!editingItem || parsedEditQty <= 0 || isUpdatingLine) return;
     setIsUpdatingLine(true);
 
     try {
       if (isSupabaseConfigured && supabase) {
         const { data, error } = await supabase.rpc('invoice_update_line', {
           p_line_id: editingItem.id,
-          p_qty: editQty,
+          p_qty: parsedEditQty,
           p_unit_price: null,
           p_actor: currentVisitor.name,
           p_reason: 'ویرایش تعداد توسط ویزیتور',
@@ -1422,9 +1425,10 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
                 <label className="block text-slate-400 mb-1">تعداد جدید:</label>
                 <input
                   type="number"
-                  min={1}
+                  min="0.001"
+                  step="any"
                   value={editQty}
-                  onChange={(e) => setEditQty(Math.max(1, parseInt(e.target.value) || 1))}
+                  onChange={(e) => setEditQty(e.target.value)}
                   className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-200 font-mono text-sm focus:outline-none focus:border-blue-500"
                 />
               </div>

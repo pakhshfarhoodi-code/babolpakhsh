@@ -26,7 +26,7 @@ export const ReorderCard: React.FC<ReorderCardProps> = ({
       <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
         {topProducts.map((p) => {
           const qtyInCart = cart[p.id] || 0;
-          const available = Math.max(0, p.stock - p.reserved_stock);
+          const available = Math.round(Math.max(0, p.stock - p.reserved_stock) * 1000) / 1000;
           const isOutOfStock = available <= 0;
 
           return (

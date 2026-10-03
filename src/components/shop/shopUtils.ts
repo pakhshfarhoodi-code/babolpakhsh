@@ -31,16 +31,26 @@ export function normalizeDigits(input: string | number): number {
 }
 
 /**
- * Clamps quantity to 0 .. maxAvailable
+ * Rounds a quantity to 3 decimal places
+ */
+export function roundQty(qty: number): number {
+  if (typeof qty !== 'number' || isNaN(qty)) return 0;
+  return Math.round(qty * 1000) / 1000;
+}
+
+/**
+ * Clamps quantity to 0 .. maxAvailable (rounded to 3 decimal places)
  */
 export function clampQuantity(
   val: number,
   maxAvailable: number
 ): { quantity: number; clamped: boolean } {
-  if (val <= 0) return { quantity: 0, clamped: false };
-  if (maxAvailable <= 0) return { quantity: 0, clamped: true };
-  if (val > maxAvailable) return { quantity: maxAvailable, clamped: true };
-  return { quantity: val, clamped: false };
+  const roundedVal = roundQty(val);
+  const roundedMax = roundQty(maxAvailable);
+  if (roundedVal <= 0) return { quantity: 0, clamped: false };
+  if (roundedMax <= 0) return { quantity: 0, clamped: true };
+  if (roundedVal > roundedMax) return { quantity: roundedMax, clamped: true };
+  return { quantity: roundedVal, clamped: false };
 }
 
 /**
@@ -152,17 +162,18 @@ export function buildCartFromOrder(
       continue;
     }
 
-    const available = Math.max(0, prod.stock - prod.reserved_stock);
+    const available = roundQty(Math.max(0, prod.stock - prod.reserved_stock));
     if (available <= 0) {
       unavailableItems.push(prod.name);
       continue;
     }
 
-    if (item.quantity > available) {
+    const roundedItemQty = roundQty(item.quantity);
+    if (roundedItemQty > available) {
       newCart[prod.id] = available;
-      reducedItems.push(`${prod.name} (از ${item.quantity} به ${available} کاهش یافت)`);
+      reducedItems.push(`${prod.name} (از ${roundedItemQty} به ${available} کاهش یافت)`);
     } else {
-      newCart[prod.id] = item.quantity;
+      newCart[prod.id] = roundedItemQty;
     }
   }
 

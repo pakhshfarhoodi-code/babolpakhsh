@@ -28,7 +28,7 @@ export const QuantityStepper: React.FC<QuantityStepperProps> = ({
   const handleIncrement = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (disabled || available <= 0) return;
-    const target = Math.round((quantity + 1) * 100) / 100;
+    const target = Math.round((quantity + 1) * 1000) / 1000;
     const { quantity: nextQty, clamped } = clampQuantity(target, available);
     if (clamped && target > available) {
       if (onExceedLimit) onExceedLimit(available);
@@ -39,7 +39,7 @@ export const QuantityStepper: React.FC<QuantityStepperProps> = ({
   const handleDecrement = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (disabled) return;
-    const target = Math.max(0, Math.round((quantity - 1) * 100) / 100);
+    const target = Math.max(0, Math.round((quantity - 1) * 1000) / 1000);
     onChange(target);
   };
 

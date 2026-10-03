@@ -109,7 +109,7 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
   // 1. Add Agreed Line (admin_manual)
   const [isAgreementModalOpen, setIsAgreementModalOpen] = useState(false);
   const [agreementProductId, setAgreementProductId] = useState('');
-  const [agreementQty, setAgreementQty] = useState(1);
+  const [agreementQty, setAgreementQty] = useState<number | string>(1);
   const [agreementCustomerLabel, setAgreementCustomerLabel] = useState('');
   const [agreementLineNote, setAgreementLineNote] = useState('');
   const [agreementUnitPrice, setAgreementUnitPrice] = useState<number | ''>('');
@@ -117,7 +117,7 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
 
   // 2. Edit line modal (Qty / Price / Reason)
   const [editingLine, setEditingLine] = useState<LoadingBillItem | null>(null);
-  const [editQty, setEditQty] = useState(1);
+  const [editQty, setEditQty] = useState<number | string>(1);
   const [editUnitPrice, setEditUnitPrice] = useState<number | ''>('');
   const [editReason, setEditReason] = useState('');
   const [isUpdatingLine, setIsUpdatingLine] = useState(false);
@@ -280,12 +280,12 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
       const unit = prod?.unit || 'بسته';
       const curStock = prod ? prod.stock : 0;
       const resStock = prod ? prod.reserved_stock : 0;
-      const availStock = curStock - resStock;
+      const availStock = Math.round(Math.max(0, curStock - resStock) * 1000) / 1000;
       const vPrice = Number(it.visitor_price ?? prod?.visitor_price ?? Math.round(Number(prod?.price || 0) * 0.85));
 
       const existing = map.get(it.product_id);
       if (existing) {
-        existing.totalQuantity += it.quantity;
+        existing.totalQuantity = Math.round((existing.totalQuantity + it.quantity) * 1000) / 1000;
         existing.totalAmount += it.quantity * existing.visitorPrice;
         existing.lines.push(it);
       } else {
@@ -308,7 +308,7 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
     // Calculate shortage based on physical stock vs bill requirement
     const result = Array.from(map.values()).map((item) => {
       const isShortage = item.currentStock < item.totalQuantity;
-      const shortageCount = isShortage ? item.totalQuantity - item.currentStock : 0;
+      const shortageCount = isShortage ? Math.round((item.totalQuantity - item.currentStock) * 1000) / 1000 : 0;
       return {
         ...item,
         isShortage,
@@ -325,7 +325,8 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
   }, [aggregatedBillItems]);
 
   const billTotalUnits = useMemo(() => {
-    return aggregatedBillItems.reduce((acc, it) => acc + it.totalQuantity, 0);
+    const sum = aggregatedBillItems.reduce((acc, it) => acc + (Number(it.totalQuantity) || 0), 0);
+    return Math.round(sum * 1000) / 1000;
   }, [aggregatedBillItems]);
 
   const hasAnyShortage = useMemo(() => {
@@ -392,7 +393,8 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
   // 1. Add Agreed Line (admin_manual - telephone or in-person agreement)
   const handleAddAgreementLine = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeBill || !agreementProductId || agreementQty <= 0 || isSubmittingAgreement) return;
+    const parsedAgreementQty = Math.round((parseFloat(String(agreementQty)) || 0) * 1000) / 1000;
+    if (!activeBill || !agreementProductId || parsedAgreementQty <= 0 || isSubmittingAgreement) return;
 
     setIsSubmittingAgreement(true);
     try {
@@ -400,7 +402,7 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
         const { data, error } = await supabase.rpc('invoice_add_manual_line', {
           p_invoice_id: activeBill.id,
           p_product_id: agreementProductId,
-          p_qty: agreementQty,
+          p_qty: parsedAgreementQty,
           p_customer_label: agreementCustomerLabel.trim() || 'توافق حضوری / تلفنی ادمین',
           p_source: 'admin_manual',
           p_line_note: agreementLineNote.trim() || null,
@@ -440,14 +442,15 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
   // 2. Update Line (Quantity / Price with Reason via invoice_update_line)
   const handleUpdateLine = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingLine || editQty <= 0 || isUpdatingLine) return;
+    const parsedEditQty = Math.round((parseFloat(String(editQty)) || 0) * 1000) / 1000;
+    if (!editingLine || parsedEditQty <= 0 || isUpdatingLine) return;
 
     setIsUpdatingLine(true);
     try {
       if (isSupabaseConfigured && supabase) {
         const { data, error } = await supabase.rpc('invoice_update_line', {
           p_line_id: editingLine.id,
-          p_qty: editQty,
+          p_qty: parsedEditQty,
           p_unit_price: editUnitPrice !== '' ? Number(editUnitPrice) : null,
           p_actor: currentUser.name || 'ادمین',
           p_reason: editReason.trim() || 'اصلاح ادمین',
@@ -1333,7 +1336,7 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
                     .filter((p) => p.is_active)
                     .map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.name} - موجودی انبار: {p.stock - p.reserved_stock} {p.unit}
+                        {p.name} - موجودی انبار: {Math.round(Math.max(0, p.stock - p.reserved_stock) * 1000) / 1000} {p.unit}
                       </option>
                     ))}
                 </select>
@@ -1344,9 +1347,10 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
                   <label className="block text-slate-400 mb-1 font-semibold">تعداد مورد توافق:</label>
                   <input
                     type="number"
-                    min={1}
+                    min="0.001"
+                    step="any"
                     value={agreementQty}
-                    onChange={(e) => setAgreementQty(Math.max(1, parseInt(e.target.value) || 1))}
+                    onChange={(e) => setAgreementQty(e.target.value)}
                     required
                     className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-200 focus:outline-none focus:border-purple-500 font-mono text-sm"
                   />
@@ -1445,9 +1449,10 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
                 <label className="block text-slate-400 mb-1">تعداد کالا:</label>
                 <input
                   type="number"
-                  min={1}
+                  min="0.001"
+                  step="any"
                   value={editQty}
-                  onChange={(e) => setEditQty(Math.max(1, parseInt(e.target.value) || 1))}
+                  onChange={(e) => setEditQty(e.target.value)}
                   required
                   className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-200 font-mono text-sm focus:outline-none focus:border-blue-500"
                 />

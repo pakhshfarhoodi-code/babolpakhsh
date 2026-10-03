@@ -54,7 +54,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
 
   // B. Low stock products (free stock < threshold)
   const lowStockProducts = useMemo(
-    () => products.filter((p) => p.stock - p.reserved_stock < LOW_STOCK_THRESHOLD),
+    () => products.filter((p) => (Math.round((p.stock - p.reserved_stock) * 1000) / 1000) < LOW_STOCK_THRESHOLD),
     [products]
   );
 

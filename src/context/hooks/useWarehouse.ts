@@ -468,7 +468,7 @@ export function useWarehouse({
       supabase
         .rpc('adjust_product_stock_transaction', {
           p_product_id: productId,
-          p_quantity: Math.abs(quantity),
+          p_quantity: Math.round(Math.abs(quantity) * 1000) / 1000,
           p_tx_type: 'return',
           p_reference: refReason,
         })
@@ -520,7 +520,7 @@ export function useWarehouse({
       supabase
         .rpc('adjust_product_stock_transaction', {
           p_product_id: productId,
-          p_quantity: additionalStock,
+          p_quantity: Math.round(additionalStock * 1000) / 1000,
           p_tx_type: 'manual_adjustment',
           p_reference: 'ورود به انبار سردخانه',
         })

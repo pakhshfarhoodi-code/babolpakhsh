@@ -47,7 +47,7 @@ export const CartSheet: React.FC<CartSheetProps> = ({
       const numQty = Number(quantity);
       const product = products.find((p) => p.id === productId);
       if (!product || numQty <= 0) return null;
-      const available = Math.max(0, product.stock - product.reserved_stock);
+      const available = Math.round(Math.max(0, product.stock - product.reserved_stock) * 1000) / 1000;
       return {
         product,
         quantity: numQty,
@@ -58,7 +58,7 @@ export const CartSheet: React.FC<CartSheetProps> = ({
     .filter((item): item is NonNullable<typeof item> => item !== null);
 
   const totalAmount = cartEntries.reduce((sum, item) => sum + item.rowTotal, 0);
-  const totalItemsCount = cartEntries.reduce((sum, item) => sum + item.quantity, 0);
+  const totalItemsCount = Math.round(cartEntries.reduce((sum, item) => sum + item.quantity, 0) * 1000) / 1000;
 
   // Shared Cart Content Layout
   const content = (

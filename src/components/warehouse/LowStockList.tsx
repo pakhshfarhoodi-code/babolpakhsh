@@ -90,7 +90,7 @@ export const LowStockList: React.FC<LowStockListProps> = ({ products }) => {
           </div>
         ) : (
           filteredProducts.map((p) => {
-            const free = p.stock - p.reserved_stock;
+            const free = Math.round((p.stock - p.reserved_stock) * 1000) / 1000;
             const isLow = p.stock <= LOW_STOCK_THRESHOLD;
 
             return (

@@ -127,9 +127,9 @@ export const SupermarketPortal: React.FC = () => {
       for (const [pId, qty] of Object.entries(parsed)) {
         const prod = products.find((p) => p.id === pId);
         if (prod && prod.is_active && qty > 0) {
-          const available = Math.max(0, prod.stock - prod.reserved_stock);
+          const available = Math.round(Math.max(0, prod.stock - prod.reserved_stock) * 1000) / 1000;
           if (available > 0) {
-            validatedCart[pId] = Math.min(qty, available);
+            validatedCart[pId] = Math.round(Math.min(qty, available) * 1000) / 1000;
           }
         }
       }
@@ -168,7 +168,8 @@ export const SupermarketPortal: React.FC = () => {
 
   // Cart Calculations
   const totalCartCount = useMemo(() => {
-    return Object.values(cart).reduce((sum: number, qty: number) => sum + (Number(qty) || 0), 0);
+    const sum = Object.values(cart).reduce((acc: number, qty: number) => acc + (Number(qty) || 0), 0);
+    return Math.round(sum * 1000) / 1000;
   }, [cart]);
 
   const totalCartAmount = useMemo(() => {
@@ -181,13 +182,14 @@ export const SupermarketPortal: React.FC = () => {
 
   // Quantity updates
   const handleQuantityChange = useCallback((productId: string, newQty: number) => {
+    const roundedQty = Math.round(newQty * 1000) / 1000;
     setCart((prev) => {
-      if (newQty <= 0) {
+      if (roundedQty <= 0) {
         const next = { ...prev };
         delete next[productId];
         return next;
       }
-      return { ...prev, [productId]: newQty };
+      return { ...prev, [productId]: roundedQty };
     });
   }, []);
 
@@ -237,13 +239,13 @@ export const SupermarketPortal: React.FC = () => {
     (productId: string) => {
       const prod = products.find((p) => p.id === productId);
       if (!prod) return;
-      const available = Math.max(0, prod.stock - prod.reserved_stock);
+      const available = Math.round(Math.max(0, prod.stock - prod.reserved_stock) * 1000) / 1000;
       if (available <= 0) {
         showToast(`کالای ${prod.name} در حال حاضر ناموجود است.`);
         return;
       }
       const currentQty = cart[productId] || 0;
-      const nextQty = Math.min(currentQty + 1, available);
+      const nextQty = Math.round(Math.min(currentQty + 1, available) * 1000) / 1000;
       handleQuantityChange(productId, nextQty);
     },
     [products, cart, handleQuantityChange, showToast]

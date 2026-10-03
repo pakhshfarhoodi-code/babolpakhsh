@@ -28,7 +28,7 @@ export const ProductRow: React.FC<ProductRowProps> = ({
   const [likeError, setLikeError] = useState<string | null>(null);
 
   const isMarketTest = Boolean(product.is_market_test);
-  const available = Math.max(0, product.stock - product.reserved_stock);
+  const available = Math.round(Math.max(0, product.stock - product.reserved_stock) * 1000) / 1000;
   const isOutOfStock = !isMarketTest && available <= 0;
   const isLowStock = !isMarketTest && !isOutOfStock && available <= LOW_STOCK_THRESHOLD;
 

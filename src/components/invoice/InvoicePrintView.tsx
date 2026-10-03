@@ -62,7 +62,7 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
 
       const existing = aggregatedItemsMap.get(it.product_id);
       if (existing) {
-        existing.totalQuantity += it.quantity;
+        existing.totalQuantity = Math.round((existing.totalQuantity + it.quantity) * 1000) / 1000;
         existing.totalAmount += it.quantity * existing.visitorPrice;
         if (it.customer_label || it.line_note) {
           existing.notes.push([it.customer_label, it.line_note].filter(Boolean).join(' - '));
@@ -83,7 +83,7 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
 
   const aggregatedList = Array.from(aggregatedItemsMap.values());
   const grandTotal = aggregatedList.reduce((acc, it) => acc + it.totalAmount, 0);
-  const totalUnits = aggregatedList.reduce((acc, it) => acc + it.totalQuantity, 0);
+  const totalUnits = Math.round(aggregatedList.reduce((acc, it) => acc + (Number(it.totalQuantity) || 0), 0) * 1000) / 1000;
 
   // 2. Customer Groups for Page 2 (Breakdown without prices)
   const customerGroupsMap = new Map<
@@ -119,7 +119,7 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
       const existing = customerGroupsMap.get(groupKey);
       if (existing) {
         existing.items.push(it);
-        existing.totalUnits += it.quantity;
+        existing.totalUnits = Math.round((existing.totalUnits + it.quantity) * 1000) / 1000;
       } else {
         customerGroupsMap.set(groupKey, {
           groupKey,
@@ -417,7 +417,7 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
                             <td className="py-2 px-3 font-bold text-slate-900">{it.product_name}</td>
                             <td className="py-2 px-3 text-center text-slate-600">{unit}</td>
                             <td className="py-2 px-3 text-center font-black font-mono text-slate-900">
-                              {it.quantity}
+                              {Number(it.quantity).toLocaleString('fa-IR')}
                             </td>
                             <td className="py-2 px-3 text-slate-600 text-[11px]">
                               {it.line_note || '-'}

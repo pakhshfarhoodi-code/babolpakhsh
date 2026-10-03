@@ -140,7 +140,7 @@ export function useOrders({
         if (!prod) {
           return { success: false, message: `کالای ${item.name} یافت نشد.` };
         }
-        const available = prod.stock - prod.reserved_stock;
+        const available = Math.round((prod.stock - prod.reserved_stock) * 1000) / 1000;
         if (item.quantity > available) {
           return {
             success: false,
@@ -303,7 +303,7 @@ export function useOrders({
             productId: i.productId,
             name: i.name,
             price: i.price,
-            quantity: i.quantity,
+            quantity: Math.round((Number(i.quantity) || 0) * 1000) / 1000,
           })),
         });
 
@@ -323,7 +323,7 @@ export function useOrders({
           if (ordered) {
             return {
               ...p,
-              reserved_stock: p.reserved_stock + ordered.quantity,
+              reserved_stock: Math.round((p.reserved_stock + ordered.quantity) * 1000) / 1000,
             };
           }
           return p;

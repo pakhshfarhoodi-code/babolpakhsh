@@ -221,10 +221,14 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
                 <label className="block text-slate-300 mb-1 font-medium">موجودی اولیه فیزیکی انبار</label>
                 <input
                   type="number"
-                  min="1"
+                  min="0"
+                  step="any"
                   required
                   value={stock || ''}
-                  onChange={(e) => setStock(Number(e.target.value))}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    setStock(isNaN(val) ? 0 : Math.round(val * 1000) / 1000);
+                  }}
                   className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition font-mono"
                 />
               </div>

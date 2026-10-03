@@ -51,7 +51,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
       if (includeStock) {
         row['موجودی کل انبار'] = p.stock;
         row['موجودی رزرو شده'] = p.reserved_stock;
-        row['موجودی آزاد قابل فروش'] = Math.max(0, p.stock - p.reserved_stock);
+        row['موجودی آزاد قابل فروش'] = Math.round(Math.max(0, p.stock - p.reserved_stock) * 1000) / 1000;
       }
 
       row['واحد شمارش'] = p.unit;

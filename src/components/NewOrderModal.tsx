@@ -165,13 +165,14 @@ export const NewOrderModal: React.FC<Props> = ({
       });
       return;
     }
+    const roundedQty = Math.round(newQty * 1000) / 1000;
     setCart((prev) => {
-      if (newQty <= 0) {
+      if (roundedQty <= 0) {
         const next = { ...prev };
         delete next[productId];
         return next;
       }
-      return { ...prev, [productId]: newQty };
+      return { ...prev, [productId]: roundedQty };
     });
   }, [products]);
 
@@ -202,7 +203,8 @@ export const NewOrderModal: React.FC<Props> = ({
   }, [cartItems]);
 
   const totalItemCount = useMemo(() => {
-    return cartItems.reduce((sum, item) => sum + item.quantity, 0);
+    const sum = cartItems.reduce((acc, item) => acc + (Number(item.quantity) || 0), 0);
+    return Math.round(sum * 1000) / 1000;
   }, [cartItems]);
 
   const handleSubmit = async () => {

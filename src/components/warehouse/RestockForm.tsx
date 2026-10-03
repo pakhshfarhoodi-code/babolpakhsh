@@ -24,7 +24,7 @@ export const RestockForm: React.FC<RestockFormProps> = ({
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
-  const [amount, setAmount] = useState<number>(10);
+  const [amount, setAmount] = useState<number | string>(10);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -75,9 +75,10 @@ export const RestockForm: React.FC<RestockFormProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedProductId || amount <= 0) return;
+    const amtNum = Math.round((parseFloat(String(amount)) || 0) * 1000) / 1000;
+    if (!selectedProductId || amtNum <= 0) return;
 
-    onSubmitRestock(selectedProductId, amount);
+    onSubmitRestock(selectedProductId, amtNum);
 
     // Reset form and return focus to search input
     setSelectedProductId('');
@@ -188,7 +189,7 @@ export const RestockForm: React.FC<RestockFormProps> = ({
             <span className="text-slate-300 font-medium">موجودی فعلی در سیستم:</span>
             <span className="font-bold text-indigo-300 font-mono">
               {formatNumber(selectedProduct.stock)} {selectedProduct.unit} (آزاد:{' '}
-              {formatNumber(selectedProduct.stock - selectedProduct.reserved_stock)})
+              {formatNumber(Math.round(Math.max(0, selectedProduct.stock - selectedProduct.reserved_stock) * 1000) / 1000)})
             </span>
           </div>
         )}
@@ -200,19 +201,20 @@ export const RestockForm: React.FC<RestockFormProps> = ({
           </label>
           <input
             type="number"
-            min="1"
+            min="0.001"
+            step="any"
             required
-            value={amount || ''}
-            onChange={(e) => setAmount(Math.max(1, Number(e.target.value)))}
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
             className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition shadow-inner font-mono"
-            placeholder="مثال: 50"
+            placeholder="مثال: 50.5"
           />
         </div>
 
         {/* Submit Button */}
         <button
           type="submit"
-          disabled={!selectedProductId || amount <= 0}
+          disabled={!selectedProductId || (Number(amount) || 0) <= 0}
           className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-98 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs transition flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 cursor-pointer"
         >
           <Plus className="w-4 h-4" />

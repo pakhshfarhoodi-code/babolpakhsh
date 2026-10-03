@@ -20,7 +20,7 @@ export const ProductReturnForm: React.FC<ProductReturnFormProps> = ({
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
-  const [quantity, setQuantity] = useState<number>(1);
+  const [quantity, setQuantity] = useState<number | string>(1);
   const [reason, setReason] = useState<string>('');
 
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -72,9 +72,10 @@ export const ProductReturnForm: React.FC<ProductReturnFormProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedProductId || quantity <= 0) return;
+    const qtyNum = Math.round((parseFloat(String(quantity)) || 0) * 1000) / 1000;
+    if (!selectedProductId || qtyNum <= 0) return;
 
-    onSubmitReturn(selectedProductId, quantity, reason);
+    onSubmitReturn(selectedProductId, qtyNum, reason);
 
     // Reset form
     setSelectedProductId('');
@@ -190,12 +191,13 @@ export const ProductReturnForm: React.FC<ProductReturnFormProps> = ({
             </label>
             <input
               type="number"
-              min="1"
+              min="0.001"
+              step="any"
               required
-              value={quantity || ''}
-              onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))}
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition font-mono"
-              placeholder="1"
+              placeholder="مثال: 1.5"
             />
           </div>
 
@@ -217,7 +219,7 @@ export const ProductReturnForm: React.FC<ProductReturnFormProps> = ({
         {/* Submit Button */}
         <button
           type="submit"
-          disabled={!selectedProductId || quantity <= 0}
+          disabled={!selectedProductId || (Number(quantity) || 0) <= 0}
           className="w-full min-h-[42px] py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-98 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs transition flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 cursor-pointer"
         >
           <RotateCcw className="w-4 h-4" />

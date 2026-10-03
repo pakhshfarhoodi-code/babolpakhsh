@@ -181,18 +181,19 @@ export function buildCartFromOrder(
 }
 
 /**
- * Common catalog filter logic for products (categories, brand, search, and inStockOnly toggle)
+ * Common catalog filter logic for products (categories, brand/selectedBrands, search, and inStockOnly toggle)
  */
 export function filterCatalogProducts(
   products: Product[],
   options: {
     categoryId?: string;
     brand?: string;
+    selectedBrands?: string[];
     searchTerm?: string;
     inStockOnly?: boolean;
   }
 ): Product[] {
-  const { categoryId = 'all', brand = 'all', searchTerm = '', inStockOnly = false } = options;
+  const { categoryId = 'all', brand = 'all', selectedBrands, searchTerm = '', inStockOnly = false } = options;
   const term = searchTerm.toLowerCase().trim();
 
   return products.filter((p) => {
@@ -200,7 +201,15 @@ export function filterCatalogProducts(
     // When inStockOnly is active, hide is_market_test ("به زودی") products
     if (inStockOnly && p.is_market_test) return false;
     if (categoryId !== 'all' && p.category_id !== categoryId) return false;
-    if (brand !== 'all' && p.brand !== brand) return false;
+
+    // Multi-brand filter support
+    if (selectedBrands && selectedBrands.length > 0) {
+      const pBrand = (p.brand || '').trim();
+      if (!selectedBrands.includes(pBrand)) return false;
+    } else if (brand !== 'all') {
+      if (p.brand !== brand) return false;
+    }
+
     if (term) {
       const matchName = p.name.toLowerCase().includes(term);
       const matchBrand = p.brand && p.brand.toLowerCase().includes(term);
@@ -209,4 +218,110 @@ export function filterCatalogProducts(
     return true;
   });
 }
+
+/**
+ * Normalizes Persian product name to find its base family name for grouping
+ * (e.g. "پنیر پیتزا مطهر ۲ کیلویی" and "پنیر پیتزا دالیا ۵۰۰ گرمی" -> "پنیر پیتزا")
+ */
+export function getProductFamilyKey(name: string): string {
+  if (!name) return '';
+  let clean = name.trim()
+    .replace(/[ي]/g, 'ی')
+    .replace(/[ك]/g, 'ک')
+    // Remove numbers and common unit/size terms in Persian/English
+    .replace(/[۰-۹0-9]+(\s*(کیلو|کیلویی|گرم|گرمی|درصد|%|عددی|عدد|لیتر|لیتری|cc|ml|gr|kg))?/gi, '')
+    // Remove brackets, dashes, slashes, punctuation
+    .replace(/[()[\]–\-_/\\,،.+]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const words = clean.split(' ').filter(Boolean);
+  if (words.length >= 2) {
+    return `${words[0]} ${words[1]}`.toLowerCase();
+  }
+  return (words[0] || clean).toLowerCase();
+}
+
+export interface SortCatalogOptions {
+  popular?: boolean;
+  byName?: boolean;
+  byPrice?: boolean;
+  productSalesMap?: Record<string, number>;
+}
+
+/**
+ * Sorts catalog products based on popularity (most sold), alphabetical name, and price (low to high).
+ * Supports combined name + price sorting where same family/base items (e.g. all pizza cheese varieties)
+ * appear together, ordered from lowest price to highest price.
+ */
+export function sortCatalogProducts(
+  products: Product[],
+  options: SortCatalogOptions
+): Product[] {
+  const { popular = false, byName = false, byPrice = false, productSalesMap = {} } = options;
+
+  const sorted = [...products];
+
+  // Case 1: Both Name and Price are selected
+  // Items of the same family/name group appear together, ordered by price from lowest to highest
+  if (byName && byPrice) {
+    sorted.sort((a, b) => {
+      const familyA = getProductFamilyKey(a.name);
+      const familyB = getProductFamilyKey(b.name);
+
+      const familyComp = familyA.localeCompare(familyB, 'fa');
+      if (familyComp !== 0) {
+        return familyComp;
+      }
+
+      // Inside same family: sort by price ascending (lowest price first)
+      if (a.price !== b.price) {
+        return a.price - b.price;
+      }
+
+      // Tiebreaker: full name
+      return a.name.localeCompare(b.name, 'fa');
+    });
+    return sorted;
+  }
+
+  // Case 2: Only Name is selected (alphabetical)
+  if (byName) {
+    sorted.sort((a, b) => a.name.localeCompare(b.name, 'fa'));
+    return sorted;
+  }
+
+  // Case 3: Only Price is selected (lowest price to highest price)
+  if (byPrice) {
+    sorted.sort((a, b) => {
+      if (a.price !== b.price) {
+        return a.price - b.price;
+      }
+      return a.name.localeCompare(b.name, 'fa');
+    });
+    return sorted;
+  }
+
+  // Case 4: Popular (Default - highest sales count first)
+  if (popular) {
+    sorted.sort((a, b) => {
+      const salesA = productSalesMap[a.id] || 0;
+      const salesB = productSalesMap[b.id] || 0;
+      if (salesB !== salesA) {
+        return salesB - salesA;
+      }
+      // If sales are equal, sort by likes count (if market test) or alphabetical name
+      const likesA = (a as any).likes_count || 0;
+      const likesB = (b as any).likes_count || 0;
+      if (likesB !== likesA) {
+        return likesB - likesA;
+      }
+      return a.name.localeCompare(b.name, 'fa');
+    });
+    return sorted;
+  }
+
+  return sorted;
+}
+
 

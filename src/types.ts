@@ -38,6 +38,7 @@ export interface Product {
   stock: number;
   reserved_stock: number;
   unit: string;
+  items_per_package?: number; // فیلد اختیاری تعداد (تعداد در کارتن/بسته)
   image_url: string;
   is_active: boolean;
   is_market_test?: boolean; // قابلیت تست بازار و اعلام به زودی
@@ -98,6 +99,8 @@ export interface OrderItem {
   name: string;
   price: number;
   quantity: number;
+  items_per_package?: number;
+  unit?: string;
   created_at?: string;
 }
 
@@ -159,6 +162,8 @@ export interface LoadingBillItem {
   line_note?: string | null;
   visitor_price?: number;
   store_price?: number;
+  items_per_package?: number;
+  unit?: string;
   created_at?: string;
 }
 

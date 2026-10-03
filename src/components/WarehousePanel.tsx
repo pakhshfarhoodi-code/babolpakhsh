@@ -128,8 +128,10 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({
     category_id: string;
     price: number;
     visitor_price?: number;
+    consumer_price?: number;
     stock: number;
     unit: string;
+    items_per_package?: number;
     image_url: string;
   }) => {
     addNewProduct({
@@ -138,8 +140,10 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({
       category_id: data.category_id,
       price: data.price,
       visitor_price: data.visitor_price,
+      consumer_price: data.consumer_price,
       stock: data.stock,
       unit: data.unit,
+      items_per_package: data.items_per_package,
       image_url: data.image_url,
       is_active: true,
     });

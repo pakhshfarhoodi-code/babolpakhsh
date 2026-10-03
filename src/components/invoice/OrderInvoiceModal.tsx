@@ -336,8 +336,11 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
                       
                       // Look up unit specified by admin in catalog
                       const productObj = products.find((p) => p.id === item.product_id);
+                      const packCount = item.items_per_package || productObj?.items_per_package;
                       const unitStr = (item as any).unit || productObj?.unit || 'عدد';
-                      const formattedQtyUnit = `${(Number(item.quantity) || 0).toLocaleString('fa-IR')} ${unitStr}`;
+                      const formattedQtyUnit = packCount && packCount > 1
+                        ? `${(Number(item.quantity) || 0).toLocaleString('fa-IR')} ${unitStr} (${packCount} عددی)`
+                        : `${(Number(item.quantity) || 0).toLocaleString('fa-IR')} ${unitStr}`;
 
                       return (
                         <tr

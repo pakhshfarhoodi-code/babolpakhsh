@@ -176,7 +176,8 @@ export const SupermarketPortal: React.FC = () => {
     return Object.entries(cart).reduce((sum: number, [pId, qty]) => {
       const prod = products.find((p) => p.id === pId);
       const numQty = Number(qty) || 0;
-      return sum + (prod ? prod.price * numQty : 0);
+      const multiplier = prod?.items_per_package && prod.items_per_package > 0 ? prod.items_per_package : 1;
+      return sum + (prod ? prod.price * numQty * multiplier : 0);
     }, 0);
   }, [cart, products]);
 
@@ -260,11 +261,14 @@ export const SupermarketPortal: React.FC = () => {
         const numQty = Number(quantity);
         const prod = products.find((p) => p.id === productId);
         if (!prod || numQty <= 0) return null;
+        const multiplier = prod.items_per_package && prod.items_per_package > 0 ? prod.items_per_package : 1;
         return {
           productId,
           name: prod.name,
-          price: prod.price,
+          price: prod.price * multiplier,
           quantity: numQty,
+          items_per_package: prod.items_per_package,
+          unit: prod.unit,
         };
       })
       .filter((item): item is NonNullable<typeof item> => item !== null);

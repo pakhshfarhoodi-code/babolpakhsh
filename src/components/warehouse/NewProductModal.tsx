@@ -17,6 +17,7 @@ interface NewProductModalProps {
     consumer_price?: number;
     stock: number;
     unit: string;
+    items_per_package?: number;
     image_url: string;
   }) => void;
 }
@@ -36,6 +37,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
   const [consumerPrice, setConsumerPrice] = useState<number>(0);
   const [stock, setStock] = useState<number>(50);
   const [unit, setUnit] = useState('عدد');
+  const [itemsPerPackage, setItemsPerPackage] = useState<number | string>('');
 
   if (!isOpen) return null;
 
@@ -75,6 +77,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
       consumer_price: consumerPrice > 0 ? consumerPrice : undefined,
       stock,
       unit,
+      items_per_package: Number(itemsPerPackage) > 0 ? Number(itemsPerPackage) : undefined,
       image_url: getSampleImage(categoryId),
     });
 
@@ -84,6 +87,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
     setVisitorPrice(0);
     setConsumerPrice(0);
     setStock(50);
+    setItemsPerPackage('');
   };
 
   return (
@@ -200,7 +204,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
               موجودی و واحد سنجش
             </span>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-slate-300 mb-1 font-medium">واحد سنجش</label>
                 <select
@@ -209,6 +213,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
                   className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition cursor-pointer"
                 >
                   <option value="عدد">عدد</option>
+                  <option value="کارتن">کارتن</option>
                   <option value="باکس">باکس</option>
                   <option value="بسته">بسته</option>
                   <option value="کیلوگرم">کیلوگرم</option>
@@ -218,7 +223,23 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-slate-300 mb-1 font-medium">موجودی اولیه فیزیکی انبار</label>
+                <label className="block text-slate-300 mb-1 font-medium flex items-center justify-between">
+                  <span>تعداد در واحد / کارتن</span>
+                  <span className="text-[10px] text-slate-400">اختیاری</span>
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="مثلاً ۲۴ عدد"
+                  value={itemsPerPackage}
+                  onChange={(e) => setItemsPerPackage(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition font-mono placeholder:text-slate-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 mb-1 font-medium">موجودی فیزیکی اولیه</label>
                 <input
                   type="number"
                   min="0"
@@ -233,6 +254,10 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
                 />
               </div>
             </div>
+
+            <p className="text-[11px] text-slate-400 leading-relaxed bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
+              💡 <span className="font-semibold text-slate-300">راهنما:</span> برای کالاهای بسته‌ای/کارتنی مانند بستنی، تعداد در هر کارتن (مثلاً ۲۴ عدد) را وارد کنید تا سیستم مبلغ فاکتور مشتری را از ضرب (تعداد کارتن × تعداد بستنی × قیمت) محاسبه کند. برای اقلام کیلویی مانند سوسیس و کالباس این فیلد نیازی به تکمیل ندارد.
+            </p>
           </div>
 
           <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-3">

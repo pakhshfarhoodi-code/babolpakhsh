@@ -55,6 +55,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
       }
 
       row['واحد شمارش'] = p.unit;
+      row['تعداد در کارتن/بسته'] = p.items_per_package && p.items_per_package > 0 ? p.items_per_package : '';
       row['وضعیت کالا'] = p.is_active ? 'فعال' : 'غیرفعال';
 
       return row;

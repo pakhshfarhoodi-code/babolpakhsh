@@ -187,13 +187,18 @@ export const NewOrderModal: React.FC<Props> = ({
     return (Object.entries(cart) as [string, number][]).map(([productId, quantity]) => {
       const prod = products.find((p) => p.id === productId);
       if (!prod || quantity <= 0) return null;
+      const multiplier = prod.items_per_package && prod.items_per_package > 0 ? prod.items_per_package : 1;
+      const cartonPrice = prod.price * multiplier;
       return {
         productId,
         name: prod.name,
-        price: prod.price,
+        price: cartonPrice,
+        basePrice: prod.price,
         quantity,
+        multiplier,
         unit: prod.unit,
-        total: prod.price * quantity,
+        items_per_package: prod.items_per_package,
+        total: cartonPrice * quantity,
       };
     }).filter((i): i is NonNullable<typeof i> => i !== null);
   }, [cart, products]);
@@ -245,6 +250,8 @@ export const NewOrderModal: React.FC<Props> = ({
           name: c.name,
           price: c.price,
           quantity: c.quantity,
+          items_per_package: c.items_per_package,
+          unit: c.unit,
         })),
       });
 
@@ -612,7 +619,8 @@ export const NewOrderModal: React.FC<Props> = ({
                       </div>
                       <div className="flex items-center justify-between text-xs text-slate-400 mt-1.5">
                         <span>
-                          {item.quantity} {item.unit} × {formatPrice(item.price)}
+                          {item.quantity} {item.unit}
+                          {item.multiplier > 1 && ` (${(item.quantity * item.multiplier).toLocaleString('fa-IR')} عدد)`} × {formatPrice(item.price)}
                         </span>
                         <button
                           onClick={() => handleSetQuantity(item.productId, 0)}

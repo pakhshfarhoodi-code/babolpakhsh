@@ -55,9 +55,12 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
   if (bill.items) {
     for (const it of bill.items) {
       const prod = productMap.get(it.product_id);
-      const unit = prod?.unit || 'بسته';
+      const packCount = it.items_per_package || prod?.items_per_package;
+      const unit = packCount && packCount > 1
+        ? `${it.unit || prod?.unit || 'کارتن'} (${packCount} عددی)`
+        : (it.unit || prod?.unit || 'بسته');
       const vPrice = Number(
-        it.visitor_price ?? prod?.visitor_price ?? Math.round(Number(prod?.price || 0) * 0.85)
+        it.visitor_price ?? (prod?.visitor_price ? Number(prod.visitor_price) * (packCount || 1) : Math.round(Number(prod?.price || 0) * (packCount || 1) * 0.85))
       );
 
       const existing = aggregatedItemsMap.get(it.product_id);
@@ -409,7 +412,10 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
                     <tbody className="divide-y divide-slate-200">
                       {group.items.map((it, idx) => {
                         const prod = productMap.get(it.product_id);
-                        const unit = prod?.unit || 'بسته';
+                        const packCount = it.items_per_package || prod?.items_per_package;
+                        const unit = packCount && packCount > 1
+                          ? `${it.unit || prod?.unit || 'کارتن'} (${packCount} عددی)`
+                          : (it.unit || prod?.unit || 'بسته');
 
                         return (
                           <tr key={it.id || idx} className="hover:bg-slate-50/50">

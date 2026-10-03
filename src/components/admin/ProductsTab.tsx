@@ -124,6 +124,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   const [newProdConsumerPrice, setNewProdConsumerPrice] = useState(0);
   const [newProdStock, setNewProdStock] = useState(0);
   const [newProdUnit, setNewProdUnit] = useState('عدد');
+  const [newProdItemsPerPackage, setNewProdItemsPerPackage] = useState<number | string>('');
   const [newProdImage, setNewProdImage] = useState<string>('');
   const [newProdIsMarketTest, setNewProdIsMarketTest] = useState(false);
   const [addModalError, setAddModalError] = useState<string | null>(null);
@@ -154,6 +155,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   const [editProdConsumerPrice, setEditProdConsumerPrice] = useState(0);
   const [editProdStock, setEditProdStock] = useState(0);
   const [editProdUnit, setEditProdUnit] = useState('عدد');
+  const [editProdItemsPerPackage, setEditProdItemsPerPackage] = useState<number | string>('');
   const [editProdImage, setEditProdImage] = useState('');
   const [editProdIsActive, setEditProdIsActive] = useState(true);
   const [editProdIsMarketTest, setEditProdIsMarketTest] = useState(false);
@@ -170,6 +172,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
     setEditProdConsumerPrice(prod.consumer_price || 0);
     setEditProdStock(prod.stock);
     setEditProdUnit(prod.unit || 'عدد');
+    setEditProdItemsPerPackage(prod.items_per_package || '');
     setEditProdImage(prod.image_url || '');
     setEditProdIsActive(prod.is_active !== false);
     setEditProdIsMarketTest(Boolean(prod.is_market_test));
@@ -219,6 +222,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
           consumer_price: editProdConsumerPrice > 0 ? editProdConsumerPrice : undefined,
           stock: editProdStock,
           unit: editProdUnit,
+          items_per_package: Number(editProdItemsPerPackage) > 0 ? Number(editProdItemsPerPackage) : undefined,
           image_url: finalImage,
           is_active: editProdIsActive,
           is_market_test: editProdIsMarketTest,
@@ -476,6 +480,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
       stock: newProdStock,
       reserved_stock: 0,
       unit: newProdUnit,
+      items_per_package: Number(newProdItemsPerPackage) > 0 ? Number(newProdItemsPerPackage) : undefined,
       image_url: newProdImage.trim() || getSampleImage(newProdCat),
       is_active: true,
       is_market_test: newProdIsMarketTest,
@@ -487,6 +492,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
     setNewProdVisitorPrice(0);
     setNewProdConsumerPrice(0);
     setNewProdStock(0);
+    setNewProdItemsPerPackage('');
     setNewProdImage('');
     setNewProdIsMarketTest(false);
     setAddModalError(null);
@@ -950,7 +956,16 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                           </span>
                         )}
                       </td>
-                      <td className="py-3 px-4 text-slate-400">{product.unit}</td>
+                      <td className="py-3 px-4 text-slate-300">
+                        <div className="flex flex-col">
+                          <span>{product.unit}</span>
+                          {product.items_per_package && product.items_per_package > 0 ? (
+                            <span className="text-[11px] font-mono text-indigo-400 font-semibold">
+                              ({product.items_per_package.toLocaleString('fa-IR')} عددی)
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
 
                       {/* Active Status Toggle (Show / Hide in store catalog) */}
                       <td className="py-3 px-4 text-center">
@@ -1212,14 +1227,30 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                   موجودی و واحد سنجش
                 </span>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <UnitSelectPicker
                     selectedUnit={newProdUnit}
                     onSelectUnit={setNewProdUnit}
                   />
 
                   <div>
-                    <label className="block text-slate-300 mb-1 font-medium">
+                    <label className="block text-slate-300 mb-1 font-medium flex items-center justify-between text-xs">
+                      <span>تعداد در واحد / کارتن</span>
+                      <span className="text-[10px] text-slate-400">اختیاری</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      placeholder="مثلاً ۲۴ عدد"
+                      value={newProdItemsPerPackage}
+                      onChange={(e) => setNewProdItemsPerPackage(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500 font-mono placeholder:text-slate-600"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 mb-1 font-medium text-xs">
                       موجودی اولیه فیزیکی سردخانه
                     </label>
                     <input
@@ -1235,6 +1266,10 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                     />
                   </div>
                 </div>
+
+                <p className="text-[11px] text-slate-400 leading-relaxed bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
+                  💡 <span className="font-semibold text-slate-300">راهنما:</span> برای کالاهای بسته‌ای/کارتنی مانند بستنی، تعداد در هر کارتن (مثلاً ۲۴ عدد) را وارد کنید تا سیستم مبلغ فاکتور مشتری را از ضرب (تعداد کارتن × تعداد بستنی × قیمت) محاسبه کند. برای اقلام کیلویی مانند سوسیس و کالباس این فیلد نیازی به تکمیل ندارد.
+                </p>
               </div>
 
               {/* Section 4: Product Image (Upload File, Image URL or Presets) */}
@@ -1564,15 +1599,31 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                   موجودی سردخانه، وضعیت عرضه و تست بازار
                 </span>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
                   <UnitSelectPicker
                     selectedUnit={editProdUnit}
                     onSelectUnit={setEditProdUnit}
                   />
 
                   <div>
+                    <label className="block text-slate-300 mb-1 font-medium flex items-center justify-between text-xs">
+                      <span>تعداد در کارتن / بسته</span>
+                      <span className="text-[10px] text-slate-400">اختیاری</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      placeholder="مثلاً ۲۴ عدد"
+                      value={editProdItemsPerPackage}
+                      onChange={(e) => setEditProdItemsPerPackage(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500 font-mono placeholder:text-slate-600"
+                    />
+                  </div>
+
+                  <div>
                     <label className="block text-slate-300 mb-1 font-medium text-xs">
-                      کل موجودی فیزیکی سردخانه
+                      کل موجودی سردخانه
                     </label>
                     <input
                       type="number"
@@ -1603,6 +1654,10 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                     </button>
                   </div>
                 </div>
+
+                <p className="text-[11px] text-slate-400 leading-relaxed bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
+                  💡 <span className="font-semibold text-slate-300">راهنما:</span> برای کالاهای بسته‌ای/کارتنی مانند بستنی، تعداد در هر کارتن (مثلاً ۲۴ عدد) را وارد کنید تا سیستم مبلغ فاکتور مشتری را از ضرب (تعداد کارتن × تعداد بستنی × قیمت) محاسبه کند. برای اقلام کیلویی مانند سوسیس و کالباس این فیلد نیازی به تکمیل ندارد.
+                </p>
 
                 {/* Market Test Toggle & Likes Section */}
                 <div className="pt-3 border-t border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-slate-900/50 p-3 rounded-xl border border-slate-800/80">

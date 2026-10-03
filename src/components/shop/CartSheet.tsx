@@ -47,12 +47,15 @@ export const CartSheet: React.FC<CartSheetProps> = ({
       const numQty = Number(quantity);
       const product = products.find((p) => p.id === productId);
       if (!product || numQty <= 0) return null;
+      const multiplier = product.items_per_package && product.items_per_package > 0 ? product.items_per_package : 1;
       const available = Math.round(Math.max(0, product.stock - product.reserved_stock) * 1000) / 1000;
       return {
         product,
         quantity: numQty,
         available,
-        rowTotal: product.price * numQty,
+        multiplier,
+        unitCartonPrice: product.price * multiplier,
+        rowTotal: product.price * numQty * multiplier,
       };
     })
     .filter((item): item is NonNullable<typeof item> => item !== null);
@@ -145,7 +148,7 @@ export const CartSheet: React.FC<CartSheetProps> = ({
             <p className="text-xs text-slate-500">از کاتالوگ محصولات، کالاهای مورد نیاز را اضافه کنید.</p>
           </div>
         ) : (
-          cartEntries.map(({ product, quantity, available, rowTotal }) => (
+          cartEntries.map(({ product, quantity, available, multiplier, unitCartonPrice, rowTotal }) => (
             <div
               key={product.id}
               className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-2"
@@ -153,17 +156,35 @@ export const CartSheet: React.FC<CartSheetProps> = ({
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <h4 className="text-xs font-bold text-slate-100 truncate">{product.name}</h4>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    فی: {product.price.toLocaleString('fa-IR')} تومان
-                  </p>
+                  <div className="text-[11px] text-slate-400 mt-0.5 space-y-0.5">
+                    {multiplier > 1 ? (
+                      <div>
+                        <span>فی هر {product.unit}: </span>
+                        <span className="text-slate-300 font-semibold">{formatPrice(unitCartonPrice)}</span>
+                        <span className="text-slate-500 mr-1.5">(دانه‌ای {formatPrice(product.price)})</span>
+                      </div>
+                    ) : (
+                      <div>فی: {formatPrice(product.price)} / {product.unit}</div>
+                    )}
+                  </div>
                 </div>
-                <span className="text-xs font-bold text-emerald-400 shrink-0">
-                  {formatPrice(rowTotal)}
-                </span>
+                <div className="text-left shrink-0">
+                  <span className="text-xs font-bold text-emerald-400 block font-mono">
+                    {formatPrice(rowTotal)}
+                  </span>
+                  {multiplier > 1 && (
+                    <span className="text-[10px] text-indigo-400 font-mono">
+                      {(quantity * multiplier).toLocaleString('fa-IR')} عدد
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center justify-between pt-1 border-t border-slate-900">
-                <span className="text-xs text-slate-500">واحد: {product.unit}</span>
+                <span className="text-xs text-slate-400">
+                  {quantity} {product.unit}
+                  {multiplier > 1 && ` (${multiplier} عددی)`}
+                </span>
                 <QuantityStepper
                   compact
                   quantity={quantity}

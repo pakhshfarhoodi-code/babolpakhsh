@@ -120,6 +120,7 @@ interface AppContextType {
     visitor_price?: number;
     stock?: number;
     unit?: string;
+    items_per_package?: number;
     is_active?: boolean;
   }>) => { success: boolean; createdCount: number; updatedCount: number; message: string } | Promise<{ success: boolean; createdCount: number; updatedCount: number; message: string }>;
   deleteProduct: (productId: string) => Promise<{ success: boolean; message: string }>;

@@ -131,18 +131,39 @@ export const ProductRow: React.FC<ProductRowProps> = ({
               </h4>
             </div>
 
-            {product.brand && (
-              <p className="text-xs text-slate-400">
-                برند: <span className="text-slate-300 font-semibold">{product.brand}</span>
-              </p>
-            )}
-
-            <div className="flex items-center gap-1.5 pt-0.5">
-              <span className={`text-sm font-extrabold market-test-price ${isMarketTest ? 'text-violet-300' : 'text-emerald-400'}`}>
-                {formatPrice(displayPrice)}
-              </span>
-              <span className="text-xs text-slate-500">/ {product.unit}</span>
+            <div className="flex items-center gap-2 flex-wrap text-xs text-slate-400">
+              {product.brand && (
+                <span>
+                  برند: <span className="text-slate-300 font-semibold">{product.brand}</span>
+                </span>
+              )}
+              {product.items_per_package && product.items_per_package > 0 && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 font-bold border border-indigo-500/30 text-[11px]">
+                  بسته {product.items_per_package.toLocaleString('fa-IR')} عددی
+                </span>
+              )}
             </div>
+
+            {product.items_per_package && product.items_per_package > 0 ? (
+              <div className="pt-0.5 space-y-0.5">
+                <div className="flex items-baseline gap-1.5 flex-wrap">
+                  <span className={`text-sm sm:text-base font-black ${isMarketTest ? 'text-violet-300' : 'text-emerald-400'}`}>
+                    {formatPrice(displayPrice * product.items_per_package)}
+                  </span>
+                  <span className="text-xs text-slate-400 font-medium">/ هر {product.unit}</span>
+                  <span className="text-[11px] text-slate-400">
+                    (دانه‌ای {formatPrice(displayPrice)})
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 pt-0.5">
+                <span className={`text-sm font-extrabold market-test-price ${isMarketTest ? 'text-violet-300' : 'text-emerald-400'}`}>
+                  {formatPrice(displayPrice)}
+                </span>
+                <span className="text-xs text-slate-500">/ {product.unit}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -185,13 +206,20 @@ export const ProductRow: React.FC<ProductRowProps> = ({
               )}
             </div>
           ) : (
-            <QuantityStepper
-              quantity={quantity}
-              available={available}
-              onChange={onChangeQuantity}
-              disabled={isOutOfStock}
-              onExceedLimit={onExceedLimit}
-            />
+            <div className="flex flex-col items-end gap-1">
+              <QuantityStepper
+                quantity={quantity}
+                available={available}
+                onChange={onChangeQuantity}
+                disabled={isOutOfStock}
+                onExceedLimit={onExceedLimit}
+              />
+              {quantity > 0 && product.items_per_package && product.items_per_package > 0 && (
+                <div className="text-[10px] sm:text-[11px] text-indigo-300 font-mono text-left font-semibold leading-tight">
+                  {(quantity * product.items_per_package).toLocaleString('fa-IR')} عدد = {formatPrice(quantity * product.items_per_package * displayPrice)}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -261,20 +289,32 @@ export const ProductRow: React.FC<ProductRowProps> = ({
                   <span className="text-xs text-slate-400 block mb-0.5">
                     {priceMode === 'visitor' ? 'قیمت خرید ویزیتور:' : 'قیمت خرید فروشگاه:'}
                   </span>
-                  <div className="flex items-baseline gap-1">
+                  <div className="flex items-baseline gap-1.5 flex-wrap">
                     <span className={`text-xl font-black font-mono ${isMarketTest ? 'text-violet-400' : 'text-emerald-400'}`}>
-                      {formatPrice(displayPrice)}
+                      {formatPrice(displayPrice * (product.items_per_package && product.items_per_package > 0 ? product.items_per_package : 1))}
                     </span>
-                    <span className="text-xs text-slate-400">/ {product.unit}</span>
+                    <span className="text-xs text-slate-400">/ هر {product.unit}</span>
+                    {product.items_per_package && product.items_per_package > 0 && (
+                      <span className="text-xs text-indigo-300 bg-indigo-500/15 border border-indigo-500/30 px-2 py-0.5 rounded-lg font-bold">
+                        {product.items_per_package.toLocaleString('fa-IR')} عددی (دانه‌ای {formatPrice(displayPrice)})
+                      </span>
+                    )}
                   </div>
                 </div>
 
                 {product.consumer_price && product.consumer_price > 0 && (
                   <div className="text-left">
                     <span className="text-[11px] text-slate-400 block mb-0.5">قیمت مصرف‌کننده:</span>
-                    <span className="text-sm font-bold text-amber-300 font-mono">
-                      {formatPrice(product.consumer_price)}
-                    </span>
+                    <div className="flex flex-col items-end">
+                      <span className="text-sm font-bold text-amber-300 font-mono">
+                        {formatPrice(product.consumer_price * (product.items_per_package && product.items_per_package > 0 ? product.items_per_package : 1))}
+                      </span>
+                      {product.items_per_package && product.items_per_package > 0 && (
+                        <span className="text-[10px] text-amber-400/80 font-mono">
+                          (هر عدد: {formatPrice(product.consumer_price)})
+                        </span>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

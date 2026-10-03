@@ -2,9 +2,19 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Product } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { ProductRow } from './ProductRow';
-import { FilterSheet } from './FilterSheet';
-import { filterCatalogProducts } from './shopUtils';
-import { Search, X, SlidersHorizontal, Package, Check } from 'lucide-react';
+import { BrandDropdown } from './BrandDropdown';
+import { filterCatalogProducts, sortCatalogProducts } from './shopUtils';
+import {
+  Search,
+  X,
+  Package,
+  Check,
+  Flame,
+  ArrowDownAZ,
+  ArrowDownNarrowWide,
+  SlidersHorizontal,
+  Info,
+} from 'lucide-react';
 
 export interface ProductCatalogProps {
   products: Product[];
@@ -25,14 +35,33 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
   defaultInStockOnly = false,
   topProductsCard,
 }) => {
-  const { categories } = useApp();
+  const { categories, orders } = useApp();
 
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
-  const [selectedBrand, setSelectedBrand] = useState<string>('all');
+  const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
   const [inStockOnly, setInStockOnly] = useState<boolean>(defaultInStockOnly);
-  const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
+
+  // 3 New Display & Sort filters
+  // Popular is active by default as requested: "بطور پیش فرض همیشه باید همین فیبتر فعال باشد"
+  const [isPopularActive, setIsPopularActive] = useState<boolean>(true);
+  const [sortByName, setSortByName] = useState<boolean>(false);
+  const [sortByPrice, setSortByPrice] = useState<boolean>(false);
+
+  // Calculate sales volume for each product across past valid orders
+  const productSalesMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    if (!orders || orders.length === 0) return map;
+    for (const order of orders) {
+      if (order.status === 'undelivered') continue;
+      for (const item of order.items || []) {
+        const q = Number(item.quantity) || 0;
+        map[item.product_id] = (map[item.product_id] || 0) + q;
+      }
+    }
+    return map;
+  }, [orders]);
 
   // Available brands in currently selected category (only active products)
   const availableBrandsInCategory = useMemo(() => {
@@ -44,45 +73,129 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
         brandsSet.add(p.brand.trim());
       }
     });
-    return Array.from(brandsSet);
+    return Array.from(brandsSet).sort((a, b) => a.localeCompare(b, 'fa'));
   }, [products, selectedCategoryId]);
 
-  // Reset selected brand if no longer present in chosen category
-  useEffect(() => {
-    if (selectedBrand !== 'all' && !availableBrandsInCategory.includes(selectedBrand)) {
-      setSelectedBrand('all');
-    }
-  }, [selectedCategoryId, availableBrandsInCategory, selectedBrand]);
+  // Count active products for each brand
+  const brandProductCountMap = useMemo(() => {
+    const countMap: Record<string, number> = {};
+    products.forEach((p) => {
+      if (!p.is_active) return;
+      if (selectedCategoryId !== 'all' && p.category_id !== selectedCategoryId) return;
+      if (inStockOnly && p.is_market_test) return;
+      const b = (p.brand || '').trim();
+      if (b) {
+        countMap[b] = (countMap[b] || 0) + 1;
+      }
+    });
+    return countMap;
+  }, [products, selectedCategoryId, inStockOnly]);
 
-  // Filtered Products using common filterCatalogProducts helper
+  // Remove any selected brands that are no longer available in the active category
+  useEffect(() => {
+    if (selectedBrands.length > 0) {
+      const validBrands = selectedBrands.filter((b) => availableBrandsInCategory.includes(b));
+      if (validBrands.length !== selectedBrands.length) {
+        setSelectedBrands(validBrands);
+      }
+    }
+  }, [availableBrandsInCategory, selectedBrands]);
+
+  // Filter products using multi-brand and keyword search
   const filteredProducts = useMemo(() => {
-    return filterCatalogProducts(products, {
+    const matched = filterCatalogProducts(products, {
       categoryId: selectedCategoryId,
-      brand: selectedBrand,
+      selectedBrands,
       searchTerm,
       inStockOnly,
     });
-  }, [products, selectedCategoryId, selectedBrand, searchTerm, inStockOnly]);
+
+    // Apply sorting logic (Popular / Name / Price / Name + Price)
+    return sortCatalogProducts(matched, {
+      popular: isPopularActive,
+      byName: sortByName,
+      byPrice: sortByPrice,
+      productSalesMap,
+    });
+  }, [
+    products,
+    selectedCategoryId,
+    selectedBrands,
+    searchTerm,
+    inStockOnly,
+    isPopularActive,
+    sortByName,
+    sortByPrice,
+    productSalesMap,
+  ]);
+
+  // Toggle handlers for the 3 display/sort filters
+  const handleTogglePopular = useCallback(() => {
+    setIsPopularActive(true);
+    setSortByName(false);
+    setSortByPrice(false);
+  }, []);
+
+  const handleToggleByName = useCallback(() => {
+    if (sortByName) {
+      setSortByName(false);
+      // If price is not active either, fallback to default popular
+      if (!sortByPrice) {
+        setIsPopularActive(true);
+      }
+    } else {
+      setSortByName(true);
+      setIsPopularActive(false);
+      // sortByPrice remains active if already toggled! Both can be active at the same time
+    }
+  }, [sortByName, sortByPrice]);
+
+  const handleToggleByPrice = useCallback(() => {
+    if (sortByPrice) {
+      setSortByPrice(false);
+      // If name is not active either, fallback to default popular
+      if (!sortByName) {
+        setIsPopularActive(true);
+      }
+    } else {
+      setSortByPrice(true);
+      setIsPopularActive(false);
+      // sortByName remains active if already toggled! Both can be active at the same time
+    }
+  }, [sortByPrice, sortByName]);
+
+  // Remove a single brand tag
+  const handleRemoveBrand = useCallback((brandToRemove: string) => {
+    setSelectedBrands((prev) => prev.filter((b) => b !== brandToRemove));
+  }, []);
 
   // Clear all filters
   const handleClearAllFilters = useCallback(() => {
     setSearchTerm('');
     setSelectedCategoryId('all');
-    setSelectedBrand('all');
+    setSelectedBrands([]);
     setInStockOnly(defaultInStockOnly);
+    setIsPopularActive(true);
+    setSortByName(false);
+    setSortByPrice(false);
   }, [defaultInStockOnly]);
+
+  const isBothNameAndPrice = sortByName && sortByPrice;
 
   const isAnyFilterActive =
     searchTerm.trim() !== '' ||
     selectedCategoryId !== 'all' ||
-    selectedBrand !== 'all' ||
-    inStockOnly !== defaultInStockOnly;
+    selectedBrands.length > 0 ||
+    inStockOnly !== defaultInStockOnly ||
+    !isPopularActive ||
+    sortByName ||
+    sortByPrice;
 
   return (
     <div className="space-y-3.5">
-      {/* 1. Search & Filter Bar */}
-      <div className="space-y-2 bg-slate-900/60 p-2.5 sm:p-3 rounded-2xl border border-slate-800/80">
-        {/* Row 1: Search input + Brand filter button */}
+      {/* 1. Search, Multi-Brand Dropdown, Categories & Sort Bar */}
+      <div className="space-y-2.5 bg-slate-900/60 p-2.5 sm:p-3.5 rounded-2xl border border-slate-800/80 shadow-sm">
+        {/* Row 1: Search input + Brand Multi-Select Dropdown Menu */}
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
             <Search className="w-4 h-4 absolute right-3 top-3 text-slate-500" />
@@ -104,23 +217,13 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
             )}
           </div>
 
-          {/* Filter Sheet Trigger Button */}
-          <button
-            type="button"
-            onClick={() => setIsFilterSheetOpen(true)}
-            className={`h-10 px-3 rounded-xl border font-bold text-xs flex items-center gap-1.5 transition shrink-0 cursor-pointer ${
-              selectedBrand !== 'all'
-                ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50'
-                : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
-            }`}
-            title="فیلتر بر اساس برند"
-          >
-            <SlidersHorizontal className="w-4 h-4 text-emerald-400" />
-            <span>فیلتر</span>
-            {selectedBrand !== 'all' && (
-              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-            )}
-          </button>
+          {/* Replaced old single filter button with Multi-Select Brand Dropdown Menu */}
+          <BrandDropdown
+            availableBrands={availableBrandsInCategory}
+            selectedBrands={selectedBrands}
+            onChangeSelectedBrands={setSelectedBrands}
+            brandProductCountMap={brandProductCountMap}
+          />
         </div>
 
         {/* Row 2: Category chips + In-Stock toggle chip */}
@@ -170,27 +273,136 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
           ))}
         </div>
 
-        {/* Clear filters link if active */}
+        {/* Row 3: 3 New Display & Sort Filters */}
+        <div className="pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-xs text-slate-400 font-bold shrink-0">
+            <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400" />
+            <span>نمایش بر اساس:</span>
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {/* Filter 1: محبوب‌ترین‌ها (پرفروش‌ترین) - پیش‌فرض همیشه فعال */}
+            <button
+              type="button"
+              onClick={handleTogglePopular}
+              className={`h-8 px-3 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                isPopularActive
+                  ? 'bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-400/50'
+                  : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+              }`}
+              title="کالاهایی که بیشترین فروش را دارند در ابتدای لیست نمایش داده می‌شوند (فیلتر پیش‌فرض)"
+            >
+              <Flame className={`w-3.5 h-3.5 ${isPopularActive ? 'text-amber-300 fill-amber-300' : 'text-slate-400'}`} />
+              <span>محبوب‌ترین‌ها</span>
+              {isPopularActive && <Check className="w-3 h-3 stroke-[3]" />}
+            </button>
+
+            {/* Filter 2: بر اساس نام (حروف الفبا) */}
+            <button
+              type="button"
+              onClick={handleToggleByName}
+              className={`h-8 px-3 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                sortByName
+                  ? 'bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-400/50'
+                  : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+              }`}
+              title="مرتب‌سازی بر اساس حروف الفبای نام کالا"
+            >
+              <ArrowDownAZ className={`w-3.5 h-3.5 ${sortByName ? 'text-emerald-100' : 'text-slate-400'}`} />
+              <span>بر اساس نام (الفبا)</span>
+              {sortByName && <Check className="w-3 h-3 stroke-[3]" />}
+            </button>
+
+            {/* Filter 3: بر اساس قیمت (کمترین به بیشترین) */}
+            <button
+              type="button"
+              onClick={handleToggleByPrice}
+              className={`h-8 px-3 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                sortByPrice
+                  ? 'bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-400/50'
+                  : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+              }`}
+              title="مرتب‌سازی بر اساس قیمت: کمترین قیمت در بالا و بیشترین قیمت در پایین"
+            >
+              <ArrowDownNarrowWide className={`w-3.5 h-3.5 ${sortByPrice ? 'text-emerald-100' : 'text-slate-400'}`} />
+              <span>بر اساس قیمت</span>
+              {sortByPrice && <Check className="w-3 h-3 stroke-[3]" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Helpful Banner when both Name and Price are selected */}
+        {isBothNameAndPrice && (
+          <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-xl p-2 px-3 flex items-center gap-2 text-[11px] text-emerald-300">
+            <Info className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>
+              فیلتر ترکیبی <strong>نام + قیمت</strong> فعال است: اقلام هم‌نوع (مانند انواع پنیر پیتزا) در کنار یکدیگر و به ترتیب از کمترین قیمت به بیشترین قیمت مرتب شده‌اند.
+            </span>
+          </div>
+        )}
+
+        {/* Clear filters and active tags summary */}
         {isAnyFilterActive && (
-          <div className="pt-1 flex items-center justify-between text-xs text-slate-400 border-t border-slate-800/60">
-            <div className="flex items-center gap-2 flex-wrap">
-              {selectedBrand !== 'all' && (
-                <span className="bg-slate-800 px-2 py-0.5 rounded-lg text-emerald-400">
-                  برند: {selectedBrand}
+          <div className="pt-2 flex items-center justify-between text-xs text-slate-400 border-t border-slate-800/60 flex-wrap gap-2">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {/* Selected brands tags with quick removal */}
+              {selectedBrands.map((b) => (
+                <span
+                  key={b}
+                  className="bg-slate-800/90 text-emerald-400 border border-slate-700/60 px-2 py-0.5 rounded-lg flex items-center gap-1 text-[11px]"
+                >
+                  <span>برند: {b}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveBrand(b)}
+                    className="hover:text-rose-400 transition cursor-pointer p-0.5"
+                    title={`حذف فیلتر برند ${b}`}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
                 </span>
-              )}
+              ))}
+
               {inStockOnly !== defaultInStockOnly && (
-                <span className="bg-slate-800 px-2 py-0.5 rounded-lg text-emerald-400">
+                <span className="bg-slate-800/90 text-emerald-400 border border-slate-700/60 px-2 py-0.5 rounded-lg text-[11px]">
                   {inStockOnly ? 'فقط کالاهای موجود' : 'شامل کالاهای تست بازار'}
                 </span>
               )}
+
+              {/* Active sort badges */}
+              {isPopularActive && (
+                <span className="bg-slate-800/90 text-amber-300 border border-slate-700/60 px-2 py-0.5 rounded-lg text-[11px] flex items-center gap-1">
+                  <Flame className="w-3 h-3 text-amber-400 fill-amber-400" />
+                  <span>محبوب‌ترین‌ها</span>
+                </span>
+              )}
+
+              {isBothNameAndPrice ? (
+                <span className="bg-slate-800/90 text-emerald-400 border border-slate-700/60 px-2 py-0.5 rounded-lg text-[11px]">
+                  الفبایی + از ارزان‌ترین به گران‌ترین
+                </span>
+              ) : (
+                <>
+                  {sortByName && (
+                    <span className="bg-slate-800/90 text-emerald-400 border border-slate-700/60 px-2 py-0.5 rounded-lg text-[11px]">
+                      الفبای نام کالا
+                    </span>
+                  )}
+                  {sortByPrice && (
+                    <span className="bg-slate-800/90 text-emerald-400 border border-slate-700/60 px-2 py-0.5 rounded-lg text-[11px]">
+                      کمترین به بیشترین قیمت
+                    </span>
+                  )}
+                </>
+              )}
             </div>
+
             <button
               type="button"
               onClick={handleClearAllFilters}
-              className="text-xs text-rose-400 hover:underline cursor-pointer"
+              className="text-xs text-rose-400 hover:text-rose-300 hover:underline cursor-pointer font-medium mr-auto"
             >
-              حذف فیلترها
+              حذف همه فیلترها
             </button>
           </div>
         )}
@@ -210,7 +422,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
               onClick={handleClearAllFilters}
               className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition cursor-pointer"
             >
-              حذف فیلترها
+              حذف فیلترها و نمایش همه
             </button>
           )}
         </div>
@@ -228,16 +440,6 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
           ))}
         </div>
       )}
-
-      {/* Brand Filter Sheet */}
-      <FilterSheet
-        isOpen={isFilterSheetOpen}
-        onClose={() => setIsFilterSheetOpen(false)}
-        availableBrands={availableBrandsInCategory}
-        selectedBrand={selectedBrand}
-        onSelectBrand={(b) => setSelectedBrand(b)}
-        onClearFilter={() => setSelectedBrand('all')}
-      />
     </div>
   );
 };

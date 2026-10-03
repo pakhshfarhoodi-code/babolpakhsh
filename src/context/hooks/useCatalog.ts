@@ -242,6 +242,7 @@ export function useCatalog() {
       category_id: validCatId || '',
       image_url: safeImage,
       visitor_price,
+      items_per_package: newProd.items_per_package !== undefined && Number(newProd.items_per_package) > 0 ? Number(newProd.items_per_package) : undefined,
       reserved_stock: 0,
       is_market_test: Boolean(newProd.is_market_test),
     };
@@ -292,6 +293,7 @@ export function useCatalog() {
           stock: newProd.stock,
           reserved_stock: 0,
           unit: newProd.unit || 'عدد',
+          items_per_package: newProd.items_per_package !== undefined && Number(newProd.items_per_package) > 0 ? Number(newProd.items_per_package) : null,
           image_url: newProd.image_url,
           is_active: newProd.is_active ?? true,
           is_market_test: Boolean(newProd.is_market_test),
@@ -362,6 +364,9 @@ export function useCatalog() {
       category_id: targetCatId,
       image_url: targetImage,
       unit: updates.unit !== undefined ? updates.unit : prod.unit,
+      items_per_package: updates.items_per_package !== undefined
+        ? (Number(updates.items_per_package) > 0 ? Number(updates.items_per_package) : undefined)
+        : prod.items_per_package,
       stock: updates.stock !== undefined ? updates.stock : prod.stock,
       price: targetPrice,
       visitor_price: targetVisitorPrice,
@@ -427,6 +432,9 @@ export function useCatalog() {
         if (updates.consumer_price !== undefined) payload.consumer_price = targetConsumerPrice ?? null;
         if (updates.stock !== undefined) payload.stock = updates.stock;
         if (updates.unit !== undefined) payload.unit = updates.unit;
+        if (updates.items_per_package !== undefined) {
+          payload.items_per_package = Number(updates.items_per_package) > 0 ? Number(updates.items_per_package) : null;
+        }
         if (updates.image_url !== undefined) payload.image_url = updates.image_url;
         if (updates.is_active !== undefined) payload.is_active = updates.is_active;
         if (updates.is_market_test !== undefined) payload.is_market_test = updates.is_market_test;
@@ -611,6 +619,7 @@ export function useCatalog() {
     consumer_price?: number;
     stock?: number;
     unit?: string;
+    items_per_package?: number;
     is_active?: boolean;
   }>): Promise<{ success: boolean; createdCount: number; updatedCount: number; message: string }> => {
     if (!items || items.length === 0) {
@@ -661,7 +670,11 @@ export function useCatalog() {
       const stockQty = item.stock !== undefined ? Math.max(0, Number(item.stock) || 0) : 50;
       const unitStr = (item.unit || '').trim() || 'عدد';
 
-      if (matchIndex >= 0) {
+        const parsedPackQty = item.items_per_package !== undefined && Number(item.items_per_package) > 0
+          ? Number(item.items_per_package)
+          : undefined;
+
+        if (matchIndex >= 0) {
         // Update existing product
         const current = updatedProducts[matchIndex];
         const hasPriceChanged = current.price !== storePrice || current.visitor_price !== visitorPrice;
@@ -689,6 +702,7 @@ export function useCatalog() {
           consumer_price: item.consumer_price !== undefined ? Number(item.consumer_price) || undefined : current.consumer_price,
           stock: stockQty !== undefined ? stockQty : current.stock,
           unit: unitStr || current.unit,
+          items_per_package: parsedPackQty !== undefined ? parsedPackQty : current.items_per_package,
           is_active: item.is_active !== undefined ? item.is_active : current.is_active,
         };
         updatedProducts[matchIndex] = updatedProd;
@@ -709,6 +723,7 @@ export function useCatalog() {
           stock: stockQty,
           reserved_stock: 0,
           unit: unitStr,
+          items_per_package: parsedPackQty,
           image_url: 'https://images.unsplash.com/photo-1551024601-bec78aea704b?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer',
           is_active: item.is_active !== undefined ? item.is_active : true,
           created_at: new Date().toISOString(),
@@ -794,6 +809,7 @@ export function useCatalog() {
             stock: p.stock !== undefined ? Number(p.stock) : 50,
             reserved_stock: 0,
             unit: p.unit || 'عدد',
+            items_per_package: p.items_per_package !== undefined && Number(p.items_per_package) > 0 ? Number(p.items_per_package) : null,
             image_url: 'https://images.unsplash.com/photo-1551024601-bec78aea704b?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer',
             is_active: p.is_active ?? true,
           };
@@ -809,8 +825,11 @@ export function useCatalog() {
 
           console.warn('Supabase products upsert failed, retrying with category_id = null fallback:', err1.message);
 
-          // Try 2: With category_id = null (removes FK dependency)
-          const chunkNoFK = chunk.map((item) => ({ ...item, category_id: null }));
+          // Try 2: With category_id = null & without items_per_package fallback
+          const chunkNoFK = chunk.map((item) => {
+            const { items_per_package, ...rest } = item;
+            return { ...rest, category_id: null };
+          });
           const { error: err2 } = await supabase.from('products').upsert(chunkNoFK, { onConflict: 'id' });
           if (!err2) continue;
 

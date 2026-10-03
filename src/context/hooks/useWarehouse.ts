@@ -118,8 +118,9 @@ export function useWarehouse({
 
       const billItems: LoadingBillItem[] = Array.from(itemsMap.values()).map((val, idx) => {
         const prod = products.find((p) => p.id === val.productId);
-        const storePrice = prod ? Number(prod.price) : 0;
-        const visitorPrice = prod ? (prod.visitor_price ?? Math.round(storePrice * 0.85)) : 0;
+        const multiplier = prod?.items_per_package && prod.items_per_package > 0 ? prod.items_per_package : 1;
+        const storePrice = prod ? Number(prod.price) * multiplier : 0;
+        const visitorPrice = prod ? (prod.visitor_price ? Number(prod.visitor_price) * multiplier : Math.round(storePrice * 0.85)) : 0;
 
         totalStoreAmount += storePrice * val.quantity;
         totalVisitorCost += visitorPrice * val.quantity;
@@ -133,6 +134,8 @@ export function useWarehouse({
           quantity: val.quantity,
           visitor_price: visitorPrice,
           store_price: storePrice,
+          items_per_package: prod?.items_per_package,
+          unit: prod?.unit,
           created_at: nowIso,
         };
       });

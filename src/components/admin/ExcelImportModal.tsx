@@ -55,6 +55,7 @@ interface ColumnMapping {
   consumerPriceCol: string;
   stockCol: string;
   unitCol: string;
+  itemsPerPackageCol: string;
 }
 
 const STANDARD_UNITS = ['عدد', 'باکس', 'کارتن', 'کیلوگرم', 'بسته', 'بطری', 'دبه', 'کیسه', 'شانه', 'قوطی'];
@@ -81,6 +82,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     consumerPriceCol: '',
     stockCol: '',
     unitCol: '',
+    itemsPerPackageCol: '',
   });
 
   const { addCategory } = useApp();
@@ -135,6 +137,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
       consumer_price?: number;
       stock: number;
       unit: string;
+      items_per_package?: number;
       isNew: boolean;
       isValid: boolean;
       error?: string;
@@ -198,8 +201,21 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         'retail',
         'consumer',
       ]),
-      stockCol: findMatch(['موجودی', 'تعداد', 'انبار', 'stock', 'qty', 'quantity', 'inventory']),
-      unitCol: findMatch(['واحد', 'واحدشمارش', 'بسته/عدد', 'unit', 'measure']),
+      stockCol: findMatch(['موجودیانبار', 'موجودیفیزیکی', 'کلموجودی', 'موجودی', 'انبار', 'stock', 'inventory', 'quantity']) || findMatch(['تعداد', 'qty']),
+      unitCol: findMatch(['واحدشمارش', 'واحد', 'بسته/عدد', 'unit', 'measure']),
+      itemsPerPackageCol: findMatch([
+        'تعداددرکارتن',
+        'تعداددربسته',
+        'تعداددرواحد',
+        'تعداددرجعبه',
+        'تعدادبسته',
+        'packquantity',
+        'itemsperpackage',
+        'itemsperbox',
+        'packagecount',
+        'countperpack',
+        'packqty',
+      ]) || (columns.some((c) => normalize(c).includes('موجودی')) ? findMatch(['تعداد']) : ''),
     };
   };
 
@@ -354,6 +370,9 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
       const isValid = rawName.length > 0 && storePrice >= 0;
       const error = !rawName ? 'نام کالا الزامی است' : storePrice < 0 ? 'قیمت نمی‌تواند منفی باشد' : undefined;
 
+      const rawItemsPerPackage = mapping.itemsPerPackageCol ? cleanNum(row[mapping.itemsPerPackageCol]) : 0;
+      const finalItemsPerPackage = rawItemsPerPackage > 0 ? rawItemsPerPackage : undefined;
+
       rows.push({
         id: rawId,
         name: rawName,
@@ -365,6 +384,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         consumer_price: consumerPrice && consumerPrice > 0 ? consumerPrice : undefined,
         stock,
         unit: finalUnit,
+        items_per_package: finalItemsPerPackage,
         isNew: !isExisting,
         isValid,
         error,
@@ -405,6 +425,12 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
   const updateRowUnit = (index: number, newUnit: string) => {
     setParsedRows((prev) =>
       prev.map((row, i) => (i === index ? { ...row, unit: newUnit } : row))
+    );
+  };
+
+  const updateRowItemsPerPackage = (index: number, val: number | undefined) => {
+    setParsedRows((prev) =>
+      prev.map((row, i) => (i === index ? { ...row, items_per_package: val && val > 0 ? val : undefined } : row))
     );
   };
 
@@ -463,6 +489,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
           consumer_price: r.consumer_price,
           stock: r.stock,
           unit: r.unit,
+          items_per_package: r.items_per_package,
           is_active: true,
         }))
       );
@@ -485,7 +512,8 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         'قیمت فروشگاه (تومان)': 30000,
         'قیمت خرید ویزیتور (تومان)': 25500,
         'موجودی': 100,
-        'واحد': 'عدد',
+        'واحد': 'کارتن',
+        'تعداد در کارتن/بسته': 24,
       },
       {
         'کد کالا': 'prod-102',
@@ -496,6 +524,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         'قیمت خرید ویزیتور (تومان)': 240000,
         'موجودی': 45,
         'واحد': 'کیلوگرم',
+        'تعداد در کارتن/بسته': '',
       },
       {
         'کد کالا': 'prod-103',
@@ -506,6 +535,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         'قیمت خرید ویزیتور (تومان)': 38000,
         'موجودی': 80,
         'واحد': 'باکس',
+        'تعداد در کارتن/بسته': 12,
       },
     ];
 
@@ -812,6 +842,26 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
                     >
                       <option value="">-- در اکسل ستون واحد نیست --</option>
+                      {headers.map((h) => (
+                        <option key={h} value={h}>
+                          {h}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Items Per Package Column */}
+                  <div className="p-3 rounded-xl bg-slate-950 border border-slate-800/80 space-y-1.5">
+                    <label className="text-xs font-bold text-slate-200 flex items-center justify-between">
+                      <span>ستون تعداد در کارتن/بسته</span>
+                      <span className="text-[10px] text-slate-400">اختیاری</span>
+                    </label>
+                    <select
+                      value={mapping.itemsPerPackageCol}
+                      onChange={(e) => setMapping((prev) => ({ ...prev, itemsPerPackageCol: e.target.value }))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
+                    >
+                      <option value="">-- در اکسل ستون تعداد نیست --</option>
                       {headers.map((h) => (
                         <option key={h} value={h}>
                           {h}
@@ -1134,6 +1184,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                         <th className="p-2.5 text-amber-400">قیمت مصرف‌کننده</th>
                         <th className="p-2.5">موجودی</th>
                         <th className="p-2.5">واحد</th>
+                        <th className="p-2.5 text-indigo-400">تعداد در بسته/کارتن</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-900">
@@ -1200,6 +1251,20 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                                 </option>
                               ))}
                             </select>
+                          </td>
+                          <td className="p-2.5">
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              placeholder="—"
+                              value={row.items_per_package || ''}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value, 10);
+                                updateRowItemsPerPackage(i, isNaN(val) || val <= 0 ? undefined : val);
+                              }}
+                              className="w-16 bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-indigo-300 font-mono text-xs focus:border-indigo-400 focus:outline-none text-center"
+                            />
                           </td>
                         </tr>
                       ))}

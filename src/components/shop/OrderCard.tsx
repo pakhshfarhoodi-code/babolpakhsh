@@ -194,7 +194,10 @@ export const OrderCard: React.FC<OrderCardProps> = ({
                 <div className="flex items-center gap-1.5 min-w-0">
                   <Package className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                   <span className="text-slate-200 truncate">{item.name || 'کالا'}</span>
-                  <span className="text-slate-500">× {item.quantity.toLocaleString('fa-IR')}</span>
+                  <span className="text-slate-500 text-[11px]">
+                    × {item.quantity.toLocaleString('fa-IR')} {item.unit || ''}
+                    {item.items_per_package && item.items_per_package > 1 && ` (${item.items_per_package} عددی)`}
+                  </span>
                 </div>
                 <span className="text-slate-300 font-bold">
                   {formatPrice(item.price * item.quantity)}

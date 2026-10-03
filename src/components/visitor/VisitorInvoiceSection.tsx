@@ -438,9 +438,12 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
 
     for (const it of activeBill.items) {
       const prod = productMap.get(it.product_id);
-      const unit = prod?.unit || 'بسته';
+      const packCount = it.items_per_package || prod?.items_per_package;
+      const unit = packCount && packCount > 1
+        ? `${it.unit || prod?.unit || 'کارتن'} (${packCount} عددی)`
+        : (it.unit || prod?.unit || 'بسته');
       const vPrice = Number(
-        it.visitor_price ?? prod?.visitor_price ?? Math.round(Number(prod?.price || 0) * 0.85)
+        it.visitor_price ?? (prod?.visitor_price ? Number(prod.visitor_price) * (packCount || 1) : Math.round(Number(prod?.price || 0) * (packCount || 1) * 0.85))
       );
 
       const existing = map.get(it.product_id);

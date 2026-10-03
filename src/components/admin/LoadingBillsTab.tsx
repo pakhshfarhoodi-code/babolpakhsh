@@ -1484,9 +1484,21 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
                               </div>
 
                               <div className="flex items-center gap-3 shrink-0">
-                                <span className="font-mono font-bold text-slate-100">
-                                  {it.quantity} عدد
-                                </span>
+                                {(() => {
+                                  const prod = products.find((p) => p.id === it.product_id);
+                                  const packCount = it.items_per_package || prod?.items_per_package;
+                                  const unitStr = it.unit || prod?.unit || 'واحد';
+                                  return (
+                                    <span className="font-mono font-bold text-slate-100">
+                                      {it.quantity} {unitStr}
+                                      {packCount && packCount > 1 && (
+                                        <span className="text-[11px] text-indigo-400 font-semibold mr-1 font-sans">
+                                          ({packCount} عددی)
+                                        </span>
+                                      )}
+                                    </span>
+                                  );
+                                })()}
                                 <span className="font-mono text-slate-400">
                                   فی: {formatPrice(Number(it.visitor_price || 0))}
                                 </span>

@@ -761,31 +761,56 @@ export function useCatalog() {
       try {
         // 0. Sync categories first so Foreign Key constraint (category_id -> categories.id) is satisfied!
         if (categories.length > 0) {
-          const catRows = categories.map((c, i) => ({
-            id: c.id,
-            name: c.name,
-            icon: c.icon || 'Layers',
-            sort_order: i + 1,
-          }));
-          await supabase.from('categories').upsert(catRows, { onConflict: 'id' });
+          try {
+            const catMap = new Map<string, { id: string; name: string; icon: string; sort_order: number }>();
+            categories.forEach((c, idx) => {
+              if (c.id) {
+                catMap.set(c.id, {
+                  id: c.id,
+                  name: c.name,
+                  icon: c.icon || 'Layers',
+                  sort_order: idx + 1,
+                });
+              }
+            });
+            await supabase.from('categories').upsert(Array.from(catMap.values()), { onConflict: 'id' });
+          } catch (cErr) {
+            console.warn('Category sync notice:', cErr);
+          }
         }
 
-        // 1. Sync new brands to Supabase
+        // 1. Sync new brands to Supabase without ON CONFLICT clash
         if (newBrandsSet.size > 0) {
-          const brandRows = Array.from(newBrandsSet).map((b) => ({
-            id: `b-${Date.now().toString().slice(-4)}-${Math.random().toString(36).substring(2, 6)}`,
-            name: b,
-          }));
-          await supabase.from('brands').upsert(brandRows, { onConflict: 'name' });
+          try {
+            const { data: existingBrs } = await supabase.from('brands').select('name');
+            const existingNames = new Set((existingBrs || []).map((b: { name: string }) => (b.name || '').trim().toLowerCase()));
+            const toInsert = Array.from(newBrandsSet)
+              .map((b) => b.trim())
+              .filter((b) => b && !existingNames.has(b.toLowerCase()));
+
+            const uniqueToInsert = Array.from(new Set(toInsert));
+            if (uniqueToInsert.length > 0) {
+              const bRows = uniqueToInsert.map((b) => ({
+                id: `b-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+                name: b,
+              }));
+              await supabase.from('brands').insert(bRows);
+            }
+          } catch (bErr) {
+            console.warn('Brand sync notice:', bErr);
+          }
         }
 
-        // 2. Sync products to Supabase
-        const rowsToSave = (itemsToUpsertToSupabase.length > 0 ? itemsToUpsertToSupabase : items).map((p) => {
+        // 2. Deduplicate products by id to ensure NO duplicate primary keys ever reach PostgreSQL batch upsert
+        const uniqueProductsMap = new Map<string, any>();
+        (itemsToUpsertToSupabase.length > 0 ? itemsToUpsertToSupabase : items).forEach((p) => {
           const sPrice = Number(p.price) || 0;
           const vPrice = p.visitor_price !== undefined && Number(p.visitor_price) > 0 ? Number(p.visitor_price) : Math.round(sPrice * 0.85);
           const validCatId = p.category_id && p.category_id.trim() ? p.category_id.trim() : null;
-          return {
-            id: p.id && p.id.trim() ? p.id.trim() : generateUniqueId('prod'),
+          const targetId = p.id && p.id.trim() ? p.id.trim() : generateUniqueId('prod');
+
+          uniqueProductsMap.set(targetId, {
+            id: targetId,
             name: p.name.trim(),
             category_id: validCatId,
             brand: p.brand?.trim() || 'متفرقه',
@@ -798,52 +823,53 @@ export function useCatalog() {
             items_per_package: p.items_per_package !== undefined && Number(p.items_per_package) > 0 ? Number(p.items_per_package) : null,
             image_url: 'https://images.unsplash.com/photo-1551024601-bec78aea704b?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer',
             is_active: p.is_active ?? true,
-          };
+          });
         });
 
-        const chunkSize = 50;
+        const rowsToSave = Array.from(uniqueProductsMap.values());
+
+        const chunkSize = 25;
         for (let i = 0; i < rowsToSave.length; i += chunkSize) {
           const chunk = rowsToSave.slice(i, i + chunkSize);
-          
-          // Try 1: Full upsert
+
+          // Try 1: Full batch upsert with 100% unique IDs
           const { error: err1 } = await supabase.from('products').upsert(chunk, { onConflict: 'id' });
           if (!err1) continue;
 
-          console.warn('Supabase products upsert failed, retrying with category_id = null fallback:', err1.message);
+          console.warn('Batch upsert had error, falling back to item-by-item upsert:', err1.message);
 
-          // Try 2: With category_id = null & without items_per_package fallback
-          const chunkNoFK = chunk.map((item) => {
-            const { items_per_package, ...rest } = item;
-            return { ...rest, category_id: null };
-          });
-          const { error: err2 } = await supabase.from('products').upsert(chunkNoFK, { onConflict: 'id' });
-          if (!err2) continue;
+          // If batch upsert encounters any conflict or schema issue, do item-by-item progressive upsert so all valid items succeed:
+          for (const item of chunk) {
+            // 1. Full item
+            const { error: sErr1 } = await supabase.from('products').upsert(item, { onConflict: 'id' });
+            if (!sErr1) continue;
 
-          console.warn('Supabase products upsert failed, retrying without consumer_price:', err2.message);
-          
-          // Try 3: Strip consumer_price & category_id
-          const chunk3 = chunkNoFK.map(({ consumer_price, ...rest }) => rest);
-          const { error: err3 } = await supabase.from('products').upsert(chunk3, { onConflict: 'id' });
-          if (!err3) continue;
+            // 2. Without items_per_package & with category_id = null fallback
+            const { items_per_package, ...rowNoPack } = item;
+            const { error: sErr2 } = await supabase.from('products').upsert({ ...rowNoPack, category_id: null }, { onConflict: 'id' });
+            if (!sErr2) continue;
 
-          console.warn('Supabase products upsert failed, retrying without visitor_price:', err3.message);
+            // 3. Without consumer_price
+            const { consumer_price, ...row3 } = rowNoPack;
+            const { error: sErr3 } = await supabase.from('products').upsert({ ...row3, category_id: null }, { onConflict: 'id' });
+            if (!sErr3) continue;
 
-          // Try 4: Strip consumer_price, visitor_price & category_id
-          const chunk4 = chunk3.map(({ visitor_price, ...rest }) => rest);
-          const { error: err4 } = await supabase.from('products').upsert(chunk4, { onConflict: 'id' });
-          if (!err4) continue;
+            // 4. Without visitor_price
+            const { visitor_price, ...row4 } = row3;
+            const { error: sErr4 } = await supabase.from('products').upsert({ ...row4, category_id: null }, { onConflict: 'id' });
+            if (!sErr4) continue;
 
-          // Try 5: Strip brand
-          const chunk5 = chunk4.map(({ brand, ...rest }) => rest);
-          const { error: err5 } = await supabase.from('products').upsert(chunk5, { onConflict: 'id' });
-          if (err5) {
-            console.error('All progressive fallbacks failed on Supabase for products chunk:', err5.message);
-            supabaseError = err5.message || err1.message || 'عدم دسترسی نوشتن در جدول products';
+            // 5. Without brand
+            const { brand, ...row5 } = row4;
+            const { error: sErr5 } = await supabase.from('products').upsert({ ...row5, category_id: null }, { onConflict: 'id' });
+            if (sErr5) {
+              supabaseError = sErr5.message;
+            }
           }
         }
 
         // 3. Register inventory transaction rows for physical stock intake (ورود بار اولیه به انبار)
-        const inventoryIntakeRows = (itemsToUpsertToSupabase.length > 0 ? itemsToUpsertToSupabase : items)
+        const inventoryIntakeRows = rowsToSave
           .filter((p) => Number(p.stock) > 0)
           .map((p) => ({
             product_id: p.id,

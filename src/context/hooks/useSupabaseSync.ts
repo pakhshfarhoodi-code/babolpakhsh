@@ -62,7 +62,7 @@ export function useSupabaseSync({
     }
 
     try {
-      // 1. Products - DB is the single source of truth, completely replaces state
+      // 1. Products - DB is the primary source of truth, fallback to local cache if DB is empty
       const { data: prods, error: prodsErr } = await supabase.from('products').select('*');
       if (prodsErr) throw prodsErr;
 
@@ -73,7 +73,30 @@ export function useSupabaseSync({
           is_active: p.is_active ?? true,
           is_market_test: Boolean(p.is_market_test),
         }));
-      setProducts(validProds);
+
+      if (validProds.length > 0) {
+        setProducts(validProds);
+        try {
+          localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(validProds));
+        } catch {}
+      } else {
+        // If DB returned 0 products (e.g. fresh DB before migration), keep locally imported products
+        try {
+          const localSaved = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
+          if (localSaved) {
+            const parsed = JSON.parse(localSaved);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setProducts(parsed);
+            } else {
+              setProducts([]);
+            }
+          } else {
+            setProducts([]);
+          }
+        } catch {
+          setProducts([]);
+        }
+      }
 
       // 2. Orders with items - DB is the single source of truth, replaces state
       const { data: ords, error: ordsErr } = await supabase.from('orders').select('*, items:order_items(*)');

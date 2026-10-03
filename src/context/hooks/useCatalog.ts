@@ -31,8 +31,7 @@ export function useCatalog() {
   const PRESET_CAT_IDS = new Set(['cat-1', 'cat-2', 'cat-3', 'cat-4', 'cat-5']);
 
   const [categories, setCategories] = useState<Category[]>(() => {
-    if (isSupabaseConfigured) return [];
-    const saved = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
+    const saved = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.CATEGORIES) : null;
     if (!saved) return [];
     try {
       const parsed = JSON.parse(saved);
@@ -43,8 +42,7 @@ export function useCatalog() {
   });
 
   const [brands, setBrands] = useState<string[]>(() => {
-    if (isSupabaseConfigured) return [];
-    const saved = localStorage.getItem(STORAGE_KEYS.BRANDS);
+    const saved = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.BRANDS) : null;
     if (!saved) return [];
     try {
       const parsed = JSON.parse(saved);
@@ -55,8 +53,7 @@ export function useCatalog() {
   });
 
   const [products, setProducts] = useState<Product[]>(() => {
-    if (isSupabaseConfigured) return [];
-    const saved = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
+    const saved = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.PRODUCTS) : null;
     const marketTestIds = getMarketTestIds();
     if (!saved) return [];
     try {
@@ -77,8 +74,7 @@ export function useCatalog() {
   });
 
   const [productLikes, setProductLikes] = useState<ProductLike[]>(() => {
-    if (isSupabaseConfigured) return [];
-    const saved = localStorage.getItem(STORAGE_KEYS.PRODUCT_LIKES);
+    const saved = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.PRODUCT_LIKES) : null;
     if (!saved) return [];
     try {
       const parsed = JSON.parse(saved);
@@ -87,6 +83,7 @@ export function useCatalog() {
       return [];
     }
   });
+
 
   const productLikesRef = useRef<ProductLike[]>(productLikes);
   useEffect(() => {
@@ -253,12 +250,10 @@ export function useCatalog() {
 
     setProducts((prev) => {
       const next = [...prev, productToAdd];
-      if (!isSupabaseConfigured) {
-        try {
-          localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(next));
-        } catch {
-          // storage quota fallback
-        }
+      try {
+        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(next));
+      } catch {
+        // storage quota fallback
       }
       return next;
     });
@@ -413,11 +408,9 @@ export function useCatalog() {
 
     setProducts((prev) => {
       const next = prev.map((p) => (p.id === productId ? updatedProd : p));
-      if (!isSupabaseConfigured) {
-        try {
-          localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(next));
-        } catch {}
-      }
+      try {
+        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(next));
+      } catch {}
       return next;
     });
 
@@ -736,41 +729,34 @@ export function useCatalog() {
 
     setProducts(updatedProducts);
 
-    // Save immediately to local storage so even if refreshed instantly, products are never lost!
-    if (!isSupabaseConfigured) {
-      try {
-        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(updatedProducts));
-      } catch {}
+    // Always save immediately to localStorage as an absolute safety net
+    try {
+      localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(updatedProducts));
+    } catch {}
 
-      if (newHistories.length > 0) {
-        setPriceHistories((prev) => {
-          const next = [...newHistories, ...prev];
-          try {
-            localStorage.setItem(STORAGE_KEYS.PRICE_HISTORIES, JSON.stringify(next));
-          } catch {}
-          return next;
-        });
-      }
-
-      if (newBrandsSet.size > 0) {
-        setBrands((prev) => {
-          const combined = Array.from(new Set([...prev, ...Array.from(newBrandsSet)]));
-          try {
-            localStorage.setItem(STORAGE_KEYS.BRANDS, JSON.stringify(combined));
-          } catch {}
-          return combined;
-        });
-      }
-    } else {
-      if (newHistories.length > 0) {
-        setPriceHistories((prev) => [...newHistories, ...prev]);
-      }
-      if (newBrandsSet.size > 0) {
-        setBrands((prev) => Array.from(new Set([...prev, ...Array.from(newBrandsSet)])));
-      }
+    if (newHistories.length > 0) {
+      setPriceHistories((prev) => {
+        const next = [...newHistories, ...prev];
+        try {
+          localStorage.setItem(STORAGE_KEYS.PRICE_HISTORIES, JSON.stringify(next));
+        } catch {}
+        return next;
+      });
     }
 
-    // Persist products, categories, and brands to Supabase
+    if (newBrandsSet.size > 0) {
+      setBrands((prev) => {
+        const combined = Array.from(new Set([...prev, ...Array.from(newBrandsSet)]));
+        try {
+          localStorage.setItem(STORAGE_KEYS.BRANDS, JSON.stringify(combined));
+        } catch {}
+        return combined;
+      });
+    }
+
+    let supabaseError: string | null = null;
+
+    // Persist products, categories, brands, and initial inventory intake to Supabase
     if (isSupabaseConfigured && supabase) {
       try {
         // 0. Sync categories first so Foreign Key constraint (category_id -> categories.id) is satisfied!
@@ -794,7 +780,7 @@ export function useCatalog() {
         }
 
         // 2. Sync products to Supabase
-        const rowsToSave = (itemsToUpsertToSupabase.length > 0 ? itemsToUpsertToSupabase : items).map((p, idx) => {
+        const rowsToSave = (itemsToUpsertToSupabase.length > 0 ? itemsToUpsertToSupabase : items).map((p) => {
           const sPrice = Number(p.price) || 0;
           const vPrice = p.visitor_price !== undefined && Number(p.visitor_price) > 0 ? Number(p.visitor_price) : Math.round(sPrice * 0.85);
           const validCatId = p.category_id && p.category_id.trim() ? p.category_id.trim() : null;
@@ -852,10 +838,31 @@ export function useCatalog() {
           const { error: err5 } = await supabase.from('products').upsert(chunk5, { onConflict: 'id' });
           if (err5) {
             console.error('All progressive fallbacks failed on Supabase for products chunk:', err5.message);
+            supabaseError = err5.message || err1.message || 'عدم دسترسی نوشتن در جدول products';
+          }
+        }
+
+        // 3. Register inventory transaction rows for physical stock intake (ورود بار اولیه به انبار)
+        const inventoryIntakeRows = (itemsToUpsertToSupabase.length > 0 ? itemsToUpsertToSupabase : items)
+          .filter((p) => Number(p.stock) > 0)
+          .map((p) => ({
+            product_id: p.id,
+            product_name: p.name,
+            transaction_type: 'manual_adjustment',
+            quantity: Number(p.stock),
+            reference_id: 'ورود اولیه از اکسل',
+          }));
+
+        if (inventoryIntakeRows.length > 0) {
+          try {
+            await supabase.from('inventory_transactions').insert(inventoryIntakeRows);
+          } catch (txErr) {
+            console.warn('Inventory transaction insert notice:', txErr);
           }
         }
       } catch (err) {
         console.error('خطای غیرمنتظره در ثبت کالاهای اکسل روی Supabase:', err);
+        supabaseError = err instanceof Error ? err.message : 'خطای ارتباط با پایگاه داده';
       }
     }
 
@@ -864,7 +871,13 @@ export function useCatalog() {
     const finalUpdated = updatedCount;
     const brandCount = Math.max(1, newBrandsSet.size);
     const catCount = Math.max(1, affectedCategoryIds.size);
-    const message = `پردازش و ثبت با موفقیت انجام شد: ${totalCount} کالا (${finalCreated} کالای جدید، ${finalUpdated} به‌روزرسانی قیمت و مشخصات) در ${brandCount} برند و ${catCount} دسته‌بندی در سامانه ذخیره گردید.`;
+
+    let message: string;
+    if (supabaseError) {
+      message = `پردازش و ثبت در حافظه سامانه انجام شد: ${totalCount} کالا (${finalCreated} جدید، ${finalUpdated} به‌روزرسانی). ⚠️ هشدار سرور Supabase: کالاها روی پایگاه داده ذخیره نشدند (${supabaseError}). لطفاً اسکریپت SQL را در بخش SQL Editor پنل Supabase اجرا نمایید تا مجوز ذخیره دائم فعال شود.`;
+    } else {
+      message = `پردازش و ثبت با موفقیت انجام شد: ${totalCount} کالا (${finalCreated} کالای جدید، ${finalUpdated} به‌روزرسانی قیمت و موجودی) در ${brandCount} برند و ${catCount} دسته‌بندی در پایگاه داده و سامانه ذخیره گردید.`;
+    }
 
     return {
       success: true,
@@ -886,11 +899,9 @@ export function useCatalog() {
     // Update local state and persist to localStorage
     setProducts((prev) => {
       const next = prev.filter((p) => p.id !== productId);
-      if (!isSupabaseConfigured) {
-        try {
-          localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(next));
-        } catch {}
-      }
+      try {
+        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(next));
+      } catch {}
       return next;
     });
 

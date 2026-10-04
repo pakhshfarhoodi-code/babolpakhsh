@@ -1,0 +1,39 @@
+name: Supabase Backup (6 times daily)
+
+on:
+  schedule:
+    # اجرا هر ۴ ساعت یک‌بار
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL Client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Create Backup Directory
+        run: mkdir -p backups
+
+      - name: Generate Timestamp
+        id: timestamp
+        run: echo "TIMESTAMP=$(date +'%Y-%m-%d_%H-%M-%S')" >> $GITHUB_ENV
+
+      - name: Dump Database
+        run: |
+          FILE_NAME="backups/supabase_backup_${{ env.TIMESTAMP }}.sql.gz"
+          pg_dump "${{ secrets.DB_URL }}" | gzip > "$FILE_NAME"
+
+      - name: Upload Backup Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-${{ env.TIMESTAMP }}
+          path: backups/*.sql.gz
+          retention-days: 30 # ذخیره به مدت ۳۰ روز

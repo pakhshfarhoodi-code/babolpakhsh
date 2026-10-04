@@ -39,6 +39,47 @@ export const ALL_SYNC_TABLES: SyncTable[] = [
   'product_likes',
 ];
 
+export const CRITICAL_TABLES: Set<SyncTable> = new Set([
+  'products',
+  'orders',
+  'supermarkets',
+  'visitors',
+  'loading_bills',
+  'categories',
+  'brands',
+]);
+
+export const OPTIONAL_TABLES: Set<SyncTable> = new Set([
+  'inventory_transactions',
+  'product_likes',
+  'reassignment_requests',
+]);
+
+/**
+ * Promise wrapper enforcing a strict 15-second timeout on any network/database request.
+ */
+function withTimeout<T>(
+  promise: PromiseLike<T>,
+  timeoutMs = 15000,
+  errorMsg = 'مهلت زمانی درخواست (۱۵ ثانیه) به پایان رسید'
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(errorMsg));
+    }, timeoutMs);
+
+    Promise.resolve(promise)
+      .then((res) => {
+        clearTimeout(timer);
+        resolve(res);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
 interface UseSupabaseSyncProps {
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
   setOrders: React.Dispatch<React.SetStateAction<Order[]>>;
@@ -64,6 +105,7 @@ export function useSupabaseSync({
   setOrders,
   setCategories,
   setBrands,
+  setUnits,
   setReassignmentRequests,
   setSupermarkets,
   setVisitors,
@@ -77,9 +119,13 @@ export function useSupabaseSync({
   setFetchError,
   reloadCounter = 0,
 }: UseSupabaseSyncProps) {
+  // Session tracking to ensure no fetching occurs prior to successful authentication
+  const currentUserIdRef = useRef<string | null>(null);
   const isInitialFetchDoneRef = useRef(false);
+  const retryAttemptRef = useRef<number>(0);
+  const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 1. Memoized Stringified State Cache to avoid redundant React re-renders
+  // 1. Memoized Stringified State Cache to prevent redundant React re-renders
   const lastStateJsonRef = useRef<Record<SyncTable, string>>({
     products: '',
     orders: '',
@@ -98,14 +144,18 @@ export function useSupabaseSync({
   const isFetchingRef = useRef<boolean>(false);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 3. Granular Table Fetch Functions with Explicit Column Projections
+  // 3. Granular Table Fetch Functions with Explicit Column Projections & 15s Timeout
 
-  // A. Fetch Products
+  // A. Fetch Products (Critical)
   const fetchProducts = useCallback(async () => {
     if (!supabase) return;
-    const { data: prods, error: prodsErr } = await supabase
-      .from('products')
-      .select('id, category_id, brand, name, price, visitor_price, consumer_price, stock, reserved_stock, unit, items_per_package, image_url, is_active, is_market_test, created_at');
+    const { data: prods, error: prodsErr } = await withTimeout(
+      supabase
+        .from('products')
+        .select('id, category_id, brand, name, price, visitor_price, consumer_price, stock, reserved_stock, unit, items_per_package, image_url, is_active, is_market_test, created_at'),
+      15000,
+      'مهلت زمانی دریافت اطلاعات کالاها به پایان رسید'
+    );
 
     if (prodsErr) throw prodsErr;
 
@@ -143,16 +193,42 @@ export function useSupabaseSync({
     }
   }, [setProducts]);
 
-  // B. Fetch Orders with Items
+  // B. Fetch Orders with Items (Critical)
   const fetchOrders = useCallback(async () => {
     if (!supabase) return;
-    const { data: ords, error: ordsErr } = await supabase
-      .from('orders')
-      .select('id, supermarket_id, supermarket_name, assigned_visitor_id, visitor_name, status, total_amount, order_source, order_channel, reassignment_id, loading_bill_id, invoice_revised_at, order_date, stock_deducted, items:order_items(id, order_id, product_id, name, price, quantity, items_per_package, unit, created_at)');
+    let ordsData: any[] = [];
+    const { data: ords, error: ordsErr } = await withTimeout(
+      supabase
+        .from('orders')
+        .select('id, supermarket_id, supermarket_name, assigned_visitor_id, visitor_name, status, total_amount, order_source, order_channel, reassignment_id, loading_bill_id, invoice_revised_at, order_date, stock_deducted, items:order_items(id, order_id, product_id, name, price, quantity, items_per_package, unit, created_at)'),
+      15000,
+      'مهلت زمانی دریافت اطلاعات سفارش‌ها به پایان رسید'
+    );
 
-    if (ordsErr) throw ordsErr;
+    if (!ordsErr && ords) {
+      ordsData = ords;
+    } else {
+      // Fallback: query orders and order_items separately if relationship embedding fails
+      const { data: rawOrders, error: rawOrdersErr } = await withTimeout(
+        supabase
+          .from('orders')
+          .select('id, supermarket_id, supermarket_name, assigned_visitor_id, visitor_name, status, total_amount, order_source, order_channel, reassignment_id, loading_bill_id, invoice_revised_at, order_date, stock_deducted'),
+        15000,
+        'مهلت زمانی دریافت اطلاعات سفارش‌ها به پایان رسید'
+      );
+      if (rawOrdersErr && ordsErr) throw ordsErr;
+      const { data: rawItems } = await withTimeout(
+        supabase.from('order_items').select('id, order_id, product_id, name, price, quantity, items_per_package, unit, created_at'),
+        15000
+      ).catch(() => ({ data: [] }));
 
-    const cleanOrds: Order[] = (ords || [])
+      ordsData = (rawOrders || []).map((o: any) => ({
+        ...o,
+        items: (rawItems || []).filter((it: any) => it.order_id === o.id),
+      }));
+    }
+
+    const cleanOrds: Order[] = ordsData
       .filter(
         (o: Order) =>
           Boolean(o.id) &&
@@ -178,13 +254,17 @@ export function useSupabaseSync({
     }
   }, [setOrders]);
 
-  // C. Fetch Categories
+  // C. Fetch Categories (Critical)
   const fetchCategories = useCallback(async () => {
     if (!supabase) return;
-    const { data: cats, error: catsErr } = await supabase
-      .from('categories')
-      .select('id, name, icon, sort_order, created_at')
-      .order('sort_order', { ascending: true });
+    const { data: cats, error: catsErr } = await withTimeout(
+      supabase
+        .from('categories')
+        .select('id, name, icon, sort_order, created_at')
+        .order('sort_order', { ascending: true }),
+      15000,
+      'مهلت زمانی دریافت دسته‌بندی‌ها به پایان رسید'
+    );
 
     if (catsErr) throw catsErr;
 
@@ -197,10 +277,15 @@ export function useSupabaseSync({
     }
   }, [setCategories]);
 
-  // D. Fetch Brands
+  // D. Fetch Brands (Critical)
   const fetchBrands = useCallback(async () => {
     if (!supabase) return;
-    const { data: brs, error: brsErr } = await supabase.from('brands').select('name');
+    const { data: brs, error: brsErr } = await withTimeout(
+      supabase.from('brands').select('name'),
+      15000,
+      'مهلت زمانی دریافت برندها به پایان رسید'
+    );
+
     if (brsErr) throw brsErr;
 
     if (brs && brs.length > 0) {
@@ -213,13 +298,17 @@ export function useSupabaseSync({
     }
   }, [setBrands]);
 
-  // E. Fetch Reassignment Requests
+  // E. Fetch Reassignment Requests (Optional)
   const fetchReassignmentRequests = useCallback(async () => {
     if (!supabase) return;
-    const { data: reassigns, error: reassignErr } = await supabase
-      .from('reassignment_requests')
-      .select('id, order_id, supermarket_name, from_visitor_id, from_visitor_name, to_visitor_id, to_visitor_name, status, timestamp, reason')
-      .order('timestamp', { ascending: false });
+    const { data: reassigns, error: reassignErr } = await withTimeout(
+      supabase
+        .from('reassignment_requests')
+        .select('id, order_id, supermarket_name, from_visitor_id, from_visitor_name, to_visitor_id, to_visitor_name, status, timestamp, reason')
+        .order('timestamp', { ascending: false }),
+      15000,
+      'مهلت زمانی دریافت درخواست‌های واگذاری به پایان رسید'
+    );
 
     if (reassignErr) throw reassignErr;
 
@@ -232,16 +321,22 @@ export function useSupabaseSync({
     }
   }, [setReassignmentRequests]);
 
-  // F. Fetch Supermarkets & Profiles
+  // F. Fetch Supermarkets & Profiles (Critical)
   const fetchSupermarkets = useCallback(async () => {
     if (!supabase) return;
     const [smsRes, profRes] = await Promise.all([
-      supabase
-        .from('supermarkets')
-        .select('id, name, owner, phone, address, assigned_visitor_id, is_active, username, created_at'),
-      supabase
-        .from('profiles')
-        .select('id, username'),
+      withTimeout(
+        supabase
+          .from('supermarkets')
+          .select('id, name, owner, phone, address, assigned_visitor_id, is_active, username, created_at'),
+        15000,
+        'مهلت زمانی دریافت اطلاعات فروشگاه‌ها به پایان رسید'
+      ),
+      withTimeout(
+        supabase.from('profiles').select('id, username'),
+        15000,
+        'مهلت زمانی دریافت مشخصات کاربری به پایان رسید'
+      ).catch(() => ({ data: [], error: null })),
     ]);
 
     if (smsRes.error) throw smsRes.error;
@@ -272,16 +367,22 @@ export function useSupabaseSync({
     }
   }, [setSupermarkets]);
 
-  // G. Fetch Visitors & Profiles
+  // G. Fetch Visitors & Profiles (Critical)
   const fetchVisitors = useCallback(async () => {
     if (!supabase) return;
     const [visRes, profRes] = await Promise.all([
-      supabase
-        .from('visitors')
-        .select('id, name, phone, region, is_active, username, created_at'),
-      supabase
-        .from('profiles')
-        .select('id, username'),
+      withTimeout(
+        supabase
+          .from('visitors')
+          .select('id, name, phone, region, is_active, username, created_at'),
+        15000,
+        'مهلت زمانی دریافت اطلاعات ویزیتورها به پایان رسید'
+      ),
+      withTimeout(
+        supabase.from('profiles').select('id, username'),
+        15000,
+        'مهلت زمانی دریافت مشخصات کاربری به پایان رسید'
+      ).catch(() => ({ data: [], error: null })),
     ]);
 
     if (visRes.error) throw visRes.error;
@@ -314,23 +415,33 @@ export function useSupabaseSync({
     }
   }, [setVisitors]);
 
-  // H. Fetch Loading Bills with Items
+  // H. Fetch Loading Bills with Items (Critical)
   const fetchLoadingBills = useCallback(async () => {
     if (!supabase) return;
     let fetchedBills: LoadingBill[] = [];
-    const { data: billsData, error: billsErr } = await supabase
-      .from('loading_bills')
-      .select('id, invoice_no, visitor_id, visitor_name, status, orders_count, total_visitor_cost, total_store_amount, revision_count, last_revised_by, approved_by, approved_at, finalized_by, finalized_at, cancel_reason, admin_note, exit_approved_by, exit_approved_at, created_at, submitted_at, items:loading_bill_items(id, loading_bill_id, order_id, product_id, product_name, quantity, original_quantity, store_price, visitor_price, source, customer_label, line_note, created_at)')
-      .order('created_at', { ascending: false });
+    const { data: billsData, error: billsErr } = await withTimeout(
+      supabase
+        .from('loading_bills')
+        .select('id, invoice_no, visitor_id, visitor_name, status, orders_count, total_visitor_cost, total_store_amount, revision_count, last_revised_by, approved_by, approved_at, finalized_by, finalized_at, cancel_reason, admin_note, exit_approved_by, exit_approved_at, created_at, submitted_at, items:loading_bill_items(id, loading_bill_id, order_id, product_id, product_name, quantity, original_quantity, store_price, visitor_price, source, customer_label, line_note, created_at)')
+        .order('created_at', { ascending: false }),
+      15000,
+      'مهلت زمانی دریافت فاکتورهای بارگیری به پایان رسید'
+    );
 
     if (!billsErr && billsData) {
       fetchedBills = billsData;
     } else {
-      const { data: bData } = await supabase
-        .from('loading_bills')
-        .select('*')
-        .order('created_at', { ascending: false });
-      const { data: iData } = await supabase.from('loading_bill_items').select('*');
+      const { data: bData } = await withTimeout(
+        supabase
+          .from('loading_bills')
+          .select('*')
+          .order('created_at', { ascending: false }),
+        15000
+      );
+      const { data: iData } = await withTimeout(
+        supabase.from('loading_bill_items').select('*'),
+        15000
+      );
 
       if (bData) {
         fetchedBills = bData.map((b: LoadingBill) => ({
@@ -347,7 +458,7 @@ export function useSupabaseSync({
     }
   }, [setLoadingBills]);
 
-  // I. Fetch Inventory Transactions (Limited to Admin & Warehouse, max 500 rows)
+  // I. Fetch Inventory Transactions (Optional - Limited to Admin & Warehouse, max 500 rows)
   const fetchInventoryTransactions = useCallback(async () => {
     if (!supabase) return;
     // Cap: Only fetch for staff roles (admin and warehouse) to save CPU and network bandwidth
@@ -355,11 +466,15 @@ export function useSupabaseSync({
       return;
     }
 
-    const { data: txData, error: txErr } = await supabase
-      .from('inventory_transactions')
-      .select('id, product_id, product_name, transaction_type, quantity, reference_id, reason, created_at')
-      .order('created_at', { ascending: false })
-      .limit(500);
+    const { data: txData, error: txErr } = await withTimeout(
+      supabase
+        .from('inventory_transactions')
+        .select('id, product_id, product_name, transaction_type, quantity, reference_id, reason, created_at')
+        .order('created_at', { ascending: false })
+        .limit(500),
+      15000,
+      'مهلت زمانی دریافت تراکنش‌های انبار به پایان رسید'
+    );
 
     if (txErr) throw txErr;
 
@@ -377,13 +492,16 @@ export function useSupabaseSync({
     }
   }, [setInventoryTransactions, role]);
 
-  // J. Fetch Product Likes
+  // J. Fetch Product Likes (Optional)
   const fetchProductLikes = useCallback(async () => {
     if (!supabase || !setProductLikes) return;
     try {
-      const { data: likesData, error: likesErr } = await supabase
-        .from('product_likes')
-        .select('id, product_id, supermarket_id, supermarket_name, supermarket_owner, supermarket_phone, created_at');
+      const { data: likesData, error: likesErr } = await withTimeout(
+        supabase
+          .from('product_likes')
+          .select('id, product_id, supermarket_id, supermarket_name, supermarket_owner, supermarket_phone, created_at'),
+        15000
+      );
 
       if (!likesErr && likesData && Array.isArray(likesData)) {
         const jsonStr = JSON.stringify(likesData);
@@ -392,15 +510,34 @@ export function useSupabaseSync({
           setProductLikes(likesData);
         }
       }
-    } catch {
-      // optional table
+    } catch (err) {
+      console.warn('Optional product_likes sync notice:', err);
     }
   }, [setProductLikes]);
 
-  // 4. Core Execution Coordinator
+  // Forward declaration of scheduleReload for use in retry mechanism
+  const scheduleReloadRef = useRef<((tables?: SyncTable[], immediate?: boolean) => void) | null>(null);
+
+  // 4. Core Execution Coordinator with Critical Table Gating & Automatic Retry
   const executeDirtyFetches = useCallback(async () => {
     if (!isSupabaseConfigured || !supabase) {
       setIsDataReady?.(true);
+      return;
+    }
+
+    // Guard: strictly do not fetch if user is not logged in with an active Supabase session
+    if (!currentUserIdRef.current) {
+      return;
+    }
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session || !session.user) {
+        currentUserIdRef.current = null;
+        return;
+      }
+      currentUserIdRef.current = session.user.id;
+    } catch {
       return;
     }
 
@@ -411,57 +548,95 @@ export function useSupabaseSync({
 
     isFetchingRef.current = true;
 
+    // Requirement 2: Clear fetchError at the start of every sync attempt
+    setFetchError?.(null);
+
     // Snapshot tables that need sync
     const tablesToSync = new Set(dirtyTablesRef.current);
     dirtyTablesRef.current.clear();
 
-    const tasks: Promise<void>[] = [];
+    const tasks: { table: SyncTable; run: () => Promise<void> }[] = [];
 
-    if (tablesToSync.has('products')) tasks.push(fetchProducts());
-    if (tablesToSync.has('orders')) tasks.push(fetchOrders());
-    if (tablesToSync.has('categories')) tasks.push(fetchCategories());
-    if (tablesToSync.has('brands')) tasks.push(fetchBrands());
-    if (tablesToSync.has('reassignment_requests')) tasks.push(fetchReassignmentRequests());
-    if (tablesToSync.has('supermarkets')) tasks.push(fetchSupermarkets());
-    if (tablesToSync.has('visitors')) tasks.push(fetchVisitors());
-    if (tablesToSync.has('loading_bills')) tasks.push(fetchLoadingBills());
-    if (tablesToSync.has('inventory_transactions')) tasks.push(fetchInventoryTransactions());
-    if (tablesToSync.has('product_likes')) tasks.push(fetchProductLikes());
+    if (tablesToSync.has('products')) tasks.push({ table: 'products', run: fetchProducts });
+    if (tablesToSync.has('orders')) tasks.push({ table: 'orders', run: fetchOrders });
+    if (tablesToSync.has('categories')) tasks.push({ table: 'categories', run: fetchCategories });
+    if (tablesToSync.has('brands')) tasks.push({ table: 'brands', run: fetchBrands });
+    if (tablesToSync.has('reassignment_requests')) tasks.push({ table: 'reassignment_requests', run: fetchReassignmentRequests });
+    if (tablesToSync.has('supermarkets')) tasks.push({ table: 'supermarkets', run: fetchSupermarkets });
+    if (tablesToSync.has('visitors')) tasks.push({ table: 'visitors', run: fetchVisitors });
+    if (tablesToSync.has('loading_bills')) tasks.push({ table: 'loading_bills', run: fetchLoadingBills });
+    if (tablesToSync.has('inventory_transactions')) tasks.push({ table: 'inventory_transactions', run: fetchInventoryTransactions });
+    if (tablesToSync.has('product_likes')) tasks.push({ table: 'product_likes', run: fetchProductLikes });
 
-    try {
-      const results = await Promise.allSettled(tasks);
-      const firstRejected = results.find((r) => r.status === 'rejected') as
-        | PromiseRejectedResult
-        | undefined;
+    const criticalErrors: { table: SyncTable; error: Error }[] = [];
 
-      if (firstRejected) {
-        const msg =
-          firstRejected.reason instanceof Error
-            ? firstRejected.reason.message
-            : 'خطا در بارگیری داده‌ها از سرور';
-        console.warn('Supabase sync notice:', msg);
-        if (!isInitialFetchDoneRef.current) {
-          setFetchError?.(msg);
+    // Execute tasks concurrently with individual table error isolation
+    const results = await Promise.allSettled(
+      tasks.map(async ({ table, run }) => {
+        try {
+          await run();
+        } catch (err: unknown) {
+          const tableError = err instanceof Error ? err : new Error(String(err));
+          if (CRITICAL_TABLES.has(table)) {
+            criticalErrors.push({ table, error: tableError });
+          } else {
+            // Optional tables: warn only, do NOT trigger error banner
+            console.warn(`Optional table (${table}) sync notice:`, tableError.message);
+          }
         }
-      } else {
-        setFetchError?.(null);
-      }
+      })
+    );
 
+    isFetchingRef.current = false;
+
+    // Evaluate results: Critical tables vs Optional tables
+    if (criticalErrors.length === 0) {
+      // Success! All critical tables loaded successfully
+      setFetchError?.(null);
       setIsDataReady?.(true);
       isInitialFetchDoneRef.current = true;
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'خطا در ارتباط با سرور';
-      console.warn('Supabase sync global catch:', msg);
-      if (!isInitialFetchDoneRef.current) {
-        setFetchError?.(msg);
+      retryAttemptRef.current = 0;
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
       }
-    } finally {
-      isFetchingRef.current = false;
+    } else {
+      // Critical table(s) failed!
+      console.warn('Critical tables sync failure:', criticalErrors);
 
-      // If new realtime events arrived while the query was running, trigger an immediate follow-up
-      if (dirtyTablesRef.current.size > 0 && typeof document !== 'undefined' && !document.hidden) {
-        executeDirtyFetches();
+      // Requirement 3: Automatic Retry Mechanism for initial load (up to 3 retries: 1s, 2s, 4s)
+      if (!isInitialFetchDoneRef.current) {
+        const retryDelays = [1000, 2000, 4000];
+        const attempt = retryAttemptRef.current;
+
+        if (attempt < 3) {
+          const delay = retryDelays[attempt];
+          retryAttemptRef.current = attempt + 1;
+          setFetchError?.(null); // Keep error hidden during automated retry attempts
+
+          if (retryTimerRef.current) {
+            clearTimeout(retryTimerRef.current);
+          }
+
+          retryTimerRef.current = setTimeout(() => {
+            retryTimerRef.current = null;
+            scheduleReloadRef.current?.(ALL_SYNC_TABLES, true);
+          }, delay);
+        } else {
+          // All 3 automatic retries failed. Now show the real error banner.
+          const firstErr = criticalErrors[0]?.error?.message || 'خطا در برقراری ارتباط با پایگاه داده';
+          setFetchError?.(firstErr);
+          setIsDataReady?.(false);
+        }
+      } else {
+        // Subsequent background polling/realtime failure after initial load succeeded
+        console.warn('Background sync encountered critical error without breaking UI view:', criticalErrors);
       }
+    }
+
+    // Follow-up for any new realtime changes that queued up during this fetch
+    if (dirtyTablesRef.current.size > 0 && typeof document !== 'undefined' && !document.hidden) {
+      executeDirtyFetches();
     }
   }, [
     fetchProducts,
@@ -510,44 +685,148 @@ export function useSupabaseSync({
     [executeDirtyFetches]
   );
 
-  // 6. Main Lifecycle Effect
+  // Keep ref up to date for retry callbacks
+  useEffect(() => {
+    scheduleReloadRef.current = scheduleReload;
+  }, [scheduleReload]);
+
+  // 6. User Login/Logout Lifecycle Listener (Requirement 1)
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
       setIsDataReady?.(true);
       return;
     }
 
-    // Purge old operational localStorage keys once on startup in Supabase mode
-    purgeOperationalLocalStorage();
+    // Check existing active session on mount
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        if (currentUserIdRef.current !== session.user.id) {
+          currentUserIdRef.current = session.user.id;
+          isInitialFetchDoneRef.current = false;
+          retryAttemptRef.current = 0;
+          setFetchError?.(null);
+          purgeOperationalLocalStorage();
+          scheduleReload(ALL_SYNC_TABLES, true);
+        }
+      } else {
+        // No session: do NOT start fetching!
+        currentUserIdRef.current = null;
+        setIsDataReady?.(false);
+        setFetchError?.(null);
+      }
+    });
 
-    // Initial full load (immediate, no debounce delay)
-    scheduleReload(ALL_SYNC_TABLES, true);
+    // Listen to Supabase auth events
+    const { data: authSub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' || (event === 'INITIAL_SESSION' && session?.user)) {
+        if (session?.user && currentUserIdRef.current !== session.user.id) {
+          currentUserIdRef.current = session.user.id;
+          // Fresh user login: reset flags and immediately trigger full initial fetch
+          isInitialFetchDoneRef.current = false;
+          retryAttemptRef.current = 0;
+          setFetchError?.(null);
+          purgeOperationalLocalStorage();
+          scheduleReload(ALL_SYNC_TABLES, true);
+        }
+      } else if (event === 'SIGNED_OUT' || !session) {
+        if (currentUserIdRef.current !== null) {
+          currentUserIdRef.current = null;
+          // User logout: Reset all operational state and tracking refs
+          setProducts([]);
+          setOrders([]);
+          setCategories([]);
+          setBrands([]);
+          setUnits?.([]);
+          setReassignmentRequests([]);
+          setSupermarkets([]);
+          setVisitors([]);
+          setLoadingBills([]);
+          setInventoryTransactions([]);
+          setProductLikes?.([]);
 
-    // 60-second backup polling (skip execution if tab is hidden)
+          setFetchError?.(null);
+          setIsDataReady?.(false);
+          isInitialFetchDoneRef.current = false;
+          retryAttemptRef.current = 0;
+
+          if (retryTimerRef.current) {
+            clearTimeout(retryTimerRef.current);
+            retryTimerRef.current = null;
+          }
+          if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+            debounceTimerRef.current = null;
+          }
+          dirtyTablesRef.current.clear();
+          lastStateJsonRef.current = {
+            products: '',
+            orders: '',
+            categories: '',
+            brands: '',
+            reassignment_requests: '',
+            supermarkets: '',
+            visitors: '',
+            loading_bills: '',
+            inventory_transactions: '',
+            product_likes: '',
+          };
+        }
+      }
+    });
+
+    return () => {
+      authSub?.subscription?.unsubscribe();
+    };
+  }, [
+    scheduleReload,
+    setProducts,
+    setOrders,
+    setCategories,
+    setBrands,
+    setUnits,
+    setReassignmentRequests,
+    setSupermarkets,
+    setVisitors,
+    setLoadingBills,
+    setInventoryTransactions,
+    setProductLikes,
+    setFetchError,
+    setIsDataReady,
+  ]);
+
+  // 7. Background Event & Realtime Subscriptions (Active only when user is logged in)
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) {
+      return;
+    }
+
+    // 60-second backup polling (skip execution if tab is hidden or user not logged in)
     const interval = setInterval(() => {
-      if (typeof document !== 'undefined' && !document.hidden) {
+      if (typeof document !== 'undefined' && !document.hidden && currentUserIdRef.current) {
         scheduleReload(ALL_SYNC_TABLES);
       }
     }, 60000);
 
     // Visibility change handler: when user returns to tab, perform a fresh sync
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === 'visible' && currentUserIdRef.current) {
         scheduleReload(ALL_SYNC_TABLES);
       }
     };
 
     // Window focus handler: sync if not hidden
     const handleWindowFocus = () => {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === 'visible' && currentUserIdRef.current) {
         scheduleReload(ALL_SYNC_TABLES);
       }
     };
 
     // Online reconnection handler
     const handleOnline = () => {
-      scheduleReload(ALL_SYNC_TABLES, true);
-      onShowToast?.('اتصال اینترنت برقرار شد. اطلاعات به‌روزرسانی شدند.', 'success');
+      if (currentUserIdRef.current) {
+        scheduleReload(ALL_SYNC_TABLES, true);
+        onShowToast?.('اتصال اینترنت برقرار شد. اطلاعات به‌روزرسانی شدند.', 'success');
+      }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -561,6 +840,7 @@ export function useSupabaseSync({
         'postgres_changes',
         { event: '*', schema: 'public', table: 'loading_bills' },
         (payload) => {
+          if (!currentUserIdRef.current) return;
           if (payload.eventType === 'INSERT') {
             const newBillRaw = payload.new as LoadingBill;
             if (role === 'warehouse' || role === 'admin') {
@@ -590,48 +870,42 @@ export function useSupabaseSync({
         'postgres_changes',
         { event: '*', schema: 'public', table: 'orders' },
         () => {
-          // Only reload orders table
-          scheduleReload(['orders']);
+          if (currentUserIdRef.current) scheduleReload(['orders']);
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'supermarkets' },
         () => {
-          // Only reload supermarkets table
-          scheduleReload(['supermarkets']);
+          if (currentUserIdRef.current) scheduleReload(['supermarkets']);
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'visitors' },
         () => {
-          // Only reload visitors table
-          scheduleReload(['visitors']);
+          if (currentUserIdRef.current) scheduleReload(['visitors']);
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'products' },
         () => {
-          // Only reload products table
-          scheduleReload(['products']);
+          if (currentUserIdRef.current) scheduleReload(['products']);
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'reassignment_requests' },
         () => {
-          // Only reload reassignment_requests table
-          scheduleReload(['reassignment_requests']);
+          if (currentUserIdRef.current) scheduleReload(['reassignment_requests']);
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'inventory_transactions' },
         () => {
-          // Only reload inventory_transactions table
-          scheduleReload(['inventory_transactions']);
+          if (currentUserIdRef.current) scheduleReload(['inventory_transactions']);
         }
       )
       .subscribe();
@@ -642,6 +916,10 @@ export function useSupabaseSync({
         clearTimeout(debounceTimerRef.current);
         debounceTimerRef.current = null;
       }
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleWindowFocus);
       window.removeEventListener('online', handleOnline);
@@ -649,16 +927,19 @@ export function useSupabaseSync({
         supabase.removeChannel(realtimeChannel);
       }
     };
-  }, [scheduleReload, role, currentUser, onShowToast, setIsDataReady]);
+  }, [scheduleReload, role, currentUser, onShowToast]);
 
-  // 7. Manual Reload Trigger (when reloadCounter changes via refreshData)
+  // 8. Manual Reload Trigger (when reloadCounter changes via refreshData or retryFetch)
   useEffect(() => {
-    if (reloadCounter > 0) {
+    if (reloadCounter > 0 && currentUserIdRef.current) {
+      isInitialFetchDoneRef.current = false;
+      retryAttemptRef.current = 0;
+      setFetchError?.(null);
       scheduleReload(ALL_SYNC_TABLES, true);
     }
-  }, [reloadCounter, scheduleReload]);
+  }, [reloadCounter, scheduleReload, setFetchError]);
 
-  // 8. LocalStorage Cross-Tab Realtime Sync (Only active in mock / local storage mode)
+  // 9. LocalStorage Cross-Tab Realtime Sync (Only active in mock / local storage mode)
   useEffect(() => {
     if (isSupabaseConfigured) return;
 

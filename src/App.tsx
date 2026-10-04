@@ -130,8 +130,8 @@ export const App: React.FC = () => {
     );
   }
 
-  // Database-first Fetch Error Screen
-  if (isOnlineDb && fetchError) {
+  // Database-first Fetch Error Screen: ONLY when fetchError is non-empty
+  if (isOnlineDb && Boolean(fetchError)) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-blue-600 selection:text-white">
         <Header currentPath={currentPath} onNavigate={navigateTo} />
@@ -143,9 +143,14 @@ export const App: React.FC = () => {
             <h2 className="text-xl sm:text-2xl font-black text-rose-200 mb-2">
               اتصال به سرور برقرار نشد
             </h2>
-            <p className="text-xs sm:text-sm text-rose-300/80 mb-6 font-medium leading-relaxed">
+            <p className="text-xs sm:text-sm text-rose-300/80 mb-3 font-medium leading-relaxed">
               ارتباط با پایگاه داده Supabase برقرار نشد. لطفاً وضعیت اینترنت را بررسی کرده و مجدداً تلاش فرمایید.
             </p>
+            {fetchError && (
+              <p className="text-[11px] text-slate-400 font-mono mb-6 bg-slate-900/60 p-2.5 rounded-xl border border-rose-900/40 break-words dir-ltr text-center">
+                {fetchError}
+              </p>
+            )}
             <button
               type="button"
               onClick={retryFetch}
@@ -160,8 +165,8 @@ export const App: React.FC = () => {
     );
   }
 
-  // Database-first Loading Skeleton
-  if (isOnlineDb && !isDataReady) {
+  // Database-first Loading Skeleton: displayed while loading is in progress (isDataReady=false and fetchError=null)
+  if (isOnlineDb && !isDataReady && !fetchError) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-blue-600 selection:text-white">
         <Header currentPath={currentPath} onNavigate={navigateTo} />

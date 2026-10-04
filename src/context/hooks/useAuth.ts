@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { UserRole, CurrentUser, Visitor, Supermarket } from '../../types';
 import { INITIAL_PROFILES } from '../../data/initialData';
 import { supabase, isSupabaseConfigured, getFunctionErrorMessage } from '../../lib/supabase';
@@ -98,88 +98,70 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
     } catch {}
   }, []);
 
-  // Supabase Session Management:
-  // On load, getSession() then fetch explicit profile columns from profiles with id = auth.uid()
-  useEffect(() => {
-    if (!isSupabaseConfigured || !supabase) return;
+  // Ref to track last fetched profile user ID to avoid duplicate queries between restoreSession, listener, and login
+  const lastProfileFetchedUserIdRef = useRef<string | null>(null);
+  const activeProfilePromiseRef = useRef<Promise<{ success: boolean; message?: string }> | null>(null);
 
-    const restoreSession = async () => {
-      try {
-        const {
-          data: { session },
-          error: sessionError,
-        } = await supabase.auth.getSession();
-
-        if (sessionError || !session?.user) {
-          setIsLoggedInState(false);
-          setAuthProfile(null);
-          return;
-        }
-
-        // Fetch profile with explicit columns: id, name, role, phone, is_active
-        const { data: prof, error: profError } = await supabase
-          .from('profiles')
-          .select('id, name, role, phone, is_active')
-          .eq('id', session.user.id)
-          .maybeSingle();
-
-        if (profError || !prof) {
-          await supabase.auth.signOut();
-          setIsLoggedInState(false);
-          setAuthProfile(null);
-          return;
-        }
-
-        if (prof.is_active === false) {
-          await supabase.auth.signOut();
-          setIsLoggedInState(false);
-          setAuthProfile(null);
-          return;
-        }
-
-        // Valid session & active profile restored
-        const userRole = prof.role as UserRole;
-        setIsLoggedInState(true);
-        setRoleState(userRole);
-        setAuthProfile({
-          id: prof.id,
-          name: prof.name,
-          username: prof.phone || prof.id,
-          phone: prof.phone || '',
-        });
-
-        if (userRole === 'visitor') {
-          setSelectedVisitorIdState(prof.id);
-        } else if (userRole === 'supermarket') {
-          setSelectedSupermarketIdState(prof.id);
-        }
-      } catch (err) {
-        console.warn('Session restoration note:', err);
+  // Single-source helper to fetch and apply profile without duplicate executions
+  const syncUserProfile = useCallback(
+    (userId: string, allowedRoles?: UserRole[]): Promise<{ success: boolean; message?: string }> => {
+      if (!userId || !isSupabaseConfigured || !supabase) {
+        return Promise.resolve({ success: false });
       }
-    };
 
-    restoreSession();
+      if (lastProfileFetchedUserIdRef.current === userId) {
+        return Promise.resolve({ success: true });
+      }
 
-    // Listen to Auth State Changes
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_OUT' || !session) {
-        setIsLoggedInState(false);
-        localStorage.setItem(STORAGE_KEYS.AUTH_LOGGED_IN, 'false');
-        localStorage.removeItem(STORAGE_KEYS.AUTH_ROLE);
-        localStorage.removeItem(STORAGE_KEYS.AUTH_VISITOR_ID);
-        localStorage.removeItem(STORAGE_KEYS.AUTH_SUPERMARKET_ID);
-        localStorage.removeItem('alborz_auth_profile');
-        setAuthProfile(null);
-      } else if (event === 'SIGNED_IN' && session?.user) {
-        // Fetch profile explicitly
-        const { data: prof } = await supabase
-          .from('profiles')
-          .select('id, name, role, phone, is_active')
-          .eq('id', session.user.id)
-          .maybeSingle();
+      if (activeProfilePromiseRef.current) {
+        return activeProfilePromiseRef.current;
+      }
 
-        if (prof && prof.is_active !== false) {
+      const promise = (async () => {
+        try {
+          const { data: prof, error: profError } = await supabase
+            .from('profiles')
+            .select('id, name, role, phone, is_active')
+            .eq('id', userId)
+            .maybeSingle();
+
+          if (profError || !prof) {
+            lastProfileFetchedUserIdRef.current = null;
+            await supabase.auth.signOut();
+            setIsLoggedInState(false);
+            setAuthProfile(null);
+            const errDetail = profError?.message ? ` (${profError.message})` : '';
+            return {
+              success: false,
+              message: `پروفایل کاربری یافت نشد.${errDetail}`,
+            };
+          }
+
+          if (prof.is_active === false) {
+            lastProfileFetchedUserIdRef.current = null;
+            await supabase.auth.signOut();
+            setIsLoggedInState(false);
+            setAuthProfile(null);
+            return {
+              success: false,
+              message: 'حساب کاربری شما غیرفعال شده است. لطفاً با مدیریت تماس بگیرید.',
+            };
+          }
+
           const userRole = prof.role as UserRole;
+          if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(userRole)) {
+            lastProfileFetchedUserIdRef.current = null;
+            await supabase.auth.signOut();
+            setIsLoggedInState(false);
+            setAuthProfile(null);
+            return {
+              success: false,
+              message: 'دسترسی غیرمجاز برای این بخش.',
+            };
+          }
+
+          // Valid active profile
+          lastProfileFetchedUserIdRef.current = prof.id;
           setIsLoggedInState(true);
           setRoleState(userRole);
           setAuthProfile({
@@ -188,11 +170,71 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
             username: prof.phone || prof.id,
             phone: prof.phone || '',
           });
+
           if (userRole === 'visitor') {
             setSelectedVisitorIdState(prof.id);
           } else if (userRole === 'supermarket') {
             setSelectedSupermarketIdState(prof.id);
           }
+
+          return { success: true };
+        } catch (err: unknown) {
+          lastProfileFetchedUserIdRef.current = null;
+          console.warn('Profile synchronization note:', err);
+          const errMsg = err instanceof Error ? err.message : 'خطای ارتباط با سرور در دریافت پروفایل';
+          return { success: false, message: errMsg };
+        } finally {
+          activeProfilePromiseRef.current = null;
+        }
+      })();
+
+      activeProfilePromiseRef.current = promise;
+      return promise;
+    },
+    [setAuthProfile]
+  );
+
+  // Supabase Session Management:
+  // Strictly avoid duplicate queries: profile is fetched once, and onAuthStateChange has NO await
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) return;
+
+    // 1. Initial session check on mount (restoreSession)
+    supabase.auth.getSession().then(({ data: { session }, error: sessionError }) => {
+      if (sessionError || !session?.user) {
+        if (!authenticatedProfile) {
+          setIsLoggedInState(false);
+          setAuthProfile(null);
+        }
+        return;
+      }
+      if (lastProfileFetchedUserIdRef.current !== session.user.id) {
+        syncUserProfile(session.user.id);
+      }
+    });
+
+    // 2. Auth State Change Listener (Synchronous callback with NO await inside)
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        lastProfileFetchedUserIdRef.current = null;
+        activeProfilePromiseRef.current = null;
+        setIsLoggedInState(false);
+        localStorage.setItem(STORAGE_KEYS.AUTH_LOGGED_IN, 'false');
+        localStorage.removeItem(STORAGE_KEYS.AUTH_ROLE);
+        localStorage.removeItem(STORAGE_KEYS.AUTH_VISITOR_ID);
+        localStorage.removeItem(STORAGE_KEYS.AUTH_SUPERMARKET_ID);
+        localStorage.removeItem('alborz_auth_profile');
+        setAuthProfile(null);
+      } else if (session?.user) {
+        const userId = session.user.id;
+        // Do not re-fetch if this user ID is already processed
+        if (lastProfileFetchedUserIdRef.current !== userId) {
+          // Defer profile fetch outside of auth event loop via setTimeout 0
+          setTimeout(() => {
+            if (lastProfileFetchedUserIdRef.current !== userId) {
+              syncUserProfile(userId);
+            }
+          }, 0);
         }
       }
     });
@@ -200,7 +242,7 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
     return () => {
       authListener?.subscription?.unsubscribe();
     };
-  }, [setAuthProfile]);
+  }, [syncUserProfile, setAuthProfile, authenticatedProfile]);
 
   const currentUser: CurrentUser = useMemo(() => {
     if (role === 'admin') {
@@ -358,59 +400,15 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
           };
         }
 
-        // 3. Read profile with explicit columns ONLY: id, name, role, phone, is_active
-        const { data: profile, error: profError } = await supabase
-          .from('profiles')
-          .select('id, name, role, phone, is_active')
-          .eq('id', authData.user.id)
-          .maybeSingle();
-
-        if (profError || !profile) {
-          await supabase.auth.signOut();
-          const errDetail = profError?.message ? ` (${profError.message})` : '';
+        // 3. Read profile through unified single-source syncUserProfile (no duplicate queries)
+        const profileResult = await syncUserProfile(authData.user.id, allowedRoles);
+        if (!profileResult.success) {
           return {
             success: false,
-            message: `پروفایل کاربری یافت نشد.${errDetail}`,
+            message: profileResult.message || 'خطا در دریافت مشخصات کاربر از سرور',
           };
         }
 
-        // Role MUST come strictly from profiles table, NEVER user_metadata
-        const userRole = profile.role as UserRole;
-
-        // Check if account is active
-        if (profile.is_active === false) {
-          await supabase.auth.signOut();
-          return {
-            success: false,
-            message: 'حساب کاربری شما غیرفعال شده است. لطفاً با مدیریت تماس بگیرید.',
-          };
-        }
-
-        // Check allowedRoles for the active login tab
-        if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(userRole)) {
-          await supabase.auth.signOut();
-          return {
-            success: false,
-            message: 'دسترسی غیرمجاز برای این بخش.',
-          };
-        }
-
-        // Login success! Set session state and persisted profile
-        setRole(userRole);
-        setAuthProfile({
-          id: profile.id,
-          name: profile.name,
-          username: profile.phone || profile.id,
-          phone: profile.phone || cleanPhone,
-        });
-
-        if (userRole === 'visitor') {
-          setSelectedVisitorId(profile.id);
-        } else if (userRole === 'supermarket') {
-          setSelectedSupermarketId(profile.id);
-        }
-
-        setIsLoggedIn(true);
         return { success: true };
       } catch (err: unknown) {
         console.warn('Login request error:', err);
@@ -421,10 +419,11 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
         };
       }
     },
-    [setRole, setSelectedVisitorId, setSelectedSupermarketId, setIsLoggedIn, setAuthProfile]
+    [syncUserProfile]
   );
 
   const logout = useCallback(async () => {
+    lastProfileFetchedUserIdRef.current = null;
     setIsLoggedInState(false);
     localStorage.setItem(STORAGE_KEYS.AUTH_LOGGED_IN, 'false');
     localStorage.removeItem(STORAGE_KEYS.AUTH_ROLE);

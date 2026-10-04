@@ -145,9 +145,10 @@ export const ProductRow: React.FC<ProductRowProps> = ({
             </div>
 
             {product.items_per_package && product.items_per_package > 0 ? (
-              <div className="pt-0.5 space-y-0.5">
+              <div className="pt-0.5 space-y-1">
+                {/* Store Purchase Price (Used for calculation) */}
                 <div className="flex items-baseline gap-1.5 flex-wrap">
-                  <span className={`text-sm sm:text-base font-black ${isMarketTest ? 'text-violet-300' : 'text-emerald-400'}`}>
+                  <span className={`text-sm sm:text-base font-black ${isMarketTest ? 'market-test-price text-violet-300' : 'text-emerald-400'}`}>
                     {formatPrice(displayPrice * product.items_per_package)}
                   </span>
                   <span className="text-xs text-slate-400 font-medium">/ هر {product.unit}</span>
@@ -155,13 +156,39 @@ export const ProductRow: React.FC<ProductRowProps> = ({
                     (دانه‌ای {formatPrice(displayPrice)})
                   </span>
                 </div>
+
+                {/* Consumer Price (Purely visual display, not used for any calculations) */}
+                {Boolean(product.consumer_price && product.consumer_price > 0) && (
+                  <div className="flex items-baseline gap-1.5 flex-wrap text-xs">
+                    <span className="text-[11px] text-slate-400 font-medium">مصرف‌کننده:</span>
+                    <span className="text-xs sm:text-sm font-bold text-amber-400 dark:text-amber-300 font-mono">
+                      {formatPrice(Number(product.consumer_price) * product.items_per_package)}
+                    </span>
+                    <span className="text-[10px] text-amber-400/80 dark:text-amber-300/80 font-mono">
+                      (دانه‌ای {formatPrice(Number(product.consumer_price))})
+                    </span>
+                  </div>
+                )}
               </div>
             ) : (
-              <div className="flex items-center gap-1.5 pt-0.5">
-                <span className={`text-sm font-extrabold market-test-price ${isMarketTest ? 'text-violet-300' : 'text-emerald-400'}`}>
-                  {formatPrice(displayPrice)}
-                </span>
-                <span className="text-xs text-slate-500">/ {product.unit}</span>
+              <div className="pt-0.5 space-y-1">
+                {/* Store Purchase Price (Used for calculation) */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className={`text-sm font-extrabold ${isMarketTest ? 'market-test-price text-violet-300' : 'text-emerald-400'}`}>
+                    {formatPrice(displayPrice)}
+                  </span>
+                  <span className="text-xs text-slate-400">/ {product.unit}</span>
+                </div>
+
+                {/* Consumer Price (Purely visual display, not used for any calculations) */}
+                {Boolean(product.consumer_price && product.consumer_price > 0) && (
+                  <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                    <span className="text-[11px] text-slate-400 font-medium">مصرف‌کننده:</span>
+                    <span className="text-xs sm:text-sm font-bold text-amber-400 dark:text-amber-300 font-mono">
+                      {formatPrice(Number(product.consumer_price))}
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </div>

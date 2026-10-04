@@ -224,6 +224,24 @@ html.theme-light .market-test-price,
   color: #7e22ce !important; /* Bold, readable dark purple */
 }
 
+/* High-contrast Price Colors in Light Theme */
+html.theme-light .text-emerald-400,
+.theme-light .text-emerald-400 {
+  color: #047857 !important; /* Crisp, readable emerald green */
+}
+
+html.theme-light .text-emerald-300,
+.theme-light .text-emerald-300 {
+  color: #065f46 !important;
+}
+
+html.theme-light .text-amber-400,
+.theme-light .text-amber-400,
+html.theme-light .text-amber-300,
+.theme-light .text-amber-300 {
+  color: #b45309 !important; /* Rich amber-700 for consumer prices */
+}
+
 html.theme-light .market-test-subtext,
 .theme-light .market-test-subtext {
   color: #581c87 !important; /* Bold, readable dark purple text */

@@ -41,6 +41,11 @@ export const ReorderCard: React.FC<ReorderCardProps> = ({
                 <p className="text-xs text-emerald-400 font-extrabold mt-1">
                   {formatPrice(p.price)}
                 </p>
+                {Boolean(p.consumer_price && p.consumer_price > 0) && (
+                  <p className="text-[10px] text-amber-400 dark:text-amber-300 font-medium truncate mt-0.5">
+                    مصرف‌کننده: {formatPrice(Number(p.consumer_price))}
+                  </p>
+                )}
               </div>
 
               <button

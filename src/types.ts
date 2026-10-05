@@ -299,8 +299,10 @@ export interface InvoiceShowSettings {
   // Table Columns
   col_row_index: boolean;
   col_product_name: boolean;
+  col_items_per_package: boolean;
   col_quantity_unit: boolean;
   col_unit_price: boolean;
+  col_discount_percent: boolean;
   col_total_price: boolean;
 
   // Summary & Totals
@@ -337,6 +339,18 @@ export interface InvoiceLayoutSettings {
   buyer_card_columns: 1 | 2;
 }
 
+export interface InvoiceStyleSettings {
+  base_font_size: 'small' | 'normal' | 'large'; // مقیاس فونت
+  header_title_size: 'small' | 'medium' | 'large'; // اندازه تیتر عنوان فاکتور
+  brand_title_size: 'small' | 'medium' | 'large'; // اندازه نام برند
+  card_padding: 'compact' | 'normal' | 'spacious'; // اندازه و پدینگ کارتهای فروشنده و خریدار
+  table_density: 'compact' | 'normal' | 'spacious'; // تراکم سطرهای جدول
+  table_font_size: 'small' | 'normal' | 'large'; // اندازه فونت جدول
+  totals_font_size: 'small' | 'normal' | 'large'; // اندازه فونت جمع‌ها و پرداخت
+  signatures_height: 'small' | 'medium' | 'large'; // ارتفاع کادرهای امضا
+  border_thickness: 'thin' | 'medium' | 'thick'; // ضخامت خطوط
+}
+
 export interface InvoiceSettings {
   // A. Seller Info
   brand_name: string;
@@ -370,6 +384,8 @@ export interface InvoiceSettings {
   // F. Amount and Payment
   has_vat: boolean;
   vat_percent: number;
+  has_overall_discount?: boolean;
+  discount_percent?: number;
   bank_account_holder: string;
   card_number: string;
   iban: string;
@@ -389,6 +405,9 @@ export interface InvoiceSettings {
 
   // J. Configurable Layout
   layout: InvoiceLayoutSettings;
+
+  // K. Visual Styling & Typography
+  style: InvoiceStyleSettings;
 }
 
 export const DEFAULT_INVOICE_SHOW_SETTINGS: InvoiceShowSettings = {
@@ -419,13 +438,15 @@ export const DEFAULT_INVOICE_SHOW_SETTINGS: InvoiceShowSettings = {
 
   col_row_index: true,
   col_product_name: true,
+  col_items_per_package: true,
   col_quantity_unit: true,
   col_unit_price: true,
+  col_discount_percent: false,
   col_total_price: true,
 
   summary_items_count: true,
   summary_subtotal: true,
-  summary_discount: true,
+  summary_discount: false,
   summary_vat: true,
   summary_final_total: true,
 
@@ -481,6 +502,18 @@ export const DEFAULT_INVOICE_LAYOUT_SETTINGS: InvoiceLayoutSettings = {
   buyer_card_columns: 2,
 };
 
+export const DEFAULT_INVOICE_STYLE_SETTINGS: InvoiceStyleSettings = {
+  base_font_size: 'normal',
+  header_title_size: 'medium',
+  brand_title_size: 'medium',
+  card_padding: 'normal',
+  table_density: 'normal',
+  table_font_size: 'normal',
+  totals_font_size: 'normal',
+  signatures_height: 'medium',
+  border_thickness: 'thin',
+};
+
 export const DEFAULT_INVOICE_SETTINGS: InvoiceSettings = {
   brand_name: 'شبکه پخش عمده فرهودی',
   legal_name: 'صنایع غذایی منجمد و سردخانه‌ای فرهودی',
@@ -506,6 +539,8 @@ export const DEFAULT_INVOICE_SETTINGS: InvoiceSettings = {
   show_page_number: true,
   has_vat: false,
   vat_percent: 10,
+  has_overall_discount: false,
+  discount_percent: 0,
   bank_account_holder: 'صنایع غذایی فرهودی',
   card_number: '',
   iban: '',
@@ -517,6 +552,7 @@ export const DEFAULT_INVOICE_SETTINGS: InvoiceSettings = {
   compact_table: false,
   show: DEFAULT_INVOICE_SHOW_SETTINGS,
   layout: DEFAULT_INVOICE_LAYOUT_SETTINGS,
+  style: DEFAULT_INVOICE_STYLE_SETTINGS,
 };
 
 export function getInvoiceSettings(raw?: unknown): InvoiceSettings {
@@ -526,6 +562,7 @@ export function getInvoiceSettings(raw?: unknown): InvoiceSettings {
   const r = raw as Partial<InvoiceSettings>;
   const rawShow = (r.show && typeof r.show === 'object') ? (r.show as Partial<InvoiceShowSettings>) : {};
   const rawLayout = (r.layout && typeof r.layout === 'object') ? (r.layout as Partial<InvoiceLayoutSettings>) : {};
+  const rawStyle = (r.style && typeof r.style === 'object') ? (r.style as Partial<InvoiceStyleSettings>) : {};
 
   // Compatibility bridges for legacy top-level booleans if show object was partially populated:
   const show: InvoiceShowSettings = {
@@ -554,13 +591,20 @@ export function getInvoiceSettings(raw?: unknown): InvoiceSettings {
       : DEFAULT_INVOICE_LAYOUT_SETTINGS.section_order,
   };
 
+  const style: InvoiceStyleSettings = {
+    ...DEFAULT_INVOICE_STYLE_SETTINGS,
+    ...rawStyle,
+  };
+
   return {
     ...DEFAULT_INVOICE_SETTINGS,
     ...r,
     show,
     layout,
+    style,
     phones: Array.isArray(r.phones) ? r.phones : DEFAULT_INVOICE_SETTINGS.phones,
   };
 }
+
 
 

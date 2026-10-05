@@ -198,15 +198,17 @@ export function printInvoiceDocument(
     // Dynamic Title for browser print dialog and default save name
     const docTitle = orderId ? `فاکتور ${orderId}` : 'فاکتور سفارش';
 
-    // Create an isolated hidden iframe for printing
+    // Create an isolated printable iframe with real physical layout dimensions
     const iframe = document.createElement('iframe');
+    iframe.id = 'invoice-print-sandbox';
     iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
+    iframe.style.left = '-9999px';
+    iframe.style.top = '-9999px';
+    iframe.style.width = paperSize === 'A5' ? '148mm' : '210mm';
+    iframe.style.height = paperSize === 'A5' ? '210mm' : '297mm';
     iframe.style.border = '0';
-    iframe.style.visibility = 'hidden';
+    iframe.style.opacity = '1';
+    iframe.style.visibility = 'visible';
     document.body.appendChild(iframe);
 
     const doc = iframe.contentWindow?.document;
@@ -215,7 +217,7 @@ export function printInvoiceDocument(
       return;
     }
 
-    // Collect all existing stylesheets to maintain font & design rendering
+    // Collect all existing stylesheets from host document
     const styleSheets = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
       .map((node) => node.outerHTML)
       .join('\n');
@@ -233,7 +235,7 @@ export function printInvoiceDocument(
           <style>
             @page {
               size: ${pageSize} portrait;
-              margin: 0; /* Suppresses browser auto headers and footers (URL, dates) */
+              margin: 0;
             }
             *, *::before, *::after {
               box-sizing: border-box !important;
@@ -254,7 +256,7 @@ export function printInvoiceDocument(
               width: 100% !important;
               max-width: 100% !important;
               min-height: ${pageSize === 'A5' ? '210mm' : '297mm'} !important;
-              padding: 10mm !important;
+              padding: 8mm 10mm !important;
               margin: 0 !important;
               box-shadow: none !important;
               border: none !important;
@@ -268,7 +270,6 @@ export function printInvoiceDocument(
               page-break-after: auto !important;
               break-after: auto !important;
             }
-            /* Repeat table headers on multi-page invoices */
             table.items-table {
               width: 100% !important;
               border-collapse: collapse !important;
@@ -291,6 +292,18 @@ export function printInvoiceDocument(
               letter-spacing: 0 !important;
               word-spacing: 0 !important;
             }
+            /* Fallback Grid & Flex layout for iframe reliability */
+            .grid { display: grid !important; }
+            .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+            .grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+            .grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+            .flex { display: flex !important; }
+            .flex-col { flex-direction: column !important; }
+            .items-center { align-items: center !important; }
+            .justify-between { justify-content: space-between !important; }
+            .gap-1 { gap: 0.25rem !important; }
+            .gap-2 { gap: 0.5rem !important; }
+            .gap-3 { gap: 0.75rem !important; }
           </style>
         </head>
         <body>
@@ -302,7 +315,7 @@ export function printInvoiceDocument(
     `);
     doc.close();
 
-    // Trigger print once content and fonts are ready
+    // Trigger print once iframe render tree is laid out
     setTimeout(() => {
       try {
         iframe.contentWindow?.focus();
@@ -311,14 +324,13 @@ export function printInvoiceDocument(
         console.error('Iframe print error, falling back to window.print', err);
         window.print();
       } finally {
-        // Clean up iframe after a small delay
         setTimeout(() => {
           if (document.body.contains(iframe)) {
             document.body.removeChild(iframe);
           }
-        }, 3000);
+        }, 5000);
       }
-    }, 400);
+    }, 450);
   } catch (error) {
     console.error('Error during printing:', error);
     window.print();

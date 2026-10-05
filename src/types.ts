@@ -340,15 +340,18 @@ export interface InvoiceLayoutSettings {
 }
 
 export interface InvoiceStyleSettings {
-  base_font_size: 'small' | 'normal' | 'large'; // مقیاس فونت
-  header_title_size: 'small' | 'medium' | 'large'; // اندازه تیتر عنوان فاکتور
+  base_font_size: 'small' | 'normal' | 'large'; // مقیاس فونت کلی
+  header_title_size: 'small' | 'medium' | 'large'; // اندازه عنوان فاکتور
   brand_title_size: 'small' | 'medium' | 'large'; // اندازه نام برند
-  card_padding: 'compact' | 'normal' | 'spacious'; // اندازه و پدینگ کارتهای فروشنده و خریدار
-  table_density: 'compact' | 'normal' | 'spacious'; // تراکم سطرهای جدول
-  table_font_size: 'small' | 'normal' | 'large'; // اندازه فونت جدول
+  cards_font_size: 'small' | 'normal' | 'large'; // اندازه فونت و مقادیر کارتهای فروشنده و خریدار
+  card_padding: 'compact' | 'normal' | 'spacious'; // اندازه و پدینگ کارتها و باکس‌ها
+  table_density: 'compact' | 'normal' | 'spacious'; // تراکم و پدینگ سطرهای جدول
+  table_font_size: 'small' | 'normal' | 'large'; // اندازه فونت جدول اقلام
   totals_font_size: 'small' | 'normal' | 'large'; // اندازه فونت جمع‌ها و پرداخت
+  terms_font_size: 'small' | 'normal' | 'large'; // اندازه فونت شرایط و توضیحات
   signatures_height: 'small' | 'medium' | 'large'; // ارتفاع کادرهای امضا
-  border_thickness: 'thin' | 'medium' | 'thick'; // ضخامت خطوط
+  border_thickness: 'thin' | 'medium' | 'thick'; // ضخامت خطوط و کادرها
+  box_rounded: 'none' | 'small' | 'medium' | 'large'; // گردی گوشه باکس‌ها
 }
 
 export interface InvoiceSettings {
@@ -506,12 +509,15 @@ export const DEFAULT_INVOICE_STYLE_SETTINGS: InvoiceStyleSettings = {
   base_font_size: 'normal',
   header_title_size: 'medium',
   brand_title_size: 'medium',
+  cards_font_size: 'normal',
   card_padding: 'normal',
   table_density: 'normal',
   table_font_size: 'normal',
   totals_font_size: 'normal',
+  terms_font_size: 'normal',
   signatures_height: 'medium',
   border_thickness: 'thin',
+  box_rounded: 'medium',
 };
 
 export const DEFAULT_INVOICE_SETTINGS: InvoiceSettings = {

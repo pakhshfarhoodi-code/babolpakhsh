@@ -1524,7 +1524,203 @@ export const InvoiceSettingsTab: React.FC = () => {
               )}
             </div>
 
-            {/* 7. Invoice Layout (چیدمان فاکتور) */}
+            {/* 7. Typography, Font Sizes, Box Sizing & Visual Style (سایز فونت‌ها و ابعاد کادرها) */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-md">
+              <button
+                type="button"
+                onClick={() => toggleSection('typography')}
+                className="w-full p-4 bg-slate-850 flex items-center justify-between text-right cursor-pointer hover:bg-slate-800/80 transition"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Type className="w-4 h-4 text-pink-400" />
+                  <span className="font-bold text-sm text-slate-200">
+                    ۷. تنظیم اندازه فونت‌ها، ابعاد باکس‌ها و مقادیر تمام بخش‌ها
+                  </span>
+                </div>
+                <ChevronDown
+                  className={`w-4 h-4 text-slate-400 transition-transform ${
+                    openSections.typography ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+
+              {openSections.typography && (
+                <div className="p-4 space-y-4 border-t border-slate-800 bg-slate-900/50">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    {/* Base Font Scale */}
+                    <div className="space-y-1 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
+                      <label className="text-slate-300 font-bold block">اندازه فونت پایه فاکتور:</label>
+                      <select
+                        value={form.style.base_font_size}
+                        onChange={(e) => handleStyleChange('base_font_size', e.target.value as any)}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs"
+                      >
+                        <option value="small">ریز و فشرده (۱۰ پیکسل)</option>
+                        <option value="normal">استاندارد (۱۱ پیکسل)</option>
+                        <option value="large">درشت و خوانا (۱۲.۵ پیکسل)</option>
+                      </select>
+                    </div>
+
+                    {/* Header Title Size */}
+                    <div className="space-y-1 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
+                      <label className="text-slate-300 font-bold block">اندازه عنوان فاکتور:</label>
+                      <select
+                        value={form.style.header_title_size}
+                        onChange={(e) => handleStyleChange('header_title_size', e.target.value as any)}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs"
+                      >
+                        <option value="small">کوچک (متناسب با صفحات متراکم)</option>
+                        <option value="medium">متوسط (استاندارد)</option>
+                        <option value="large">بزرگ و برجسته</option>
+                      </select>
+                    </div>
+
+                    {/* Brand Name Size */}
+                    <div className="space-y-1 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
+                      <label className="text-slate-300 font-bold block">اندازه نام برند / سربرگ:</label>
+                      <select
+                        value={form.style.brand_title_size}
+                        onChange={(e) => handleStyleChange('brand_title_size', e.target.value as any)}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs"
+                      >
+                        <option value="small">کوچک</option>
+                        <option value="medium">متوسط (استاندارد)</option>
+                        <option value="large">بزرگ و سربرگی</option>
+                      </select>
+                    </div>
+
+                    {/* Cards Font Size */}
+                    <div className="space-y-1 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
+                      <label className="text-slate-300 font-bold block">فونت عناوین و مقادیر کارت‌های طرفین:</label>
+                      <select
+                        value={form.style.cards_font_size}
+                        onChange={(e) => handleStyleChange('cards_font_size', e.target.value as any)}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs"
+                      >
+                        <option value="small">کوچک (۱۰ پیکسل)</option>
+                        <option value="normal">استاندارد (۱۱ پیکسل)</option>
+                        <option value="large">درشت (۱۲.۵ پیکسل)</option>
+                      </select>
+                    </div>
+
+                    {/* Card Padding & Size */}
+                    <div className="space-y-1 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
+                      <label className="text-slate-300 font-bold block">ابعاد و پدینگ کارت‌های مشخصات:</label>
+                      <select
+                        value={form.style.card_padding}
+                        onChange={(e) => handleStyleChange('card_padding', e.target.value as any)}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs"
+                      >
+                        <option value="compact">فشرده (کمترین فضا)</option>
+                        <option value="normal">متوسط (استاندارد)</option>
+                        <option value="spacious">جادار و باز</option>
+                      </select>
+                    </div>
+
+                    {/* Table Row Density & Padding */}
+                    <div className="space-y-1 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
+                      <label className="text-slate-300 font-bold block">تراکم و ارتفاع سطرهای جدول اقلام:</label>
+                      <select
+                        value={form.style.table_density}
+                        onChange={(e) => handleStyleChange('table_density', e.target.value as any)}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs"
+                      >
+                        <option value="compact">فشرده (برای جا شدن ردیف‌های بیشتر در یک صفحه)</option>
+                        <option value="normal">استاندارد</option>
+                        <option value="spacious">جادار و بافاصله</option>
+                      </select>
+                    </div>
+
+                    {/* Table Font Size */}
+                    <div className="space-y-1 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
+                      <label className="text-slate-300 font-bold block">اندازه فونت جدول اقلام:</label>
+                      <select
+                        value={form.style.table_font_size}
+                        onChange={(e) => handleStyleChange('table_font_size', e.target.value as any)}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs"
+                      >
+                        <option value="small">ریز (۱۰ پیکسل)</option>
+                        <option value="normal">متوسط (۱۱ الی ۱۲ پیکسل)</option>
+                        <option value="large">درشت و خوانا (۱۳ پیکسل)</option>
+                      </select>
+                    </div>
+
+                    {/* Totals Font Size */}
+                    <div className="space-y-1 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
+                      <label className="text-slate-300 font-bold block">اندازه فونت جمع‌ها و پرداخت:</label>
+                      <select
+                        value={form.style.totals_font_size}
+                        onChange={(e) => handleStyleChange('totals_font_size', e.target.value as any)}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs"
+                      >
+                        <option value="small">کوچک</option>
+                        <option value="normal">متوسط (استاندارد)</option>
+                        <option value="large">بزرگ و برجسته</option>
+                      </select>
+                    </div>
+
+                    {/* Terms Font Size */}
+                    <div className="space-y-1 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
+                      <label className="text-slate-300 font-bold block">اندازه فونت شرایط و توضیحات:</label>
+                      <select
+                        value={form.style.terms_font_size}
+                        onChange={(e) => handleStyleChange('terms_font_size', e.target.value as any)}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs"
+                      >
+                        <option value="small">ریز (۹.۵ پیکسل)</option>
+                        <option value="normal">متوسط (۱۰.۵ پیکسل)</option>
+                        <option value="large">درشت (۱۲ پیکسل)</option>
+                      </select>
+                    </div>
+
+                    {/* Signatures Box Height */}
+                    <div className="space-y-1 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
+                      <label className="text-slate-300 font-bold block">ارتفاع کادرهای امضا و مهر:</label>
+                      <select
+                        value={form.style.signatures_height}
+                        onChange={(e) => handleStyleChange('signatures_height', e.target.value as any)}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs"
+                      >
+                        <option value="small">کم‌ارتفاع (۴۸ پیکسل)</option>
+                        <option value="medium">متوسط (۶۴ پیکسل - استاندارد)</option>
+                        <option value="large">بلند (۹۶ پیکسل - فضای کافی برای مهر بزرگ)</option>
+                      </select>
+                    </div>
+
+                    {/* Border Thickness */}
+                    <div className="space-y-1 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
+                      <label className="text-slate-300 font-bold block">ضخامت خطوط و کادرها:</label>
+                      <select
+                        value={form.style.border_thickness}
+                        onChange={(e) => handleStyleChange('border_thickness', e.target.value as any)}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs"
+                      >
+                        <option value="thin">نازک و ظریف (۱ پیکسل خاکستری)</option>
+                        <option value="medium">متوسط (۲ پیکسل ملایم)</option>
+                        <option value="thick">پررنگ و شاخص (۲ پیکسل تیره)</option>
+                      </select>
+                    </div>
+
+                    {/* Box Rounded Corners */}
+                    <div className="space-y-1 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
+                      <label className="text-slate-300 font-bold block">میزان گردی گوشه‌های کادرها:</label>
+                      <select
+                        value={form.style.box_rounded}
+                        onChange={(e) => handleStyleChange('box_rounded', e.target.value as any)}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs"
+                      >
+                        <option value="none">گوشه‌های تیز (مستطیلی کلاسیک)</option>
+                        <option value="small">گردی کم (۴ پیکسل)</option>
+                        <option value="medium">گردی متوسط (۸ پیکسل - مدرن)</option>
+                        <option value="large">گردی زیاد (۱۶ پیکسل)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 8. Invoice Layout (چیدمان فاکتور) */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-md">
               <button
                 type="button"
@@ -1534,7 +1730,7 @@ export const InvoiceSettingsTab: React.FC = () => {
                 <div className="flex items-center gap-2.5">
                   <MoveVertical className="w-4 h-4 text-purple-400" />
                   <span className="font-bold text-sm text-slate-200">
-                    ۷. چیدمان و ترتیب بخش‌های فاکتور
+                    ۸. چیدمان و ترتیب بخش‌های فاکتور
                   </span>
                 </div>
                 <ChevronDown
@@ -1737,7 +1933,7 @@ export const InvoiceSettingsTab: React.FC = () => {
               )}
             </div>
 
-            {/* 8. Paper Size */}
+            {/* 9. Paper Size */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-md">
               <button
                 type="button"
@@ -1746,7 +1942,7 @@ export const InvoiceSettingsTab: React.FC = () => {
               >
                 <div className="flex items-center gap-2.5">
                   <Printer className="w-4 h-4 text-rose-400" />
-                  <span className="font-bold text-sm text-slate-200">۸. قطع کاغذ و ابعاد چاپ</span>
+                  <span className="font-bold text-sm text-slate-200">۹. قطع کاغذ و ابعاد چاپ</span>
                 </div>
                 <ChevronDown
                   className={`w-4 h-4 text-slate-400 transition-transform ${

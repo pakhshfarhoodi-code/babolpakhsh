@@ -66,6 +66,13 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
       ? 'p-3.5 sm:p-4'
       : 'p-2 sm:p-2.5';
 
+  const cardsFontClass =
+    style.cards_font_size === 'small'
+      ? 'text-[10px]'
+      : style.cards_font_size === 'large'
+      ? 'text-[12.5px]'
+      : 'text-[11px]';
+
   const tableRowPaddingClass =
     style.table_density === 'compact'
       ? 'py-0.5 px-1.5'
@@ -87,6 +94,13 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
       ? 'text-xs sm:text-sm'
       : 'text-[11px] sm:text-xs';
 
+  const termsFontClass =
+    style.terms_font_size === 'small'
+      ? 'text-[9.5px]'
+      : style.terms_font_size === 'large'
+      ? 'text-[12px]'
+      : 'text-[10.5px]';
+
   const signaturesHeightClass =
     style.signatures_height === 'small'
       ? 'h-12'
@@ -94,12 +108,21 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
       ? 'h-24'
       : 'h-16';
 
+  const roundedBoxClass =
+    style.box_rounded === 'none'
+      ? 'rounded-none'
+      : style.box_rounded === 'small'
+      ? 'rounded'
+      : style.box_rounded === 'large'
+      ? 'rounded-2xl'
+      : 'rounded-lg';
+
   const borderClass =
     style.border_thickness === 'medium'
-      ? 'border-2 border-slate-400'
+      ? `border-2 border-slate-400 ${roundedBoxClass}`
       : style.border_thickness === 'thick'
-      ? 'border-2 border-slate-800'
-      : 'border border-slate-300';
+      ? `border-2 border-slate-800 ${roundedBoxClass}`
+      : `border border-slate-300 ${roundedBoxClass}`;
 
   // ---------------------------------------------------------------------------
   // Seller & Buyer Data Logic
@@ -408,7 +431,7 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
 
     return (
       <div
-        className={`${borderClass} rounded-lg ${cardPaddingClass} bg-slate-50/50 flex flex-col justify-between ${baseFontClass} leading-snug`}
+        className={`${borderClass} ${cardPaddingClass} bg-slate-50/50 flex flex-col justify-between ${cardsFontClass} leading-snug`}
       >
         <div>
           <div className="font-bold text-slate-900 border-b border-slate-200 pb-1 mb-1.5 flex items-center gap-1.5">
@@ -491,7 +514,7 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
 
     return (
       <div
-        className={`${borderClass} rounded-lg ${cardPaddingClass} bg-slate-50/50 flex flex-col justify-between ${baseFontClass} leading-snug`}
+        className={`${borderClass} ${cardPaddingClass} bg-slate-50/50 flex flex-col justify-between ${cardsFontClass} leading-snug`}
       >
         <div>
           <div className="font-bold text-slate-900 border-b border-slate-200 pb-1 mb-1.5 flex items-center gap-1.5">
@@ -764,7 +787,7 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
     if (!termsText) return null;
 
     return (
-      <div className={`${borderClass} rounded-lg p-2 text-[10.5px] leading-relaxed text-slate-700 bg-slate-50/40 break-inside-avoid`}>
+      <div className={`${borderClass} p-2 ${termsFontClass} leading-relaxed text-slate-700 bg-slate-50/40 break-inside-avoid`}>
         <span className="font-bold text-slate-900">شرایط و توضیحات: </span>
         <span>{termsText}</span>
       </div>

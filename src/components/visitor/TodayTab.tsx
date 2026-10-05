@@ -377,7 +377,7 @@ export const TodayTab: React.FC<TodayTabProps> = ({
                     <button
                       type="button"
                       onClick={() => setInvoiceOrder(order)}
-                      title="مشاهده فاکتور، چاپ کاغذی و دانلود PDF"
+                      title="مشاهده، چاپ یا دانلود فاکتور"
                       className="p-2 sm:px-2.5 sm:py-2 rounded-xl bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/30 transition flex items-center justify-center cursor-pointer shrink-0"
                     >
                       <FileText className="w-4 h-4" />

@@ -986,28 +986,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [reloadCounter]);
 
-  // Update invoice settings (admin action)
+  // Update invoice settings (admin action via SECURITY DEFINER RPC)
   const updateInvoiceSettings = useCallback(
     async (newSettings: InvoiceSettings): Promise<{ success: boolean; message: string }> => {
       try {
-        setInvoiceSettings(newSettings);
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('app_setting_invoice_settings', JSON.stringify(newSettings));
-        }
-
         if (isSupabaseConfigured && supabase) {
-          const { error } = await supabase.from('app_settings').upsert({
-            key: 'invoice_settings',
-            value: newSettings,
+          const { error } = await supabase.rpc('set_invoice_settings', {
+            p_value: newSettings,
           });
 
           if (error) {
-            console.error('Error saving invoice settings to Supabase:', error);
+            console.error('Error saving invoice settings via Supabase RPC:', error);
             return {
               success: false,
-              message: error.message || 'خطا در ذخیره‌سازی تنظیمات فاکتور در دیتابیس',
+              message: error.message || 'خطا در ذخیره‌سازی تنظیمات فاکتور در سرور',
             };
           }
+        }
+
+        // Only update local state and localStorage if RPC succeeded (or if supabase not configured)
+        setInvoiceSettings(newSettings);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('app_setting_invoice_settings', JSON.stringify(newSettings));
         }
 
         return {

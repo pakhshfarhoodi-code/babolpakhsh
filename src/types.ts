@@ -257,6 +257,86 @@ export interface CentralPhone {
   show_in_invoice: boolean;
 }
 
+export type InvoiceSectionKey =
+  | 'header'
+  | 'seller'
+  | 'buyer'
+  | 'items_table'
+  | 'payment_info'
+  | 'totals_summary'
+  | 'terms'
+  | 'signatures';
+
+export interface InvoiceShowSettings {
+  // Header
+  logo: boolean;
+  brand_name: boolean;
+  tagline: boolean;
+  order_id: boolean;
+  order_date: boolean;
+  order_time: boolean;
+  sale_type: boolean;
+  version_badge: boolean;
+  invoice_title: boolean;
+
+  // Seller
+  seller_name: boolean;
+  seller_legal_name: boolean;
+  seller_phones: boolean;
+  seller_address: boolean;
+  seller_visitor: boolean;
+  seller_national_id: boolean;
+  seller_economic_code: boolean;
+  seller_registration_number: boolean;
+  seller_postal_code: boolean;
+
+  // Buyer
+  buyer_store_name: boolean;
+  buyer_owner: boolean;
+  buyer_phone: boolean;
+  buyer_address: boolean;
+
+  // Table Columns
+  col_row_index: boolean;
+  col_product_name: boolean;
+  col_quantity_unit: boolean;
+  col_unit_price: boolean;
+  col_total_price: boolean;
+
+  // Summary & Totals
+  summary_items_count: boolean;
+  summary_subtotal: boolean;
+  summary_discount: boolean;
+  summary_vat: boolean;
+  summary_final_total: boolean;
+
+  // Payment & Details
+  amount_in_words: boolean;
+  payment_account_holder: boolean;
+  payment_card: boolean;
+  payment_iban: boolean;
+  payment_terms: boolean;
+
+  // Footer & Signatures
+  terms_and_conditions: boolean;
+  contact_footer: boolean;
+  signatures_seller: boolean;
+  signatures_buyer: boolean;
+  signatures_receiver: boolean;
+  page_number: boolean;
+}
+
+export interface InvoiceLayoutSettings {
+  section_order: InvoiceSectionKey[];
+  section_widths: Record<InvoiceSectionKey, 'full' | 'half'>;
+  section_alignments: Record<InvoiceSectionKey, 'right' | 'center' | 'left'>;
+  logo_position: 'right' | 'center' | 'left';
+  order_info_position: 'left' | 'right' | 'center';
+  stick_footer_to_bottom: boolean;
+  seller_card_columns: 1 | 2;
+  buyer_card_columns: 1 | 2;
+}
+
 export interface InvoiceSettings {
   // A. Seller Info
   brand_name: string;
@@ -275,17 +355,17 @@ export interface InvoiceSettings {
   postal_code?: string;
 
   // D. Visitor Info
-  show_visitor_info: boolean;
+  show_visitor_info?: boolean;
   direct_sale_title: string;
   visitor_sale_title: string;
 
   // E. Title and Appearance
   invoice_title: string;
-  show_logo: boolean;
-  show_buyer_address: boolean;
-  show_amount_in_words: boolean;
-  show_signature_boxes: boolean;
-  show_page_number: boolean;
+  show_logo?: boolean;
+  show_buyer_address?: boolean;
+  show_amount_in_words?: boolean;
+  show_signature_boxes?: boolean;
+  show_page_number?: boolean;
 
   // F. Amount and Payment
   has_vat: boolean;
@@ -303,7 +383,103 @@ export interface InvoiceSettings {
   // H. Paper
   paper_size: 'A4' | 'A5';
   compact_table: boolean;
+
+  // I. Comprehensive Feature Visibility Flags
+  show: InvoiceShowSettings;
+
+  // J. Configurable Layout
+  layout: InvoiceLayoutSettings;
 }
+
+export const DEFAULT_INVOICE_SHOW_SETTINGS: InvoiceShowSettings = {
+  logo: true,
+  brand_name: true,
+  tagline: true,
+  order_id: true,
+  order_date: true,
+  order_time: true,
+  sale_type: true,
+  version_badge: true,
+  invoice_title: true,
+
+  seller_name: true,
+  seller_legal_name: true,
+  seller_phones: true,
+  seller_address: true,
+  seller_visitor: true,
+  seller_national_id: true,
+  seller_economic_code: true,
+  seller_registration_number: true,
+  seller_postal_code: true,
+
+  buyer_store_name: true,
+  buyer_owner: true,
+  buyer_phone: true,
+  buyer_address: true,
+
+  col_row_index: true,
+  col_product_name: true,
+  col_quantity_unit: true,
+  col_unit_price: true,
+  col_total_price: true,
+
+  summary_items_count: true,
+  summary_subtotal: true,
+  summary_discount: true,
+  summary_vat: true,
+  summary_final_total: true,
+
+  amount_in_words: true,
+  payment_account_holder: true,
+  payment_card: true,
+  payment_iban: true,
+  payment_terms: true,
+
+  terms_and_conditions: true,
+  contact_footer: true,
+  signatures_seller: true,
+  signatures_buyer: true,
+  signatures_receiver: true,
+  page_number: true,
+};
+
+export const DEFAULT_INVOICE_LAYOUT_SETTINGS: InvoiceLayoutSettings = {
+  section_order: [
+    'header',
+    'seller',
+    'buyer',
+    'items_table',
+    'payment_info',
+    'totals_summary',
+    'terms',
+    'signatures',
+  ],
+  section_widths: {
+    header: 'full',
+    seller: 'half',
+    buyer: 'half',
+    items_table: 'full',
+    payment_info: 'half',
+    totals_summary: 'half',
+    terms: 'full',
+    signatures: 'full',
+  },
+  section_alignments: {
+    header: 'right',
+    seller: 'right',
+    buyer: 'right',
+    items_table: 'right',
+    payment_info: 'right',
+    totals_summary: 'right',
+    terms: 'right',
+    signatures: 'right',
+  },
+  logo_position: 'right',
+  order_info_position: 'left',
+  stick_footer_to_bottom: true,
+  seller_card_columns: 2,
+  buyer_card_columns: 2,
+};
 
 export const DEFAULT_INVOICE_SETTINGS: InvoiceSettings = {
   brand_name: 'شبکه پخش عمده فرهودی',
@@ -339,6 +515,8 @@ export const DEFAULT_INVOICE_SETTINGS: InvoiceSettings = {
   copy_label: 'نسخه فروشگاه',
   paper_size: 'A4',
   compact_table: false,
+  show: DEFAULT_INVOICE_SHOW_SETTINGS,
+  layout: DEFAULT_INVOICE_LAYOUT_SETTINGS,
 };
 
 export function getInvoiceSettings(raw?: unknown): InvoiceSettings {
@@ -346,10 +524,43 @@ export function getInvoiceSettings(raw?: unknown): InvoiceSettings {
     return { ...DEFAULT_INVOICE_SETTINGS };
   }
   const r = raw as Partial<InvoiceSettings>;
+  const rawShow = (r.show && typeof r.show === 'object') ? (r.show as Partial<InvoiceShowSettings>) : {};
+  const rawLayout = (r.layout && typeof r.layout === 'object') ? (r.layout as Partial<InvoiceLayoutSettings>) : {};
+
+  // Compatibility bridges for legacy top-level booleans if show object was partially populated:
+  const show: InvoiceShowSettings = {
+    ...DEFAULT_INVOICE_SHOW_SETTINGS,
+    ...(r.show_logo !== undefined ? { logo: r.show_logo } : {}),
+    ...(r.show_buyer_address !== undefined ? { buyer_address: r.show_buyer_address } : {}),
+    ...(r.show_amount_in_words !== undefined ? { amount_in_words: r.show_amount_in_words } : {}),
+    ...(r.show_page_number !== undefined ? { page_number: r.show_page_number } : {}),
+    ...(r.show_visitor_info !== undefined ? { seller_visitor: r.show_visitor_info } : {}),
+    ...rawShow,
+  };
+
+  const layout: InvoiceLayoutSettings = {
+    ...DEFAULT_INVOICE_LAYOUT_SETTINGS,
+    ...rawLayout,
+    section_widths: {
+      ...DEFAULT_INVOICE_LAYOUT_SETTINGS.section_widths,
+      ...(rawLayout.section_widths || {}),
+    },
+    section_alignments: {
+      ...DEFAULT_INVOICE_LAYOUT_SETTINGS.section_alignments,
+      ...(rawLayout.section_alignments || {}),
+    },
+    section_order: Array.isArray(rawLayout.section_order) && rawLayout.section_order.length > 0
+      ? rawLayout.section_order
+      : DEFAULT_INVOICE_LAYOUT_SETTINGS.section_order,
+  };
+
   return {
     ...DEFAULT_INVOICE_SETTINGS,
     ...r,
+    show,
+    layout,
     phones: Array.isArray(r.phones) ? r.phones : DEFAULT_INVOICE_SETTINGS.phones,
   };
 }
+
 

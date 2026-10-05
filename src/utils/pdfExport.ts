@@ -235,6 +235,9 @@ export function printInvoiceDocument(
               size: ${pageSize} portrait;
               margin: 0; /* Suppresses browser auto headers and footers (URL, dates) */
             }
+            *, *::before, *::after {
+              box-sizing: border-box !important;
+            }
             html, body {
               background-color: #ffffff !important;
               color: #0f172a !important;
@@ -246,39 +249,24 @@ export function printInvoiceDocument(
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
             }
-            /* Table wrapper ensuring 10mm physical margin on every printed page */
-            table.print-wrapper-table {
+            .invoice-page-sheet {
+              box-sizing: border-box !important;
               width: 100% !important;
-              border-collapse: collapse !important;
-              border: none !important;
+              max-width: 100% !important;
+              min-height: ${pageSize === 'A5' ? '210mm' : '297mm'} !important;
+              padding: 10mm !important;
               margin: 0 !important;
-              padding: 0 !important;
-            }
-            table.print-wrapper-table > thead > tr > td.print-page-margin {
-              height: 10mm !important;
-              border: none !important;
-              padding: 0 !important;
-              margin: 0 !important;
-            }
-            table.print-wrapper-table > tfoot > tr > td.print-page-margin {
-              height: 10mm !important;
-              border: none !important;
-              padding: 0 !important;
-              margin: 0 !important;
-            }
-            table.print-wrapper-table > tbody > tr > td.print-content-cell {
-              border: none !important;
-              padding: 0 10mm !important;
-              vertical-align: top !important;
-            }
-            .invoice-paper, #printable-invoice {
-              width: 100% !important;
-              max-width: none !important;
               box-shadow: none !important;
               border: none !important;
-              margin: 0 !important;
-              padding: 0 !important;
-              background: #ffffff !important;
+              border-radius: 0 !important;
+              page-break-after: always !important;
+              break-after: page !important;
+              position: relative !important;
+              background-color: #ffffff !important;
+            }
+            .invoice-page-sheet:last-of-type {
+              page-break-after: auto !important;
+              break-after: auto !important;
             }
             /* Repeat table headers on multi-page invoices */
             table.items-table {
@@ -306,23 +294,9 @@ export function printInvoiceDocument(
           </style>
         </head>
         <body>
-          <table class="print-wrapper-table">
-            <thead>
-              <tr><td class="print-page-margin"></td></tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td class="print-content-cell">
-                  <div class="invoice-paper">
-                    ${targetElement.innerHTML}
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-            <tfoot>
-              <tr><td class="print-page-margin"></td></tr>
-            </tfoot>
-          </table>
+          <div class="print-root">
+            ${targetElement.innerHTML}
+          </div>
         </body>
       </html>
     `);

@@ -6,6 +6,7 @@ import { LoadingBillsTab } from './admin/LoadingBillsTab';
 import { ProductsTab } from './admin/ProductsTab';
 import { TeamTab } from './admin/TeamTab';
 import { ReportsTab } from './admin/ReportsTab';
+import { InvoiceSettingsTab } from './admin/InvoiceSettingsTab';
 import { LOW_STOCK_THRESHOLD, isStoreInactiveFor30Days } from './admin/helpers';
 import {
   AlertTriangle,
@@ -18,9 +19,10 @@ import {
   Check,
   FileText,
   Truck,
+  FileSpreadsheet,
 } from 'lucide-react';
 
-export type AdminTabKey = 'overview' | 'orders' | 'products' | 'team' | 'reports';
+export type AdminTabKey = 'overview' | 'orders' | 'products' | 'team' | 'reports' | 'invoice_settings';
 
 interface AdminPanelProps {
   activeTab?: AdminTabKey;
@@ -163,6 +165,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       id: 'reports' as const,
       label: 'گزارش‌ها و انبار',
       icon: BarChart3,
+      badge: null,
+      badgeColor: '',
+      activeStyle:
+        'bg-blue-600 text-white shadow-md shadow-blue-600/30 border-blue-500 font-bold',
+      inactiveHover: 'hover:text-blue-300 hover:bg-slate-900',
+    },
+    {
+      id: 'invoice_settings' as const,
+      label: 'تنظیمات فاکتور',
+      icon: FileSpreadsheet,
       badge: null,
       badgeColor: '',
       activeStyle:
@@ -374,6 +386,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           visitors={visitors}
           loadingBills={useApp().loadingBills}
         />
+      )}
+
+      {/* Tab 6: Invoice Settings */}
+      {activeTab === 'invoice_settings' && (
+        <InvoiceSettingsTab />
       )}
 
       {/* Modal for Editing Category */}

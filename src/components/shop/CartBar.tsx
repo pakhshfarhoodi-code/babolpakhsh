@@ -1,6 +1,6 @@
 import React from 'react';
 import { ShoppingBag, ChevronUp } from 'lucide-react';
-import { formatPrice } from './shopUtils';
+import { Price } from './Price';
 
 interface CartBarProps {
   itemCount: number;
@@ -32,15 +32,19 @@ export const CartBar: React.FC<CartBarProps> = ({
               <ShoppingBag className="w-3.5 h-3.5" />
             </div>
             <span className="font-bold">
-              سبد خرید ({itemCount.toLocaleString('fa-IR')} قلم)
+              سبد خرید (<span className="num-fa">{itemCount.toLocaleString('fa-IR')}</span> قلم)
             </span>
           </div>
 
           {/* Total Price & Action Chevron */}
           <div className="flex items-center gap-2">
-            <span className="font-extrabold text-white text-xs sm:text-sm">
-              {formatPrice(totalAmount)}
-            </span>
+            <Price
+              value={totalAmount}
+              size="md"
+              unit="تومان"
+              bold
+              className="text-xs sm:text-sm font-extrabold text-white"
+            />
             <div className="w-6 h-6 rounded-lg bg-black/20 flex items-center justify-center">
               <ChevronUp className="w-4 h-4" />
             </div>

@@ -15,7 +15,7 @@ import {
   XCircle,
   FileText,
 } from 'lucide-react';
-import { formatPrice } from './helpers';
+import { formatPrice, formatOrderDate } from './helpers';
 import { OrderInvoiceModal } from '../invoice/OrderInvoiceModal';
 
 interface CustomerDetailSheetProps {
@@ -132,7 +132,7 @@ export const CustomerDetailSheet: React.FC<CustomerDetailSheetProps> = ({
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-blue-400 font-mono">{ord.id}</span>
-                        <span className="text-xs text-slate-400">{ord.order_date}</span>
+                        <span className="text-xs text-slate-400 num-fa">{formatOrderDate(ord.order_date)}</span>
                       </div>
                       <span
                         className={`px-2 py-0.5 rounded-full text-xs font-medium border ${

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Order } from '../../types';
-import { getOrderStatusLabel, formatPrice } from './shopUtils';
+import { getOrderStatusLabel, formatPrice, formatOrderDate } from './shopUtils';
+import { Price } from './Price';
 import {
   ChevronDown,
   RotateCcw,
@@ -39,7 +40,9 @@ export const OrderCard: React.FC<OrderCardProps> = ({
           <span className="font-mono font-bold text-xs text-slate-100 dir-ltr bg-slate-950 px-2 py-0.5 rounded-lg border border-slate-800">
             {order.id}
           </span>
-          <span className="text-xs text-slate-400">{order.order_date}</span>
+          <span className="text-xs text-slate-400 num-fa">
+            {formatOrderDate(order.order_date)}
+          </span>
         </div>
 
         <div className="flex items-center gap-2">
@@ -119,11 +122,16 @@ export const OrderCard: React.FC<OrderCardProps> = ({
 
       {/* Summary Row: Price & Actions */}
       <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 gap-2">
-        <div className="text-xs">
+        <div className="text-xs flex items-baseline gap-1">
           <span className="text-slate-400">مبلغ سفارش: </span>
-          <span className="font-extrabold text-emerald-400 text-sm">
-            {formatPrice(order.total_amount)}
-          </span>
+          <Price
+            value={order.total_amount}
+            size="md"
+            tone="success"
+            unit="تومان"
+            bold
+            className="text-sm font-extrabold"
+          />
         </div>
 
         <div className="flex items-center gap-1.5">
@@ -194,14 +202,19 @@ export const OrderCard: React.FC<OrderCardProps> = ({
                 <div className="flex items-center gap-1.5 min-w-0">
                   <Package className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                   <span className="text-slate-200 truncate">{item.name || 'کالا'}</span>
-                  <span className="text-slate-500 text-[11px]">
+                  <span className="text-slate-500 text-[11px] num-fa">
                     × {item.quantity.toLocaleString('fa-IR')} {item.unit || ''}
-                    {item.items_per_package && item.items_per_package > 1 && ` (${item.items_per_package} عددی)`}
+                    {item.items_per_package && item.items_per_package > 1 && ` (${item.items_per_package.toLocaleString('fa-IR')} عددی)`}
                   </span>
                 </div>
-                <span className="text-slate-300 font-bold">
-                  {formatPrice(item.price * item.quantity)}
-                </span>
+                <Price
+                  value={item.price * item.quantity}
+                  size="sm"
+                  tone="default"
+                  unit="تومان"
+                  bold
+                  className="text-slate-300 font-bold"
+                />
               </div>
             ))}
           </div>

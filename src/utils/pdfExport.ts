@@ -7,7 +7,8 @@ import jsPDF from 'jspdf';
  */
 export async function exportElementToPdf(
   element: HTMLElement,
-  fileName: string = 'factor.pdf'
+  fileName: string = 'factor.pdf',
+  paperSize: 'A4' | 'A5' = 'A4'
 ): Promise<boolean> {
   try {
     // 1. Ensure all images are loaded (with 1s timeout to prevent hanging)
@@ -48,16 +49,17 @@ export async function exportElementToPdf(
       imgData = canvas.toDataURL('image/png');
     }
 
+    const isA5 = paperSize.toLowerCase() === 'a5';
     const pdf = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
-      format: 'a4',
+      format: isA5 ? 'a5' : 'a4',
       compress: true,
     });
 
-    const pageWidth = 210; // A4 standard width in mm
-    const pageHeight = 297; // A4 standard height in mm
-    const margin = 6; // mm margins
+    const pageWidth = isA5 ? 148 : 210; // mm standard width
+    const pageHeight = isA5 ? 210 : 297; // mm standard height
+    const margin = 10; // 10mm standard margins
     const contentWidth = pageWidth - margin * 2;
     const contentHeight = (canvas.height * contentWidth) / canvas.width;
 
@@ -107,7 +109,7 @@ export async function exportElementToPdf(
           suggestedName: cleanName,
           types: [
             {
-              description: 'فایل فاکتور PDF (پخش فرهودی)',
+              description: 'فایل فاکتور PDF',
               accept: { 'application/pdf': ['.pdf'] },
             },
           ],
@@ -132,8 +134,8 @@ export async function exportElementToPdf(
         });
         if (navigator.canShare({ files: [pdfFile] })) {
           await navigator.share({
-            title: 'فاکتور سفارش پخش فرهودی',
-            text: `فاکتور رسمی ${cleanName.replace('.pdf', '')}`,
+            title: 'فاکتور سفارش',
+            text: cleanName.replace('.pdf', ''),
             files: [pdfFile],
           });
           savedSuccessfully = true;
@@ -179,14 +181,22 @@ export async function exportElementToPdf(
 /**
  * Isolated Paper Printing Utility
  * Creates a clean isolated printing sandbox so background app screens and dashboard pages are NOT printed!
+ * Uses standard wrapper table (thead/tfoot) to preserve 10mm margins on all pages with @page { margin: 0; }
  */
-export function printInvoiceDocument(element?: HTMLElement | null): void {
+export function printInvoiceDocument(
+  element?: HTMLElement | null,
+  orderId?: string,
+  paperSize: 'A4' | 'A5' = 'A4'
+): void {
   try {
     const targetElement = element || document.getElementById('printable-invoice');
     if (!targetElement) {
       window.print();
       return;
     }
+
+    // Dynamic Title for browser print dialog and default save name
+    const docTitle = orderId ? `فاکتور ${orderId}` : 'فاکتور سفارش';
 
     // Create an isolated hidden iframe for printing
     const iframe = document.createElement('iframe');
@@ -210,20 +220,22 @@ export function printInvoiceDocument(element?: HTMLElement | null): void {
       .map((node) => node.outerHTML)
       .join('\n');
 
+    const pageSize = paperSize === 'A5' ? 'A5' : 'A4';
+
     doc.open();
     doc.write(`
       <!DOCTYPE html>
       <html lang="fa" dir="rtl">
         <head>
           <meta charset="utf-8" />
-          <title>چاپ فاکتور رسمی پخش فرهودی</title>
+          <title>${docTitle}</title>
           ${styleSheets}
           <style>
             @page {
-              size: A4 portrait;
-              margin: 8mm;
+              size: ${pageSize} portrait;
+              margin: 0; /* Suppresses browser auto headers and footers (URL, dates) */
             }
-            body {
+            html, body {
               background-color: #ffffff !important;
               color: #0f172a !important;
               font-family: 'Vazirmatn', system-ui, -apple-system, sans-serif !important;
@@ -234,32 +246,83 @@ export function printInvoiceDocument(element?: HTMLElement | null): void {
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
             }
+            /* Table wrapper ensuring 10mm physical margin on every printed page */
+            table.print-wrapper-table {
+              width: 100% !important;
+              border-collapse: collapse !important;
+              border: none !important;
+              margin: 0 !important;
+              padding: 0 !important;
+            }
+            table.print-wrapper-table > thead > tr > td.print-page-margin {
+              height: 10mm !important;
+              border: none !important;
+              padding: 0 !important;
+              margin: 0 !important;
+            }
+            table.print-wrapper-table > tfoot > tr > td.print-page-margin {
+              height: 10mm !important;
+              border: none !important;
+              padding: 0 !important;
+              margin: 0 !important;
+            }
+            table.print-wrapper-table > tbody > tr > td.print-content-cell {
+              border: none !important;
+              padding: 0 10mm !important;
+              vertical-align: top !important;
+            }
             .invoice-paper, #printable-invoice {
               width: 100% !important;
               max-width: none !important;
               box-shadow: none !important;
               border: none !important;
               margin: 0 !important;
-              padding: 4mm !important;
+              padding: 0 !important;
               background: #ffffff !important;
             }
-            * {
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
-            }
-            table {
-              border-collapse: collapse !important;
+            /* Repeat table headers on multi-page invoices */
+            table.items-table {
               width: 100% !important;
+              border-collapse: collapse !important;
             }
-            th, td {
-              border-color: #cbd5e1 !important;
+            table.items-table thead {
+              display: table-header-group !important;
+            }
+            table.items-table tr {
+              break-inside: avoid !important;
+              page-break-inside: avoid !important;
+            }
+            .break-inside-avoid, .print-avoid-break {
+              break-inside: avoid !important;
+              page-break-inside: avoid !important;
+            }
+            .num-fa {
+              font-family: 'Vazirmatn', system-ui, sans-serif !important;
+              font-variant-numeric: normal !important;
+              font-feature-settings: normal !important;
+              letter-spacing: 0 !important;
+              word-spacing: 0 !important;
             }
           </style>
         </head>
         <body>
-          <div class="invoice-paper">
-            ${targetElement.innerHTML}
-          </div>
+          <table class="print-wrapper-table">
+            <thead>
+              <tr><td class="print-page-margin"></td></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="print-content-cell">
+                  <div class="invoice-paper">
+                    ${targetElement.innerHTML}
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr><td class="print-page-margin"></td></tr>
+            </tfoot>
+          </table>
         </body>
       </html>
     `);

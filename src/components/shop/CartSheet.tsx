@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Product } from '../../types';
 import { QuantityStepper } from './QuantityStepper';
 import { formatPrice } from './shopUtils';
+import { Price } from './Price';
 import {
   X,
   Trash2,
@@ -65,22 +66,24 @@ export const CartSheet: React.FC<CartSheetProps> = ({
 
   // Shared Cart Content Layout
   const content = (
-    <div className="flex flex-col h-full bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
-      {/* Header */}
-      <div className="p-3.5 sm:p-4 border-b border-slate-800 bg-slate-950/60 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-emerald-600/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
-            <ShoppingBag className="w-4 h-4" />
+    <div className={`flex flex-col bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl ${
+      cartEntries.length === 0 ? 'h-auto' : 'h-full max-h-[calc(100vh-6rem)]'
+    }`}>
+      {/* Header: single line 'سبد سفارش · ۰ کالا' */}
+      <div className="p-2.5 sm:p-3 border-b border-slate-800 bg-slate-950/60 flex items-center justify-between">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-7 h-7 rounded-lg bg-emerald-600/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30 shrink-0">
+            <ShoppingBag className="w-3.5 h-3.5" />
           </div>
-          <div>
-            <h3 className="text-sm font-bold text-slate-100">سبد سفارش فروشگاه</h3>
-            <p className="text-xs text-slate-400">
-              {cartEntries.length.toLocaleString('fa-IR')} کالا ({totalItemsCount.toLocaleString('fa-IR')} واحد)
-            </p>
-          </div>
+          <h3 className="text-xs sm:text-sm font-bold text-slate-100 truncate">
+            سبد سفارش · <span className="num-fa">{cartEntries.length.toLocaleString('fa-IR')}</span> کالا
+            {cartEntries.length > 0 && (
+              <span className="num-fa"> ({totalItemsCount.toLocaleString('fa-IR')} واحد)</span>
+            )}
+          </h3>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 shrink-0">
           {cartEntries.length > 0 && !isConfirmingClear && (
             <button
               type="button"
@@ -142,10 +145,9 @@ export const CartSheet: React.FC<CartSheetProps> = ({
       {/* Items List */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2 no-scrollbar">
         {cartEntries.length === 0 ? (
-          <div className="py-12 text-center text-slate-400 space-y-2">
-            <ShoppingBag className="w-10 h-10 mx-auto text-slate-600" />
-            <p className="text-xs font-semibold">سبد خرید شما خالی است.</p>
-            <p className="text-xs text-slate-500">از کاتالوگ محصولات، کالاهای مورد نیاز را اضافه کنید.</p>
+          <div className="py-4 px-3 text-center text-slate-400 flex items-center justify-center gap-2">
+            <ShoppingBag className="w-7 h-7 text-slate-600 shrink-0" />
+            <p className="text-xs font-semibold text-slate-400">سبد خالی است.</p>
           </div>
         ) : (
           cartEntries.map(({ product, quantity, available, multiplier, unitCartonPrice, rowTotal }) => (
@@ -158,32 +160,33 @@ export const CartSheet: React.FC<CartSheetProps> = ({
                   <h4 className="text-xs font-bold text-slate-100 truncate">{product.name}</h4>
                   <div className="text-[11px] text-slate-400 mt-0.5 space-y-0.5">
                     {multiplier > 1 ? (
-                      <div>
-                        <span>فی هر {product.unit}: </span>
-                        <span className="text-slate-300 font-semibold">{formatPrice(unitCartonPrice)}</span>
-                        <span className="text-slate-500 mr-1.5">(دانه‌ای {formatPrice(product.price)})</span>
+                      <div className="flex items-baseline gap-1">
+                        <span>فی هر بسته: </span>
+                        <Price value={unitCartonPrice} size="sm" tone="default" unit="تومان" bold />
                       </div>
                     ) : (
-                      <div>فی: {formatPrice(product.price)} / {product.unit}</div>
+                      <div className="flex items-baseline gap-1">
+                        <span>فی: </span>
+                        <Price value={product.price} size="sm" tone="muted" unit={`تومان / ${product.unit}`} bold={false} />
+                      </div>
                     )}
                   </div>
                 </div>
                 <div className="text-left shrink-0">
-                  <span className="text-xs font-bold text-emerald-400 block font-mono">
-                    {formatPrice(rowTotal)}
-                  </span>
+                  <Price value={rowTotal} size="sm" tone="success" unit="تومان" bold className="block" />
                   {multiplier > 1 && (
-                    <span className="text-[10px] text-indigo-400 font-mono">
+                    <span className="text-[10px] text-indigo-400 num-fa block">
                       {(quantity * multiplier).toLocaleString('fa-IR')} عدد
                     </span>
                   )}
                 </div>
               </div>
 
-              <div className="flex items-center justify-between pt-1 border-t border-slate-900">
-                <span className="text-xs text-slate-400">
-                  {quantity} {product.unit}
-                  {multiplier > 1 && ` (${multiplier} عددی)`}
+              <div className="flex items-center justify-between pt-1 border-t border-slate-800/80">
+                <span className="text-xs text-slate-400 font-medium num-fa">
+                  {multiplier > 1
+                    ? `${quantity.toLocaleString('fa-IR')} بسته (${multiplier.toLocaleString('fa-IR')} عددی)`
+                    : `${quantity.toLocaleString('fa-IR')} ${product.unit}`}
                 </span>
                 <QuantityStepper
                   compact
@@ -204,9 +207,14 @@ export const CartSheet: React.FC<CartSheetProps> = ({
           {/* Summary Row */}
           <div className="flex items-center justify-between text-xs sm:text-sm">
             <span className="font-medium text-slate-400">جمع کل سفارش:</span>
-            <span className="text-base sm:text-lg font-extrabold text-emerald-400">
-              {formatPrice(totalAmount)}
-            </span>
+            <Price
+              value={totalAmount}
+              size="lg"
+              tone="success"
+              unit="تومان"
+              bold
+              className="text-base sm:text-lg font-extrabold"
+            />
           </div>
 
           {/* Submit Order Button */}
@@ -233,7 +241,7 @@ export const CartSheet: React.FC<CartSheetProps> = ({
   // If on desktop (rendered as sidebar), render directly
   if (!isMobileModal) {
     return (
-      <div className="sticky top-20 h-[calc(100vh-6rem)]">
+      <div className={`sticky top-20 ${cartEntries.length === 0 ? 'h-auto' : 'h-[calc(100vh-6rem)]'}`}>
         {content}
       </div>
     );

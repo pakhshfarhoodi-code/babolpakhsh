@@ -4,11 +4,9 @@ import { Product, Order, Supermarket } from '../types';
 import { ProductCatalog } from './shop/ProductCatalog';
 import { CartBar } from './shop/CartBar';
 import { CartSheet } from './shop/CartSheet';
-import { ReorderCard } from './shop/ReorderCard';
 import { OrderCard } from './shop/OrderCard';
 import { OrderInvoiceModal } from './invoice/OrderInvoiceModal';
 import {
-  getTopPurchasedProducts,
   buildCartFromOrder,
   clampQuantity,
 } from './shop/shopUtils';
@@ -161,10 +159,7 @@ export const SupermarketPortal: React.FC = () => {
     ).length;
   }, [storeOrders]);
 
-  // Top purchased products
-  const topProducts = useMemo(() => {
-    return getTopPurchasedProducts(orders, products, storeId, 5);
-  }, [orders, products, storeId]);
+
 
   // Cart Calculations
   const totalCartCount = useMemo(() => {
@@ -236,21 +231,6 @@ export const SupermarketPortal: React.FC = () => {
     [products, showToast]
   );
 
-  const handleAddTopProduct = useCallback(
-    (productId: string) => {
-      const prod = products.find((p) => p.id === productId);
-      if (!prod) return;
-      const available = Math.round(Math.max(0, prod.stock - prod.reserved_stock) * 1000) / 1000;
-      if (available <= 0) {
-        showToast(`کالای ${prod.name} در حال حاضر ناموجود است.`);
-        return;
-      }
-      const currentQty = cart[productId] || 0;
-      const nextQty = Math.round(Math.min(currentQty + 1, available) * 1000) / 1000;
-      handleQuantityChange(productId, nextQty);
-    },
-    [products, cart, handleQuantityChange, showToast]
-  );
 
   // Checkout submission
   const handleCheckoutSubmit = async () => {
@@ -309,7 +289,7 @@ export const SupermarketPortal: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4 pb-20 lg:pb-8">
+    <div className="space-y-3 pb-20 lg:pb-8 max-w-[1600px] mx-auto">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-16 inset-x-4 z-50 max-w-md mx-auto p-3 rounded-2xl bg-slate-900 border border-emerald-500/50 text-slate-100 text-xs font-semibold shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-top-3">
@@ -390,33 +370,33 @@ export const SupermarketPortal: React.FC = () => {
       )}
 
       {/* 2. Navigation Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+      <div className="flex items-center gap-1.5 border-b border-slate-800 pb-1">
         <button
           type="button"
           onClick={() => setActiveTab('catalog')}
-          className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 cursor-pointer ${
+          className={`h-9 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
             activeTab === 'catalog'
-              ? 'bg-emerald-600 text-white shadow-sm'
+              ? 'bg-emerald-600 text-white shadow-xs'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
           }`}
         >
-          <Package className="w-4 h-4" />
+          <Package className="w-3.5 h-3.5" />
           <span>کاتالوگ محصولات</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('orders')}
-          className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 cursor-pointer ${
+          className={`h-9 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
             activeTab === 'orders'
-              ? 'bg-emerald-600 text-white shadow-sm'
+              ? 'bg-emerald-600 text-white shadow-xs'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
           }`}
         >
-          <ShoppingBag className="w-4 h-4" />
+          <ShoppingBag className="w-3.5 h-3.5" />
           <span>سفارش‌های من</span>
           {activePendingOrdersCount > 0 && (
-            <span className="w-5 h-5 rounded-full bg-emerald-400 text-slate-950 font-extrabold text-xs flex items-center justify-center">
+            <span className="w-4 h-4 rounded-full bg-emerald-400 text-slate-950 font-extrabold text-[10px] flex items-center justify-center">
               {activePendingOrdersCount.toLocaleString('fa-IR')}
             </span>
           )}
@@ -425,9 +405,9 @@ export const SupermarketPortal: React.FC = () => {
 
       {/* Main Tab Content */}
       {activeTab === 'catalog' ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-          {/* Products Column (2 cols on desktop) */}
-          <div className="lg:col-span-2">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_360px] gap-3 items-start">
+          {/* Products Column */}
+          <div className="min-w-0">
             <ProductCatalog
               products={products}
               cart={cart}
@@ -435,18 +415,11 @@ export const SupermarketPortal: React.FC = () => {
               onExceedLimit={handleExceedLimit}
               priceMode="store"
               defaultInStockOnly={false}
-              topProductsCard={
-                <ReorderCard
-                  topProducts={topProducts}
-                  cart={cart}
-                  onAddProductToCart={handleAddTopProduct}
-                />
-              }
             />
           </div>
 
-          {/* Desktop Cart Sidebar (1 col on lg+) */}
-          <div className="hidden lg:block lg:col-span-1">
+          {/* Desktop Cart Sidebar (sticky on lg+) */}
+          <div className="hidden lg:block lg:sticky lg:top-20 max-h-[calc(100vh-6rem)]">
             <CartSheet
               isOpen={true}
               isMobileModal={false}

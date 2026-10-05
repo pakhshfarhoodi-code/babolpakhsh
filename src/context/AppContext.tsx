@@ -17,6 +17,9 @@ import {
   CreateStaffAccountResult,
   UpdateSupermarketPayload,
   UpdateVisitorPayload,
+  InvoiceSettings,
+  DEFAULT_INVOICE_SETTINGS,
+  getInvoiceSettings,
 } from '../types';
 import {
   INITIAL_CATEGORIES,
@@ -170,6 +173,8 @@ interface AppContextType {
   refreshData: () => void;
   theme: 'dark' | 'light';
   toggleTheme: () => void;
+  invoiceSettings: InvoiceSettings;
+  updateInvoiceSettings: (settings: InvoiceSettings) => Promise<{ success: boolean; message: string }>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -935,6 +940,92 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [orders, auth.currentUser.name, supermarkets, updateSupermarket]
   );
 
+  // Invoice Settings state with localStorage fallback
+  const [invoiceSettings, setInvoiceSettings] = useState<InvoiceSettings>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('app_setting_invoice_settings');
+      if (saved) {
+        try {
+          return getInvoiceSettings(JSON.parse(saved));
+        } catch {
+          // ignore
+        }
+      }
+    }
+    return DEFAULT_INVOICE_SETTINGS;
+  });
+
+  // Load invoice_settings from Supabase app_settings on startup & on data refresh
+  useEffect(() => {
+    let isMounted = true;
+    const fetchInvoiceSettings = async () => {
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const { data, error } = await supabase
+            .from('app_settings')
+            .select('value')
+            .eq('key', 'invoice_settings')
+            .maybeSingle();
+
+          if (!error && data && data.value && isMounted) {
+            const parsed = getInvoiceSettings(data.value);
+            setInvoiceSettings(parsed);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('app_setting_invoice_settings', JSON.stringify(parsed));
+            }
+          }
+        } catch (err) {
+          console.warn('Error fetching invoice_settings from app_settings:', err);
+        }
+      }
+    };
+
+    fetchInvoiceSettings();
+    return () => {
+      isMounted = false;
+    };
+  }, [reloadCounter]);
+
+  // Update invoice settings (admin action)
+  const updateInvoiceSettings = useCallback(
+    async (newSettings: InvoiceSettings): Promise<{ success: boolean; message: string }> => {
+      try {
+        setInvoiceSettings(newSettings);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('app_setting_invoice_settings', JSON.stringify(newSettings));
+        }
+
+        if (isSupabaseConfigured && supabase) {
+          const { error } = await supabase.from('app_settings').upsert({
+            key: 'invoice_settings',
+            value: newSettings,
+          });
+
+          if (error) {
+            console.error('Error saving invoice settings to Supabase:', error);
+            return {
+              success: false,
+              message: error.message || 'خطا در ذخیره‌سازی تنظیمات فاکتور در دیتابیس',
+            };
+          }
+        }
+
+        return {
+          success: true,
+          message: 'تنظیمات فاکتور با موفقیت ذخیره شد.',
+        };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'خطای غیرمنتظره در ذخیره تنظیمات';
+        console.error('Exception in updateInvoiceSettings:', err);
+        return {
+          success: false,
+          message: msg,
+        };
+      }
+    },
+    []
+  );
+
   // Memoized provider value so child components do not needlessly re-render
   const contextValue: AppContextType = useMemo(() => ({
     role: auth.role,
@@ -947,6 +1038,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     currentUser: auth.currentUser,
     loginWithCredentials: auth.loginWithCredentials,
     logout: auth.logout,
+    invoiceSettings,
+    updateInvoiceSettings,
     categories: catalog.categories,
     brands: catalog.brands,
     units: catalog.units,
@@ -1074,6 +1167,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     theme,
     toggleTheme,
     showToast,
+    invoiceSettings,
+    updateInvoiceSettings,
   ]);
 
   return (

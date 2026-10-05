@@ -3,7 +3,8 @@ import { Product } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { QuantityStepper } from './QuantityStepper';
 import { formatPrice, LOW_STOCK_THRESHOLD } from './shopUtils';
-import { Package, Maximize2, X, Tag, Warehouse, Heart, Clock, Sparkles } from 'lucide-react';
+import { Price } from './Price';
+import { Package, Maximize2, X, Tag, Warehouse, Heart, Clock, Sparkles, Check } from 'lucide-react';
 import { SafeImage } from '../common/SafeImage';
 
 interface ProductRowProps {
@@ -66,187 +67,157 @@ export const ProductRow: React.FC<ProductRowProps> = ({
   return (
     <>
       <div
-        className={`relative overflow-hidden p-3 rounded-2xl border transition shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-          isMarketTest
-            ? 'market-test-card border-violet-500/50 bg-slate-900 hover:border-violet-500/70 shadow-violet-950/20'
-            : isOutOfStock
+        className={`relative overflow-hidden p-2 rounded-xl border transition shadow-xs flex items-stretch gap-2.5 ${
+          isOutOfStock
             ? 'opacity-60 bg-slate-950/40 border-slate-800'
+            : quantity > 0
+            ? 'bg-slate-900 border-emerald-500/70 shadow-emerald-950/30 ring-1 ring-emerald-500/40'
+            : isMarketTest
+            ? 'market-test-card border-violet-500/40 bg-slate-900 hover:border-violet-500/60'
             : 'bg-slate-900 border-slate-800 hover:border-slate-700'
         }`}
       >
-        {/* Diagonal Corner Ribbon for "به زودی" */}
-        {isMarketTest && (
-          <div className="absolute top-0 right-0 w-20 h-20 overflow-hidden pointer-events-none z-10">
-            <div className="absolute top-3 -right-6 w-24 bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 text-white text-[10px] font-black text-center py-0.5 rotate-45 shadow-md border-y border-violet-300/30">
-              به زودی
-            </div>
+        {/* Part A: Image (Square 72px on sm+, 64px on mobile, relative, object-cover) */}
+        <button
+          type="button"
+          onClick={() => setIsImageModalOpen(true)}
+          className={`group relative w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-lg bg-slate-950 border flex items-center justify-center shrink-0 overflow-hidden cursor-pointer shadow-xs transition ${
+            isMarketTest ? 'border-violet-500/50 hover:border-violet-400' : 'border-slate-800/80 hover:border-emerald-500/60'
+          }`}
+          title="برای مشاهده تصویر بزرگ کالا کلیک کنید"
+        >
+          <SafeImage
+            src={product.image_url}
+            alt={product.name}
+            categoryId={product.category_id}
+            productName={product.name}
+            className="w-full h-full object-cover transition duration-300 group-hover:scale-110"
+          />
+
+          {/* Hover Zoom Icon */}
+          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition text-white">
+            <Maximize2 className="w-4 h-4 text-emerald-300 drop-shadow-md" />
           </div>
-        )}
 
-        {/* Right side: Product Image + Info */}
-        <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
-          {/* 56px-64px clickable image with zoom hover badge */}
-          <button
-            type="button"
+          {/* Narrow bottom status bar on image (never over text) */}
+          {isMarketTest ? (
+            <span className="absolute bottom-0 inset-x-0 bg-violet-950/95 text-violet-200 text-[10px] font-bold text-center py-0.5 border-t border-violet-700/60 z-10 leading-tight">
+              به‌زودی
+            </span>
+          ) : isOutOfStock ? (
+            <span className="absolute bottom-0 inset-x-0 bg-rose-950/95 text-rose-300 text-[10px] font-bold text-center py-0.5 border-t border-rose-800/60 z-10 leading-tight">
+              ناموجود
+            </span>
+          ) : isLowStock ? (
+            <span className="absolute bottom-0 inset-x-0 bg-amber-950/95 text-amber-300 text-[10px] font-semibold text-center py-0.5 border-t border-amber-800/60 z-10 leading-tight">
+              کم‌موجود
+            </span>
+          ) : null}
+        </button>
+
+        {/* Part B: Text Column (flex-1, min-w-0, flex-col, gap-0.5) */}
+        <div className="flex-1 min-w-0 flex flex-col gap-0.5 justify-center">
+          {/* Line 1: Name (text-[13px], font-medium, leading-snug, line-clamp-2) */}
+          <h4
             onClick={() => setIsImageModalOpen(true)}
-            className={`group relative w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-slate-950 border flex items-center justify-center shrink-0 overflow-hidden cursor-pointer shadow-xs transition ${
-              isMarketTest ? 'border-violet-500/50 hover:border-violet-400' : 'border-slate-800/80 hover:border-emerald-500/60'
-            }`}
-            title="برای مشاهده تصویر بزرگ کالا کلیک کنید"
+            className="text-[13px] font-medium leading-snug line-clamp-2 text-slate-100 hover:text-emerald-400 transition cursor-pointer"
+            title={product.name}
           >
-            <SafeImage
-              src={product.image_url}
-              alt={product.name}
-              categoryId={product.category_id}
-              productName={product.name}
-              className="w-full h-full object-cover transition duration-300 group-hover:scale-110"
-            />
+            {product.name}
+          </h4>
 
-            {/* Hover Zoom Icon */}
-            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition text-white">
-              <Maximize2 className="w-4 h-4 text-emerald-300 drop-shadow-md" />
-            </div>
-
-            {/* Stock Badges */}
-            {isOutOfStock ? (
-              <span className="absolute bottom-0 inset-x-0 bg-rose-950/90 text-rose-300 text-xs font-bold text-center py-0.5 border-t border-rose-800/60 z-10">
-                ناموجود
-              </span>
-            ) : isLowStock ? (
-              <span className="absolute bottom-0 inset-x-0 bg-amber-950/90 text-amber-300 text-xs font-semibold text-center py-0.5 border-t border-amber-800/60 z-10">
-                کم‌موجود
-              </span>
-            ) : null}
-          </button>
-
-          {/* Name, Brand & Price */}
-          <div className="min-w-0 flex-1 space-y-1">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <h4
-                onClick={() => setIsImageModalOpen(true)}
-                className="text-sm font-bold text-slate-100 line-clamp-2 leading-snug hover:text-emerald-400 transition cursor-pointer"
-                title={product.name}
-              >
-                {product.name}
-              </h4>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap text-xs text-slate-400">
-              {product.brand && (
-                <span>
+          {/* Line 2: Brand and Package badge in 1 line */}
+          {(product.brand || (product.items_per_package && product.items_per_package > 0)) && (
+            <div className="flex items-center gap-1.5 min-w-0 text-[11px] leading-tight pt-0.5">
+              {product.brand ? (
+                <span className="truncate min-w-0 text-slate-400" title={`برند: ${product.brand}`}>
                   برند: <span className="text-slate-300 font-semibold">{product.brand}</span>
                 </span>
-              )}
-              {product.items_per_package && product.items_per_package > 0 && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 font-bold border border-indigo-500/30 text-[11px]">
+              ) : null}
+              {product.brand && product.items_per_package && product.items_per_package > 0 ? (
+                <span className="text-slate-500 shrink-0">·</span>
+              ) : null}
+              {product.items_per_package && product.items_per_package > 0 ? (
+                <span className="shrink-0 whitespace-nowrap px-1.5 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 font-bold border border-indigo-500/30 text-[11px] num-fa">
                   بسته {product.items_per_package.toLocaleString('fa-IR')} عددی
                 </span>
-              )}
+              ) : null}
+            </div>
+          )}
+
+          {/* Line 3: Price block with mt-auto, flex-col without wrap */}
+          <div className="mt-auto flex flex-col gap-0.5 pt-0.5 leading-tight min-w-0">
+            {/* Purchase Price: 14px bold number + 'تومان / واحد' with Price component and whitespace-nowrap */}
+            <div className="flex items-baseline whitespace-nowrap min-w-0">
+              <Price
+                value={displayPrice}
+                size="lg"
+                tone={isMarketTest ? 'violet' : 'success'}
+                unit={`تومان / ${product.unit}`}
+                bold
+                className="truncate text-[13px] sm:text-[14px]"
+              />
             </div>
 
-            {product.items_per_package && product.items_per_package > 0 ? (
-              <div className="pt-0.5 space-y-1">
-                {/* Store Purchase Price (Used for calculation) */}
-                <div className="flex items-baseline gap-1.5 flex-wrap">
-                  <span className={`text-sm sm:text-base font-black ${isMarketTest ? 'market-test-price text-violet-300' : 'text-emerald-400'}`}>
-                    {formatPrice(displayPrice * product.items_per_package)}
-                  </span>
-                  <span className="text-xs text-slate-400 font-medium">/ هر {product.unit}</span>
-                  <span className="text-[11px] text-slate-400">
-                    (دانه‌ای {formatPrice(displayPrice)})
-                  </span>
-                </div>
-
-                {/* Consumer Price (Purely visual display, not used for any calculations) */}
-                {Boolean(product.consumer_price && product.consumer_price > 0) && (
-                  <div className="flex items-baseline gap-1.5 flex-wrap text-xs">
-                    <span className="text-[11px] text-slate-400 font-medium">مصرف‌کننده:</span>
-                    <span className="text-xs sm:text-sm font-bold text-amber-400 dark:text-amber-300 font-mono">
-                      {formatPrice(Number(product.consumer_price) * product.items_per_package)}
-                    </span>
-                    <span className="text-[10px] text-amber-400/80 dark:text-amber-300/80 font-mono">
-                      (دانه‌ای {formatPrice(Number(product.consumer_price))})
-                    </span>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="pt-0.5 space-y-1">
-                {/* Store Purchase Price (Used for calculation) */}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className={`text-sm font-extrabold ${isMarketTest ? 'market-test-price text-violet-300' : 'text-emerald-400'}`}>
-                    {formatPrice(displayPrice)}
-                  </span>
-                  <span className="text-xs text-slate-400">/ {product.unit}</span>
-                </div>
-
-                {/* Consumer Price (Purely visual display, not used for any calculations) */}
-                {Boolean(product.consumer_price && product.consumer_price > 0) && (
-                  <div className="flex items-center gap-1.5 flex-wrap text-xs">
-                    <span className="text-[11px] text-slate-400 font-medium">مصرف‌کننده:</span>
-                    <span className="text-xs sm:text-sm font-bold text-amber-400 dark:text-amber-300 font-mono">
-                      {formatPrice(Number(product.consumer_price))}
-                    </span>
-                  </div>
-                )}
+            {/* Consumer Price (Only when consumer_price > 0): 11px amber, whitespace-nowrap */}
+            {Boolean(product.consumer_price && product.consumer_price > 0) && (
+              <div className="flex items-baseline gap-1 text-[11px] whitespace-nowrap font-medium min-w-0 leading-tight">
+                <span className="text-slate-400 text-[10.5px] sm:text-[11px] shrink-0">مصرف‌کننده:</span>
+                <Price
+                  value={product.consumer_price}
+                  size="sm"
+                  tone="amber"
+                  unit="تومان"
+                  bold
+                  className="truncate text-[10.5px] sm:text-[11px]"
+                />
               </div>
             )}
           </div>
         </div>
 
-        {/* Left side: Action Area */}
-        <div className="shrink-0 flex items-center justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/80">
+        {/* Part C: Action Area (shrink-0, w-[92px], items-center) */}
+        <div className="shrink-0 w-[92px] flex flex-col justify-center items-center my-auto">
           {isMarketTest ? (
-            <div className="flex flex-col items-stretch sm:items-end gap-1 w-full sm:w-auto">
+            <div className="w-full flex flex-col items-center gap-1">
               <button
                 type="button"
                 onClick={handleLikeClick}
                 disabled={isLiking}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md active:scale-95 ${
+                title="با ثبت علاقه‌مندی، از موجود شدن کالا باخبر خواهید شد"
+                aria-label="با ثبت علاقه‌مندی، از موجود شدن کالا باخبر خواهید شد"
+                className={`h-9 w-full rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer shadow-xs active:scale-95 select-none ${
                   hasLiked
-                    ? 'market-test-btn-liked bg-rose-600/25 text-rose-300 border border-rose-500/50 hover:bg-rose-600/35 shadow-rose-900/30'
-                    : 'market-test-btn-unliked bg-violet-950/80 hover:bg-violet-900/90 text-violet-200 border border-violet-700/60 hover:border-violet-500'
+                    ? 'market-test-btn-liked bg-violet-600 hover:bg-violet-500 text-white border border-violet-500 shadow-violet-900/30'
+                    : 'market-test-btn-unliked bg-violet-950/80 hover:bg-violet-900 text-violet-200 border border-violet-700/60 hover:border-violet-500'
                 }`}
-                title={hasLiked ? 'لغو علاقه‌مندی' : 'ثبت علاقه‌مندی به این کالا'}
               >
-                <Heart
-                  className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                    hasLiked ? 'fill-rose-500 text-rose-500 scale-110' : 'text-violet-400 group-hover:text-rose-400'
-                  }`}
-                />
-                <span>{hasLiked ? 'علاقه‌مندی ثبت شد' : 'علاقه‌مند به خرید'}</span>
-                {currentUser?.role === 'admin' && itemLikes.length > 0 && (
-                  <span className="text-[10px] bg-slate-900/90 border border-violet-800/80 px-1.5 py-0.2 rounded-full font-mono text-violet-300">
-                    {itemLikes.length.toLocaleString('fa-IR')}
-                  </span>
+                {hasLiked ? (
+                  <Check className="w-3.5 h-3.5 stroke-[2.5] text-white shrink-0" />
+                ) : (
+                  <Heart className="w-3.5 h-3.5 text-violet-400 group-hover:text-rose-400 shrink-0" />
                 )}
+                <span className="truncate">{hasLiked ? 'ثبت شد' : 'علاقه‌مندی'}</span>
               </button>
 
               {likeError ? (
-                <div className="text-[10px] text-rose-300 bg-rose-950/90 border border-rose-800/80 px-2 py-0.5 rounded-lg text-center leading-tight">
+                <div className="text-[10px] text-rose-400 dark:text-rose-300 text-center leading-tight line-clamp-2">
                   {likeError}
                 </div>
               ) : (
-                <p className="text-[10px] market-test-subtext text-violet-300/80 text-center sm:text-left leading-tight max-w-[170px]">
-                  لایک کنید تا پس از موجود شدن اطلاع‌رسانی گردد.
-                </p>
+                <span className="text-[10.5px] sm:text-[11px] leading-tight text-center text-slate-500 dark:text-slate-400 select-none line-clamp-2">
+                  موجود شد، خبرتان می‌کنیم
+                </span>
               )}
             </div>
           ) : (
-            <div className="flex flex-col items-end gap-1">
-              <QuantityStepper
-                quantity={quantity}
-                available={available}
-                onChange={onChangeQuantity}
-                disabled={isOutOfStock}
-                onExceedLimit={onExceedLimit}
-              />
-              {quantity > 0 && product.items_per_package && product.items_per_package > 0 && (
-                <div className="text-[10px] sm:text-[11px] text-indigo-300 font-mono text-left font-semibold leading-tight">
-                  {(quantity * product.items_per_package).toLocaleString('fa-IR')} عدد = {formatPrice(quantity * product.items_per_package * displayPrice)}
-                </div>
-              )}
-            </div>
+            <QuantityStepper
+              quantity={quantity}
+              available={available}
+              onChange={onChangeQuantity}
+              disabled={isOutOfStock}
+              onExceedLimit={onExceedLimit}
+            />
           )}
         </div>
       </div>
@@ -317,13 +288,19 @@ export const ProductRow: React.FC<ProductRowProps> = ({
                     {priceMode === 'visitor' ? 'قیمت خرید ویزیتور:' : 'قیمت خرید فروشگاه:'}
                   </span>
                   <div className="flex items-baseline gap-1.5 flex-wrap">
-                    <span className={`text-xl font-black font-mono ${isMarketTest ? 'text-violet-400' : 'text-emerald-400'}`}>
-                      {formatPrice(displayPrice * (product.items_per_package && product.items_per_package > 0 ? product.items_per_package : 1))}
-                    </span>
+                    <Price
+                      value={displayPrice * (product.items_per_package && product.items_per_package > 0 ? product.items_per_package : 1)}
+                      size="lg"
+                      tone={isMarketTest ? 'violet' : 'success'}
+                      unit="تومان"
+                      bold
+                      className="text-lg sm:text-xl font-black"
+                    />
                     <span className="text-xs text-slate-400">/ هر {product.unit}</span>
                     {product.items_per_package && product.items_per_package > 0 && (
-                      <span className="text-xs text-indigo-300 bg-indigo-500/15 border border-indigo-500/30 px-2 py-0.5 rounded-lg font-bold">
-                        {product.items_per_package.toLocaleString('fa-IR')} عددی (دانه‌ای {formatPrice(displayPrice)})
+                      <span className="text-xs text-indigo-300 bg-indigo-500/15 border border-indigo-500/30 px-2 py-0.5 rounded-lg font-bold num-fa inline-flex items-center gap-1">
+                        <span>{product.items_per_package.toLocaleString('fa-IR')} عددی</span>
+                        <span className="text-indigo-400 font-normal">(دانه‌ای <Price value={displayPrice} size="sm" tone="violet" unit="تومان" />)</span>
                       </span>
                     )}
                   </div>
@@ -333,13 +310,17 @@ export const ProductRow: React.FC<ProductRowProps> = ({
                   <div className="text-left">
                     <span className="text-[11px] text-slate-400 block mb-0.5">قیمت مصرف‌کننده:</span>
                     <div className="flex flex-col items-end">
-                      <span className="text-sm font-bold text-amber-300 font-mono">
-                        {formatPrice(product.consumer_price * (product.items_per_package && product.items_per_package > 0 ? product.items_per_package : 1))}
-                      </span>
+                      <Price
+                        value={product.consumer_price * (product.items_per_package && product.items_per_package > 0 ? product.items_per_package : 1)}
+                        size="md"
+                        tone="amber"
+                        unit="تومان"
+                        bold
+                      />
                       {product.items_per_package && product.items_per_package > 0 && (
-                        <span className="text-[10px] text-amber-400/80 font-mono">
-                          (هر عدد: {formatPrice(product.consumer_price)})
-                        </span>
+                        <div className="text-[10px] text-amber-400/80 num-fa mt-0.5">
+                          (هر عدد: <Price value={product.consumer_price} size="sm" tone="amber" unit="تومان" />)
+                        </div>
                       )}
                     </div>
                   </div>
@@ -369,7 +350,7 @@ export const ProductRow: React.FC<ProductRowProps> = ({
                     />
                     <span>{hasLiked ? 'علاقه‌مندی شما ثبت شده است' : 'اعلام نیاز و علاقه‌مندی به این کالا'}</span>
                     {itemLikes.length > 0 && (
-                      <span className="text-[11px] bg-slate-900 border border-slate-700 px-2 py-0.5 rounded-full font-mono text-slate-300">
+                      <span className="text-[11px] bg-slate-900 border border-slate-700 px-2 py-0.5 rounded-full num-fa text-slate-300">
                         {itemLikes.length.toLocaleString('fa-IR')} لایک
                       </span>
                     )}
@@ -380,7 +361,7 @@ export const ProductRow: React.FC<ProductRowProps> = ({
                   <div className="text-xs text-slate-400 flex items-center gap-1.5">
                     <Warehouse className="w-3.5 h-3.5 text-slate-500" />
                     <span>موجودی آزاد:</span>
-                    <span className="font-bold text-slate-200">
+                    <span className="font-bold text-slate-200 num-fa">
                       {available.toLocaleString('fa-IR')} {product.unit}
                     </span>
                   </div>

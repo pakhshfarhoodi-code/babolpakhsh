@@ -1,8 +1,9 @@
 import React from 'react';
-import { LoadingBill, LoadingBillItem, Visitor, Product, Order } from '../../types';
+import { LoadingBill, LoadingBillItem, Visitor, Product, Order, InvoiceSettings, DEFAULT_INVOICE_SETTINGS } from '../../types';
 import { formatPriceToWords } from '../../utils/numberToPersianWords';
 import { formatPrice } from '../visitor/helpers';
 import farhoodiLogo from '../../assets/images/farhoodi_b2b_logo.webp';
+import { useApp } from '../../context/AppContext';
 import {
   FileText,
   Clock,
@@ -30,6 +31,9 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
   orders = [],
   showCustomerBreakdown = false,
 }) => {
+  const { invoiceSettings: contextSettings } = useApp();
+  const settings: InvoiceSettings = contextSettings || DEFAULT_INVOICE_SETTINGS;
+
   // Map products for fast lookup
   const productMap = new Map<string, Product>();
   products.forEach((p) => productMap.set(p.id, p));
@@ -169,17 +173,19 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
           <div className="flex items-center justify-between border-b-2 border-slate-900 pb-4 mb-5">
             {/* Right: Company Logo and Branding */}
             <div className="flex items-center gap-3">
-              <img
-                src={farhoodiLogo}
-                alt="لوگوی صنایع غذایی فرهودی"
-                className="w-14 h-14 object-contain rounded-xl border border-slate-200 p-0.5"
-              />
+              {settings.show_logo !== false && (
+                <img
+                  src={settings.logo_url || farhoodiLogo}
+                  alt={settings.brand_name || 'لوگوی فروشنده'}
+                  className="w-14 h-14 object-contain rounded-xl border border-slate-200 p-0.5"
+                />
+              )}
               <div>
                 <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
-                  صنایع غذایی منجمد و سردخانه‌ای فرهودی
+                  {settings.legal_name || settings.brand_name || 'صنایع غذایی منجمد و سردخانه‌ای'}
                 </h1>
                 <p className="text-xs text-slate-600 mt-0.5 font-semibold">
-                  حواله بارگیری و فاکتور توزیع مویرگی ویزیتور
+                  {settings.tagline || 'حواله بارگیری و فاکتور توزیع مویرگی ویزیتور'}
                 </p>
               </div>
             </div>
@@ -319,7 +325,7 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
               <strong className="font-black text-slate-900">{formatPriceToWords(grandTotal)} تومان</strong>
             </div>
             <div className="text-slate-500 text-[11px]">
-              این برگه به منزله رسید قطعی بارگیری و تحویل از انبار شرکت پخش فرهودی می‌باشد.
+              این برگه به منزله رسید قطعی بارگیری و تحویل از انبار شرکت پخش {settings.brand_name || 'مرکزی'} می‌باشد.
             </div>
           </div>
         </div>
@@ -443,7 +449,7 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
 
           {/* Bottom of Page 2 */}
           <div className="print-avoid-break pt-4 mt-6 border-t border-slate-300 text-xs text-center text-slate-500">
-            پیوست توزیع مویرگی صنایع غذایی فرهودی - تحویل گردید توسط ویزیتور: {visitor.name}
+            پیوست توزیع مویرگی {settings.brand_name || 'مرکزی'} - تحویل گردید توسط ویزیتور: {visitor.name}
           </div>
         </div>
       )}

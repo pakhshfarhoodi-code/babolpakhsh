@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from './context/AppContext';
 import { Header } from './components/Header';
-import { AdminPanel } from './components/AdminPanel';
+import { AdminPanel, AdminTabKey } from './components/AdminPanel';
 import { VisitorPortal } from './components/VisitorPortal';
 import { SupermarketPortal } from './components/SupermarketPortal';
 import { WarehousePanel } from './components/WarehousePanel';
@@ -36,10 +36,10 @@ import { AlertTriangle, RefreshCw, Loader2 } from 'lucide-react';
 export const App: React.FC = () => {
   const { role, setRole, isLoggedIn, isOnlineDb, isDataReady, fetchError, retryFetch } = useApp();
   const [currentPath, setCurrentPath] = useState<string>(getNormalizedPath);
-  const [adminActiveTab, setAdminActiveTab] = useState<'overview' | 'orders' | 'products' | 'team' | 'reports'>(() => {
+  const [adminActiveTab, setAdminActiveTab] = useState<AdminTabKey>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('pakhsh_admin_active_tab');
-      if (saved) return saved as any;
+      if (saved) return saved as AdminTabKey;
     }
     return 'overview';
   });

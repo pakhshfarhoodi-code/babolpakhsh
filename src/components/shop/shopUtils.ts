@@ -1,4 +1,5 @@
 import { Order, Product } from '../../types';
+export { formatOrderDate, formatPersianDate, formatPersianDateOnly, isTodayInTehran } from '../../utils/dateUtils';
 
 export const LOW_STOCK_THRESHOLD = 10;
 
@@ -53,11 +54,32 @@ export function clampQuantity(
   return { quantity: roundedVal, clamped: false };
 }
 
+const faNumberFormatter = new Intl.NumberFormat('fa-IR', {
+  maximumFractionDigits: 3,
+});
+
 /**
- * Format numbers and prices in Persian currency format
+ * Format raw number to Persian digits with Persian thousand separators (٬)
  */
-export function formatPrice(amount: number): string {
-  return `${amount.toLocaleString('fa-IR')} تومان`;
+export function formatNumberFa(amount: number | string): string {
+  const num = typeof amount === 'number' ? (isNaN(amount) ? 0 : amount) : (Number(amount) || 0);
+  return faNumberFormatter.format(num);
+}
+
+/**
+ * Converts English digits to Persian digits
+ */
+export function toPersianDigits(input: string | number): string {
+  if (input === null || input === undefined || input === '') return '';
+  return input.toString().replace(/[0-9]/g, (d) => ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'][parseInt(d, 10)]);
+}
+
+/**
+ * Format numbers and prices in Persian currency format with non-breaking space
+ */
+export function formatPrice(amount: number, unit = 'تومان'): string {
+  const num = typeof amount === 'number' ? (isNaN(amount) ? 0 : amount) : (Number(amount) || 0);
+  return `${faNumberFormatter.format(num)}\u00A0${unit}`;
 }
 
 /**

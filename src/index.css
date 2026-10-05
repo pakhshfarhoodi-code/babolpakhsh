@@ -28,6 +28,15 @@
 @layer base {
   :root {
     --font-vazirmatn: 'Vazirmatn', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    --num-spacing: 0;
+  }
+
+  .num-fa {
+    font-family: var(--font-vazirmatn);
+    font-variant-numeric: normal;
+    font-feature-settings: normal;
+    letter-spacing: var(--num-spacing, 0);
+    word-spacing: 0;
   }
 
   html.theme-light, .theme-light {
@@ -264,9 +273,16 @@ html.theme-light .market-test-btn-unliked:hover,
 
 html.theme-light .market-test-btn-liked,
 .theme-light .market-test-btn-liked {
-  background-color: #ffe4e6 !important;
-  color: #be123c !important;
-  border-color: #fb7185 !important;
+  background-color: #7c3aed !important;
+  color: #ffffff !important;
+  border-color: #6d28d9 !important;
+}
+
+html.theme-light .market-test-btn-liked:hover,
+.theme-light .market-test-btn-liked:hover {
+  background-color: #6d28d9 !important;
+  color: #ffffff !important;
+  border-color: #5b21b6 !important;
 }
 
 /* Admin Modals in Light Theme - Pure White Background */

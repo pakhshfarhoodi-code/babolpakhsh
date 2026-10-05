@@ -20,6 +20,7 @@ import {
   getTodayJalali,
   jalaliToDayCount,
   formatPrice,
+  formatOrderDate,
 } from './helpers';
 
 interface ReportsTabProps {
@@ -142,7 +143,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
           totalPurchases,
           deliveredPurchases,
           sharePercent,
-          lastOrderDate: lastOrder ? lastOrder.order_date : 'بدون سفارش',
+          lastOrderDate: lastOrder ? formatOrderDate(lastOrder.order_date) : 'بدون سفارش',
           recentOrders: allShopOrders,
         };
       })
@@ -449,7 +450,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-blue-400">{ord.id}</span>
-                    <span className="text-xs text-slate-400">{ord.order_date}</span>
+                    <span className="text-xs text-slate-400 num-fa">{formatOrderDate(ord.order_date)}</span>
                   </div>
                   {ord.items && (
                     <p className="text-xs text-slate-400 mt-0.5 truncate max-w-xs">
@@ -580,7 +581,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
                         {activeCustomerReport.orders.map((ord) => (
                           <tr key={ord.id} className="border-b border-slate-200">
                             <td className="py-1.5 px-2 border border-slate-300 font-mono">{ord.id}</td>
-                            <td className="py-1.5 px-2 border border-slate-300">{ord.order_date}</td>
+                            <td className="py-1.5 px-2 border border-slate-300 num-fa">{formatOrderDate(ord.order_date)}</td>
                             <td className="py-1.5 px-2 border border-slate-300 font-bold">
                               {formatPrice(ord.total_amount)}
                             </td>

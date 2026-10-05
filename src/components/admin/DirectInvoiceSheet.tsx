@@ -3,7 +3,7 @@ import { Product, Visitor, Supermarket, Order, LoadingBill, LoadingBillItem } fr
 import { useApp } from '../../context/AppContext';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { ProductCatalog } from '../shop/ProductCatalog';
-import { roundQty, formatPrice } from '../shop/shopUtils';
+import { roundQty, formatPrice, formatOrderDate } from '../shop/shopUtils';
 import { VisitorInvoicePrintModal } from '../visitor/VisitorInvoicePrintModal';
 import { OrderInvoiceModal } from '../invoice/OrderInvoiceModal';
 import {
@@ -935,8 +935,8 @@ export const DirectInvoiceSheet: React.FC<DirectInvoiceSheetProps> = ({
                                     {order.id}
                                   </span>
                                 </div>
-                                <p className="text-[11px] text-slate-400 mt-0.5">
-                                  ثبت شده در: {order.order_date ? order.order_date.slice(0, 16) : 'امروز'}
+                                <p className="text-[11px] text-slate-400 mt-0.5 num-fa">
+                                  ثبت شده در: {formatOrderDate(order.order_date)}
                                 </p>
                               </div>
                             </div>

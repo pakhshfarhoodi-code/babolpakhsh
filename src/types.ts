@@ -250,3 +250,106 @@ export interface UpdateVisitorPayload {
   is_active?: boolean;
 }
 
+export interface CentralPhone {
+  id: string;
+  label: string; // e.g. "دفتر", "موبایل", "پشتیبانی"
+  number: string;
+  show_in_invoice: boolean;
+}
+
+export interface InvoiceSettings {
+  // A. Seller Info
+  brand_name: string;
+  legal_name: string;
+  tagline: string;
+  logo_url: string; // data URI or image URL
+  address: string;
+
+  // B. Central Distribution Phone Numbers
+  phones: CentralPhone[];
+
+  // C. Legal Identifiers (all optional)
+  national_id?: string;
+  economic_code?: string;
+  registration_number?: string;
+  postal_code?: string;
+
+  // D. Visitor Info
+  show_visitor_info: boolean;
+  direct_sale_title: string;
+  visitor_sale_title: string;
+
+  // E. Title and Appearance
+  invoice_title: string;
+  show_logo: boolean;
+  show_buyer_address: boolean;
+  show_amount_in_words: boolean;
+  show_signature_boxes: boolean;
+  show_page_number: boolean;
+
+  // F. Amount and Payment
+  has_vat: boolean;
+  vat_percent: number;
+  bank_account_holder: string;
+  card_number: string;
+  iban: string;
+  payment_terms: string;
+
+  // G. Footer
+  footer_notes: string;
+  website_or_contact: string;
+  copy_label: string;
+
+  // H. Paper
+  paper_size: 'A4' | 'A5';
+  compact_table: boolean;
+}
+
+export const DEFAULT_INVOICE_SETTINGS: InvoiceSettings = {
+  brand_name: 'شبکه پخش عمده فرهودی',
+  legal_name: 'صنایع غذایی منجمد و سردخانه‌ای فرهودی',
+  tagline: 'سامانه سفارش‌گیری و توزیع مویرگی زنجیره سرد مواد غذایی',
+  logo_url: '',
+  address: 'بابل، جاده قائمشهر، مجتمع پخش سردخانه‌ای فرهودی',
+  phones: [
+    { id: 'p1', label: 'دفتر فروش', number: '۰۱۱۳۳۲۲۱۱۰۰', show_in_invoice: true },
+    { id: 'p2', label: 'موبایل و پشتیبانی', number: '۰۹۱۲۳۴۵۶۷۸۹', show_in_invoice: true },
+  ],
+  national_id: '',
+  economic_code: '',
+  registration_number: '',
+  postal_code: '',
+  show_visitor_info: true,
+  direct_sale_title: 'فروش مستقیم پخش مرکزی',
+  visitor_sale_title: 'فروش از طریق ویزیتور',
+  invoice_title: 'صورت‌حساب فروش و تحویل کالا',
+  show_logo: true,
+  show_buyer_address: true,
+  show_amount_in_words: true,
+  show_signature_boxes: true,
+  show_page_number: true,
+  has_vat: false,
+  vat_percent: 10,
+  bank_account_holder: 'صنایع غذایی فرهودی',
+  card_number: '',
+  iban: '',
+  payment_terms: 'نقدی هنگام تحویل کالا / چک صیادی با هماهنگی مدیریت',
+  footer_notes: 'اجناس تحویل شده از نظر سلامت ظاهری، انجماد و تاریخ مصرف مورد تایید خریدار قرار گرفت.',
+  website_or_contact: 'barfroosh.ir',
+  copy_label: 'نسخه فروشگاه',
+  paper_size: 'A4',
+  compact_table: false,
+};
+
+export function getInvoiceSettings(raw?: unknown): InvoiceSettings {
+  if (!raw || typeof raw !== 'object') {
+    return { ...DEFAULT_INVOICE_SETTINGS };
+  }
+  const r = raw as Partial<InvoiceSettings>;
+  return {
+    ...DEFAULT_INVOICE_SETTINGS,
+    ...r,
+    phones: Array.isArray(r.phones) ? r.phones : DEFAULT_INVOICE_SETTINGS.phones,
+  };
+}
+

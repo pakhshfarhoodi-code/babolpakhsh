@@ -244,8 +244,19 @@ export function printInvoiceDocument(
               size: ${pageSize} portrait;
               margin: 0mm;
             }
+            /* Neutralize any copied visibility:hidden rules from host @media print */
             *, *::before, *::after {
               box-sizing: border-box !important;
+            }
+            body, body * {
+              visibility: visible !important;
+            }
+            #printable-invoice, #printable-invoice *,
+            .print-root, .print-root *,
+            .invoice-document-root, .invoice-document-root *,
+            .invoice-page-sheet, .invoice-page-sheet * {
+              visibility: visible !important;
+              opacity: 1 !important;
             }
             html, body {
               background-color: #ffffff !important;
@@ -259,25 +270,31 @@ export function printInvoiceDocument(
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
             }
-            .print-root {
+            .print-root, #printable-invoice {
               width: 100% !important;
               margin: 0 !important;
               padding: 0 !important;
               background: #ffffff !important;
+              display: block !important;
             }
             .invoice-document-root {
               width: 100% !important;
               margin: 0 !important;
               padding: 0 !important;
-              display: block !important;
+              display: flex !important;
+              flex-direction: column !important;
+              align-items: center !important;
             }
             .invoice-page-sheet {
               box-sizing: border-box !important;
-              width: 100% !important;
-              max-width: 100% !important;
+              width: ${pageSize === 'A5' ? '148mm' : '210mm'} !important;
+              min-width: ${pageSize === 'A5' ? '148mm' : '210mm'} !important;
+              max-width: ${pageSize === 'A5' ? '148mm' : '210mm'} !important;
+              height: ${minPageHeight} !important;
               min-height: ${minPageHeight} !important;
-              padding: 8mm 10mm !important;
-              margin: 0 !important;
+              max-height: ${minPageHeight} !important;
+              padding: 10mm 12mm 14mm 12mm !important;
+              margin: 0 auto !important;
               box-shadow: none !important;
               border: none !important;
               border-radius: 0 !important;
@@ -286,7 +303,7 @@ export function printInvoiceDocument(
               position: relative !important;
               background-color: #ffffff !important;
               color: #0f172a !important;
-              overflow: visible !important;
+              overflow: hidden !important;
               display: flex !important;
               flex-direction: column !important;
               justify-content: space-between !important;
@@ -444,7 +461,7 @@ export function printInvoiceDocument(
           </style>
         </head>
         <body>
-          <div class="print-root">
+          <div id="printable-invoice" class="print-root">
             ${targetElement.innerHTML}
           </div>
         </body>
@@ -452,7 +469,21 @@ export function printInvoiceDocument(
     `);
     doc.close();
 
-    // Trigger printing once fonts and content are rendered
+    // Helper: wait for all images inside iframe document to load
+    const waitForImages = (docTarget: Document): Promise<void> => {
+      const images = Array.from(docTarget.querySelectorAll('img'));
+      if (images.length === 0) return Promise.resolve();
+      const promises = images.map((img) => {
+        if (img.complete && img.naturalHeight !== 0) return Promise.resolve();
+        return new Promise<void>((resolve) => {
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+        });
+      });
+      return Promise.all(promises).then(() => {});
+    };
+
+    // Trigger printing once fonts, images, and content are fully ready
     const executePrint = () => {
       try {
         iframe.contentWindow?.focus();
@@ -465,19 +496,28 @@ export function printInvoiceDocument(
           if (document.body.contains(iframe)) {
             document.body.removeChild(iframe);
           }
-        }, 8000);
+        }, 10000);
       }
     };
 
-    if (iframe.contentDocument?.fonts?.ready) {
-      iframe.contentDocument.fonts.ready.then(() => {
-        setTimeout(executePrint, 250);
-      }).catch(() => {
-        setTimeout(executePrint, 350);
-      });
-    } else {
-      setTimeout(executePrint, 350);
-    }
+    const prepareAndPrint = async () => {
+      try {
+        if (iframe.contentDocument?.fonts?.ready) {
+          await iframe.contentDocument.fonts.ready.catch(() => {});
+        }
+        if (iframe.contentDocument) {
+          await waitForImages(iframe.contentDocument);
+        }
+        // Wait two animation frames for complete style calculation
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        setTimeout(executePrint, 150);
+      } catch (err) {
+        console.warn('Asset wait error, printing directly:', err);
+        setTimeout(executePrint, 300);
+      }
+    };
+
+    prepareAndPrint();
   } catch (error) {
     console.error('Error during printing:', error);
     window.print();

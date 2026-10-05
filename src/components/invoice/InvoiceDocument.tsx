@@ -1,17 +1,20 @@
-import React from 'react';
+import React, { useLayoutEffect, useRef, useState, useMemo } from 'react';
 import {
   Order,
   Supermarket,
   Visitor,
   InvoiceSettings,
   InvoiceSectionKey,
+  TableColumnKey,
+  DEFAULT_COLUMN_WIDTHS,
   DEFAULT_INVOICE_SETTINGS,
   DEFAULT_INVOICE_LAYOUT_SETTINGS,
   DEFAULT_INVOICE_STYLE_SETTINGS,
 } from '../../types';
-import { formatPriceToWords } from '../../utils/numberToPersianWords';
+import { numberToPersianWords } from '../../utils/numberToPersianWords';
 import { formatOrderDate } from '../../utils/dateUtils';
 import { Building2, Store } from 'lucide-react';
+import { useApp } from '../../context/AppContext';
 
 export interface InvoiceDocumentProps {
   order: Order;
@@ -20,6 +23,8 @@ export interface InvoiceDocumentProps {
   visitor?: Visitor | null;
   isPrintMode?: boolean;
   className?: string;
+  interactiveColumns?: boolean;
+  onColumnWidthsChange?: (newWidths: Record<TableColumnKey, number>) => void;
 }
 
 export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
@@ -27,9 +32,11 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
   settings: propSettings,
   supermarket,
   visitor,
-  isPrintMode = false,
   className = '',
+  interactiveColumns = false,
+  onColumnWidthsChange,
 }) => {
+  const { products = [] } = useApp();
   const settings = propSettings || DEFAULT_INVOICE_SETTINGS;
   const show = settings.show;
   const layout = settings.layout;
@@ -45,19 +52,35 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
       ? 'text-[12.5px]'
       : 'text-[11px]';
 
-  const headerTitleClass =
-    style.header_title_size === 'small'
-      ? 'text-xs sm:text-sm font-bold'
-      : style.header_title_size === 'large'
-      ? 'text-base sm:text-xl font-black'
-      : 'text-sm sm:text-base font-extrabold';
+  const sectionSpacingClass =
+    style.section_spacing === 'compact'
+      ? 'mb-1 gap-1.5'
+      : style.section_spacing === 'spacious'
+      ? 'mb-3.5 sm:mb-4 gap-3.5'
+      : 'mb-2 gap-2';
 
-  const brandTitleClass =
+  const sectionMarginBottom =
+    style.section_spacing === 'compact'
+      ? 'mb-1'
+      : style.section_spacing === 'spacious'
+      ? 'mb-3 sm:mb-3.5'
+      : 'mb-2';
+
+  const headerTitleClass = `${
+    style.header_title_size === 'small'
+      ? 'text-xs sm:text-sm'
+      : style.header_title_size === 'large'
+      ? 'text-base sm:text-xl'
+      : 'text-sm sm:text-base'
+  } ${style.header_title_bold !== false ? 'font-extrabold' : 'font-normal'}`;
+
+  const brandTitleClass = `${
     style.brand_title_size === 'small'
-      ? 'text-sm sm:text-base font-bold'
+      ? 'text-sm sm:text-base'
       : style.brand_title_size === 'large'
-      ? 'text-lg sm:text-2xl font-black'
-      : 'text-base sm:text-lg font-black';
+      ? 'text-lg sm:text-2xl'
+      : 'text-base sm:text-lg'
+  } ${style.brand_title_bold !== false ? 'font-black' : 'font-semibold'}`;
 
   const cardPaddingClass =
     style.card_padding === 'compact'
@@ -66,12 +89,21 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
       ? 'p-3.5 sm:p-4'
       : 'p-2 sm:p-2.5';
 
-  const cardsFontClass =
-    style.cards_font_size === 'small'
+  const cardLabelClass = `${
+    style.card_labels_size === 'small'
+      ? 'text-[9.5px]'
+      : style.card_labels_size === 'large'
+      ? 'text-[12px]'
+      : 'text-[10.5px]'
+  } ${style.card_labels_bold ? 'font-bold text-slate-700' : 'font-medium text-slate-500'}`;
+
+  const cardValueClass = `${
+    style.card_values_size === 'small'
       ? 'text-[10px]'
-      : style.cards_font_size === 'large'
+      : style.card_values_size === 'large'
       ? 'text-[12.5px]'
-      : 'text-[11px]';
+      : 'text-[11px]'
+  } ${style.card_values_bold !== false ? 'font-bold text-slate-900' : 'font-normal text-slate-800'}`;
 
   const tableRowPaddingClass =
     style.table_density === 'compact'
@@ -87,17 +119,36 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
       ? 'text-xs sm:text-sm'
       : 'text-[11px] sm:text-xs';
 
-  const totalsFontClass =
+  const tableHeadWeightClass = style.table_header_bold !== false ? 'font-bold' : 'font-medium';
+
+  const totalsFontClass = `${
     style.totals_font_size === 'small'
       ? 'text-[10.5px]'
       : style.totals_font_size === 'large'
       ? 'text-xs sm:text-sm'
-      : 'text-[11px] sm:text-xs';
+      : 'text-[11px] sm:text-xs'
+  } ${style.totals_bold !== false ? 'font-semibold' : 'font-normal'}`;
 
-  const termsFontClass =
+  const paymentFontClass = `${
+    style.payment_font_size === 'small'
+      ? 'text-[10px]'
+      : style.payment_font_size === 'large'
+      ? 'text-xs sm:text-sm'
+      : 'text-[11px] sm:text-xs'
+  } ${style.payment_bold ? 'font-semibold' : 'font-normal'}`;
+
+  const termsFontClass = `${
     style.terms_font_size === 'small'
       ? 'text-[9.5px]'
       : style.terms_font_size === 'large'
+      ? 'text-[12px]'
+      : 'text-[10.5px]'
+  } ${style.terms_bold ? 'font-bold' : 'font-normal'}`;
+
+  const footerFontClass =
+    style.footer_font_size === 'small'
+      ? 'text-[9.5px]'
+      : style.footer_font_size === 'large'
       ? 'text-[12px]'
       : 'text-[10.5px]';
 
@@ -108,21 +159,45 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
       ? 'h-24'
       : 'h-16';
 
-  const roundedBoxClass =
-    style.box_rounded === 'none'
-      ? 'rounded-none'
-      : style.box_rounded === 'small'
-      ? 'rounded'
-      : style.box_rounded === 'large'
-      ? 'rounded-2xl'
-      : 'rounded-lg';
+  const isRounded = style.rounded_corners !== false && style.box_rounded !== 'none';
+  const roundedBoxClass = !isRounded
+    ? 'rounded-none'
+    : style.box_rounded === 'small'
+    ? 'rounded'
+    : style.box_rounded === 'large'
+    ? 'rounded-2xl'
+    : 'rounded-lg';
 
-  const borderClass =
-    style.border_thickness === 'medium'
-      ? `border-2 border-slate-400 ${roundedBoxClass}`
-      : style.border_thickness === 'thick'
-      ? `border-2 border-slate-800 ${roundedBoxClass}`
-      : `border border-slate-300 ${roundedBoxClass}`;
+  const getBorderClass = (strength?: string) => {
+    if (strength === 'none') return `border-0 ${roundedBoxClass}`;
+    if (strength === 'light') return `border border-slate-200 ${roundedBoxClass}`;
+    if (strength === 'bold') return `border-2 border-slate-800 ${roundedBoxClass}`;
+    return `border border-slate-300 ${roundedBoxClass}`;
+  };
+
+  const cardBorderClass = getBorderClass(style.card_border || (style.border_thickness === 'thick' ? 'bold' : style.border_thickness === 'medium' ? 'normal' : 'light'));
+  const tableBorderClass = getBorderClass(style.table_border || (style.border_thickness === 'thick' ? 'bold' : style.border_thickness === 'medium' ? 'normal' : 'light'));
+  const footerDividerClass =
+    style.footer_border === 'none'
+      ? 'border-0'
+      : style.footer_border === 'bold'
+      ? 'border-t-2 border-slate-800'
+      : style.footer_border === 'light'
+      ? 'border-t border-slate-200'
+      : 'border-t border-slate-300';
+
+  const borderClass = cardBorderClass;
+
+  // ---------------------------------------------------------------------------
+  // Currency & Formatting
+  // ---------------------------------------------------------------------------
+  const isDivideBy10 = Boolean(settings.divide_price_by_10);
+  const currencyLabel = settings.currency_label || (isDivideBy10 ? 'تومان' : 'ریال');
+
+  const formatMoney = (rawAmount: number): string => {
+    const val = isDivideBy10 ? Math.round(rawAmount / 10) : rawAmount;
+    return val.toLocaleString('fa-IR');
+  };
 
   // ---------------------------------------------------------------------------
   // Seller & Buyer Data Logic
@@ -203,7 +278,11 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
   const vatPercent = Number(settings.vat_percent) || 0;
   const vatAmount = hasVat ? Math.round(totalAfterDiscount * (vatPercent / 100)) : 0;
   const finalTotal = totalAfterDiscount + vatAmount;
-  const priceInWords = show.amount_in_words ? formatPriceToWords(finalTotal) : '';
+
+  const finalDisplayAmount = isDivideBy10 ? Math.round(finalTotal / 10) : finalTotal;
+  const priceInWords = show.amount_in_words
+    ? `${numberToPersianWords(finalDisplayAmount)} ${currencyLabel} تمام`
+    : '';
 
   const totalItemsCount = rawItems.reduce(
     (sum, item) => sum + (Number(item.quantity) || 0),
@@ -238,50 +317,13 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
     show.signatures_receiver
   );
 
-  // ---------------------------------------------------------------------------
-  // Multi-page Pagination Engine
-  // ---------------------------------------------------------------------------
   const isA5 = settings.paper_size === 'A5';
-  const singlePageMaxRows = isA5 ? 5 : 8;
-  const multiPageFirstPageRows = isA5 ? 7 : 11;
-  const multiPageMiddlePageRows = isA5 ? 12 : 18;
-  const multiPageLastPageRowsWithSummary = isA5 ? 6 : 9;
-
-  let pageItemChunks: typeof rawItems[] = [];
-
-  if (rawItems.length <= singlePageMaxRows || rawItems.length === 0) {
-    pageItemChunks = [rawItems];
-  } else {
-    let currentIndex = 0;
-    const totalCount = rawItems.length;
-
-    const page1Count = Math.min(totalCount, multiPageFirstPageRows);
-    pageItemChunks.push(rawItems.slice(0, page1Count));
-    currentIndex += page1Count;
-
-    while (currentIndex < totalCount) {
-      const remaining = totalCount - currentIndex;
-      if (remaining <= multiPageLastPageRowsWithSummary) {
-        pageItemChunks.push(rawItems.slice(currentIndex));
-        currentIndex = totalCount;
-      } else if (remaining <= multiPageMiddlePageRows) {
-        const half = Math.ceil(remaining / 2);
-        pageItemChunks.push(rawItems.slice(currentIndex, currentIndex + half));
-        currentIndex += half;
-      } else {
-        pageItemChunks.push(rawItems.slice(currentIndex, currentIndex + multiPageMiddlePageRows));
-        currentIndex += multiPageMiddlePageRows;
-      }
-    }
-  }
-
-  const totalPages = pageItemChunks.length;
 
   // ---------------------------------------------------------------------------
   // Section Renderers
   // ---------------------------------------------------------------------------
 
-  const renderHeader = (pageIndex: number) => {
+  const renderHeader = (pageIndex: number, totalPagesCount: number = 1) => {
     if (pageIndex > 0) {
       return (
         <div className="pb-2 mb-2 border-b border-slate-200 flex items-center justify-between text-xs">
@@ -314,7 +356,7 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
               </div>
             )}
             <div className="num-fa font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-              ادامه صفحه {pageIndex + 1} از {totalPages}
+              ادامه صفحه {(pageIndex + 1).toLocaleString('fa-IR')} از {totalPagesCount.toLocaleString('fa-IR')}
             </div>
           </div>
         </div>
@@ -375,7 +417,7 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
           {/* Meta Information Chip */}
           {hasMetaBlock && (
             <div
-              className={`bg-slate-50 ${borderClass} rounded-lg p-2 text-[11px] leading-snug min-w-[210px] shrink-0 ${
+              className={`bg-slate-50 ${borderClass} p-2 text-[11px] leading-snug min-w-[210px] shrink-0 ${
                 orderPos === 'right' && logoPos === 'left' ? 'order-first' : ''
               }`}
             >
@@ -424,6 +466,149 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
       </div>
     );
   };
+  // ---------------------------------------------------------------------------
+  // Active Columns & Layout Calculations
+  // ---------------------------------------------------------------------------
+  const activeColumns = useMemo(() => {
+    const rawWidths = layout.column_widths || DEFAULT_COLUMN_WIDTHS;
+    const cols: {
+      key: TableColumnKey;
+      label: string;
+      alignClass: string;
+      rawWidth: number;
+    }[] = [];
+
+    if (show.col_row_index) {
+      cols.push({
+        key: 'row_index',
+        label: '#',
+        alignClass: 'text-center',
+        rawWidth: rawWidths.row_index ?? DEFAULT_COLUMN_WIDTHS.row_index,
+      });
+    }
+    if (show.col_product_name) {
+      cols.push({
+        key: 'product_name',
+        label: 'شرح کالا / خدمات',
+        alignClass: 'text-right',
+        rawWidth: rawWidths.product_name ?? DEFAULT_COLUMN_WIDTHS.product_name,
+      });
+    }
+    if (show.col_items_per_package) {
+      cols.push({
+        key: 'items_per_package',
+        label: 'تعداد در کارتن',
+        alignClass: 'text-center',
+        rawWidth: rawWidths.items_per_package ?? DEFAULT_COLUMN_WIDTHS.items_per_package,
+      });
+    }
+    if (show.col_quantity_unit) {
+      cols.push({
+        key: 'quantity_unit',
+        label: 'تعداد / واحد',
+        alignClass: 'text-center',
+        rawWidth: rawWidths.quantity_unit ?? DEFAULT_COLUMN_WIDTHS.quantity_unit,
+      });
+    }
+    if (show.col_unit_price) {
+      cols.push({
+        key: 'unit_price',
+        label: `فی (${currencyLabel})`,
+        alignClass: 'text-center',
+        rawWidth: rawWidths.unit_price ?? DEFAULT_COLUMN_WIDTHS.unit_price,
+      });
+    }
+    if (show.col_discount_percent) {
+      cols.push({
+        key: 'discount_percent',
+        label: 'تخفیف (٪)',
+        alignClass: 'text-center',
+        rawWidth: rawWidths.discount_percent ?? DEFAULT_COLUMN_WIDTHS.discount_percent,
+      });
+    }
+    if (show.col_total_price) {
+      cols.push({
+        key: 'total_price',
+        label: `مبلغ کل (${currencyLabel})`,
+        alignClass: 'text-center',
+        rawWidth: rawWidths.total_price ?? DEFAULT_COLUMN_WIDTHS.total_price,
+      });
+    }
+
+    const totalRaw = cols.reduce((sum, c) => sum + (c.rawWidth || 10), 0) || 100;
+    return cols.map((c) => ({
+      ...c,
+      normalizedPercent: Number(((c.rawWidth / totalRaw) * 100).toFixed(2)),
+    }));
+  }, [show, layout.column_widths, currencyLabel]);
+
+  // Pointer drag resizing state
+  const tableRef = useRef<HTMLTableElement>(null);
+  const resizeStateRef = useRef<{
+    colIdx: number;
+    startX: number;
+    startWidthA: number;
+    startWidthB: number;
+    tableWidth: number;
+    rafId: number | null;
+  } | null>(null);
+
+  const handleStartResize = (e: React.PointerEvent, colIdx: number) => {
+    if (colIdx >= activeColumns.length - 1) return;
+    const tableEl = tableRef.current;
+    if (!tableEl) return;
+
+    const tableWidth = tableEl.offsetWidth || 700;
+    const colA = activeColumns[colIdx];
+    const colB = activeColumns[colIdx + 1];
+
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+
+    resizeStateRef.current = {
+      colIdx,
+      startX: e.clientX,
+      startWidthA: colA.normalizedPercent,
+      startWidthB: colB.normalizedPercent,
+      tableWidth,
+      rafId: null,
+    };
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      const state = resizeStateRef.current;
+      if (!state) return;
+
+      if (state.rafId !== null) cancelAnimationFrame(state.rafId);
+
+      state.rafId = requestAnimationFrame(() => {
+        // In RTL: moving pointer to the left (moveEvent.clientX < state.startX) expands column A and shrinks column B
+        const deltaPx = state.startX - moveEvent.clientX;
+        const deltaPercent = (deltaPx / state.tableWidth) * 100;
+
+        const minPercent = 8;
+        const totalPair = state.startWidthA + state.startWidthB;
+        let newWidthA = Math.max(minPercent, Math.min(totalPair - minPercent, state.startWidthA + deltaPercent));
+        let newWidthB = totalPair - newWidthA;
+
+        const currentMap = { ...(layout.column_widths || DEFAULT_COLUMN_WIDTHS) };
+        currentMap[activeColumns[state.colIdx].key] = Math.round(newWidthA);
+        currentMap[activeColumns[state.colIdx + 1].key] = Math.round(newWidthB);
+
+        if (onColumnWidthsChange) {
+          onColumnWidthsChange(currentMap);
+        }
+      });
+    };
+
+    const onPointerUp = (upEvent: PointerEvent) => {
+      if (resizeStateRef.current?.rafId) cancelAnimationFrame(resizeStateRef.current.rafId);
+      resizeStateRef.current = null;
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+    };
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+  };
 
   const renderSellerCard = () => {
     if (!hasAnySellerInfo) return null;
@@ -431,7 +616,7 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
 
     return (
       <div
-        className={`${borderClass} ${cardPaddingClass} bg-slate-50/50 flex flex-col justify-between ${cardsFontClass} leading-snug`}
+        className={`${cardBorderClass} ${cardPaddingClass} bg-slate-50/50 flex flex-col justify-between leading-snug`}
       >
         <div>
           <div className="font-bold text-slate-900 border-b border-slate-200 pb-1 mb-1.5 flex items-center gap-1.5">
@@ -442,24 +627,24 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
           <div className={`grid ${cols} gap-x-2 gap-y-1`}>
             {(sellerLegalName || sellerName) && (
               <div className="truncate">
-                <span className="text-slate-500 font-medium">نام: </span>
-                <strong className="text-slate-900">{sellerLegalName || sellerName}</strong>
+                <span className={cardLabelClass}>نام: </span>
+                <strong className={cardValueClass}>{sellerLegalName || sellerName}</strong>
               </div>
             )}
 
             {activeCentralPhones.map((p) => (
               <div key={p.id} className="flex items-center gap-1.5">
-                <span className="text-slate-500 font-medium shrink-0">
+                <span className={`${cardLabelClass} shrink-0`}>
                   {p.label ? `${p.label}:` : 'تلفن:'}
                 </span>
-                <strong className="num-fa text-slate-800 dir-ltr inline-block">{p.number}</strong>
+                <strong className={`num-fa dir-ltr inline-block ${cardValueClass}`}>{p.number}</strong>
               </div>
             ))}
 
             {hasVisitorInfo && (
               <div className="col-span-full truncate bg-blue-50/60 rounded px-1.5 py-0.5 border border-blue-100 text-blue-900 font-medium">
-                <span>ویزیتور: </span>
-                <strong className="font-bold text-blue-950">
+                <span className={cardLabelClass}>ویزیتور: </span>
+                <strong className={`font-bold text-blue-950 ${cardValueClass}`}>
                   {visitorName}
                   {visitorPhone ? ` — ${visitorPhone}` : ''}
                 </strong>
@@ -468,22 +653,26 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
 
             {sellerNationalId && (
               <div>
-                <span className="text-slate-500 font-medium">شناسه ملی: </span>
-                <span className="num-fa text-slate-800 dir-ltr inline-block">{sellerNationalId}</span>
+                <span className={cardLabelClass}>شناسه ملی: </span>
+                <span className={`num-fa dir-ltr inline-block ${cardValueClass}`}>
+                  {sellerNationalId}
+                </span>
               </div>
             )}
 
             {sellerEconomicCode && (
               <div>
-                <span className="text-slate-500 font-medium">کد اقتصادی: </span>
-                <span className="num-fa text-slate-800 dir-ltr inline-block">{sellerEconomicCode}</span>
+                <span className={cardLabelClass}>کد اقتصادی: </span>
+                <span className={`num-fa dir-ltr inline-block ${cardValueClass}`}>
+                  {sellerEconomicCode}
+                </span>
               </div>
             )}
 
             {sellerRegistrationNumber && (
               <div>
-                <span className="text-slate-500 font-medium">شماره ثبت: </span>
-                <span className="num-fa text-slate-800 dir-ltr inline-block">
+                <span className={cardLabelClass}>شماره ثبت: </span>
+                <span className={`num-fa dir-ltr inline-block ${cardValueClass}`}>
                   {sellerRegistrationNumber}
                 </span>
               </div>
@@ -491,8 +680,8 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
 
             {sellerPostalCode && (
               <div>
-                <span className="text-slate-500 font-medium">کد پستی: </span>
-                <span className="num-fa text-slate-800 dir-ltr inline-block">{sellerPostalCode}</span>
+                <span className={cardLabelClass}>کد پستی: </span>
+                <span className={`num-fa dir-ltr inline-block ${cardValueClass}`}>{sellerPostalCode}</span>
               </div>
             )}
           </div>
@@ -500,8 +689,8 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
 
         {sellerAddress && (
           <div className="mt-1.5 pt-1 border-t border-slate-200 text-slate-700">
-            <span className="text-slate-500 font-medium">آدرس: </span>
-            <span>{sellerAddress}</span>
+            <span className={cardLabelClass}>آدرس: </span>
+            <span className={cardValueClass}>{sellerAddress}</span>
           </div>
         )}
       </div>
@@ -514,7 +703,7 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
 
     return (
       <div
-        className={`${borderClass} ${cardPaddingClass} bg-slate-50/50 flex flex-col justify-between ${cardsFontClass} leading-snug`}
+        className={`${cardBorderClass} ${cardPaddingClass} bg-slate-50/50 flex flex-col justify-between leading-snug`}
       >
         <div>
           <div className="font-bold text-slate-900 border-b border-slate-200 pb-1 mb-1.5 flex items-center gap-1.5">
@@ -525,22 +714,22 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
           <div className={`grid ${cols} gap-x-2 gap-y-1`}>
             {buyerStoreName && (
               <div className="truncate">
-                <span className="text-slate-500 font-medium">فروشگاه: </span>
-                <strong className="text-slate-900">{buyerStoreName}</strong>
+                <span className={cardLabelClass}>فروشگاه: </span>
+                <strong className={cardValueClass}>{buyerStoreName}</strong>
               </div>
             )}
 
             {buyerOwner && (
               <div className="truncate">
-                <span className="text-slate-500 font-medium">متصدی: </span>
-                <strong className="text-slate-800">{buyerOwner}</strong>
+                <span className={cardLabelClass}>متصدی: </span>
+                <strong className={cardValueClass}>{buyerOwner}</strong>
               </div>
             )}
 
             {buyerPhone && (
               <div className="flex items-center gap-1.5">
-                <span className="text-slate-500 font-medium shrink-0">تلفن: </span>
-                <strong className="num-fa text-slate-800 dir-ltr inline-block">{buyerPhone}</strong>
+                <span className={`${cardLabelClass} shrink-0`}>تلفن: </span>
+                <strong className={`num-fa dir-ltr inline-block ${cardValueClass}`}>{buyerPhone}</strong>
               </div>
             )}
           </div>
@@ -548,122 +737,128 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
 
         {buyerAddress && (
           <div className="mt-1.5 pt-1 border-t border-slate-200 text-slate-700">
-            <span className="text-slate-500 font-medium">آدرس: </span>
-            <span>{buyerAddress}</span>
+            <span className={cardLabelClass}>آدرس: </span>
+            <span className={cardValueClass}>{buyerAddress}</span>
           </div>
         )}
       </div>
     );
   };
 
+  const renderItemsTableHead = () => {
+    return (
+      <thead>
+        <tr className="bg-slate-100/90 text-slate-800 border-b border-slate-300">
+          {activeColumns.map((col, idx) => (
+            <th
+              key={col.key}
+              style={{ width: `${col.normalizedPercent}%` }}
+              className={`relative ${tableRowPaddingClass} ${tableHeadWeightClass} ${col.alignClass} border-l last:border-l-0 border-slate-300 select-none overflow-hidden`}
+            >
+              <span>{col.label}</span>
+              {interactiveColumns && idx < activeColumns.length - 1 && (
+                <div
+                  onPointerDown={(e) => handleStartResize(e, idx)}
+                  className="absolute left-0 top-0 bottom-0 w-3 -ml-1.5 cursor-col-resize z-20 flex items-center justify-center group touch-none"
+                  title="برای تغییر عرض ستون بکشید"
+                >
+                  <div className="w-1 h-3.5 bg-blue-500 rounded group-hover:w-1.5 group-hover:bg-blue-600 transition-all opacity-70 group-hover:opacity-100" />
+                </div>
+              )}
+            </th>
+          ))}
+        </tr>
+      </thead>
+    );
+  };
+
+  const renderItemRow = (item: typeof rawItems[0], globalIndex: number) => {
+    const qty = Number(item.quantity) || 0;
+    const unitPrice = Number(item.price) || 0;
+    const itemDiscount = Number((item as any).discount_percent) || 0;
+    const lineTotal = show.col_discount_percent && itemDiscount > 0
+      ? qty * unitPrice * (1 - itemDiscount / 100)
+      : qty * unitPrice;
+
+    // Lookup missing items_per_package and unit from AppContext products
+    const product = products.find((p) => p.id === item.product_id);
+    const rawItemsPerPkg =
+      item.items_per_package ||
+      (item as any).product?.items_per_package ||
+      (product as any)?.items_per_package ||
+      (product as any)?.unit_count_per_carton ||
+      '';
+
+    const itemsPerPkgDisplay =
+      rawItemsPerPkg && Number(rawItemsPerPkg) > 0
+        ? Number(rawItemsPerPkg).toLocaleString('fa-IR')
+        : '—';
+
+    const unitName = (item as any).unit || product?.unit || settings.default_unit_name || 'عدد';
+
+    return (
+      <tr key={item.product_id || globalIndex} className="hover:bg-slate-50/50 break-inside-avoid">
+        {show.col_row_index && (
+          <td className={`${tableRowPaddingClass} text-center num-fa text-slate-600 font-medium border-l border-slate-200`}>
+            {globalIndex}
+          </td>
+        )}
+        {show.col_product_name && (
+          <td className={`${tableRowPaddingClass} font-bold text-slate-900 border-l border-slate-200 break-words`}>
+            {(item as any).product_name || item.name}
+          </td>
+        )}
+        {show.col_items_per_package && (
+          <td className={`${tableRowPaddingClass} text-center num-fa text-slate-700 border-l border-slate-200 font-medium`}>
+            {itemsPerPkgDisplay}
+          </td>
+        )}
+        {show.col_quantity_unit && (
+          <td className={`${tableRowPaddingClass} text-center border-l border-slate-200`}>
+            <span className="num-fa font-bold text-slate-800">{qty.toLocaleString('fa-IR')}</span>
+            {unitName && (
+              <span className="text-[10px] text-slate-500 mr-1">{unitName}</span>
+            )}
+          </td>
+        )}
+        {show.col_unit_price && (
+          <td className={`${tableRowPaddingClass} text-center num-fa font-bold text-slate-700 border-l border-slate-200`}>
+            {formatMoney(unitPrice)}
+          </td>
+        )}
+        {show.col_discount_percent && (
+          <td className={`${tableRowPaddingClass} text-center num-fa font-bold text-slate-700 border-l border-slate-200`}>
+            {itemDiscount > 0 ? `${itemDiscount.toLocaleString('fa-IR')}٪` : '۰٪'}
+          </td>
+        )}
+        {show.col_total_price && (
+          <td className={`${tableRowPaddingClass} text-center num-fa font-black text-slate-900`}>
+            {formatMoney(Math.round(lineTotal))}
+          </td>
+        )}
+      </tr>
+    );
+  };
+
   const renderItemsTable = (itemsChunk: typeof rawItems, startIndex: number) => {
     return (
-      <div className={`mb-2 overflow-hidden rounded-lg ${borderClass}`}>
-        <table className={`w-full text-right border-collapse ${tableFontClass} items-table`}>
-          <thead>
-            <tr className="bg-slate-100/90 text-slate-800 font-bold border-b border-slate-300">
-              {show.col_row_index && (
-                <th className={`${tableRowPaddingClass} text-center w-8 sm:w-10 border-l border-slate-300`}>
-                  #
-                </th>
-              )}
-              {show.col_product_name && (
-                <th className={`${tableRowPaddingClass} border-l border-slate-300`}>
-                  شرح کالا / خدمات
-                </th>
-              )}
-              {show.col_items_per_package && (
-                <th className={`${tableRowPaddingClass} text-center w-20 sm:w-24 border-l border-slate-300`}>
-                  تعداد در کارتن
-                </th>
-              )}
-              {show.col_quantity_unit && (
-                <th className={`${tableRowPaddingClass} text-center w-20 sm:w-24 border-l border-slate-300`}>
-                  تعداد / واحد
-                </th>
-              )}
-              {show.col_unit_price && (
-                <th className={`${tableRowPaddingClass} text-center w-24 sm:w-28 border-l border-slate-300`}>
-                  فی (ریال)
-                </th>
-              )}
-              {show.col_discount_percent && (
-                <th className={`${tableRowPaddingClass} text-center w-16 sm:w-20 border-l border-slate-300`}>
-                  تخفیف (٪)
-                </th>
-              )}
-              {show.col_total_price && (
-                <th className={`${tableRowPaddingClass} text-center w-28 sm:w-32`}>
-                  مبلغ کل (ریال)
-                </th>
-              )}
-            </tr>
-          </thead>
+      <div className={`${sectionMarginBottom} overflow-hidden ${tableBorderClass}`}>
+        <table ref={tableRef} className={`w-full text-right border-collapse table-fixed ${tableFontClass} items-table`}>
+          <colgroup>
+            {activeColumns.map((col) => (
+              <col key={col.key} style={{ width: `${col.normalizedPercent}%` }} />
+            ))}
+          </colgroup>
+          {renderItemsTableHead()}
           <tbody className="divide-y divide-slate-200">
             {itemsChunk.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-6 text-center text-slate-400 text-xs">
+                <td colSpan={activeColumns.length || 7} className="py-6 text-center text-slate-400 text-xs">
                   هیچ قلم کالایی در این سفارش ثبت نشده است.
                 </td>
               </tr>
             ) : (
-              itemsChunk.map((item, idx) => {
-                const globalIndex = startIndex + idx + 1;
-                const qty = Number(item.quantity) || 0;
-                const unitPrice = Number(item.price) || 0;
-                const itemDiscount = Number((item as any).discount_percent) || 0;
-                const lineTotal = show.col_discount_percent && itemDiscount > 0
-                  ? qty * unitPrice * (1 - itemDiscount / 100)
-                  : qty * unitPrice;
-                const unitName = (item as any).unit || 'عدد';
-                const itemsPerPkg = item.items_per_package || (item as any).product?.items_per_package || (item as any).items_per_pack || '';
-
-                return (
-                  <tr
-                    key={item.product_id || idx}
-                    className="hover:bg-slate-50/50 break-inside-avoid"
-                  >
-                    {show.col_row_index && (
-                      <td className={`${tableRowPaddingClass} text-center num-fa text-slate-600 font-medium border-l border-slate-200`}>
-                        {globalIndex}
-                      </td>
-                    )}
-                    {show.col_product_name && (
-                      <td className={`${tableRowPaddingClass} font-bold text-slate-900 border-l border-slate-200`}>
-                        {(item as any).product_name || item.name}
-                      </td>
-                    )}
-                    {show.col_items_per_package && (
-                      <td className={`${tableRowPaddingClass} text-center num-fa text-slate-700 border-l border-slate-200`}>
-                        {itemsPerPkg ? itemsPerPkg.toLocaleString('fa-IR') : '—'}
-                      </td>
-                    )}
-                    {show.col_quantity_unit && (
-                      <td className={`${tableRowPaddingClass} text-center border-l border-slate-200`}>
-                        <span className="num-fa font-bold text-slate-800">{qty.toLocaleString('fa-IR')}</span>
-                        {unitName && (
-                          <span className="text-[10px] text-slate-500 mr-1">{unitName}</span>
-                        )}
-                      </td>
-                    )}
-                    {show.col_unit_price && (
-                      <td className={`${tableRowPaddingClass} text-center num-fa font-bold text-slate-700 border-l border-slate-200`}>
-                        {unitPrice.toLocaleString('fa-IR')}
-                      </td>
-                    )}
-                    {show.col_discount_percent && (
-                      <td className={`${tableRowPaddingClass} text-center num-fa font-bold text-slate-700 border-l border-slate-200`}>
-                        {itemDiscount > 0 ? `${itemDiscount.toLocaleString('fa-IR')}٪` : '۰٪'}
-                      </td>
-                    )}
-                    {show.col_total_price && (
-                      <td className={`${tableRowPaddingClass} text-center num-fa font-black text-slate-900`}>
-                        {Math.round(lineTotal).toLocaleString('fa-IR')}
-                      </td>
-                    )}
-                  </tr>
-                );
-              })
+              itemsChunk.map((item, idx) => renderItemRow(item, startIndex + idx + 1))
             )}
           </tbody>
         </table>
@@ -676,7 +871,7 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
 
     return (
       <div
-        className={`${borderClass} rounded-lg ${cardPaddingClass} bg-slate-50/50 flex flex-col justify-between ${totalsFontClass} leading-snug break-inside-avoid`}
+        className={`${cardBorderClass} ${cardPaddingClass} bg-slate-50/50 flex flex-col justify-between ${paymentFontClass} leading-snug break-inside-avoid`}
       >
         <div>
           <div className="font-bold text-slate-900 border-b border-slate-200 pb-1 mb-1.5">
@@ -685,23 +880,23 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
 
           {show.amount_in_words && priceInWords && (
             <div className="mb-2 p-1.5 bg-white rounded border border-slate-200 text-slate-800">
-              <span className="text-slate-500 font-medium">مبلغ به حروف: </span>
-              <strong className="font-bold text-slate-900">{priceInWords} ریال</strong>
+              <span className={cardLabelClass}>مبلغ به حروف: </span>
+              <strong className={cardValueClass}>{priceInWords}</strong>
             </div>
           )}
 
           <div className="space-y-1 text-slate-700">
             {paymentHolder && (
               <div className="flex items-center justify-between gap-2">
-                <span className="text-slate-500 font-medium">صاحب حساب:</span>
-                <span className="font-bold text-slate-900">{paymentHolder}</span>
+                <span className={cardLabelClass}>صاحب حساب:</span>
+                <span className={cardValueClass}>{paymentHolder}</span>
               </div>
             )}
 
             {paymentCard && (
               <div className="flex items-center justify-between gap-2">
-                <span className="text-slate-500 font-medium">شماره کارت:</span>
-                <span className="num-fa font-bold text-slate-900 dir-ltr inline-block">
+                <span className={cardLabelClass}>شماره کارت:</span>
+                <span className={`num-fa dir-ltr inline-block ${cardValueClass}`}>
                   {paymentCard}
                 </span>
               </div>
@@ -709,8 +904,8 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
 
             {paymentIban && (
               <div className="flex items-center justify-between gap-2">
-                <span className="text-slate-500 font-medium">شماره شبا:</span>
-                <span className="num-fa font-bold text-slate-900 dir-ltr inline-block">
+                <span className={cardLabelClass}>شماره شبا:</span>
+                <span className={`num-fa dir-ltr inline-block ${cardValueClass}`}>
                   {paymentIban}
                 </span>
               </div>
@@ -720,8 +915,8 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
 
         {paymentTermsText && (
           <div className="mt-2 pt-1.5 border-t border-slate-200 text-[10.5px] text-slate-600">
-            <span className="text-slate-500 font-medium">شرایط تسویه: </span>
-            <span>{paymentTermsText}</span>
+            <span className={cardLabelClass}>شرایط تسویه: </span>
+            <span className={cardValueClass}>{paymentTermsText}</span>
           </div>
         )}
       </div>
@@ -733,39 +928,39 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
 
     return (
       <div
-        className={`${borderClass} rounded-lg ${cardPaddingClass} bg-slate-50/50 flex flex-col justify-between ${totalsFontClass} break-inside-avoid`}
+        className={`${cardBorderClass} ${cardPaddingClass} bg-slate-50/50 flex flex-col justify-between ${totalsFontClass} break-inside-avoid`}
       >
         <div className="space-y-1.5">
           {show.summary_items_count && (
             <div className="flex items-center justify-between text-slate-600">
-              <span className="font-medium">تعداد کل اقلام سفارش:</span>
-              <span className="num-fa font-bold text-slate-800">{totalItemsCount.toLocaleString('fa-IR')}</span>
+              <span className={cardLabelClass}>تعداد کل اقلام سفارش:</span>
+              <span className={`num-fa ${cardValueClass}`}>{totalItemsCount.toLocaleString('fa-IR')}</span>
             </div>
           )}
 
           {show.summary_subtotal && (
             <div className="flex items-center justify-between text-slate-700">
-              <span className="font-medium">جمع کل اقلام:</span>
-              <span className="num-fa font-bold text-slate-900">
-                {subtotal.toLocaleString('fa-IR')} ریال
+              <span className={cardLabelClass}>جمع کل اقلام:</span>
+              <span className={`num-fa ${cardValueClass}`}>
+                {formatMoney(subtotal)} {currencyLabel}
               </span>
             </div>
           )}
 
           {hasOverallDiscount && (
             <div className="flex items-center justify-between text-emerald-700 font-medium">
-              <span>تخفیف روی کل سفارش ({overallDiscountPercent}٪):</span>
-              <span className="num-fa font-bold">
-                -{overallDiscountAmount.toLocaleString('fa-IR')} ریال
+              <span className={cardLabelClass}>تخفیف روی کل سفارش ({overallDiscountPercent}٪):</span>
+              <span className={`num-fa font-bold text-emerald-700 ${cardValueClass}`}>
+                -{formatMoney(overallDiscountAmount)} {currencyLabel}
               </span>
             </div>
           )}
 
           {show.summary_vat && hasVat && (
             <div className="flex items-center justify-between text-slate-700">
-              <span className="font-medium">مالیات و ارزش افزوده ({vatPercent}٪):</span>
-              <span className="num-fa font-bold text-slate-900">
-                {vatAmount.toLocaleString('fa-IR')} ریال
+              <span className={cardLabelClass}>مالیات و ارزش افزوده ({vatPercent}٪):</span>
+              <span className={`num-fa ${cardValueClass}`}>
+                {formatMoney(vatAmount)} {currencyLabel}
               </span>
             </div>
           )}
@@ -775,7 +970,7 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
           <div className="mt-2 pt-2 border-t-2 border-slate-800 flex items-center justify-between bg-slate-100/80 -mx-2.5 -mb-2.5 p-2.5 rounded-b-lg">
             <span className="font-black text-slate-950 text-xs sm:text-sm">مبلغ قابل پرداخت:</span>
             <span className="num-fa font-black text-slate-950 text-sm sm:text-base">
-              {finalTotal.toLocaleString('fa-IR')} ریال
+              {formatMoney(finalTotal)} {currencyLabel}
             </span>
           </div>
         )}
@@ -787,7 +982,7 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
     if (!termsText) return null;
 
     return (
-      <div className={`${borderClass} p-2 ${termsFontClass} leading-relaxed text-slate-700 bg-slate-50/40 break-inside-avoid`}>
+      <div className={`${cardBorderClass} p-2 ${termsFontClass} leading-relaxed text-slate-700 bg-slate-50/40 break-inside-avoid`}>
         <span className="font-bold text-slate-900">شرایط و توضیحات: </span>
         <span>{termsText}</span>
       </div>
@@ -800,21 +995,21 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
     return (
       <div className="grid grid-cols-3 gap-2 text-center text-[11px] break-inside-avoid pt-1">
         {show.signatures_seller && (
-          <div className={`${borderClass} rounded-lg p-2 bg-slate-50/40 ${signaturesHeightClass} flex flex-col justify-between`}>
+          <div className={`${cardBorderClass} p-2 bg-slate-50/40 ${signaturesHeightClass} flex flex-col justify-between`}>
             <span className="font-bold text-slate-800">امضا و مهر فروشنده</span>
             <div className="border-b border-dashed border-slate-300 mx-3 mb-1" />
           </div>
         )}
 
         {show.signatures_buyer && (
-          <div className={`${borderClass} rounded-lg p-2 bg-slate-50/40 ${signaturesHeightClass} flex flex-col justify-between`}>
+          <div className={`${cardBorderClass} p-2 bg-slate-50/40 ${signaturesHeightClass} flex flex-col justify-between`}>
             <span className="font-bold text-slate-800">امضا و مهر خریدار</span>
             <div className="border-b border-dashed border-slate-300 mx-3 mb-1" />
           </div>
         )}
 
         {show.signatures_receiver && (
-          <div className={`${borderClass} rounded-lg p-2 bg-slate-50/40 ${signaturesHeightClass} flex flex-col justify-between`}>
+          <div className={`${cardBorderClass} p-2 bg-slate-50/40 ${signaturesHeightClass} flex flex-col justify-between`}>
             <span className="font-bold text-slate-800">امضای تحویل‌گیرنده کالا</span>
             <div className="border-b border-dashed border-slate-300 mx-3 mb-1" />
           </div>
@@ -822,6 +1017,165 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
       </div>
     );
   };
+
+  // ---------------------------------------------------------------------------
+  // Dynamic Height Measurement & Pagination Engine (useLayoutEffect)
+  // ---------------------------------------------------------------------------
+  const measureContainerRef = useRef<HTMLDivElement>(null);
+  const [measuredChunks, setMeasuredChunks] = useState<typeof rawItems[] | null>(null);
+
+  useLayoutEffect(() => {
+    if (!measureContainerRef.current) return;
+
+    const root = measureContainerRef.current;
+    const headerEl = root.querySelector('[data-measure="header"]') as HTMLElement | null;
+    const subHeaderEl = root.querySelector('[data-measure="sub_header"]') as HTMLElement | null;
+    const sellerEl = root.querySelector('[data-measure="seller"]') as HTMLElement | null;
+    const buyerEl = root.querySelector('[data-measure="buyer"]') as HTMLElement | null;
+    const theadEl = root.querySelector('[data-measure="thead"]') as HTMLElement | null;
+    const summaryBlockEl = root.querySelector('[data-measure="summary_block"]') as HTMLElement | null;
+
+    const headerH = headerEl?.offsetHeight || 135;
+    const subHeaderH = subHeaderEl?.offsetHeight || 42;
+    const sellerH = sellerEl?.offsetHeight || 0;
+    const buyerH = buyerEl?.offsetHeight || 0;
+    const theadH = theadEl?.offsetHeight || 38;
+    const summaryBlockH = summaryBlockEl?.offsetHeight || 220;
+
+    // Measure each row height individually
+    const rowEls = root.querySelectorAll('[data-measure-row]');
+    const rowHeights: number[] = [];
+    rowEls.forEach((el) => {
+      rowHeights.push((el as HTMLElement).offsetHeight || 34);
+    });
+
+    // Usable height of paper (A4: 297mm ≈ 1122.5px; A5: 210mm ≈ 793.7px)
+    // Subtract top padding (10mm ~38px), bottom padding (14mm ~53px), footer space (32px), safety margin (20px)
+    const totalPageHeight = isA5 ? 794 : 1122;
+    const pagePaddingV = isA5 ? 90 : 110;
+    const usablePageH = totalPageHeight - pagePaddingV;
+
+    // Parties cards combined height
+    let partiesH = 0;
+    if (sellerH > 0 && buyerH > 0) {
+      // If paired side-by-side in grid
+      partiesH = Math.max(sellerH, buyerH) + 8;
+    } else {
+      partiesH = (sellerH || buyerH) + (sellerH || buyerH ? 8 : 0);
+    }
+
+    const page1TopH = headerH + partiesH + theadH;
+    const page1AvailH = usablePageH - page1TopH;
+    const subPageTopH = subHeaderH + theadH;
+    const subPageAvailH = usablePageH - subPageTopH;
+
+    const totalCount = rawItems.length;
+    if (totalCount === 0) {
+      setMeasuredChunks([[]]);
+      return;
+    }
+
+    // Check single page possibility:
+    const totalItemsHeight = rowHeights.reduce((a, b) => a + b, 0);
+    if (totalItemsHeight + summaryBlockH <= page1AvailH) {
+      setMeasuredChunks([rawItems]);
+      return;
+    }
+
+    // Multi-page distribution
+    const chunks: typeof rawItems[] = [];
+    let currentIndex = 0;
+
+    // Page 1: fill up to page1AvailH
+    let p1Height = 0;
+    let p1End = 0;
+    while (p1End < totalCount && p1Height + rowHeights[p1End] <= page1AvailH) {
+      p1Height += rowHeights[p1End];
+      p1End++;
+    }
+    // Prevent empty page 1 if an unusual huge row occurs
+    if (p1End === 0 && totalCount > 0) p1End = 1;
+
+    chunks.push(rawItems.slice(0, p1End));
+    currentIndex = p1End;
+
+    // Intermediate and Last pages
+    while (currentIndex < totalCount) {
+      const remainingCount = totalCount - currentIndex;
+      let remainingH = 0;
+      for (let i = currentIndex; i < totalCount; i++) {
+        remainingH += rowHeights[i];
+      }
+
+      // Can all remaining items + summary fit on this page?
+      if (remainingH + summaryBlockH <= subPageAvailH) {
+        chunks.push(rawItems.slice(currentIndex));
+        currentIndex = totalCount;
+        break;
+      }
+
+      // Fill current page with items up to subPageAvailH
+      let pageH = 0;
+      let countOnThisPage = 0;
+      while (
+        currentIndex + countOnThisPage < totalCount &&
+        pageH + rowHeights[currentIndex + countOnThisPage] <= subPageAvailH
+      ) {
+        pageH += rowHeights[currentIndex + countOnThisPage];
+        countOnThisPage++;
+      }
+
+      if (countOnThisPage === 0) countOnThisPage = 1;
+
+      // Check if after adding this chunk, remaining items on next page would be 0 (summary alone)
+      if (currentIndex + countOnThisPage === totalCount) {
+        // Summary won't fit on this page, and next page would have 0 items!
+        // Move last 2 items (or at least 1) to next page so summary block is NEVER alone
+        const itemsToMove = Math.min(Math.max(1, Math.floor(countOnThisPage / 2)), 2);
+        countOnThisPage = Math.max(1, countOnThisPage - itemsToMove);
+      }
+
+      chunks.push(rawItems.slice(currentIndex, currentIndex + countOnThisPage));
+      currentIndex += countOnThisPage;
+    }
+
+    setMeasuredChunks(chunks);
+  }, [
+    rawItems,
+    settings,
+    show,
+    layout,
+    style,
+    isA5,
+    hasAnySellerInfo,
+    hasAnyBuyerInfo,
+    hasAnySummaryInfo,
+    hasAnyPaymentInfo,
+    hasAnySignature,
+    termsText,
+    products,
+  ]);
+
+  // Initial fallback partitioning before layout measurement completes
+  const fallbackChunks = useMemo(() => {
+    if (rawItems.length <= 6) return [rawItems];
+    const res: typeof rawItems[] = [];
+    res.push(rawItems.slice(0, 8));
+    let idx = 8;
+    while (idx < rawItems.length) {
+      const rem = rawItems.length - idx;
+      if (rem <= 8) {
+        res.push(rawItems.slice(idx));
+        break;
+      }
+      res.push(rawItems.slice(idx, idx + 12));
+      idx += 12;
+    }
+    return res;
+  }, [rawItems]);
+
+  const pageItemChunks = measuredChunks || fallbackChunks;
+  const totalPages = pageItemChunks.length;
 
   const renderSectionByKey = (
     key: InvoiceSectionKey,
@@ -831,7 +1185,7 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
   ) => {
     switch (key) {
       case 'header':
-        return renderHeader(pageIndex);
+        return renderHeader(pageIndex, totalPages);
       case 'seller':
         return pageIndex === 0 ? renderSellerCard() : null;
       case 'buyer':
@@ -925,52 +1279,104 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
   let cumulativeIndex = 0;
 
   return (
-    <div
-      className={`invoice-document-root flex flex-col gap-6 print:gap-0 ${baseFontClass} ${className}`}
-      style={{ direction: 'rtl' }}
-    >
-      {pageItemChunks.map((chunk, pageIndex) => {
-        const startIndex = cumulativeIndex;
-        cumulativeIndex += chunk.length;
-        const isLastPage = pageIndex === totalPages - 1;
+    <>
+      {/* Invisible Measurement Container for useLayoutEffect */}
+      <div
+        ref={measureContainerRef}
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          top: '-99999px',
+          left: '-99999px',
+          width: isA5 ? '148mm' : '210mm',
+          visibility: 'hidden',
+          pointerEvents: 'none',
+          boxSizing: 'border-box',
+          padding: '10mm 12mm',
+        }}
+        className={baseFontClass}
+      >
+        <div data-measure="header">{renderHeader(0, 1)}</div>
+        <div data-measure="sub_header">{renderHeader(1, 2)}</div>
+        {hasAnySellerInfo && <div data-measure="seller">{renderSellerCard()}</div>}
+        {hasAnyBuyerInfo && <div data-measure="buyer">{renderBuyerCard()}</div>}
+        <div data-measure="thead">
+          <table className="w-full text-right border-collapse items-table">
+            {renderItemsTableHead()}
+          </table>
+        </div>
+        <table className="w-full text-right border-collapse items-table">
+          <tbody>
+            {rawItems.map((item, idx) => (
+              <React.Fragment key={idx}>
+                {React.cloneElement(renderItemRow(item, idx + 1), {
+                  'data-measure-row': idx,
+                } as any)}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+        <div data-measure="summary_block" className="space-y-2">
+          {renderPaymentInfo()}
+          {renderTotalsSummary()}
+          {renderTerms()}
+          {renderSignatures()}
+        </div>
+      </div>
 
-        return (
-          <div
-            key={`page-${pageIndex}`}
-            className={`invoice-page-sheet bg-white text-slate-900 rounded-xl p-5 mx-auto shadow-xl ${borderClass} print:border-none print:shadow-none print:p-0 print:m-0 print:max-w-none print:rounded-none flex flex-col justify-between relative ${
-              isA5 ? 'max-w-2xl min-h-[600px] print:min-h-[210mm]' : 'max-w-3xl min-h-[850px] print:min-h-[297mm]'
-            }`}
-            style={{
-              pageBreakAfter: !isLastPage ? 'always' : 'auto',
-              breakAfter: !isLastPage ? 'page' : 'auto',
-            }}
-          >
-            {/* Top / Main Content */}
-            <div className="flex-1 flex flex-col">
-              {renderPageSections(pageIndex, chunk, startIndex)}
-            </div>
+      {/* Main Visible Multi-Page Document */}
+      <div
+        className={`invoice-document-root flex flex-col items-center gap-6 print:gap-0 ${baseFontClass} ${className}`}
+        style={{ direction: 'rtl', width: '100%' }}
+      >
+        {pageItemChunks.map((chunk, pageIndex) => {
+          const startIndex = cumulativeIndex;
+          cumulativeIndex += chunk.length;
+          const isLastPage = pageIndex === totalPages - 1;
 
-            {/* Bottom Page Footer Bar */}
+          return (
             <div
-              className={`pt-2 border-t border-slate-200 text-[10.5px] text-slate-500 flex items-center justify-between gap-2 mt-3 ${
-                layout.stick_footer_to_bottom ? 'sticky bottom-0' : ''
-              }`}
+              key={`page-${pageIndex}`}
+              className={`invoice-page-sheet bg-white text-slate-900 rounded-xl shadow-xl ${borderClass} print:border-none print:shadow-none print:m-0 print:rounded-none flex flex-col justify-between relative overflow-hidden`}
+              style={{
+                width: isA5 ? '148mm' : '210mm',
+                minWidth: isA5 ? '148mm' : '210mm',
+                maxWidth: isA5 ? '148mm' : '210mm',
+                minHeight: isA5 ? '210mm' : '297mm',
+                height: isA5 ? '210mm' : '297mm',
+                maxHeight: isA5 ? '210mm' : '297mm',
+                boxSizing: 'border-box',
+                padding: '10mm 12mm 14mm 12mm',
+                margin: '0 auto',
+                pageBreakAfter: !isLastPage ? 'always' : 'auto',
+                breakAfter: !isLastPage ? 'page' : 'auto',
+              }}
             >
-              <div>
-                {show.contact_footer && settings.website_or_contact && (
-                  <span>سامانه / ارتباط: {settings.website_or_contact}</span>
-                )}
+              {/* Top / Main Content Area */}
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {renderPageSections(pageIndex, chunk, startIndex)}
               </div>
 
-              {show.page_number && (
-                <div className="num-fa font-bold text-slate-700">
-                  صفحه {(pageIndex + 1).toLocaleString('fa-IR')} از {totalPages.toLocaleString('fa-IR')}
+              {/* Fixed Bottom Page Footer Bar (Positioned at bottom of page) */}
+              <div
+                className={`absolute bottom-[8mm] left-[12mm] right-[12mm] pt-2 ${footerDividerClass} ${footerFontClass} text-slate-500 flex items-center justify-between gap-2`}
+              >
+                <div>
+                  {show.contact_footer && settings.website_or_contact && (
+                    <span>سامانه / ارتباط: {settings.website_or_contact}</span>
+                  )}
                 </div>
-              )}
+
+                {show.page_number && (
+                  <div className="num-fa font-bold text-slate-700">
+                    صفحه {(pageIndex + 1).toLocaleString('fa-IR')} از {totalPages.toLocaleString('fa-IR')}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        );
-      })}
-    </div>
+          );
+        })}
+      </div>
+    </>
   );
 };

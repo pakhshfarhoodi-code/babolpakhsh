@@ -1,6 +1,6 @@
 import React from 'react';
 import { LoadingBill, LoadingBillItem, Visitor, Product, Order, InvoiceSettings, DEFAULT_INVOICE_SETTINGS } from '../../types';
-import { formatPriceToWords } from '../../utils/numberToPersianWords';
+import { formatPriceToWords, numberToPersianWords } from '../../utils/numberToPersianWords';
 import { formatPrice } from '../visitor/helpers';
 import farhoodiLogo from '../../assets/images/farhoodi_b2b_logo.webp';
 import { useApp } from '../../context/AppContext';
@@ -33,6 +33,7 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
 }) => {
   const { invoiceSettings: contextSettings } = useApp();
   const settings: InvoiceSettings = contextSettings || DEFAULT_INVOICE_SETTINGS;
+  const currencyLabel = settings.currency_label || 'تومان';
 
   // Map products for fast lookup
   const productMap = new Map<string, Product>();
@@ -272,8 +273,8 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
                   <th className="py-2.5 px-3">شرح کالای منجمد</th>
                   <th className="py-2.5 px-3 w-20 text-center">واحد</th>
                   <th className="py-2.5 px-3 w-20 text-center">تعداد کل</th>
-                  <th className="py-2.5 px-3 w-32 text-left">قیمت خرید ویزیتور (تومان)</th>
-                  <th className="py-2.5 px-3 w-36 text-left">مبلغ کل (تومان)</th>
+                  <th className="py-2.5 px-3 w-32 text-left">قیمت خرید ویزیتور ({currencyLabel})</th>
+                  <th className="py-2.5 px-3 w-36 text-left">مبلغ کل ({currencyLabel})</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -311,7 +312,7 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
                   </td>
                   <td className="py-3 px-3"></td>
                   <td className="py-3 px-3 text-left font-mono font-black text-sm text-slate-900">
-                    {formatPrice(grandTotal)} تومان
+                    {formatPrice(grandTotal)} {currencyLabel}
                   </td>
                 </tr>
               </tfoot>
@@ -322,7 +323,7 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
           <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs mb-8 print-avoid-break">
             <div>
               <span className="text-slate-600 font-semibold">مبلغ کل فاکتور به حروف: </span>
-              <strong className="font-black text-slate-900">{formatPriceToWords(grandTotal)} تومان</strong>
+              <strong className="font-black text-slate-900">{numberToPersianWords(grandTotal)} {currencyLabel} تمام</strong>
             </div>
             <div className="text-slate-500 text-[11px]">
               این برگه به منزله رسید قطعی بارگیری و تحویل از انبار شرکت پخش {settings.brand_name || 'مرکزی'} می‌باشد.

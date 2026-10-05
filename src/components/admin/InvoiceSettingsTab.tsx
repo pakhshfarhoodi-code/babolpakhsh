@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   InvoiceSettings,
@@ -6,8 +6,11 @@ import {
   InvoiceLayoutSettings,
   InvoiceStyleSettings,
   InvoiceSectionKey,
+  TableColumnKey,
   CentralPhone,
   DEFAULT_INVOICE_SETTINGS,
+  DEFAULT_INVOICE_STYLE_SETTINGS,
+  DEFAULT_COLUMN_WIDTHS,
   getInvoiceSettings,
 } from '../../types';
 import { InvoiceDocument } from '../invoice/InvoiceDocument';
@@ -107,7 +110,7 @@ export const InvoiceSettingsTab: React.FC = () => {
 
   // Preview options
   const [previewSaleType, setPreviewSaleType] = useState<'direct' | 'visitor'>('direct');
-  const [previewRowCount, setPreviewRowCount] = useState<3 | 6 | 30>(6);
+  const [previewRowCount, setPreviewRowCount] = useState<6 | 11 | 19 | 30>(6);
 
   // Accordion state
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
@@ -287,6 +290,59 @@ export const InvoiceSettingsTab: React.FC = () => {
       showToast('تنظیمات به حالت پیش‌فرض بازگردانده شد. برای اعمال دکمه ذخیره را بزنید.', 'info');
     }
   };
+
+  const handleResetAppearance = () => {
+    setForm((prev) => ({
+      ...prev,
+      style: { ...DEFAULT_INVOICE_STYLE_SETTINGS },
+    }));
+    showToast('ظاهر و استایل‌ها به حالت پیش‌فرض بازگردانده شد.', 'info');
+  };
+
+  const handleResetColumnWidths = () => {
+    setForm((prev) => ({
+      ...prev,
+      layout: {
+        ...prev.layout,
+        column_widths: { ...DEFAULT_COLUMN_WIDTHS },
+      },
+    }));
+    showToast('عرض ستون‌ها به حالت پیش‌فرض بازگردانده شد.', 'info');
+  };
+
+  const handleColumnWidthChange = (columnKey: TableColumnKey, newWidth: number) => {
+    setForm((prev) => ({
+      ...prev,
+      layout: {
+        ...prev.layout,
+        column_widths: {
+          ...(prev.layout.column_widths || DEFAULT_COLUMN_WIDTHS),
+          [columnKey]: newWidth,
+        },
+      },
+    }));
+  };
+
+  const handleColumnWidthsBatchChange = (newWidths: Record<TableColumnKey, number>) => {
+    setForm((prev) => ({
+      ...prev,
+      layout: {
+        ...prev.layout,
+        column_widths: newWidths,
+      },
+    }));
+  };
+
+  // Debounced settings state for buttery-smooth live preview (150ms)
+  const [debouncedSettings, setDebouncedSettings] = useState<InvoiceSettings>(form);
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSettings(form);
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [form]);
+
+  const memoizedPreviewSettings = useMemo(() => debouncedSettings, [debouncedSettings]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1267,6 +1323,77 @@ export const InvoiceSettingsTab: React.FC = () => {
 
               {openSections.totals && (
                 <div className="p-4 space-y-4 border-t border-slate-800 bg-slate-900/50">
+                  {/* Currency & Unit Settings */}
+                  <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 space-y-3">
+                    <span className="text-xs font-bold text-slate-200 block">واحد پول و تبدیل مبالغ:</span>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div className="space-y-1">
+                        <label className="text-slate-400 font-medium">واحد پولی فاکتور:</label>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            value={form.currency_label || 'ریال'}
+                            onChange={(e) => handleFieldChange('currency_label', e.target.value)}
+                            placeholder="مثال: ریال یا تومان"
+                            className="flex-1 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-xs font-bold"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleFieldChange('currency_label', 'ریال');
+                              handleFieldChange('divide_price_by_10', false);
+                            }}
+                            className={`px-2 py-1.5 rounded-lg border text-xs cursor-pointer font-bold transition ${
+                              form.currency_label === 'ریال' && !form.divide_price_by_10
+                                ? 'bg-blue-600 border-blue-500 text-white'
+                                : 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800'
+                            }`}
+                          >
+                            ریال
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleFieldChange('currency_label', 'تومان');
+                              handleFieldChange('divide_price_by_10', true);
+                            }}
+                            className={`px-2 py-1.5 rounded-lg border text-xs cursor-pointer font-bold transition ${
+                              form.currency_label === 'تومان' && form.divide_price_by_10
+                                ? 'bg-amber-600 border-amber-500 text-white'
+                                : 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800'
+                            }`}
+                          >
+                            تومان
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-slate-400 font-medium">نام واحد پیش‌فرض کالا:</label>
+                        <input
+                          type="text"
+                          value={form.default_unit_name || 'عدد'}
+                          onChange={(e) => handleFieldChange('default_unit_name', e.target.value)}
+                          placeholder="مثال: عدد / کارتن / بسته"
+                          className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-xs"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="pt-1">
+                      <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-amber-300">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(form.divide_price_by_10)}
+                          onChange={(e) => handleFieldChange('divide_price_by_10', e.target.checked)}
+                          className="w-4 h-4 rounded text-blue-600 bg-slate-800 border-slate-700"
+                        />
+                        <span>نمایش مبالغ به تومان (تقسیم بر ۱۰ — فقط در نمایش فاکتور، بدون تغییر داده‌ها در دیتابیس)</span>
+                      </label>
+                    </div>
+                  </div>
+
                   {/* VAT */}
                   <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 space-y-3">
                     <div className="flex items-center justify-between">
@@ -1524,7 +1651,7 @@ export const InvoiceSettingsTab: React.FC = () => {
               )}
             </div>
 
-            {/* 7. Typography, Font Sizes, Box Sizing & Visual Style (سایز فونت‌ها و ابعاد کادرها) */}
+            {/* 7. Typography, Font Sizes, Box Sizing & Visual Style (ظاهر، اندازه فونت‌ها و کادرها) */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-md">
               <button
                 type="button"
@@ -1534,7 +1661,7 @@ export const InvoiceSettingsTab: React.FC = () => {
                 <div className="flex items-center gap-2.5">
                   <Type className="w-4 h-4 text-pink-400" />
                   <span className="font-bold text-sm text-slate-200">
-                    ۷. تنظیم اندازه فونت‌ها، ابعاد باکس‌ها و مقادیر تمام بخش‌ها
+                    ۷. تنظیم ظاهر، فونت‌ها، ابعاد کادرها و خطوط فاکتور
                   </span>
                 </div>
                 <ChevronDown
@@ -1546,6 +1673,27 @@ export const InvoiceSettingsTab: React.FC = () => {
 
               {openSections.typography && (
                 <div className="p-4 space-y-4 border-t border-slate-800 bg-slate-900/50">
+                  {/* Reset Appearance Button */}
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                    <span className="text-xs text-slate-400 font-medium">
+                      تنظیمات اندازه فونت، ضخامت خطوط و فواصل بین بخش‌ها
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForm((prev) => ({
+                          ...prev,
+                          style: { ...DEFAULT_INVOICE_STYLE_SETTINGS },
+                        }));
+                        showToast('تنظیمات ظاهر به حالت پیش‌فرض بازگردانده شد.', 'info');
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs flex items-center gap-1 cursor-pointer transition"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>بازگشت به پیش‌فرض ظاهر</span>
+                    </button>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                     {/* Base Font Scale */}
                     <div className="space-y-1 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
@@ -1561,158 +1709,145 @@ export const InvoiceSettingsTab: React.FC = () => {
                       </select>
                     </div>
 
-                    {/* Header Title Size */}
+                    {/* Section Spacing */}
                     <div className="space-y-1 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
-                      <label className="text-slate-300 font-bold block">اندازه عنوان فاکتور:</label>
+                      <label className="text-slate-300 font-bold block">فاصله بین بخش‌های فاکتور:</label>
+                      <select
+                        value={form.style.section_spacing}
+                        onChange={(e) => handleStyleChange('section_spacing', e.target.value as any)}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs"
+                      >
+                        <option value="compact">فشرده (کمترین فاصله برای برگه‌های متراکم)</option>
+                        <option value="normal">معمولی (استاندارد)</option>
+                        <option value="spacious">باز و جادار</option>
+                      </select>
+                    </div>
+
+                    {/* Header Title Size & Bold */}
+                    <div className="space-y-1.5 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
+                      <div className="flex items-center justify-between">
+                        <label className="text-slate-300 font-bold">اندازه عنوان فاکتور:</label>
+                        <label className="flex items-center gap-1 cursor-pointer text-slate-300 text-[11px]">
+                          <input
+                            type="checkbox"
+                            checked={form.style.header_title_bold !== false}
+                            onChange={(e) => handleStyleChange('header_title_bold', e.target.checked)}
+                            className="w-3.5 h-3.5 rounded text-blue-600 bg-slate-800 border-slate-700"
+                          />
+                          <span>بولد</span>
+                        </label>
+                      </div>
                       <select
                         value={form.style.header_title_size}
                         onChange={(e) => handleStyleChange('header_title_size', e.target.value as any)}
                         className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs"
                       >
-                        <option value="small">کوچک (متناسب با صفحات متراکم)</option>
-                        <option value="medium">متوسط (استاندارد)</option>
-                        <option value="large">بزرگ و برجسته</option>
+                        <option value="small">کوچک</option>
+                        <option value="normal">معمولی</option>
+                        <option value="large">بزرگ</option>
                       </select>
                     </div>
 
-                    {/* Brand Name Size */}
-                    <div className="space-y-1 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
-                      <label className="text-slate-300 font-bold block">اندازه نام برند / سربرگ:</label>
+                    {/* Brand Name Size & Bold */}
+                    <div className="space-y-1.5 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
+                      <div className="flex items-center justify-between">
+                        <label className="text-slate-300 font-bold">اندازه نام برند / سربرگ:</label>
+                        <label className="flex items-center gap-1 cursor-pointer text-slate-300 text-[11px]">
+                          <input
+                            type="checkbox"
+                            checked={form.style.brand_title_bold !== false}
+                            onChange={(e) => handleStyleChange('brand_title_bold', e.target.checked)}
+                            className="w-3.5 h-3.5 rounded text-blue-600 bg-slate-800 border-slate-700"
+                          />
+                          <span>بولد</span>
+                        </label>
+                      </div>
                       <select
                         value={form.style.brand_title_size}
                         onChange={(e) => handleStyleChange('brand_title_size', e.target.value as any)}
                         className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs"
                       >
                         <option value="small">کوچک</option>
-                        <option value="medium">متوسط (استاندارد)</option>
-                        <option value="large">بزرگ و سربرگی</option>
+                        <option value="normal">معمولی</option>
+                        <option value="large">بزرگ</option>
                       </select>
                     </div>
 
-                    {/* Cards Font Size */}
-                    <div className="space-y-1 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
-                      <label className="text-slate-300 font-bold block">فونت عناوین و مقادیر کارت‌های طرفین:</label>
+                    {/* Card Labels Font & Bold */}
+                    <div className="space-y-1.5 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
+                      <div className="flex items-center justify-between">
+                        <label className="text-slate-300 font-bold">فونت عناوین/برچسب‌های کارت‌ها:</label>
+                        <label className="flex items-center gap-1 cursor-pointer text-slate-300 text-[11px]">
+                          <input
+                            type="checkbox"
+                            checked={form.style.card_labels_bold}
+                            onChange={(e) => handleStyleChange('card_labels_bold', e.target.checked)}
+                            className="w-3.5 h-3.5 rounded text-blue-600 bg-slate-800 border-slate-700"
+                          />
+                          <span>بولد</span>
+                        </label>
+                      </div>
                       <select
-                        value={form.style.cards_font_size}
-                        onChange={(e) => handleStyleChange('cards_font_size', e.target.value as any)}
+                        value={form.style.card_labels_size}
+                        onChange={(e) => handleStyleChange('card_labels_size', e.target.value as any)}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs"
+                      >
+                        <option value="small">کوچک (۹.۵ پیکسل)</option>
+                        <option value="normal">معمولی (۱۰.۵ پیکسل)</option>
+                        <option value="large">بزرگ (۱۲ پیکسل)</option>
+                      </select>
+                    </div>
+
+                    {/* Card Values Font & Bold */}
+                    <div className="space-y-1.5 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
+                      <div className="flex items-center justify-between">
+                        <label className="text-slate-300 font-bold">فونت مقادیر/اطلاعات کارت‌ها:</label>
+                        <label className="flex items-center gap-1 cursor-pointer text-slate-300 text-[11px]">
+                          <input
+                            type="checkbox"
+                            checked={form.style.card_values_bold !== false}
+                            onChange={(e) => handleStyleChange('card_values_bold', e.target.checked)}
+                            className="w-3.5 h-3.5 rounded text-blue-600 bg-slate-800 border-slate-700"
+                          />
+                          <span>بولد</span>
+                        </label>
+                      </div>
+                      <select
+                        value={form.style.card_values_size}
+                        onChange={(e) => handleStyleChange('card_values_size', e.target.value as any)}
                         className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs"
                       >
                         <option value="small">کوچک (۱۰ پیکسل)</option>
-                        <option value="normal">استاندارد (۱۱ پیکسل)</option>
-                        <option value="large">درشت (۱۲.۵ پیکسل)</option>
+                        <option value="normal">معمولی (۱۱ پیکسل)</option>
+                        <option value="large">بزرگ (۱۲.۵ پیکسل)</option>
                       </select>
                     </div>
 
-                    {/* Card Padding & Size */}
+                    {/* Card Padding */}
                     <div className="space-y-1 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
-                      <label className="text-slate-300 font-bold block">ابعاد و پدینگ کارت‌های مشخصات:</label>
+                      <label className="text-slate-300 font-bold block">پدینگ و فضای داخلی کارت‌ها:</label>
                       <select
                         value={form.style.card_padding}
                         onChange={(e) => handleStyleChange('card_padding', e.target.value as any)}
                         className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs"
                       >
                         <option value="compact">فشرده (کمترین فضا)</option>
-                        <option value="normal">متوسط (استاندارد)</option>
+                        <option value="normal">معمولی (استاندارد)</option>
                         <option value="spacious">جادار و باز</option>
                       </select>
                     </div>
 
-                    {/* Table Row Density & Padding */}
+                    {/* Table Row Density */}
                     <div className="space-y-1 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
-                      <label className="text-slate-300 font-bold block">تراکم و ارتفاع سطرهای جدول اقلام:</label>
+                      <label className="text-slate-300 font-bold block">فاصله بین ردیف‌های جدول (تراکم):</label>
                       <select
                         value={form.style.table_density}
                         onChange={(e) => handleStyleChange('table_density', e.target.value as any)}
                         className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs"
                       >
-                        <option value="compact">فشرده (برای جا شدن ردیف‌های بیشتر در یک صفحه)</option>
-                        <option value="normal">استاندارد</option>
-                        <option value="spacious">جادار و بافاصله</option>
-                      </select>
-                    </div>
-
-                    {/* Table Font Size */}
-                    <div className="space-y-1 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
-                      <label className="text-slate-300 font-bold block">اندازه فونت جدول اقلام:</label>
-                      <select
-                        value={form.style.table_font_size}
-                        onChange={(e) => handleStyleChange('table_font_size', e.target.value as any)}
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs"
-                      >
-                        <option value="small">ریز (۱۰ پیکسل)</option>
-                        <option value="normal">متوسط (۱۱ الی ۱۲ پیکسل)</option>
-                        <option value="large">درشت و خوانا (۱۳ پیکسل)</option>
-                      </select>
-                    </div>
-
-                    {/* Totals Font Size */}
-                    <div className="space-y-1 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
-                      <label className="text-slate-300 font-bold block">اندازه فونت جمع‌ها و پرداخت:</label>
-                      <select
-                        value={form.style.totals_font_size}
-                        onChange={(e) => handleStyleChange('totals_font_size', e.target.value as any)}
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs"
-                      >
-                        <option value="small">کوچک</option>
-                        <option value="normal">متوسط (استاندارد)</option>
-                        <option value="large">بزرگ و برجسته</option>
-                      </select>
-                    </div>
-
-                    {/* Terms Font Size */}
-                    <div className="space-y-1 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
-                      <label className="text-slate-300 font-bold block">اندازه فونت شرایط و توضیحات:</label>
-                      <select
-                        value={form.style.terms_font_size}
-                        onChange={(e) => handleStyleChange('terms_font_size', e.target.value as any)}
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs"
-                      >
-                        <option value="small">ریز (۹.۵ پیکسل)</option>
-                        <option value="normal">متوسط (۱۰.۵ پیکسل)</option>
-                        <option value="large">درشت (۱۲ پیکسل)</option>
-                      </select>
-                    </div>
-
-                    {/* Signatures Box Height */}
-                    <div className="space-y-1 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
-                      <label className="text-slate-300 font-bold block">ارتفاع کادرهای امضا و مهر:</label>
-                      <select
-                        value={form.style.signatures_height}
-                        onChange={(e) => handleStyleChange('signatures_height', e.target.value as any)}
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs"
-                      >
-                        <option value="small">کم‌ارتفاع (۴۸ پیکسل)</option>
-                        <option value="medium">متوسط (۶۴ پیکسل - استاندارد)</option>
-                        <option value="large">بلند (۹۶ پیکسل - فضای کافی برای مهر بزرگ)</option>
-                      </select>
-                    </div>
-
-                    {/* Border Thickness */}
-                    <div className="space-y-1 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
-                      <label className="text-slate-300 font-bold block">ضخامت خطوط و کادرها:</label>
-                      <select
-                        value={form.style.border_thickness}
-                        onChange={(e) => handleStyleChange('border_thickness', e.target.value as any)}
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs"
-                      >
-                        <option value="thin">نازک و ظریف (۱ پیکسل خاکستری)</option>
-                        <option value="medium">متوسط (۲ پیکسل ملایم)</option>
-                        <option value="thick">پررنگ و شاخص (۲ پیکسل تیره)</option>
-                      </select>
-                    </div>
-
-                    {/* Box Rounded Corners */}
-                    <div className="space-y-1 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
-                      <label className="text-slate-300 font-bold block">میزان گردی گوشه‌های کادرها:</label>
-                      <select
-                        value={form.style.box_rounded}
-                        onChange={(e) => handleStyleChange('box_rounded', e.target.value as any)}
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs"
-                      >
-                        <option value="none">گوشه‌های تیز (مستطیلی کلاسیک)</option>
-                        <option value="small">گردی کم (۴ پیکسل)</option>
-                        <option value="medium">گردی متوسط (۸ پیکسل - مدرن)</option>
-                        <option value="large">گردی زیاد (۱۶ پیکسل)</option>
+                        <option value="compact">فشرده (برای جا شدن ردیف‌های بیشتر)</option>
+                        <option value="normal">معمولی</option>
+                        <option value="spacious">باز و جادار</option>
                       </select>
                     </div>
                   </div>
@@ -1720,7 +1855,7 @@ export const InvoiceSettingsTab: React.FC = () => {
               )}
             </div>
 
-            {/* 8. Invoice Layout (چیدمان فاکتور) */}
+            {/* 8. Table Column Widths & Layout (عرض ستون‌ها و چیدمان فاکتور) */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-md">
               <button
                 type="button"
@@ -1728,9 +1863,9 @@ export const InvoiceSettingsTab: React.FC = () => {
                 className="w-full p-4 bg-slate-850 flex items-center justify-between text-right cursor-pointer hover:bg-slate-800/80 transition"
               >
                 <div className="flex items-center gap-2.5">
-                  <MoveVertical className="w-4 h-4 text-purple-400" />
+                  <Table className="w-4 h-4 text-cyan-400" />
                   <span className="font-bold text-sm text-slate-200">
-                    ۸. چیدمان و ترتیب بخش‌های فاکتور
+                    ۸. تنظیم عرض ستون‌های جدول اقلام و چیدمان بخش‌ها
                   </span>
                 </div>
                 <ChevronDown
@@ -1742,6 +1877,256 @@ export const InvoiceSettingsTab: React.FC = () => {
 
               {openSections.layout && (
                 <div className="p-4 space-y-4 border-t border-slate-800 bg-slate-900/50">
+                  {/* Column Widths Subsection */}
+                  <div className="p-3 bg-slate-950/70 rounded-xl border border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-xs font-bold text-cyan-300">
+                          تنظیم دقیق عرض ستون‌های فعال جدول اقلام (درصد از ۱۰۰٪)
+                        </h4>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          می‌توانید با اسلایدرهای زیر یا با کشیدن دستگیره بین سربرگ‌ها در پیش‌نمایش، عرض ستون‌ها را تغییر دهید.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setForm((prev) => ({
+                            ...prev,
+                            layout: {
+                              ...prev.layout,
+                              column_widths: { ...DEFAULT_COLUMN_WIDTHS },
+                            },
+                          }));
+                          showToast('عرض ستون‌های جدول به پیش‌فرض بازگردانده شد.', 'info');
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs flex items-center gap-1 cursor-pointer transition shrink-0"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>بازگشت به پیش‌فرض عرض‌ها</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2">
+                      {form.show.col_row_index && (
+                        <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 space-y-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-slate-300">ستون ردیف (#):</span>
+                            <span className="num-fa font-bold text-cyan-400">
+                              {(form.layout.column_widths?.row_index ?? DEFAULT_COLUMN_WIDTHS.row_index)}٪
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min={6}
+                            max={30}
+                            value={form.layout.column_widths?.row_index ?? DEFAULT_COLUMN_WIDTHS.row_index}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setForm((prev) => ({
+                                ...prev,
+                                layout: {
+                                  ...prev.layout,
+                                  column_widths: {
+                                    ...(prev.layout.column_widths || DEFAULT_COLUMN_WIDTHS),
+                                    row_index: val,
+                                  },
+                                },
+                              }));
+                            }}
+                            className="w-full accent-cyan-500 cursor-pointer"
+                          />
+                        </div>
+                      )}
+
+                      {form.show.col_product_name && (
+                        <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 space-y-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-slate-300">شرح کالا / خدمات:</span>
+                            <span className="num-fa font-bold text-cyan-400">
+                              {(form.layout.column_widths?.product_name ?? DEFAULT_COLUMN_WIDTHS.product_name)}٪
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min={15}
+                            max={60}
+                            value={form.layout.column_widths?.product_name ?? DEFAULT_COLUMN_WIDTHS.product_name}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setForm((prev) => ({
+                                ...prev,
+                                layout: {
+                                  ...prev.layout,
+                                  column_widths: {
+                                    ...(prev.layout.column_widths || DEFAULT_COLUMN_WIDTHS),
+                                    product_name: val,
+                                  },
+                                },
+                              }));
+                            }}
+                            className="w-full accent-cyan-500 cursor-pointer"
+                          />
+                        </div>
+                      )}
+
+                      {form.show.col_items_per_package && (
+                        <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 space-y-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-slate-300">تعداد در کارتن:</span>
+                            <span className="num-fa font-bold text-cyan-400">
+                              {(form.layout.column_widths?.items_per_package ?? DEFAULT_COLUMN_WIDTHS.items_per_package)}٪
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min={8}
+                            max={35}
+                            value={form.layout.column_widths?.items_per_package ?? DEFAULT_COLUMN_WIDTHS.items_per_package}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setForm((prev) => ({
+                                ...prev,
+                                layout: {
+                                  ...prev.layout,
+                                  column_widths: {
+                                    ...(prev.layout.column_widths || DEFAULT_COLUMN_WIDTHS),
+                                    items_per_package: val,
+                                  },
+                                },
+                              }));
+                            }}
+                            className="w-full accent-cyan-500 cursor-pointer"
+                          />
+                        </div>
+                      )}
+
+                      {form.show.col_quantity_unit && (
+                        <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 space-y-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-slate-300">تعداد / واحد:</span>
+                            <span className="num-fa font-bold text-cyan-400">
+                              {(form.layout.column_widths?.quantity_unit ?? DEFAULT_COLUMN_WIDTHS.quantity_unit)}٪
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min={8}
+                            max={35}
+                            value={form.layout.column_widths?.quantity_unit ?? DEFAULT_COLUMN_WIDTHS.quantity_unit}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setForm((prev) => ({
+                                ...prev,
+                                layout: {
+                                  ...prev.layout,
+                                  column_widths: {
+                                    ...(prev.layout.column_widths || DEFAULT_COLUMN_WIDTHS),
+                                    quantity_unit: val,
+                                  },
+                                },
+                              }));
+                            }}
+                            className="w-full accent-cyan-500 cursor-pointer"
+                          />
+                        </div>
+                      )}
+
+                      {form.show.col_unit_price && (
+                        <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 space-y-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-slate-300">فی (قیمت واحد):</span>
+                            <span className="num-fa font-bold text-cyan-400">
+                              {(form.layout.column_widths?.unit_price ?? DEFAULT_COLUMN_WIDTHS.unit_price)}٪
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min={8}
+                            max={35}
+                            value={form.layout.column_widths?.unit_price ?? DEFAULT_COLUMN_WIDTHS.unit_price}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setForm((prev) => ({
+                                ...prev,
+                                layout: {
+                                  ...prev.layout,
+                                  column_widths: {
+                                    ...(prev.layout.column_widths || DEFAULT_COLUMN_WIDTHS),
+                                    unit_price: val,
+                                  },
+                                },
+                              }));
+                            }}
+                            className="w-full accent-cyan-500 cursor-pointer"
+                          />
+                        </div>
+                      )}
+
+                      {form.show.col_discount_percent && (
+                        <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 space-y-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-slate-300">درصد تخفیف (٪):</span>
+                            <span className="num-fa font-bold text-cyan-400">
+                              {(form.layout.column_widths?.discount_percent ?? DEFAULT_COLUMN_WIDTHS.discount_percent)}٪
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min={6}
+                            max={30}
+                            value={form.layout.column_widths?.discount_percent ?? DEFAULT_COLUMN_WIDTHS.discount_percent}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setForm((prev) => ({
+                                ...prev,
+                                layout: {
+                                  ...prev.layout,
+                                  column_widths: {
+                                    ...(prev.layout.column_widths || DEFAULT_COLUMN_WIDTHS),
+                                    discount_percent: val,
+                                  },
+                                },
+                              }));
+                            }}
+                            className="w-full accent-cyan-500 cursor-pointer"
+                          />
+                        </div>
+                      )}
+
+                      {form.show.col_total_price && (
+                        <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 space-y-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-slate-300">مبلغ کل ردیف:</span>
+                            <span className="num-fa font-bold text-cyan-400">
+                              {(form.layout.column_widths?.total_price ?? DEFAULT_COLUMN_WIDTHS.total_price)}٪
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min={10}
+                            max={40}
+                            value={form.layout.column_widths?.total_price ?? DEFAULT_COLUMN_WIDTHS.total_price}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setForm((prev) => ({
+                                ...prev,
+                                layout: {
+                                  ...prev.layout,
+                                  column_widths: {
+                                    ...(prev.layout.column_widths || DEFAULT_COLUMN_WIDTHS),
+                                    total_price: val,
+                                  },
+                                },
+                              }));
+                            }}
+                            className="w-full accent-cyan-500 cursor-pointer"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   {/* Top layout options */}
                   <div className="grid grid-cols-2 gap-3 p-3 bg-slate-950/60 rounded-xl border border-slate-800 text-xs">
                     <div className="space-y-1">
@@ -2039,17 +2424,6 @@ export const InvoiceSettingsTab: React.FC = () => {
               <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  onClick={() => setPreviewRowCount(3)}
-                  className={`px-2 py-0.5 rounded transition cursor-pointer ${
-                    previewRowCount === 3
-                      ? 'bg-blue-600 text-white font-bold'
-                      : 'bg-slate-800 text-slate-400'
-                  }`}
-                >
-                  ۳ قلم
-                </button>
-                <button
-                  type="button"
                   onClick={() => setPreviewRowCount(6)}
                   className={`px-2 py-0.5 rounded transition cursor-pointer ${
                     previewRowCount === 6
@@ -2057,7 +2431,29 @@ export const InvoiceSettingsTab: React.FC = () => {
                       : 'bg-slate-800 text-slate-400'
                   }`}
                 >
-                  ۶ قلم (۱ صفحه)
+                  ۶ قلم
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewRowCount(11)}
+                  className={`px-2 py-0.5 rounded transition cursor-pointer ${
+                    previewRowCount === 11
+                      ? 'bg-blue-600 text-white font-bold'
+                      : 'bg-slate-800 text-slate-400'
+                  }`}
+                >
+                  ۱۱ قلم
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewRowCount(19)}
+                  className={`px-2 py-0.5 rounded transition cursor-pointer ${
+                    previewRowCount === 19
+                      ? 'bg-purple-600 text-white font-bold'
+                      : 'bg-slate-800 text-slate-400'
+                  }`}
+                >
+                  ۱۹ قلم
                 </button>
                 <button
                   type="button"
@@ -2068,7 +2464,7 @@ export const InvoiceSettingsTab: React.FC = () => {
                       : 'bg-slate-800 text-slate-400'
                   }`}
                 >
-                  ۳۰ قلم (چندصفحه‌ای)
+                  ۳۰ قلم
                 </button>
               </div>
             </div>
@@ -2077,9 +2473,11 @@ export const InvoiceSettingsTab: React.FC = () => {
             <div className="mt-2 max-h-[75vh] overflow-y-auto rounded-xl p-2 bg-slate-950/70 border border-slate-800">
               <InvoiceDocument
                 order={mockOrder as any}
-                settings={form}
+                settings={memoizedPreviewSettings}
                 supermarket={mockSupermarket as any}
                 visitor={previewSaleType === 'visitor' ? (mockVisitor as any) : undefined}
+                interactiveColumns={true}
+                onColumnWidthsChange={handleColumnWidthsBatchChange}
                 className="transform scale-95 origin-top"
               />
             </div>

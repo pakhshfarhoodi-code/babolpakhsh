@@ -328,10 +328,34 @@ export interface InvoiceShowSettings {
   page_number: boolean;
 }
 
+export type TableColumnKey =
+  | 'row_index'
+  | 'product_name'
+  | 'items_per_package'
+  | 'quantity_unit'
+  | 'unit_price'
+  | 'discount_percent'
+  | 'total_price';
+
+export const DEFAULT_COLUMN_WIDTHS: Record<TableColumnKey, number> = {
+  row_index: 6,
+  product_name: 34,
+  items_per_package: 12,
+  quantity_unit: 12,
+  unit_price: 13,
+  discount_percent: 8,
+  total_price: 15,
+};
+
+export type FontSizeOption = 'small' | 'normal' | 'large';
+export type BorderStrength = 'none' | 'light' | 'normal' | 'bold';
+export type SpacingOption = 'compact' | 'normal' | 'spacious';
+
 export interface InvoiceLayoutSettings {
   section_order: InvoiceSectionKey[];
   section_widths: Record<InvoiceSectionKey, 'full' | 'half'>;
   section_alignments: Record<InvoiceSectionKey, 'right' | 'center' | 'left'>;
+  column_widths?: Record<TableColumnKey, number>; // درصد عرض هر ستون جدول
   logo_position: 'right' | 'center' | 'left';
   order_info_position: 'left' | 'right' | 'center';
   stick_footer_to_bottom: boolean;
@@ -340,18 +364,48 @@ export interface InvoiceLayoutSettings {
 }
 
 export interface InvoiceStyleSettings {
-  base_font_size: 'small' | 'normal' | 'large'; // مقیاس فونت کلی
-  header_title_size: 'small' | 'medium' | 'large'; // اندازه عنوان فاکتور
-  brand_title_size: 'small' | 'medium' | 'large'; // اندازه نام برند
-  cards_font_size: 'small' | 'normal' | 'large'; // اندازه فونت و مقادیر کارتهای فروشنده و خریدار
-  card_padding: 'compact' | 'normal' | 'spacious'; // اندازه و پدینگ کارتها و باکس‌ها
-  table_density: 'compact' | 'normal' | 'spacious'; // تراکم و پدینگ سطرهای جدول
-  table_font_size: 'small' | 'normal' | 'large'; // اندازه فونت جدول اقلام
-  totals_font_size: 'small' | 'normal' | 'large'; // اندازه فونت جمع‌ها و پرداخت
-  terms_font_size: 'small' | 'normal' | 'large'; // اندازه فونت شرایط و توضیحات
-  signatures_height: 'small' | 'medium' | 'large'; // ارتفاع کادرهای امضا
-  border_thickness: 'thin' | 'medium' | 'thick'; // ضخامت خطوط و کادرها
-  box_rounded: 'none' | 'small' | 'medium' | 'large'; // گردی گوشه باکس‌ها
+  // Global & Spacing
+  base_font_size: FontSizeOption; // مقیاس کلی فونت
+  section_spacing: SpacingOption; // فاصله بین بخش‌ها (فشرده / معمولی / باز)
+  
+  // Header
+  header_title_size: FontSizeOption;
+  header_title_bold: boolean;
+  brand_title_size: FontSizeOption;
+  brand_title_bold: boolean;
+  
+  // Cards (فروشنده و خریدار)
+  card_padding: SpacingOption;
+  card_labels_size: FontSizeOption; // اندازه فونت برچسب‌های کارت‌ها
+  card_labels_bold: boolean;
+  card_values_size: FontSizeOption; // اندازه فونت مقادیر کارت‌ها
+  card_values_bold: boolean;
+  cards_font_size?: FontSizeOption; // legacy
+  
+  // Table
+  table_font_size: FontSizeOption;
+  table_header_bold: boolean;
+  table_density: SpacingOption; // فاصله بین ردیف‌های جدول (فشرده / معمولی / باز)
+  
+  // Totals & Payment
+  totals_font_size: FontSizeOption;
+  totals_bold: boolean;
+  payment_font_size: FontSizeOption;
+  payment_bold: boolean;
+  
+  // Terms & Footer
+  terms_font_size: FontSizeOption;
+  terms_bold: boolean;
+  footer_font_size: FontSizeOption;
+  signatures_height: 'small' | 'medium' | 'large';
+  
+  // Borders & Corners
+  card_border: BorderStrength; // کادر کارت‌ها: بدون خط / کمرنگ / معمولی / پررنگ
+  table_border: BorderStrength; // خطوط جدول: بدون خط / کمرنگ / معمولی / پررنگ
+  footer_border: BorderStrength; // خط جداکننده پاورقی
+  border_thickness?: 'thin' | 'medium' | 'thick'; // legacy
+  rounded_corners: boolean; // گوشه گرد روشن/خاموش
+  box_rounded?: 'none' | 'small' | 'medium' | 'large'; // legacy
 }
 
 export interface InvoiceSettings {
@@ -384,7 +438,10 @@ export interface InvoiceSettings {
   show_signature_boxes?: boolean;
   show_page_number?: boolean;
 
-  // F. Amount and Payment
+  // F. Amount, Currency and Payment
+  currency_label: string; // 'ریال' | 'تومان' | متن دلخواه
+  divide_price_by_10: boolean; // نمایش مبالغ به تومان با تقسیم بر ۱۰
+  default_unit_name: string; // پیش‌فرض واحد کالا (مثلا 'عدد')
   has_vat: boolean;
   vat_percent: number;
   has_overall_discount?: boolean;
@@ -498,6 +555,7 @@ export const DEFAULT_INVOICE_LAYOUT_SETTINGS: InvoiceLayoutSettings = {
     terms: 'right',
     signatures: 'right',
   },
+  column_widths: { ...DEFAULT_COLUMN_WIDTHS },
   logo_position: 'right',
   order_info_position: 'left',
   stick_footer_to_bottom: true,
@@ -507,16 +565,33 @@ export const DEFAULT_INVOICE_LAYOUT_SETTINGS: InvoiceLayoutSettings = {
 
 export const DEFAULT_INVOICE_STYLE_SETTINGS: InvoiceStyleSettings = {
   base_font_size: 'normal',
-  header_title_size: 'medium',
-  brand_title_size: 'medium',
-  cards_font_size: 'normal',
+  section_spacing: 'normal',
+  header_title_size: 'normal',
+  header_title_bold: true,
+  brand_title_size: 'normal',
+  brand_title_bold: true,
   card_padding: 'normal',
-  table_density: 'normal',
+  card_labels_size: 'normal',
+  card_labels_bold: false,
+  card_values_size: 'normal',
+  card_values_bold: true,
+  cards_font_size: 'normal',
   table_font_size: 'normal',
+  table_header_bold: true,
+  table_density: 'normal',
   totals_font_size: 'normal',
+  totals_bold: true,
+  payment_font_size: 'normal',
+  payment_bold: false,
   terms_font_size: 'normal',
+  terms_bold: false,
+  footer_font_size: 'normal',
   signatures_height: 'medium',
+  card_border: 'normal',
+  table_border: 'normal',
+  footer_border: 'normal',
   border_thickness: 'thin',
+  rounded_corners: true,
   box_rounded: 'medium',
 };
 
@@ -543,6 +618,9 @@ export const DEFAULT_INVOICE_SETTINGS: InvoiceSettings = {
   show_amount_in_words: true,
   show_signature_boxes: true,
   show_page_number: true,
+  currency_label: 'ریال',
+  divide_price_by_10: false,
+  default_unit_name: 'عدد',
   has_vat: false,
   vat_percent: 10,
   has_overall_discount: false,
@@ -592,6 +670,10 @@ export function getInvoiceSettings(raw?: unknown): InvoiceSettings {
       ...DEFAULT_INVOICE_LAYOUT_SETTINGS.section_alignments,
       ...(rawLayout.section_alignments || {}),
     },
+    column_widths: {
+      ...DEFAULT_COLUMN_WIDTHS,
+      ...(rawLayout.column_widths || {}),
+    },
     section_order: Array.isArray(rawLayout.section_order) && rawLayout.section_order.length > 0
       ? rawLayout.section_order
       : DEFAULT_INVOICE_LAYOUT_SETTINGS.section_order,
@@ -605,6 +687,9 @@ export function getInvoiceSettings(raw?: unknown): InvoiceSettings {
   return {
     ...DEFAULT_INVOICE_SETTINGS,
     ...r,
+    currency_label: r.currency_label || 'ریال',
+    divide_price_by_10: r.divide_price_by_10 ?? false,
+    default_unit_name: r.default_unit_name || 'عدد',
     show,
     layout,
     style,

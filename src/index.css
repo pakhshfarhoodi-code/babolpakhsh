@@ -377,6 +377,8 @@ html.theme-light .admin-edit-modal h3,
   /* Force visibility for invoice content */
   #printable-invoice,
   #printable-invoice *,
+  .print-root,
+  .print-root *,
   .invoice-document-root,
   .invoice-document-root *,
   .invoice-page-sheet,
@@ -384,9 +386,11 @@ html.theme-light .admin-edit-modal h3,
   .invoice-paper,
   .invoice-paper * {
     visibility: visible !important;
+    opacity: 1 !important;
   }
 
   #printable-invoice,
+  .print-root,
   .invoice-document-root {
     display: block !important;
     width: 100% !important;
@@ -401,10 +405,14 @@ html.theme-light .admin-edit-modal h3,
 
   .invoice-page-sheet {
     box-sizing: border-box !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    margin: 0 !important;
-    padding: 8mm 10mm !important;
+    width: 210mm !important;
+    min-width: 210mm !important;
+    max-width: 210mm !important;
+    height: 297mm !important;
+    min-height: 297mm !important;
+    max-height: 297mm !important;
+    margin: 0 auto !important;
+    padding: 10mm 12mm 14mm 12mm !important;
     box-shadow: none !important;
     border: none !important;
     border-radius: 0 !important;
@@ -412,7 +420,11 @@ html.theme-light .admin-edit-modal h3,
     break-after: page !important;
     background: #ffffff !important;
     color: #0f172a !important;
-    overflow: visible !important;
+    overflow: hidden !important;
+    position: relative !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
   }
 
   .invoice-page-sheet:last-of-type {

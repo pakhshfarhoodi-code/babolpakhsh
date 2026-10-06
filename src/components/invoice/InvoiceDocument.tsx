@@ -14,6 +14,14 @@ import {
 } from '../../types';
 import { numberToPersianWords } from '../../utils/numberToPersianWords';
 import { formatOrderDate } from '../../utils/dateUtils';
+import {
+  getPackSize,
+  isPackaged,
+  getBaseUnit,
+  getUnitColumnText,
+  getUnitPriceFromOrderItem,
+  computeLine,
+} from '../../utils/orderLine';
 import { Building2, Store } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
@@ -258,17 +266,42 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
 
   // originalSubtotal is the sum of raw item totals before discount
   const originalSubtotal = rawItems.reduce((sum, item) => {
-    return sum + (Number(item.price) || 0) * (Number(item.quantity) || 0);
+    const product = products.find((p) => p.id === item.product_id);
+    const rawItemsPerPkg =
+      item.items_per_package ||
+      (item as any).product?.items_per_package ||
+      (product as any)?.items_per_package ||
+      '';
+    const pack = getPackSize(rawItemsPerPkg);
+    const unitPrice = getUnitPriceFromOrderItem({ price: item.price, items_per_package: pack });
+    const { total } = computeLine({
+      quantity: Number(item.quantity) || 0,
+      pack,
+      unitPrice,
+      discountPercent: 0,
+    });
+    return sum + total;
   }, 0);
 
   const subtotal = originalSubtotal > 0 ? originalSubtotal : (order.total_amount || 0);
 
-  // Calculate discounted row totals and sum them up
+  // Calculate discounted row totals and sum them up with computeLine
   const discountedSubtotal = rawItems.reduce((sum, item) => {
-    const qty = Number(item.quantity) || 0;
-    const price = Number(item.price) || 0;
-    const discountedPrice = Math.round(price * (100 - totalDiscountPercent) / 100);
-    return sum + (discountedPrice * qty);
+    const product = products.find((p) => p.id === item.product_id);
+    const rawItemsPerPkg =
+      item.items_per_package ||
+      (item as any).product?.items_per_package ||
+      (product as any)?.items_per_package ||
+      '';
+    const pack = getPackSize(rawItemsPerPkg);
+    const unitPrice = getUnitPriceFromOrderItem({ price: item.price, items_per_package: pack });
+    const { total } = computeLine({
+      quantity: Number(item.quantity) || 0,
+      pack,
+      unitPrice,
+      discountPercent: totalDiscountPercent,
+    });
+    return sum + total;
   }, 0);
 
   // Discount Amounts for Summary
@@ -492,9 +525,9 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
     const defaultLabelMap: Record<TableColumnKey, string> = {
       row_index: '#',
       product_name: 'شرح کالا / خدمات',
-      items_per_package: 'تعداد در کارتن',
-      quantity_unit: 'تعداد / واحد',
-      unit_price: totalDiscountPercent > 0 ? `قیمت اصلی (${currencyLabel})` : `فی (${currencyLabel})`,
+      quantity_unit: 'تعداد',
+      items_per_package: 'واحد (تعداد در کارتن)',
+      unit_price: totalDiscountPercent > 0 ? `قیمت اصلی (${currencyLabel})` : `قیمت واحد (${currencyLabel})`,
       discount_percent: totalDiscountPercent > 0 ? `قیمت با تخفیف (${currencyLabel})` : 'تخفیف (٪)',
       total_price: `مبلغ کل (${currencyLabel})`,
     };
@@ -519,6 +552,8 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
       // Override label with dynamic label map if it is empty, or matching previous default labels
       if (!displayLabel || 
           displayLabel === 'فی' || 
+          displayLabel === 'تعداد / واحد' || 
+          displayLabel === 'تعداد در کارتن' || 
           displayLabel === 'تخفیف' || 
           displayLabel === 'تخفیف (٪)' || 
           displayLabel === `فی (${currencyLabel})` || 
@@ -778,67 +813,117 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
   };
 
   const renderItemRow = (item: typeof rawItems[0], globalIndex: number) => {
-    const qty = Number(item.quantity) || 0;
-    const unitPrice = Number(item.price) || 0;
-    const discountedUnitPrice = Math.round(unitPrice * (100 - totalDiscountPercent) / 100);
-    const lineTotal = discountedUnitPrice * qty;
-
     // Lookup missing items_per_package and unit from AppContext products
     const product = products.find((p) => p.id === item.product_id);
     const rawItemsPerPkg =
       item.items_per_package ||
       (item as any).product?.items_per_package ||
       (product as any)?.items_per_package ||
-      (product as any)?.unit_count_per_carton ||
       '';
 
-    const itemsPerPkgDisplay =
-      rawItemsPerPkg && Number(rawItemsPerPkg) > 0
-        ? Number(rawItemsPerPkg).toLocaleString('fa-IR')
-        : '—';
+    const pack = getPackSize(rawItemsPerPkg);
+    const packaged = isPackaged(pack);
+    const rawUnit = (item as any).unit || product?.unit || settings.default_unit_name || 'عدد';
+    const baseUnit = getBaseUnit(rawUnit, pack);
 
-    const unitName = (item as any).unit || product?.unit || settings.default_unit_name || 'عدد';
+    const qty = Number(item.quantity) || 0;
+    const unitPrice = getUnitPriceFromOrderItem({ price: item.price, items_per_package: pack });
+    const { discountedUnitPrice, total: lineTotal } = computeLine({
+      quantity: qty,
+      pack,
+      unitPrice,
+      discountPercent: totalDiscountPercent,
+    });
+
+    const isLastCol = (idx: number) => idx === activeColumns.length - 1;
 
     return (
       <tr key={item.product_id || globalIndex} className="hover:bg-slate-50/50 break-inside-avoid">
-        {show.col_row_index && (
-          <td className={`${tableRowPaddingClass} text-center num-fa text-slate-600 font-medium border-l border-slate-200`}>
-            {globalIndex}
-          </td>
-        )}
-        {show.col_product_name && (
-          <td className={`${tableRowPaddingClass} font-bold text-slate-900 border-l border-slate-200 break-words`}>
-            {(item as any).product_name || item.name}
-          </td>
-        )}
-        {show.col_items_per_package && (
-          <td className={`${tableRowPaddingClass} text-center num-fa text-slate-700 border-l border-slate-200 font-medium`}>
-            {itemsPerPkgDisplay}
-          </td>
-        )}
-        {show.col_quantity_unit && (
-          <td className={`${tableRowPaddingClass} text-center border-l border-slate-200`}>
-            <span className="num-fa font-bold text-slate-800">{qty.toLocaleString('fa-IR')}</span>
-            {unitName && (
-              <span className="text-[10px] text-slate-500 mr-1">{unitName}</span>
-            )}
-          </td>
-        )}
-        {show.col_unit_price && (
-          <td className={`${tableRowPaddingClass} text-center num-fa font-bold text-slate-700 border-l border-slate-200`}>
-            {formatMoney(unitPrice)}
-          </td>
-        )}
-        {(show.col_discount_percent || totalDiscountPercent > 0) && (
-          <td className={`${tableRowPaddingClass} text-center num-fa font-bold text-slate-700 border-l border-slate-200`}>
-            {totalDiscountPercent > 0 ? formatMoney(discountedUnitPrice) : '۰٪'}
-          </td>
-        )}
-        {show.col_total_price && (
-          <td className={`${tableRowPaddingClass} text-center num-fa font-black text-slate-900`}>
-            {formatMoney(Math.round(lineTotal))}
-          </td>
-        )}
+        {activeColumns.map((col, colIdx) => {
+          const borderClass = isLastCol(colIdx) ? '' : 'border-l border-slate-200';
+
+          switch (col.key) {
+            case 'row_index':
+              return (
+                <td
+                  key={col.key}
+                  className={`${tableRowPaddingClass} text-center num-fa text-slate-600 font-medium ${borderClass}`}
+                >
+                  {globalIndex}
+                </td>
+              );
+
+            case 'product_name':
+              return (
+                <td
+                  key={col.key}
+                  className={`${tableRowPaddingClass} font-bold text-slate-900 ${borderClass} break-words text-right`}
+                >
+                  {(item as any).product_name || item.name}
+                </td>
+              );
+
+            case 'quantity_unit':
+              return (
+                <td
+                  key={col.key}
+                  className={`${tableRowPaddingClass} text-center ${borderClass}`}
+                >
+                  <span className="num-fa font-bold text-slate-800">
+                    {qty.toLocaleString('fa-IR')}
+                  </span>
+                  {packaged && (
+                    <span className="text-[10px] text-slate-500 mr-1 font-normal">کارتن</span>
+                  )}
+                </td>
+              );
+
+            case 'items_per_package':
+              return (
+                <td
+                  key={col.key}
+                  className={`${tableRowPaddingClass} text-center num-fa text-slate-700 ${borderClass} font-medium`}
+                >
+                  {getUnitColumnText(pack, baseUnit)}
+                </td>
+              );
+
+            case 'unit_price':
+              return (
+                <td
+                  key={col.key}
+                  className={`${tableRowPaddingClass} text-center num-fa font-bold text-slate-700 ${borderClass}`}
+                >
+                  {formatMoney(unitPrice)}
+                </td>
+              );
+
+            case 'discount_percent':
+              return (
+                <td
+                  key={col.key}
+                  className={`${tableRowPaddingClass} text-center num-fa font-bold text-slate-700 ${borderClass}`}
+                >
+                  {totalDiscountPercent > 0
+                    ? formatMoney(discountedUnitPrice)
+                    : '۰٪'}
+                </td>
+              );
+
+            case 'total_price':
+              return (
+                <td
+                  key={col.key}
+                  className={`${tableRowPaddingClass} text-center num-fa font-black text-slate-900 ${borderClass}`}
+                >
+                  {formatMoney(lineTotal)}
+                </td>
+              );
+
+            default:
+              return null;
+          }
+        })}
       </tr>
     );
   };

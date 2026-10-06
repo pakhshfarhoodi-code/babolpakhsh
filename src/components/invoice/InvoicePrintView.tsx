@@ -5,6 +5,13 @@ import { formatPrice } from '../visitor/helpers';
 import farhoodiLogo from '../../assets/images/farhoodi_b2b_logo.webp';
 import { useApp } from '../../context/AppContext';
 import {
+  getPackSize,
+  getBaseUnit,
+  getUnitColumnText,
+  isPackaged,
+  computeLine,
+} from '../../utils/orderLine';
+import {
   FileText,
   Clock,
   CheckCircle2,
@@ -49,7 +56,8 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
     {
       productId: string;
       productName: string;
-      unit: string;
+      pack: number;
+      baseUnit: string;
       totalQuantity: number;
       visitorPrice: number;
       totalAmount: number;
@@ -60,18 +68,20 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
   if (bill.items) {
     for (const it of bill.items) {
       const prod = productMap.get(it.product_id);
-      const packCount = it.items_per_package || prod?.items_per_package;
-      const unit = packCount && packCount > 1
-        ? `${it.unit || prod?.unit || 'کارتن'} (${packCount} عددی)`
-        : (it.unit || prod?.unit || 'بسته');
-      const vPrice = Number(
-        it.visitor_price ?? (prod?.visitor_price ? Number(prod.visitor_price) * (packCount || 1) : 0)
-      );
+      const pack = getPackSize(it.items_per_package || prod?.items_per_package);
+      const baseUnit = getBaseUnit(it.unit || prod?.unit, pack);
+      const vPrice = Number(prod?.visitor_price ?? (it.visitor_price ?? 0));
+      const lineCalc = computeLine({
+        quantity: it.quantity,
+        pack,
+        unitPrice: vPrice,
+        discountPercent: 0,
+      });
 
       const existing = aggregatedItemsMap.get(it.product_id);
       if (existing) {
         existing.totalQuantity = Math.round((existing.totalQuantity + it.quantity) * 1000) / 1000;
-        existing.totalAmount += it.quantity * existing.visitorPrice;
+        existing.totalAmount += lineCalc.total;
         if (it.customer_label || it.line_note) {
           existing.notes.push([it.customer_label, it.line_note].filter(Boolean).join(' - '));
         }
@@ -79,10 +89,11 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
         aggregatedItemsMap.set(it.product_id, {
           productId: it.product_id,
           productName: it.product_name,
-          unit,
+          pack,
+          baseUnit,
           totalQuantity: it.quantity,
           visitorPrice: vPrice,
-          totalAmount: it.quantity * vPrice,
+          totalAmount: lineCalc.total,
           notes: it.customer_label || it.line_note ? [[it.customer_label, it.line_note].filter(Boolean).join(' - ')] : [],
         });
       }
@@ -271,9 +282,9 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
                 <tr className="bg-slate-100 text-slate-900 border-b border-slate-300 font-black">
                   <th className="py-2.5 px-3 w-10 text-center">ردیف</th>
                   <th className="py-2.5 px-3">شرح کالای منجمد</th>
-                  <th className="py-2.5 px-3 w-20 text-center">واحد</th>
-                  <th className="py-2.5 px-3 w-20 text-center">تعداد کل</th>
-                  <th className="py-2.5 px-3 w-32 text-left">قیمت خرید ویزیتور ({currencyLabel})</th>
+                  <th className="py-2.5 px-3 w-24 text-center">تعداد</th>
+                  <th className="py-2.5 px-3 w-32 text-center">واحد (تعداد در کارتن)</th>
+                  <th className="py-2.5 px-3 w-32 text-left">قیمت واحد ({currencyLabel})</th>
                   <th className="py-2.5 px-3 w-36 text-left">مبلغ کل ({currencyLabel})</th>
                 </tr>
               </thead>
@@ -289,9 +300,14 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
                         </div>
                       )}
                     </td>
-                    <td className="py-2.5 px-3 text-center text-slate-600">{item.unit}</td>
-                    <td className="py-2.5 px-3 text-center font-black text-slate-900 font-mono text-sm">
-                      {item.totalQuantity.toLocaleString('fa-IR')}
+                    <td className="py-2.5 px-3 text-center font-bold text-slate-900">
+                      <span className="font-mono text-sm">{item.totalQuantity.toLocaleString('fa-IR')}</span>
+                      {isPackaged(item.pack) && (
+                        <span className="text-[10px] text-slate-500 font-normal mr-1">کارتن</span>
+                      )}
+                    </td>
+                    <td className="py-2.5 px-3 text-center text-slate-600 font-medium">
+                      {getUnitColumnText(item.pack, item.baseUnit)}
                     </td>
                     <td className="py-2.5 px-3 text-left font-mono text-slate-800">
                       {formatPrice(item.visitorPrice)}
@@ -304,13 +320,13 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
               </tbody>
               <tfoot>
                 <tr className="bg-slate-100 font-black border-t-2 border-slate-400 text-slate-900">
-                  <td colSpan={3} className="py-3 px-3 text-right">
+                  <td colSpan={2} className="py-3 px-3 text-right">
                     مجموع کل اقلام فاکتور ویزیتور:
                   </td>
                   <td className="py-3 px-3 text-center text-blue-900 font-black font-mono text-sm">
                     {totalUnits.toLocaleString('fa-IR')}
                   </td>
-                  <td className="py-3 px-3"></td>
+                  <td colSpan={2} className="py-3 px-3"></td>
                   <td className="py-3 px-3 text-left font-mono font-black text-sm text-slate-900">
                     {formatPrice(grandTotal)} {currencyLabel}
                   </td>
@@ -410,8 +426,8 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
                       <tr className="bg-slate-50 text-slate-700 border-b border-slate-200 font-semibold text-[11px]">
                         <th className="py-2 px-3 w-8 text-center">ردیف</th>
                         <th className="py-2 px-3">نام کالای منجمد</th>
-                        <th className="py-2 px-3 w-20 text-center">واحد</th>
                         <th className="py-2 px-3 w-24 text-center">تعداد تحویلی</th>
+                        <th className="py-2 px-3 w-32 text-center">واحد (تعداد در کارتن)</th>
                         <th className="py-2 px-3">توضیحات و هماهنگی</th>
                         <th className="py-2 px-3 w-32 text-center">امضای تحویل‌گیرنده</th>
                       </tr>
@@ -419,18 +435,21 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
                     <tbody className="divide-y divide-slate-200">
                       {group.items.map((it, idx) => {
                         const prod = productMap.get(it.product_id);
-                        const packCount = it.items_per_package || prod?.items_per_package;
-                        const unit = packCount && packCount > 1
-                          ? `${it.unit || prod?.unit || 'کارتن'} (${packCount} عددی)`
-                          : (it.unit || prod?.unit || 'بسته');
+                        const pack = getPackSize(it.items_per_package || prod?.items_per_package);
+                        const baseUnit = getBaseUnit(it.unit || prod?.unit, pack);
 
                         return (
                           <tr key={it.id || idx} className="hover:bg-slate-50/50">
                             <td className="py-2 px-3 text-center text-slate-500 font-mono">{idx + 1}</td>
                             <td className="py-2 px-3 font-bold text-slate-900">{it.product_name}</td>
-                            <td className="py-2 px-3 text-center text-slate-600">{unit}</td>
-                            <td className="py-2 px-3 text-center font-black font-mono text-slate-900">
-                              {Number(it.quantity).toLocaleString('fa-IR')}
+                            <td className="py-2 px-3 text-center font-bold text-slate-900">
+                              <span className="font-mono">{Number(it.quantity).toLocaleString('fa-IR')}</span>
+                              {isPackaged(pack) && (
+                                <span className="text-[10px] text-slate-500 font-normal mr-1">کارتن</span>
+                              )}
+                            </td>
+                            <td className="py-2 px-3 text-center text-slate-600 font-medium">
+                              {getUnitColumnText(pack, baseUnit)}
                             </td>
                             <td className="py-2 px-3 text-slate-600 text-[11px]">
                               {it.line_note || '-'}

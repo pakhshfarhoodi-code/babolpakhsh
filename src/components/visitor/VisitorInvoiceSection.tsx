@@ -5,6 +5,14 @@ import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { formatOrderDate, formatPrice } from './helpers';
 import { VisitorInvoicePrintModal } from './VisitorInvoicePrintModal';
 import {
+  getPackSize,
+  getBaseUnit,
+  getUnitColumnText,
+  getSaleUnitLabel,
+  isPackaged,
+  computeLine,
+} from '../../utils/orderLine';
+import {
   FileText,
   Plus,
   Send,
@@ -398,19 +406,25 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
       let orderTotal = 0;
       const items = (ord.items || []).map((it) => {
         const prod = productMap.get(it.product_id);
-        const unit = prod?.unit || 'بسته';
-        const visitorPrice = Number(
-          prod?.visitor_price ?? it.price
-        );
-        const lineTotal = it.quantity * visitorPrice;
-        orderTotal += lineTotal;
+        const pack = getPackSize(it.items_per_package || prod?.items_per_package);
+        const baseUnit = getBaseUnit(it.unit || prod?.unit, pack);
+        const visitorPrice = Number(prod?.visitor_price ?? 0);
+        const lineCalc = computeLine({
+          quantity: it.quantity,
+          pack,
+          unitPrice: visitorPrice,
+          discountPercent: 0,
+        });
+        orderTotal += lineCalc.total;
         return {
           id: it.id || `${ord.id}-${it.product_id}`,
           name: it.name,
           quantity: it.quantity,
-          unit,
+          pack,
+          baseUnit,
+          unit: getSaleUnitLabel(it.unit || prod?.unit, pack),
           visitorPrice,
-          lineTotal,
+          lineTotal: lineCalc.total,
         };
       });
       return { items, orderTotal };
@@ -427,6 +441,8 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
       {
         productId: string;
         productName: string;
+        pack: number;
+        baseUnit: string;
         unit: string;
         totalQuantity: number;
         visitorPrice: number;
@@ -438,18 +454,20 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
 
     for (const it of activeBill.items) {
       const prod = productMap.get(it.product_id);
-      const packCount = it.items_per_package || prod?.items_per_package;
-      const unit = packCount && packCount > 1
-        ? `${it.unit || prod?.unit || 'کارتن'} (${packCount} عددی)`
-        : (it.unit || prod?.unit || 'بسته');
-      const vPrice = Number(
-        it.visitor_price ?? (prod?.visitor_price ? Number(prod.visitor_price) * (packCount || 1) : 0)
-      );
+      const pack = getPackSize(it.items_per_package || prod?.items_per_package);
+      const baseUnit = getBaseUnit(it.unit || prod?.unit, pack);
+      const vPrice = Number(prod?.visitor_price ?? (it.visitor_price ?? 0));
+      const lineCalc = computeLine({
+        quantity: it.quantity,
+        pack,
+        unitPrice: vPrice,
+        discountPercent: 0,
+      });
 
       const existing = map.get(it.product_id);
       if (existing) {
         existing.totalQuantity = Math.round((existing.totalQuantity + it.quantity) * 1000) / 1000;
-        existing.totalAmount += it.quantity * existing.visitorPrice;
+        existing.totalAmount += lineCalc.total;
         if (it.source === 'visitor_manual' || it.source === 'admin_manual') {
           existing.manualLines.push(it);
         } else {
@@ -459,10 +477,12 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
         map.set(it.product_id, {
           productId: it.product_id,
           productName: it.product_name,
-          unit,
+          pack,
+          baseUnit,
+          unit: getUnitColumnText(pack, baseUnit),
           totalQuantity: it.quantity,
           visitorPrice: vPrice,
-          totalAmount: it.quantity * vPrice,
+          totalAmount: lineCalc.total,
           manualLines:
             it.source === 'visitor_manual' || it.source === 'admin_manual' ? [it] : [],
           orderLinesCount: it.source === 'order' ? 1 : 0,
@@ -511,20 +531,50 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
   const totalSurplusAmount = useMemo(() => {
     return Object.entries(surplusCart).reduce((sum, [pId, qty]) => {
       const prod = productMap.get(pId) || products.find((p) => p.id === pId);
-      const vPrice = Number(
-        prod?.visitor_price ?? 0
-      );
-      return sum + (Number(qty) || 0) * vPrice;
+      const pack = getPackSize(prod?.items_per_package);
+      const vPrice = Number(prod?.visitor_price ?? 0);
+      const lineCalc = computeLine({
+        quantity: Number(qty) || 0,
+        pack,
+        unitPrice: vPrice,
+        discountPercent: 0,
+      });
+      return sum + lineCalc.total;
     }, 0);
   }, [surplusCart, productMap, products]);
+
+  // Open print modal with validation
+  const handleOpenPrintModal = (billToPrint: LoadingBill) => {
+    const invalidItem = (billToPrint.items || []).find((it) => {
+      const prod = productMap.get(it.product_id) || products.find((p) => p.id === it.product_id);
+      const vp = Number(prod?.visitor_price ?? (it.visitor_price ?? 0));
+      return vp <= 0;
+    });
+
+    if (invalidItem) {
+      showToast(`قیمت خرید ویزیتور برای کالای «${invalidItem.product_name}» تعریف نشده است.`, 'error');
+      return;
+    }
+    setSelectedBillForPrint(billToPrint);
+  };
 
   // Handle surplus items submission to draft bill
   const handleSurplusSubmit = async () => {
     if (!activeBill || isSubmittingSurplus || totalSurplusCount <= 0) return;
 
+    const entries = Object.entries(surplusCart).filter(([_, qty]) => Number(qty) > 0);
+
+    // Validate that all surplus items have visitor_price > 0
+    for (const [productId] of entries) {
+      const prod = productMap.get(productId) || products.find((p) => p.id === productId);
+      if (!prod?.visitor_price || prod.visitor_price <= 0) {
+        showToast(`قیمت خرید ویزیتور برای کالای «${prod?.name || 'انتخاب شده'}» تعریف نشده است.`, 'error');
+        return;
+      }
+    }
+
     setIsSubmittingSurplus(true);
     const finalLabel = surplusCustomerLabel.trim() || 'موجودی همراه ویزیتور';
-    const entries = Object.entries(surplusCart).filter(([_, qty]) => Number(qty) > 0);
 
     let successCount = 0;
 
@@ -646,6 +696,18 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
 
     if (!activeBill.items || activeBill.items.length === 0) {
       showToast('فاکتور بار فاقد هرگونه قلم کالا است. لطفاً حداقل یک سفارش یا قلم آزاد انتخاب کنید.', 'error');
+      return;
+    }
+
+    // Validate all items have visitor_price > 0
+    const invalidItem = (activeBill.items || []).find((it) => {
+      const prod = productMap.get(it.product_id) || products.find((p) => p.id === it.product_id);
+      const vp = Number(prod?.visitor_price ?? (it.visitor_price ?? 0));
+      return vp <= 0;
+    });
+
+    if (invalidItem) {
+      showToast(`قیمت خرید ویزیتور برای کالای «${invalidItem.product_name}» تعریف نشده است.`, 'error');
       return;
     }
 
@@ -813,7 +875,7 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
               {activeBill && (
                 <button
                   type="button"
-                  onClick={() => setSelectedBillForPrint(activeBill)}
+                  onClick={() => handleOpenPrintModal(activeBill)}
                   className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer ${
                     activeBill.status === 'approved' || activeBill.status === 'loaded'
                       ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/20'
@@ -1281,7 +1343,7 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
 
                         <button
                           type="button"
-                          onClick={() => setSelectedBillForPrint(b)}
+                          onClick={() => handleOpenPrintModal(b)}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/30 transition cursor-pointer"
                         >
                           <Printer className="w-4 h-4" />

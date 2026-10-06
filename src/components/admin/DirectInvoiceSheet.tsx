@@ -7,6 +7,15 @@ import { roundQty, formatPrice, formatOrderDate } from '../shop/shopUtils';
 import { VisitorInvoicePrintModal } from '../visitor/VisitorInvoicePrintModal';
 import { OrderInvoiceModal } from '../invoice/OrderInvoiceModal';
 import {
+  getPackSize,
+  getBaseUnit,
+  getUnitColumnText,
+  getSaleUnitLabel,
+  isPackaged,
+  computeLine,
+  formatLineCalculation,
+} from '../../utils/orderLine';
+import {
   X,
   Plus,
   Trash2,
@@ -212,6 +221,11 @@ export const DirectInvoiceSheet: React.FC<DirectInvoiceSheetProps> = ({
       const prod = products.find((p) => p.id === productId);
       if (!prod) return;
 
+      if (!isStoreMode && roundedQty > 0 && (!prod.visitor_price || prod.visitor_price <= 0)) {
+        showToast(`قیمت خرید ویزیتور برای کالای «${prod.name}» تعریف نشده است.`, 'error');
+        return;
+      }
+
       setManualLines((prev) => {
         const existingIdx = prev.findIndex((line) => line.product_id === productId);
 
@@ -247,7 +261,7 @@ export const DirectInvoiceSheet: React.FC<DirectInvoiceSheetProps> = ({
         return [...prev, newLine];
       });
     },
-    [products, isStoreMode, selectedStore]
+    [products, isStoreMode, selectedStore, showToast]
   );
 
   // Toggle selection of a system order
@@ -316,8 +330,15 @@ export const DirectInvoiceSheet: React.FC<DirectInvoiceSheetProps> = ({
     return selectedOrdersData.reduce((sum, ord) => {
       const ordVisitorCost = (ord.items || []).reduce((itemSum, item) => {
         const prod = products.find((p) => p.id === item.product_id);
-        const itemVisPrice = prod?.visitor_price ?? 0;
-        return itemSum + item.quantity * itemVisPrice;
+        const pack = getPackSize(item.items_per_package || prod?.items_per_package);
+        const itemVisPrice = Number(prod?.visitor_price ?? 0);
+        const lineCalc = computeLine({
+          quantity: item.quantity,
+          pack,
+          unitPrice: itemVisPrice,
+          discountPercent: 0,
+        });
+        return itemSum + lineCalc.total;
       }, 0);
       return sum + ordVisitorCost;
     }, 0);
@@ -333,7 +354,14 @@ export const DirectInvoiceSheet: React.FC<DirectInvoiceSheetProps> = ({
   // Calculate manual lines totals
   const manualLinesTotal = useMemo(() => {
     return manualLines.reduce((sum, line) => {
-      return sum + line.quantity * line.unit_price;
+      const pack = getPackSize(line.product.items_per_package);
+      const lineCalc = computeLine({
+        quantity: line.quantity,
+        pack,
+        unitPrice: line.unit_price,
+        discountPercent: 0,
+      });
+      return sum + lineCalc.total;
     }, 0);
   }, [manualLines]);
 
@@ -475,6 +503,26 @@ export const DirectInvoiceSheet: React.FC<DirectInvoiceSheetProps> = ({
     if (selectedOrderIds.size === 0 && manualLines.length === 0) {
       showToast('لطفاً حداقل یک سفارش یا یک قلم کالای مازاد به فاکتور اضافه کنید.', 'error');
       return;
+    }
+
+    // Validate manual lines visitor prices
+    for (const line of manualLines) {
+      if (!line.unit_price || line.unit_price <= 0) {
+        showToast(`قیمت خرید ویزیتور برای کالای «${line.product.name}» تعریف نشده است.`, 'error');
+        return;
+      }
+    }
+
+    // Validate selected system orders visitor prices
+    for (const ord of selectedOrdersData) {
+      for (const item of (ord.items || [])) {
+        const prod = products.find((p) => p.id === item.product_id);
+        const vp = Number(prod?.visitor_price ?? 0);
+        if (vp <= 0) {
+          showToast(`قیمت خرید ویزیتور برای کالای «${item.name || prod?.name || 'انتخاب شده'}» تعریف نشده است.`, 'error');
+          return;
+        }
+      }
     }
 
     setIsSubmitting(true);
@@ -1085,6 +1133,18 @@ export const DirectInvoiceSheet: React.FC<DirectInvoiceSheetProps> = ({
 
               {/* Items List */}
               <div className="space-y-3">
+                {/* Price Source Info Banner */}
+                <div className="bg-slate-950 border border-slate-800/90 rounded-xl p-2.5 px-3 flex items-center justify-between text-xs text-slate-300">
+                  <div className="flex items-center gap-2">
+                    <Info className={`w-4 h-4 shrink-0 ${isStoreMode ? 'text-blue-400' : 'text-emerald-400'}`} />
+                    <span>
+                      {isStoreMode
+                        ? 'قیمت واحد از قیمت خرید فروشگاه (product.price) گرفته شده است.'
+                        : 'قیمت واحد از قیمت خرید ویزیتور (product.visitor_price) گرفته شده است.'}
+                    </span>
+                  </div>
+                </div>
+
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-300">
                     {isStoreMode ? 'اقلام سبد خرید فروشگاه' : 'اقلام مازاد / مستقیم انتخابی'}
@@ -1111,7 +1171,21 @@ export const DirectInvoiceSheet: React.FC<DirectInvoiceSheetProps> = ({
                 ) : (
                   <div className="space-y-2">
                     {manualLines.map((line) => {
-                      const lineTotal = line.quantity * line.unit_price;
+                      const pack = getPackSize(line.product.items_per_package);
+                      const baseUnit = getBaseUnit(line.product.unit, pack);
+                      const lineCalc = computeLine({
+                        quantity: line.quantity,
+                        pack,
+                        unitPrice: line.unit_price,
+                        discountPercent: 0,
+                      });
+                      const calcText = formatLineCalculation(
+                        line.quantity,
+                        pack,
+                        line.unit_price,
+                        baseUnit,
+                        0
+                      );
                       const isEditingPrice = editingPriceLineId === line.id;
 
                       return (
@@ -1126,7 +1200,7 @@ export const DirectInvoiceSheet: React.FC<DirectInvoiceSheetProps> = ({
                               </h4>
                               <p className="text-[10px] text-slate-400 mt-0.5">
                                 {line.product.brand ? `برند: ${line.product.brand} | ` : ''}
-                                واحد: {line.product.unit}
+                                واحد پایه: {baseUnit} {pack > 1 ? `(کارتن ${pack} عددی)` : ''}
                               </p>
                             </div>
                             <button
@@ -1151,7 +1225,7 @@ export const DirectInvoiceSheet: React.FC<DirectInvoiceSheetProps> = ({
                                 -
                               </button>
                               <span className="font-bold font-mono text-xs px-2 text-slate-100">
-                                {line.quantity.toLocaleString('fa-IR')}
+                                {line.quantity.toLocaleString('fa-IR')} {pack > 1 ? 'کارتن' : baseUnit}
                               </span>
                               <button
                                 type="button"
@@ -1187,9 +1261,9 @@ export const DirectInvoiceSheet: React.FC<DirectInvoiceSheetProps> = ({
                                   type="button"
                                   onClick={() => handleStartEditPrice(line)}
                                   className="flex items-center gap-1 hover:bg-slate-900 px-2 py-1 rounded text-slate-300 hover:text-emerald-300 transition cursor-pointer border border-transparent hover:border-slate-800"
-                                  title="کلیک برای ویرایش قیمت واحد"
+                                  title="کلیک برای ویرایش قیمت یک واحد پایه"
                                 >
-                                  <span className="text-[11px] text-slate-400">واحد:</span>
+                                  <span className="text-[11px] text-slate-400">قیمت واحد پایه:</span>
                                   <span className="font-bold font-mono">
                                     {line.unit_price.toLocaleString('fa-IR')} ت
                                   </span>
@@ -1199,11 +1273,11 @@ export const DirectInvoiceSheet: React.FC<DirectInvoiceSheetProps> = ({
                             </div>
                           </div>
 
-                          {/* Line Total */}
-                          <div className="flex justify-between items-center text-[11px] text-slate-400 bg-slate-900/60 px-2 py-1 rounded-lg">
-                            <span>جمع ردیف:</span>
-                            <span className="font-bold text-emerald-400 font-mono">
-                              {formatPrice(lineTotal)}
+                          {/* Line Total & Calculation formula */}
+                          <div className="flex justify-between items-center text-[11px] text-slate-300 bg-slate-900/80 px-2.5 py-1.5 rounded-lg border border-slate-800/80">
+                            <span className="text-slate-400 font-medium">محاسبه ردیف:</span>
+                            <span className="font-bold text-emerald-300 font-mono text-[11px] dir-rtl">
+                              {calcText}
                             </span>
                           </div>
                         </div>

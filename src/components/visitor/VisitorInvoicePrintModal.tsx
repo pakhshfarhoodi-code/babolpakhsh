@@ -32,7 +32,7 @@ export const VisitorInvoicePrintModal: React.FC<VisitorInvoicePrintModalProps> =
   orders: propOrders,
 }) => {
   const printRef = useRef<HTMLDivElement>(null);
-  const { orders: contextOrders } = useApp();
+  const { orders: contextOrders, showToast } = useApp();
   const allOrders = propOrders || contextOrders || [];
 
   // Toggle for optional Page 2: Customer breakdown (بدون قیمت)
@@ -46,6 +46,19 @@ export const VisitorInvoicePrintModal: React.FC<VisitorInvoicePrintModalProps> =
 
   const handlePrint = () => {
     if (!printRef.current) return;
+
+    // Validation: Block print if any item has missing/zero visitor_price
+    const invalidItem = (bill.items || []).find((it) => {
+      const prod = products.find((p) => p.id === it.product_id);
+      const vp = Number(prod?.visitor_price ?? (it.visitor_price ?? 0));
+      return vp <= 0;
+    });
+
+    if (invalidItem) {
+      showToast(`قیمت خرید ویزیتور برای کالای «${invalidItem.product_name}» تعریف نشده است.`, 'error');
+      return;
+    }
+
     printInvoiceDocument(printRef.current);
   };
 

@@ -11,6 +11,12 @@ import {
   calculateTotalDiscountPercent,
   calculateDiscountedPrice,
 } from '../../utils/storeDiscount';
+import {
+  getPackSize,
+  isPackaged,
+  getBaseUnit,
+  getSaleUnitLabel,
+} from '../../utils/orderLine';
 
 interface ProductRowProps {
   product: Product;

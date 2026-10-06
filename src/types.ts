@@ -498,9 +498,9 @@ export interface InvoiceTableColumnConfig {
 export const DEFAULT_TABLE_COLUMNS: InvoiceTableColumnConfig[] = [
   { key: 'row_index', label: '#', visible: true },
   { key: 'product_name', label: 'شرح کالا / خدمات', visible: true },
-  { key: 'items_per_package', label: 'تعداد در کارتن', visible: true },
-  { key: 'quantity_unit', label: 'تعداد / واحد', visible: true },
-  { key: 'unit_price', label: 'فی', visible: true },
+  { key: 'quantity_unit', label: 'تعداد', visible: true },
+  { key: 'items_per_package', label: 'واحد (تعداد در کارتن)', visible: true },
+  { key: 'unit_price', label: 'قیمت واحد', visible: true },
   { key: 'discount_percent', label: 'تخفیف (٪)', visible: false },
   { key: 'total_price', label: 'مبلغ کل', visible: true },
 ];
@@ -734,10 +734,39 @@ export function getInvoiceSettings(raw?: unknown): InvoiceSettings {
 
   let mergedColumns: InvoiceTableColumnConfig[] = [];
   if (Array.isArray(r.table_columns) && r.table_columns.length > 0) {
-    mergedColumns = r.table_columns.map((col) => ({
-      ...col,
-      visible: show[colVisibilityKeyMap[col.key]] ?? col.visible ?? true,
-    }));
+    mergedColumns = r.table_columns.map((col) => {
+      let label = col.label;
+      // Upgrade legacy default labels if they match old defaults
+      if (label === 'فی' || label === 'فی (تومان)' || label === 'فی (ریال)') {
+        label = 'قیمت واحد';
+      } else if (label === 'تعداد / واحد') {
+        label = 'تعداد';
+      } else if (label === 'تعداد در کارتن') {
+        label = 'واحد (تعداد در کارتن)';
+      }
+
+      return {
+        ...col,
+        label,
+        visible: show[colVisibilityKeyMap[col.key]] ?? col.visible ?? true,
+      };
+    });
+
+    // Check if the order of items_per_package and quantity_unit matches legacy default (where items_per_package was before quantity_unit)
+    const itemsPkgIdx = mergedColumns.findIndex((c) => c.key === 'items_per_package');
+    const qtyUnitIdx = mergedColumns.findIndex((c) => c.key === 'quantity_unit');
+    if (itemsPkgIdx >= 0 && qtyUnitIdx >= 0 && itemsPkgIdx < qtyUnitIdx) {
+      // Check if it's the exact old default order
+      const keysOrder = mergedColumns.map((c) => c.key);
+      const isOldOrder = keysOrder.join(',').startsWith('row_index,product_name,items_per_package,quantity_unit');
+      if (isOldOrder) {
+        const itemPkgCol = mergedColumns[itemsPkgIdx];
+        const qtyCol = mergedColumns[qtyUnitIdx];
+        mergedColumns[itemsPkgIdx] = qtyCol;
+        mergedColumns[qtyUnitIdx] = itemPkgCol;
+      }
+    }
+
     // Append any missing column key
     DEFAULT_TABLE_COLUMNS.forEach((defCol) => {
       if (!mergedColumns.some((c) => c.key === defCol.key)) {

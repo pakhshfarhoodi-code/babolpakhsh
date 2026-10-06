@@ -63,11 +63,11 @@ const faNumberFormatter = new Intl.NumberFormat('fa-IR', {
  */
 export function formatNumberFa(amount: number | string): string {
   const num = typeof amount === 'number' ? (isNaN(amount) ? 0 : amount) : (Number(amount) || 0);
-  return faNumberFormatter.format(num);
+  return faNumberFormatter.format(num).replace(/,/g, '٬');
 }
 
 /**
- * Converts English digits to Persian digits
+ * Converts English digits to Persian digits in any string or number
  */
 export function toPersianDigits(input: string | number): string {
   if (input === null || input === undefined || input === '') return '';
@@ -79,7 +79,8 @@ export function toPersianDigits(input: string | number): string {
  */
 export function formatPrice(amount: number, unit = 'تومان'): string {
   const num = typeof amount === 'number' ? (isNaN(amount) ? 0 : amount) : (Number(amount) || 0);
-  return `${faNumberFormatter.format(num)}\u00A0${unit}`;
+  const formatted = faNumberFormatter.format(num).replace(/,/g, '٬');
+  return `${formatted}\u00A0${unit}`;
 }
 
 /**
@@ -88,18 +89,19 @@ export function formatPrice(amount: number, unit = 'تومان'): string {
 export function getOrderStatusLabel(status: Order['status']): {
   label: string;
   colorClass: string;
-  step: number; // 1: registered, 2: on the way, 3: delivered/undelivered
+  step: number; // 1: registered (ثبت شده), 2: on the way (در راه), 3: delivered/undelivered
 } {
   switch (status) {
     case 'assigned':
       return {
-        label: 'در انتظار ارسال',
+        label: 'ثبت شده',
         colorClass: 'bg-blue-950 text-blue-400 border-blue-800',
         step: 1,
       };
     case 'delegated':
+    case 'loading':
       return {
-        label: 'در حال هماهنگی ارسال',
+        label: 'در راه',
         colorClass: 'bg-amber-950 text-amber-400 border-amber-800',
         step: 2,
       };

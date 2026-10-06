@@ -2,6 +2,7 @@ import React from 'react';
 import { LoadingBill, LoadingBillItem, Visitor, Product, Order, InvoiceSettings, DEFAULT_INVOICE_SETTINGS } from '../../types';
 import { formatPriceToWords, numberToPersianWords } from '../../utils/numberToPersianWords';
 import { formatPrice } from '../visitor/helpers';
+import { toPersianDigits } from '../shop/shopUtils';
 import farhoodiLogo from '../../assets/images/farhoodi_b2b_logo.webp';
 import { useApp } from '../../context/AppContext';
 import {
@@ -291,17 +292,17 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
               <tbody className="divide-y divide-slate-200">
                 {aggregatedList.map((item, index) => (
                   <tr key={item.productId} className="print-avoid-break hover:bg-slate-50/50">
-                    <td className="py-2.5 px-3 text-center text-slate-500 font-mono">{index + 1}</td>
+                    <td className="py-2.5 px-3 text-center text-slate-600 font-semibold">{toPersianDigits(index + 1)}</td>
                     <td className="py-2.5 px-3">
-                      <span className="font-bold text-slate-900">{item.productName}</span>
+                      <span className="font-bold text-slate-900">{toPersianDigits(item.productName)}</span>
                       {item.notes.length > 0 && (
                         <div className="text-[10px] text-slate-600 mt-0.5">
-                          اقلام متفرقه / آزاد: {item.notes.join(' ، ')}
+                          اقلام متفرقه / آزاد: {item.notes.map((n) => toPersianDigits(n)).join(' ، ')}
                         </div>
                       )}
                     </td>
                     <td className="py-2.5 px-3 text-center font-bold text-slate-900">
-                      <span className="font-mono text-sm">{item.totalQuantity.toLocaleString('fa-IR')}</span>
+                      <span className="text-sm">{toPersianDigits(item.totalQuantity.toLocaleString('fa-IR'))}</span>
                       {isPackaged(item.pack) && (
                         <span className="text-[10px] text-slate-500 font-normal mr-1">کارتن</span>
                       )}
@@ -309,10 +310,10 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
                     <td className="py-2.5 px-3 text-center text-slate-600 font-medium">
                       {getUnitColumnText(item.pack, item.baseUnit)}
                     </td>
-                    <td className="py-2.5 px-3 text-left font-mono text-slate-800">
+                    <td className="py-2.5 px-3 text-left font-bold text-slate-800">
                       {formatPrice(item.visitorPrice)}
                     </td>
-                    <td className="py-2.5 px-3 text-left font-bold font-mono text-slate-900">
+                    <td className="py-2.5 px-3 text-left font-bold text-slate-900">
                       {formatPrice(item.totalAmount)}
                     </td>
                   </tr>
@@ -323,11 +324,11 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
                   <td colSpan={2} className="py-3 px-3 text-right">
                     مجموع کل اقلام فاکتور ویزیتور:
                   </td>
-                  <td className="py-3 px-3 text-center text-blue-900 font-black font-mono text-sm">
-                    {totalUnits.toLocaleString('fa-IR')}
+                  <td className="py-3 px-3 text-center text-blue-900 font-black text-sm">
+                    {toPersianDigits(totalUnits.toLocaleString('fa-IR'))}
                   </td>
                   <td colSpan={2} className="py-3 px-3"></td>
-                  <td className="py-3 px-3 text-left font-mono font-black text-sm text-slate-900">
+                  <td className="py-3 px-3 text-left font-black text-sm text-slate-900">
                     {formatPrice(grandTotal)} {currencyLabel}
                   </td>
                 </tr>

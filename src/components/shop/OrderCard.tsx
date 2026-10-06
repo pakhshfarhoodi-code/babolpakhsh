@@ -15,6 +15,8 @@ import {
   Printer,
   AlertTriangle,
   Percent,
+  Edit2,
+  Trash2,
 } from 'lucide-react';
 import {
   calculateTotalDiscountPercent,
@@ -26,6 +28,8 @@ interface OrderCardProps {
   assignedVisitor?: { name: string; phone: string };
   onReorder: (order: Order) => void;
   onViewInvoice?: (order: Order) => void;
+  onEditOrder?: (order: Order) => void;
+  onDeleteOrder?: (order: Order) => void;
 }
 
 export const OrderCard: React.FC<OrderCardProps> = ({
@@ -33,6 +37,8 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   assignedVisitor,
   onReorder,
   onViewInvoice,
+  onEditOrder,
+  onDeleteOrder,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const statusInfo = getOrderStatusLabel(order.status);
@@ -209,6 +215,32 @@ export const OrderCard: React.FC<OrderCardProps> = ({
             >
               <FileText className="w-3.5 h-3.5" />
               <span>فاکتور / PDF</span>
+            </button>
+          )}
+
+          {/* Edit Order Button (Only for registered Step 1 orders) */}
+          {onEditOrder && statusInfo.step === 1 && (
+            <button
+              type="button"
+              onClick={() => onEditOrder(order)}
+              className="px-2.5 py-1.5 rounded-xl bg-amber-600/20 hover:bg-amber-600 text-amber-300 hover:text-white border border-amber-500/30 font-bold text-xs transition flex items-center gap-1 cursor-pointer"
+              title="ویرایش تعداد و اقلام این سفارش"
+            >
+              <Edit2 className="w-3.5 h-3.5" />
+              <span>ویرایش</span>
+            </button>
+          )}
+
+          {/* Delete Order Button (Only for registered Step 1 orders) */}
+          {onDeleteOrder && statusInfo.step === 1 && (
+            <button
+              type="button"
+              onClick={() => onDeleteOrder(order)}
+              className="px-2.5 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 font-bold text-xs transition flex items-center gap-1 cursor-pointer"
+              title="حذف و لغو این سفارش"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>حذف</span>
             </button>
           )}
 

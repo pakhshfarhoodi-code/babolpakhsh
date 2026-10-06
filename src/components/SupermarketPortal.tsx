@@ -6,6 +6,7 @@ import { CartBar } from './shop/CartBar';
 import { CartSheet } from './shop/CartSheet';
 import { OrderCard } from './shop/OrderCard';
 import { OrderInvoiceModal } from './invoice/OrderInvoiceModal';
+import { EditOrderModal } from './shop/EditOrderModal';
 import {
   buildCartFromOrder,
   clampQuantity,
@@ -37,6 +38,7 @@ export const SupermarketPortal: React.FC = () => {
     categories,
     orders,
     createOrder,
+    deleteOrder,
     currentUser,
     invoiceSettings,
     refreshData,
@@ -94,6 +96,7 @@ export const SupermarketPortal: React.FC = () => {
   const [placedOrderId, setPlacedOrderId] = useState<string | null>(null);
   const [placedOrderObject, setPlacedOrderObject] = useState<Order | null>(null);
   const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState<Order | null>(null);
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
 
   // Store Approval Status: 'pending' | 'approved' | 'rejected' (default 'approved')
   const approvalStatus: 'pending' | 'approved' | 'rejected' = currentStore?.approval_status || 'approved';
@@ -571,6 +574,18 @@ export const SupermarketPortal: React.FC = () => {
                 assignedVisitor={assignedVisitor}
                 onReorder={handleReorder}
                 onViewInvoice={(ord) => setSelectedInvoiceOrder(ord)}
+                onEditOrder={(ord) => setEditingOrder(ord)}
+                onDeleteOrder={async (ord) => {
+                  if (window.confirm(`آیا از حذف و لغو سفارش شماره ${ord.id} اطمینان دارید؟ موجودی رزروشده آزاد خواهد شد.`)) {
+                    const res = await deleteOrder(ord.id);
+                    if (res.success) {
+                      showToast(res.message || 'سفارش با موفقیت حذف شد.', 'success');
+                      refreshData();
+                    } else {
+                      showToast(res.message || 'خطا در حذف سفارش.', 'error');
+                    }
+                  }
+                }}
               />
             ))
           )}
@@ -606,6 +621,15 @@ export const SupermarketPortal: React.FC = () => {
         order={selectedInvoiceOrder}
         supermarket={currentStore}
         visitor={assignedVisitor}
+      />
+
+      {/* Supermarket Order Edit Modal */}
+      <EditOrderModal
+        isOpen={!!editingOrder}
+        onClose={() => setEditingOrder(null)}
+        order={editingOrder}
+        products={products}
+        onSaveSuccess={refreshData}
       />
     </div>
   );

@@ -83,6 +83,10 @@ interface AppContextType {
   priceHistories: ProductPriceHistory[];
   deleteInventoryTransactions: (txIds: string[]) => Promise<{ success: boolean; message: string; count: number }>;
   createOrder: (payload: CreateOrderPayload) => Promise<{ success: boolean; message: string; orderId?: string; order?: Order }> | { success: boolean; message: string; orderId?: string; order?: Order };
+  updateOrder: (
+    orderId: string,
+    updatedItems: { productId: string; name: string; price: number; quantity: number }[]
+  ) => Promise<{ success: boolean; message: string }>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
   requestReassignment: (orderId: string, toVisitorId: string | null) => void;
   respondToReassignment: (requestId: string, accept: boolean) => void;
@@ -1062,6 +1066,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     deleteInventoryTransactions: warehouse.deleteInventoryTransactions,
     priceHistories: catalog.priceHistories,
     createOrder: orders.createOrder,
+    updateOrder: orders.updateOrder,
     updateOrderStatus: orders.updateOrderStatus,
     requestReassignment: orders.requestReassignment,
     respondToReassignment: orders.respondToReassignment,
@@ -1157,6 +1162,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     orders.orders,
     orders.reassignmentRequests,
     orders.createOrder,
+    orders.updateOrder,
     orders.updateOrderStatus,
     orders.requestReassignment,
     orders.respondToReassignment,

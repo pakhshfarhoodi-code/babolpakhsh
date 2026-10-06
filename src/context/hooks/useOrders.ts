@@ -791,12 +791,119 @@ export function useOrders({
     [orders, setProducts, addInventoryTransactions]
   );
 
+  // Update Order (Edits order items, updates reserved stock delta and total amount)
+  const updateOrder = useCallback(
+    async (
+      orderId: string,
+      updatedItems: { productId: string; name: string; price: number; quantity: number }[]
+    ): Promise<{ success: boolean; message: string }> => {
+      const targetOrder = orders.find((o) => o.id === orderId);
+      if (!targetOrder) return { success: false, message: 'سفارش مورد نظر یافت نشد.' };
+
+      if (targetOrder.status !== 'assigned') {
+        return { success: false, message: 'سفارش در مرحله در راه قرار گرفته و دیگر قابل ویرایش نیست.' };
+      }
+
+      if (!updatedItems || updatedItems.length === 0) {
+        return { success: false, message: 'سبد سفارش نمی‌تواند خالی باشد. در صورت تمایل می‌توانید سفارش را حذف کنید.' };
+      }
+
+      const oldItems = targetOrder.items || [];
+      const nowIso = new Date().toISOString();
+
+      // Check stock availability for increases
+      for (const item of updatedItems) {
+        const prod = products.find((p) => p.id === item.productId);
+        if (!prod) return { success: false, message: `کالای ${item.name} یافت نشد.` };
+
+        const oldQty = oldItems.find((i) => i.product_id === item.productId)?.quantity || 0;
+        const diffQty = item.quantity - oldQty;
+        if (diffQty > 0) {
+          const available = Math.round((prod.stock - prod.reserved_stock) * 1000) / 1000;
+          if (diffQty > available) {
+            return {
+              success: false,
+              message: `موجودی ناکافی برای افزایش ${prod.name}. موجودی قابل فروش: ${available} ${prod.unit}`,
+            };
+          }
+        }
+      }
+
+      // Calculate reserved stock delta for each product
+      setProducts((prev) =>
+        prev.map((p) => {
+          const oldQty = oldItems.find((i) => i.product_id === p.id)?.quantity || 0;
+          const newQty = updatedItems.find((i) => i.productId === p.id)?.quantity || 0;
+          const delta = newQty - oldQty;
+          if (delta !== 0) {
+            return {
+              ...p,
+              reserved_stock: Math.max(0, Math.round((p.reserved_stock + delta) * 1000) / 1000),
+            };
+          }
+          return p;
+        })
+      );
+
+      const newTotalAmount = updatedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+      const updatedOrderObj: Order = {
+        ...targetOrder,
+        total_amount: newTotalAmount,
+        invoice_revised_at: nowIso,
+        items: updatedItems.map((i, idx) => ({
+          id: `item-${Date.now()}-${idx}`,
+          order_id: orderId,
+          product_id: i.productId,
+          name: i.name,
+          price: i.price,
+          quantity: i.quantity,
+        })),
+      };
+
+      // Supabase sync
+      if (isSupabaseConfigured && supabase) {
+        try {
+          await supabase.from('order_items').delete().eq('order_id', orderId);
+
+          const itemRows = updatedItems.map((i) => ({
+            order_id: orderId,
+            product_id: i.productId,
+            name: i.name,
+            price: i.price,
+            quantity: i.quantity,
+          }));
+          await supabase.from('order_items').insert(itemRows);
+
+          await supabase
+            .from('orders')
+            .update({
+              total_amount: newTotalAmount,
+              invoice_revised_at: nowIso,
+            })
+            .eq('id', orderId);
+        } catch (err) {
+          console.error('Error updating order on Supabase:', err);
+        }
+      }
+
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? updatedOrderObj : o)));
+
+      return {
+        success: true,
+        message: `سفارش ${orderId} با موفقیت به‌روزرسانی شد.`,
+      };
+    },
+    [orders, products, setProducts]
+  );
+
   return {
     orders,
     setOrders,
     reassignmentRequests,
     setReassignmentRequests,
     createOrder,
+    updateOrder,
     updateOrderStatus,
     requestReassignment,
     respondToReassignment,

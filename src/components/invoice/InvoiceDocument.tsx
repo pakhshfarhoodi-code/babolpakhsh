@@ -24,6 +24,7 @@ import {
 } from '../../utils/orderLine';
 import { Building2, Store } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { toPersianDigits } from '../shop/shopUtils';
 
 export interface InvoiceDocumentProps {
   order: Order;
@@ -203,7 +204,7 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
   const currencyLabel = settings.currency_label || 'تومان';
 
   const formatMoney = (rawAmount: number): string => {
-    return Math.round(rawAmount).toLocaleString('fa-IR');
+    return Math.round(rawAmount).toLocaleString('fa-IR').replace(/,/g, '٬');
   };
 
   // ---------------------------------------------------------------------------
@@ -849,7 +850,7 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
                   key={col.key}
                   className={`${tableRowPaddingClass} text-center num-fa text-slate-600 font-medium ${borderClass}`}
                 >
-                  {globalIndex}
+                  {toPersianDigits(globalIndex)}
                 </td>
               );
 
@@ -859,7 +860,7 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
                   key={col.key}
                   className={`${tableRowPaddingClass} font-bold text-slate-900 ${borderClass} break-words text-right`}
                 >
-                  {(item as any).product_name || item.name}
+                  {toPersianDigits((item as any).product_name || item.name)}
                 </td>
               );
 

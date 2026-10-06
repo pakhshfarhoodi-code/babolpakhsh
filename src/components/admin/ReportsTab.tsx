@@ -265,7 +265,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
                     const prod = products.find((p) => p.id === it.product_id);
                     const fallbackStorePrice = prod?.price || 0;
                     const storePrice = it.store_price ?? fallbackStorePrice;
-                    const visitorPrice = it.visitor_price ?? (prod?.visitor_price || Math.round(storePrice * 0.85));
+                    const visitorPrice = it.visitor_price ?? (prod?.visitor_price ?? 0);
 
                     totalVisitorBuyCost += visitorPrice * it.quantity;
                   }
@@ -352,7 +352,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
                                 const fallbackStorePrice = prod?.price || 0;
                                 const storePrice = item.store_price ?? fallbackStorePrice;
                                 const visitorPrice =
-                                  item.visitor_price ?? (prod?.visitor_price || Math.round(storePrice * 0.85));
+                                  item.visitor_price ?? (prod?.visitor_price ?? 0);
 
                                 return (
                                   <tr key={idx} className="hover:bg-slate-900/50">

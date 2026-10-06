@@ -144,7 +144,7 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
   const handleSelectInlineProduct = (p: Product) => {
     setAgreementProductId(p.id);
     setInlineSearchQuery(p.name);
-    const defaultVPrice = p.visitor_price ?? Math.round(p.price * 0.85);
+    const defaultVPrice = p.visitor_price ?? 0;
     setAgreementUnitPrice(defaultVPrice);
   };
 
@@ -329,7 +329,7 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
       const curStock = prod ? prod.stock : 0;
       const resStock = prod ? prod.reserved_stock : 0;
       const availStock = Math.round(Math.max(0, curStock - resStock) * 1000) / 1000;
-      const vPrice = Number(it.visitor_price ?? prod?.visitor_price ?? Math.round(Number(prod?.price || 0) * 0.85));
+      const vPrice = Number(it.visitor_price ?? prod?.visitor_price ?? 0);
 
       const existing = map.get(it.product_id);
       if (existing) {
@@ -1313,7 +1313,7 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
                                       ) : (
                                         filteredInlineProducts.map((p) => {
                                           const avail = Math.round(Math.max(0, p.stock - p.reserved_stock) * 1000) / 1000;
-                                          const vPrice = p.visitor_price ?? Math.round(p.price * 0.85);
+                                          const vPrice = p.visitor_price ?? 0;
                                           return (
                                             <div
                                               key={p.id}
@@ -1385,7 +1385,7 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
                                     onChange={(e) => setAgreementUnitPrice(e.target.value ? Number(e.target.value) : '')}
                                     placeholder={
                                       selectedInlineProduct
-                                        ? String(selectedInlineProduct.visitor_price ?? Math.round(selectedInlineProduct.price * 0.85))
+                                        ? String(selectedInlineProduct.visitor_price ?? 0)
                                         : 'نرخ'
                                     }
                                     className="w-24 p-2 text-left bg-slate-950 border border-purple-500/70 rounded-xl text-slate-100 font-mono text-xs focus:outline-none focus:border-purple-400"
@@ -1405,7 +1405,7 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
                                   (Number(agreementQty) || 0) *
                                     (agreementUnitPrice !== ''
                                       ? Number(agreementUnitPrice)
-                                      : (selectedInlineProduct?.visitor_price ?? (selectedInlineProduct?.price ? Math.round(selectedInlineProduct.price * 0.85) : 0)))
+                                      : (selectedInlineProduct?.visitor_price ?? 0))
                                 )
                               )}
                             </td>

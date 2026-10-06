@@ -168,7 +168,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
     setEditProdBrand(prod.brand || brands[0] || 'متفرقه');
     setEditProdCat(prod.category_id || categories[0]?.id || '');
     setEditProdPrice(prod.price);
-    setEditProdVisitorPrice(prod.visitor_price || Math.round(prod.price * 0.85));
+    setEditProdVisitorPrice(prod.visitor_price ?? 0);
     setEditProdConsumerPrice(prod.consumer_price || 0);
     setEditProdStock(prod.stock);
     setEditProdUnit(prod.unit || 'عدد');
@@ -210,7 +210,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
     setIsSavingEdit(true);
     try {
       const finalImage = editProdImage.trim() || editingProduct.image_url || getSampleImage(editProdCat);
-      const visitorPrice = editProdVisitorPrice > 0 ? editProdVisitorPrice : Math.round(editProdPrice * 0.85);
+      const visitorPrice = editProdVisitorPrice !== undefined ? editProdVisitorPrice : (editingProduct.visitor_price ?? 0);
 
       if (onUpdateProduct) {
         onUpdateProduct(editingProduct.id, {
@@ -468,7 +468,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
       return;
     }
 
-    const visitorPrice = newProdVisitorPrice > 0 ? newProdVisitorPrice : Math.round(newProdPrice * 0.85);
+    const visitorPrice = newProdVisitorPrice !== undefined && newProdVisitorPrice >= 0 ? newProdVisitorPrice : 0;
 
     onAddNewProduct({
       name: newProdName.trim(),
@@ -787,7 +787,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                   const isEditing = editingPriceId === product.id;
                   const categoryObj = categories.find((c) => c.id === product.category_id);
                   const isLow = freeStock < LOW_STOCK_THRESHOLD;
-                  const visitorPrice = product.visitor_price || Math.round(product.price * 0.85);
+                  const visitorPrice = product.visitor_price ?? 0;
                   const isSelected = selectedProductIds.includes(product.id);
                   const itemLikes = productLikes.filter((pl) => pl.product_id === product.id);
 
@@ -1047,7 +1047,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                               type="button"
                               onClick={() => {
                                 setEditingPriceId(product.id);
-                                setTempVisitorPrice(product.visitor_price || Math.round(product.price * 0.85));
+                                setTempVisitorPrice(product.visitor_price ?? 0);
                                 setTempStorePrice(product.price);
                                 setTempConsumerPrice(product.consumer_price || 0);
                               }}
@@ -1176,7 +1176,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                       min="0"
                       value={newProdVisitorPrice || ''}
                       onChange={(e) => setNewProdVisitorPrice(Number(e.target.value))}
-                      placeholder={newProdPrice ? `${Math.round(newProdPrice * 0.85)}` : 'نرخ ویزیتور'}
+                      placeholder="نرخ ویزیتور (تومان)"
                       className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
                     />
                     <span className="text-[10px] text-slate-400 mt-1 block">نرخ حواله شرکت به ویزیتور</span>
@@ -1191,13 +1191,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                       required
                       min="1000"
                       value={newProdPrice || ''}
-                      onChange={(e) => {
-                        const val = Number(e.target.value);
-                        setNewProdPrice(val);
-                        if (!newProdVisitorPrice || newProdVisitorPrice === Math.round(newProdPrice * 0.85)) {
-                          setNewProdVisitorPrice(Math.round(val * 0.85));
-                        }
-                      }}
+                      onChange={(e) => setNewProdPrice(Number(e.target.value))}
                       className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500 font-mono"
                     />
                     <span className="text-[10px] text-slate-400 mt-1 block">نرخ فروش به سوپرمارکت</span>
@@ -1562,13 +1556,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                       required
                       min="1000"
                       value={editProdPrice || ''}
-                      onChange={(e) => {
-                        const val = Number(e.target.value);
-                        setEditProdPrice(val);
-                        if (!editProdVisitorPrice || editProdVisitorPrice === Math.round(editProdPrice * 0.85)) {
-                          setEditProdVisitorPrice(Math.round(val * 0.85));
-                        }
-                      }}
+                      onChange={(e) => setEditProdPrice(Number(e.target.value))}
                       className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-emerald-400 focus:outline-none focus:border-emerald-500 font-mono font-bold"
                     />
                     <span className="text-[10px] text-slate-400 mt-1 block">مبنای فاکتور سوپرمارکت</span>

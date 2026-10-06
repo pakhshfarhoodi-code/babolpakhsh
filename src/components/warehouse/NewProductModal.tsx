@@ -59,9 +59,6 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
 
   const handlePriceChange = (val: number) => {
     setPrice(val);
-    if (!visitorPrice || visitorPrice === Math.round(price * 0.85)) {
-      setVisitorPrice(Math.round(val * 0.85));
-    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -73,7 +70,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
       brand: brand.trim() || 'متفرقه',
       category_id: categoryId,
       price,
-      visitor_price: visitorPrice > 0 ? visitorPrice : Math.round(price * 0.85),
+      visitor_price: visitorPrice > 0 ? visitorPrice : 0,
       consumer_price: consumerPrice > 0 ? consumerPrice : undefined,
       stock,
       unit,

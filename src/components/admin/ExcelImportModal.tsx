@@ -320,9 +320,6 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
 
        const storePrice = cleanNum(row[mapping.storePriceCol]);
       let visitorPrice = mapping.visitorPriceCol ? cleanNum(row[mapping.visitorPriceCol]) : 0;
-      if (!visitorPrice && storePrice > 0) {
-        visitorPrice = Math.round(storePrice * 0.85); // 85% default
-      }
 
       const consumerPrice = mapping.consumerPriceCol ? cleanNum(row[mapping.consumerPriceCol]) : undefined;
       const stock = mapping.stockCol ? cleanNum(row[mapping.stockCol]) : 50;

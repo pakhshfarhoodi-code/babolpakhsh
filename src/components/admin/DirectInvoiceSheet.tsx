@@ -224,7 +224,7 @@ export const DirectInvoiceSheet: React.FC<DirectInvoiceSheetProps> = ({
 
         const defaultPrice = isStoreMode
           ? prod.price
-          : prod.visitor_price || Math.round(prod.price * 0.85);
+          : (prod.visitor_price ?? 0);
 
         if (existingIdx >= 0) {
           const updated = [...prev];
@@ -316,7 +316,7 @@ export const DirectInvoiceSheet: React.FC<DirectInvoiceSheetProps> = ({
     return selectedOrdersData.reduce((sum, ord) => {
       const ordVisitorCost = (ord.items || []).reduce((itemSum, item) => {
         const prod = products.find((p) => p.id === item.product_id);
-        const itemVisPrice = prod?.visitor_price || Math.round(item.price * 0.85);
+        const itemVisPrice = prod?.visitor_price ?? 0;
         return itemSum + item.quantity * itemVisPrice;
       }, 0);
       return sum + ordVisitorCost;
@@ -554,7 +554,7 @@ export const DirectInvoiceSheet: React.FC<DirectInvoiceSheetProps> = ({
                 product_name: it.name,
                 quantity: it.quantity,
                 store_price: it.price,
-                visitor_price: prod?.visitor_price || Math.round(it.price * 0.85),
+                visitor_price: prod?.visitor_price ?? 0,
                 source: 'order' as const,
                 customer_label: ord.supermarket_name,
               };

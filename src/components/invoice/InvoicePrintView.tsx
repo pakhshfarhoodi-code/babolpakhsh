@@ -65,7 +65,7 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
         ? `${it.unit || prod?.unit || 'کارتن'} (${packCount} عددی)`
         : (it.unit || prod?.unit || 'بسته');
       const vPrice = Number(
-        it.visitor_price ?? (prod?.visitor_price ? Number(prod.visitor_price) * (packCount || 1) : Math.round(Number(prod?.price || 0) * (packCount || 1) * 0.85))
+        it.visitor_price ?? (prod?.visitor_price ? Number(prod.visitor_price) * (packCount || 1) : 0)
       );
 
       const existing = aggregatedItemsMap.get(it.product_id);

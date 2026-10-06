@@ -134,6 +134,7 @@ export interface Order {
   discount_reviewed_at?: string;
   pickup_discount_percent?: number;
   founder_discount_percent?: number;
+  created_at?: string;
 }
 
 export interface OrderVisitorHistory {

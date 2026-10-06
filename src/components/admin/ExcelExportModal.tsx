@@ -43,7 +43,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
       };
 
       if (includeVisitorPrice) {
-        row['قیمت خرید ویزیتور (تومان)'] = p.visitor_price || Math.round(p.price * 0.85);
+        row['قیمت خرید ویزیتور (تومان)'] = p.visitor_price ?? 0;
       }
 
       row['قیمت خرید فروشگاه (تومان)'] = p.price;

@@ -165,7 +165,7 @@ export function useCatalog() {
     const prod = products.find((p) => p.id === productId);
     if (!prod) return;
     
-    const targetVisitorPrice = newVisitorPrice !== undefined ? newVisitorPrice : (prod.visitor_price ?? Math.round(newPrice * 0.85));
+    const targetVisitorPrice = newVisitorPrice !== undefined ? newVisitorPrice : (prod.visitor_price ?? 0);
     const targetConsumerPrice = newConsumerPrice !== undefined ? newConsumerPrice : prod.consumer_price;
     if (prod.price === newPrice && prod.visitor_price === targetVisitorPrice && prod.consumer_price === targetConsumerPrice) return;
 
@@ -228,7 +228,7 @@ export function useCatalog() {
   // Add new product
   const addNewProduct = useCallback((newProd: Omit<Product, 'id' | 'reserved_stock'>) => {
     const id = `prod-${Date.now().toString().slice(-4)}`;
-    const visitor_price = newProd.visitor_price !== undefined ? newProd.visitor_price : Math.round(newProd.price * 0.85);
+    const visitor_price = newProd.visitor_price !== undefined ? newProd.visitor_price : 0;
     const validCatId = newProd.category_id && newProd.category_id.trim() ? newProd.category_id.trim() : null;
 
     const safeImage = sanitizeImageUrl(newProd.image_url, validCatId || undefined, newProd.name);
@@ -339,7 +339,7 @@ export function useCatalog() {
     const targetPrice = updates.price !== undefined ? updates.price : prod.price;
     const targetVisitorPrice = updates.visitor_price !== undefined
       ? updates.visitor_price
-      : (prod.visitor_price ?? Math.round(targetPrice * 0.85));
+      : (prod.visitor_price ?? 0);
     const targetConsumerPrice = updates.consumer_price !== undefined ? updates.consumer_price : prod.consumer_price;
     const targetIsMarketTest = updates.is_market_test !== undefined
       ? Boolean(updates.is_market_test)
@@ -658,9 +658,9 @@ export function useCatalog() {
       });
 
       const storePrice = Number(item.price) || 0;
-      const visitorPrice = item.visitor_price !== undefined && item.visitor_price !== null && Number(item.visitor_price) > 0
+      const visitorPrice = item.visitor_price !== undefined && item.visitor_price !== null
         ? Number(item.visitor_price)
-        : Math.round(storePrice * 0.85);
+        : (matchIndex >= 0 ? (updatedProducts[matchIndex].visitor_price ?? 0) : 0);
       const stockQty = item.stock !== undefined ? Math.max(0, Number(item.stock) || 0) : 50;
       const unitStr = (item.unit || '').trim() || 'عدد';
       const imageUrlStr = item.image_url && item.image_url.trim() ? item.image_url.trim() : undefined;
@@ -808,7 +808,7 @@ export function useCatalog() {
         const uniqueProductsMap = new Map<string, any>();
         (itemsToUpsertToSupabase.length > 0 ? itemsToUpsertToSupabase : items).forEach((p) => {
           const sPrice = Number(p.price) || 0;
-          const vPrice = p.visitor_price !== undefined && Number(p.visitor_price) > 0 ? Number(p.visitor_price) : Math.round(sPrice * 0.85);
+          const vPrice = p.visitor_price !== undefined && p.visitor_price !== null ? Number(p.visitor_price) : 0;
           const validCatId = p.category_id && p.category_id.trim() ? p.category_id.trim() : null;
           const targetId = p.id && p.id.trim() ? p.id.trim() : generateUniqueId('prod');
 
@@ -1032,7 +1032,9 @@ export function useCatalog() {
         newPrice = Math.max(100, Math.round(prod.price * (1 + updates.priceAdjustmentPercent / 100)));
       }
 
-      const newVisitorPrice = Math.round(newPrice * 0.85);
+      const newVisitorPrice = updates.priceAdjustmentPercent !== undefined && updates.priceAdjustmentPercent !== 0 && prod.visitor_price
+        ? Math.max(0, Math.round(prod.visitor_price * (1 + updates.priceAdjustmentPercent / 100)))
+        : (prod.visitor_price ?? 0);
 
       const updated: Product = {
         ...prod,

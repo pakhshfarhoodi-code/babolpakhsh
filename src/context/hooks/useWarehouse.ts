@@ -120,7 +120,7 @@ export function useWarehouse({
         const prod = products.find((p) => p.id === val.productId);
         const multiplier = prod?.items_per_package && prod.items_per_package > 0 ? prod.items_per_package : 1;
         const storePrice = prod ? Number(prod.price) * multiplier : 0;
-        const visitorPrice = prod ? (prod.visitor_price ? Number(prod.visitor_price) * multiplier : Math.round(storePrice * 0.85)) : 0;
+        const visitorPrice = prod && prod.visitor_price ? Number(prod.visitor_price) * multiplier : 0;
 
         totalStoreAmount += storePrice * val.quantity;
         totalVisitorCost += visitorPrice * val.quantity;

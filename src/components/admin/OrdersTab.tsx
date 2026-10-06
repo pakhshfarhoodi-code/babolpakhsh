@@ -21,13 +21,26 @@ import {
   X,
   AlertTriangle,
   Percent,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import { isToday, isWithinDays, formatPrice, formatOrderDate } from './helpers';
+import { getTehranDateParts } from '../../utils/dateUtils';
 import { OrderOverrideModal } from './OrderOverrideModal';
 import { OrderInvoiceModal } from '../invoice/OrderInvoiceModal';
 import { getOrderChannel } from '../../context/utils';
 import { useApp } from '../../context/AppContext';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+
+export type OrderSortField =
+  | 'id'
+  | 'supermarket_name'
+  | 'visitor_name'
+  | 'total_amount'
+  | 'order_date'
+  | 'status';
+export type OrderSortDirection = 'asc' | 'desc';
 
 interface OrdersTabProps {
   orders: Order[];
@@ -60,6 +73,19 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
   type ChannelFilterType = 'all' | 'visitor_field' | 'store_self' | 'store_direct';
   const [channelFilter, setChannelFilter] = useState<ChannelFilterType>('all');
   const [timeFilter, setTimeFilter] = useState<'all' | 'today' | 'week'>('all');
+
+  // Sorting state (default: date descending -> latest invoices/orders on top)
+  const [sortField, setSortField] = useState<OrderSortField>('order_date');
+  const [sortDirection, setSortDirection] = useState<OrderSortDirection>('desc');
+
+  const handleSort = (field: OrderSortField) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === 'desc' ? 'asc' : 'desc'));
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
+  };
 
   // Override modal state
   const [overrideModalOrder, setOverrideModalOrder] = useState<Order | null>(null);
@@ -224,6 +250,81 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
     });
   }, [orders, channelFilter, statusFilter, timeFilter, searchTerm]);
 
+  // Helper to extract comparable timestamp from order date
+  const getOrderTimestamp = (order: Order): number => {
+    if (order.created_at) {
+      const t = new Date(order.created_at).getTime();
+      if (!isNaN(t) && t > 0) return t;
+    }
+    if (order.order_date) {
+      const t = new Date(order.order_date).getTime();
+      if (!isNaN(t) && t > 0) return t;
+      const parts = getTehranDateParts(order.order_date);
+      if (parts) {
+        return (parts.year * 10000 + parts.month * 100 + parts.day) * 10000 + (parts.hour * 60 + parts.minute);
+      }
+    }
+    const digits = order.id.replace(/\D/g, '');
+    return digits ? parseInt(digits, 10) : 0;
+  };
+
+  // Sorted orders based on active column and direction (default: latest date on top)
+  const sortedOrders = useMemo(() => {
+    const list = [...filteredOrders];
+    const dirMultiplier = sortDirection === 'asc' ? 1 : -1;
+
+    list.sort((a, b) => {
+      let comparison = 0;
+      switch (sortField) {
+        case 'id':
+          comparison = a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' });
+          break;
+        case 'supermarket_name':
+          comparison = (a.supermarket_name || '').localeCompare(b.supermarket_name || '', 'fa');
+          break;
+        case 'visitor_name': {
+          const vA = a.visitor_name || getOrderChannel(a);
+          const vB = b.visitor_name || getOrderChannel(b);
+          comparison = vA.localeCompare(vB, 'fa');
+          break;
+        }
+        case 'total_amount':
+          comparison = (Number(a.total_amount) || 0) - (Number(b.total_amount) || 0);
+          break;
+        case 'order_date': {
+          const timeA = getOrderTimestamp(a);
+          const timeB = getOrderTimestamp(b);
+          comparison = timeA - timeB;
+          break;
+        }
+        case 'status': {
+          const statusRank: Record<OrderStatus, number> = {
+            assigned: 1,
+            loading: 2,
+            delegated: 3,
+            delivered: 4,
+            undelivered: 5,
+          };
+          const rankA = statusRank[a.status] || 0;
+          const rankB = statusRank[b.status] || 0;
+          comparison = rankA - rankB;
+          break;
+        }
+        default:
+          comparison = 0;
+      }
+
+      if (comparison === 0) {
+        // Fallback stable tie-breaker: newest order date on top
+        return getOrderTimestamp(b) - getOrderTimestamp(a);
+      }
+
+      return comparison * dirMultiplier;
+    });
+
+    return list;
+  }, [filteredOrders, sortField, sortDirection]);
+
   const handleOpenOverride = (order: Order, target: OrderStatus) => {
     setOverrideModalOrder(order);
     setOverrideTargetStatus(target);
@@ -282,6 +383,59 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
     }
     setAssignModalOrder(null);
     setSelectedTargetVisitor('');
+  };
+
+  const getSortLabel = (field: OrderSortField): string => {
+    switch (field) {
+      case 'id':
+        return 'کد سفارش';
+      case 'supermarket_name':
+        return 'سوپرمارکت مقصد';
+      case 'visitor_name':
+        return 'کانال توزیع / ویزیتور';
+      case 'total_amount':
+        return 'مبلغ کل';
+      case 'order_date':
+        return 'تاریخ ثبت';
+      case 'status':
+        return 'وضعیت';
+      default:
+        return '';
+    }
+  };
+
+  const renderSortTh = (
+    field: OrderSortField,
+    label: string,
+    align: 'right' | 'center' = 'right'
+  ) => {
+    const isActive = sortField === field;
+    return (
+      <th
+        onClick={() => handleSort(field)}
+        className={`py-3 px-4 font-semibold select-none cursor-pointer group transition-colors text-${align} ${
+          isActive ? 'text-blue-400 bg-slate-900/90' : 'hover:text-slate-200 hover:bg-slate-900/50'
+        }`}
+        title={`مرتب‌سازی بر اساس ${label} (${isActive ? (sortDirection === 'desc' ? 'کاهشی - کلیک برای تغییر به افزایشی' : 'افزایشی - کلیک برای تغییر به کاهشی') : 'کلیک برای مرتب‌سازی کاهشی'})`}
+      >
+        <div
+          className={`inline-flex items-center gap-1.5 ${
+            align === 'center' ? 'justify-center w-full' : 'justify-start'
+          }`}
+        >
+          <span>{label}</span>
+          {isActive ? (
+            sortDirection === 'desc' ? (
+              <ArrowDown className="w-3.5 h-3.5 text-blue-400 shrink-0 animate-in fade-in zoom-in-75 duration-150" />
+            ) : (
+              <ArrowUp className="w-3.5 h-3.5 text-blue-400 shrink-0 animate-in fade-in zoom-in-75 duration-150" />
+            )
+          ) : (
+            <ArrowUpDown className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 shrink-0 transition-opacity opacity-60 group-hover:opacity-100" />
+          )}
+        </div>
+      </th>
+    );
   };
 
   return (
@@ -414,8 +568,8 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
 
       {/* Orders Count and Table / Cards */}
       <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-sm">
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="p-4 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h3 className="font-bold text-sm text-slate-100">
               فهرست فاکتورها و سفارشات پخش مویرگی
             </h3>
@@ -425,10 +579,26 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
               </span>
             )}
           </div>
-          <span className="text-xs text-slate-400">{filteredOrders.length} سفارش یافت شد</span>
+          <div className="flex items-center gap-2.5">
+            {(sortField !== 'order_date' || sortDirection !== 'desc') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSortField('order_date');
+                  setSortDirection('desc');
+                }}
+                className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-xl bg-blue-500/15 text-blue-300 hover:bg-blue-500/25 border border-blue-500/30 transition cursor-pointer font-medium"
+                title="بازگشت به حالت پیش‌فرض (جدیدترین فاکتورها در بالای جدول)"
+              >
+                <span>سورت: {getSortLabel(sortField)} ({sortDirection === 'desc' ? 'کاهشی' : 'افزایشی'})</span>
+                <X className="w-3 h-3 text-blue-400" />
+              </button>
+            )}
+            <span className="text-xs text-slate-400">{sortedOrders.length} سفارش یافت شد</span>
+          </div>
         </div>
 
-        {filteredOrders.length === 0 ? (
+        {sortedOrders.length === 0 ? (
           <div className="py-12 text-center text-slate-500 text-xs">
             سفارشی مطابق با فیلترهای انتخابی یافت نشد.
           </div>
@@ -437,17 +607,17 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
             <table className="w-full text-right text-xs">
               <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800">
                 <tr>
-                  <th className="py-3 px-4 font-semibold">کد سفارش</th>
-                  <th className="py-3 px-4 font-semibold">سوپرمارکت مقصد</th>
-                  <th className="py-3 px-4 font-semibold">کانال توزیع (ویزیتور)</th>
-                  <th className="py-3 px-4 font-semibold">مبلغ کل (تومان)</th>
-                  <th className="py-3 px-4 font-semibold">تاریخ ثبت</th>
-                  <th className="py-3 px-4 font-semibold text-center">وضعیت</th>
-                  <th className="py-3 px-4 font-semibold text-center">عملیات مدیریتی</th>
+                  {renderSortTh('id', 'کد سفارش')}
+                  {renderSortTh('supermarket_name', 'سوپرمارکت مقصد')}
+                  {renderSortTh('visitor_name', 'کانال توزیع (ویزیتور)')}
+                  {renderSortTh('total_amount', 'مبلغ کل (تومان)')}
+                  {renderSortTh('order_date', 'تاریخ ثبت')}
+                  {renderSortTh('status', 'وضعیت', 'center')}
+                  <th className="py-3 px-4 font-semibold text-center select-none">عملیات مدیریتی</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {filteredOrders.map((order) => {
+                {sortedOrders.map((order) => {
                   const orderChannel = getOrderChannel(order);
                   const isDirect = orderChannel === 'store_direct';
 

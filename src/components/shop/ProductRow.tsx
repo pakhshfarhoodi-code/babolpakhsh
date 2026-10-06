@@ -47,7 +47,7 @@ export const ProductRow: React.FC<ProductRowProps> = ({
   const isLowStock = !isMarketTest && !isOutOfStock && available <= LOW_STOCK_THRESHOLD;
 
   const displayPrice = priceMode === 'visitor'
-    ? Number(product.visitor_price ?? Math.round(Number(product.price || 0) * 0.85))
+    ? Number(product.visitor_price ?? 0)
     : product.price;
 
   const currentShop = supermarkets.find(

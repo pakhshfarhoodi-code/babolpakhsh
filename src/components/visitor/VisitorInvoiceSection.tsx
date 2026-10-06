@@ -400,7 +400,7 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
         const prod = productMap.get(it.product_id);
         const unit = prod?.unit || 'بسته';
         const visitorPrice = Number(
-          prod?.visitor_price ?? (prod?.price ? Math.round(Number(prod.price) * 0.85) : it.price)
+          prod?.visitor_price ?? it.price
         );
         const lineTotal = it.quantity * visitorPrice;
         orderTotal += lineTotal;
@@ -443,7 +443,7 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
         ? `${it.unit || prod?.unit || 'کارتن'} (${packCount} عددی)`
         : (it.unit || prod?.unit || 'بسته');
       const vPrice = Number(
-        it.visitor_price ?? (prod?.visitor_price ? Number(prod.visitor_price) * (packCount || 1) : Math.round(Number(prod?.price || 0) * (packCount || 1) * 0.85))
+        it.visitor_price ?? (prod?.visitor_price ? Number(prod.visitor_price) * (packCount || 1) : 0)
       );
 
       const existing = map.get(it.product_id);
@@ -512,7 +512,7 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
     return Object.entries(surplusCart).reduce((sum, [pId, qty]) => {
       const prod = productMap.get(pId) || products.find((p) => p.id === pId);
       const vPrice = Number(
-        prod?.visitor_price ?? (prod?.price ? Math.round(Number(prod.price) * 0.85) : 0)
+        prod?.visitor_price ?? 0
       );
       return sum + (Number(qty) || 0) * vPrice;
     }, 0);

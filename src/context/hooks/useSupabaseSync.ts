@@ -149,20 +149,92 @@ export function useSupabaseSync({
   // A. Fetch Products (Critical)
   const fetchProducts = useCallback(async () => {
     if (!supabase) return;
-    const { data: prods, error: prodsErr } = await withTimeout(
-      supabase
-        .from('products')
-        .select('id, category_id, brand, name, price, visitor_price, consumer_price, stock, reserved_stock, unit, items_per_package, image_url, is_active, is_market_test, created_at'),
-      15000,
-      'مهلت زمانی دریافت اطلاعات کالاها به پایان رسید'
-    );
+    const isStoreRole = role === 'supermarket';
+    const storeColumns = 'id, category_id, brand, name, price, consumer_price, stock, reserved_stock, unit, items_per_package, image_url, is_active, is_market_test, created_at';
+    const fullColumns = 'id, category_id, brand, name, price, visitor_price, consumer_price, stock, reserved_stock, unit, items_per_package, image_url, is_active, is_market_test, created_at';
+
+    let prods: any[] | null = null;
+    let prodsErr: any = null;
+
+    if (isStoreRole) {
+      // 1. Try reading from products_store view (which does not expose visitor_price)
+      try {
+        const viewRes = await withTimeout(
+          supabase
+            .from('products_store')
+            .select(storeColumns),
+          15000,
+          'مهلت زمانی دریافت اطلاعات کالاها به پایان رسید'
+        );
+
+        if (viewRes.error) {
+          const errCode = (viewRes.error as any)?.code;
+          const errMsg = String((viewRes.error as any)?.message || '');
+          const isMissingRelation =
+            errCode === '42P01' ||
+            errMsg.includes('42P01') ||
+            (errMsg.toLowerCase().includes('relation') && errMsg.toLowerCase().includes('does not exist'));
+
+          if (isMissingRelation) {
+            // Fallback once to table 'products' with the store columns without visitor_price
+            const fallbackRes = await withTimeout(
+              supabase
+                .from('products')
+                .select(storeColumns),
+              15000,
+              'مهلت زمانی دریافت اطلاعات کالاها به پایان رسید'
+            );
+            prods = fallbackRes.data;
+            prodsErr = fallbackRes.error;
+          } else {
+            prodsErr = viewRes.error;
+          }
+        } else {
+          prods = viewRes.data;
+        }
+      } catch (err: any) {
+        const errCode = err?.code;
+        const errMsg = String(err?.message || '');
+        const isMissingRelation =
+          errCode === '42P01' ||
+          errMsg.includes('42P01') ||
+          (errMsg.toLowerCase().includes('relation') && errMsg.toLowerCase().includes('does not exist'));
+
+        if (isMissingRelation) {
+          // Fallback once to table 'products' with the store columns without visitor_price
+          const fallbackRes = await withTimeout(
+            supabase
+              .from('products')
+              .select(storeColumns),
+            15000,
+            'مهلت زمانی دریافت اطلاعات کالاها به پایان رسید'
+          );
+          prods = fallbackRes.data;
+          prodsErr = fallbackRes.error;
+        } else {
+          prodsErr = err;
+        }
+      }
+    } else {
+      // For other roles (admin, warehouse, visitor): fetch full product columns including visitor_price
+      const fullRes = await withTimeout(
+        supabase
+          .from('products')
+          .select(fullColumns),
+        15000,
+        'مهلت زمانی دریافت اطلاعات کالاها به پایان رسید'
+      );
+      prods = fullRes.data;
+      prodsErr = fullRes.error;
+    }
 
     if (prodsErr) throw prodsErr;
 
     const validProds: Product[] = (prods || [])
-      .filter((p: Product) => !LEGACY_MOCK_NAMES.has(p.name?.trim()))
-      .map((p: Product) => ({
+      .filter((p: any) => !LEGACY_MOCK_NAMES.has(p.name?.trim()))
+      .map((p: any) => ({
         ...p,
+        visitor_price: isStoreRole ? undefined : (p.visitor_price !== undefined && p.visitor_price !== null ? Number(p.visitor_price) : undefined),
         is_active: p.is_active ?? true,
         is_market_test: Boolean(p.is_market_test),
       }));
@@ -182,16 +254,19 @@ export function useSupabaseSync({
         if (localSaved) {
           const parsed = JSON.parse(localSaved);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            const fallbackJson = JSON.stringify(parsed);
+            const sanitized = isStoreRole
+              ? parsed.map((p: any) => ({ ...p, visitor_price: undefined }))
+              : parsed;
+            const fallbackJson = JSON.stringify(sanitized);
             if (lastStateJsonRef.current.products !== fallbackJson) {
               lastStateJsonRef.current.products = fallbackJson;
-              setProducts(parsed);
+              setProducts(sanitized);
             }
           }
         }
       } catch {}
     }
-  }, [setProducts]);
+  }, [setProducts, role]);
 
   // B. Fetch Orders with Items (Critical)
   const fetchOrders = useCallback(async () => {
@@ -841,7 +916,7 @@ export function useSupabaseSync({
     window.addEventListener('online', handleOnline);
 
     // Granular Realtime Supabase Channel Subscriptions for tables
-    const realtimeChannel = supabase
+    let channelBuilder = supabase
       .channel('app-db-realtime-sync')
       .on(
         'postgres_changes',
@@ -893,14 +968,20 @@ export function useSupabaseSync({
         () => {
           if (currentUserIdRef.current) scheduleReload(['visitors']);
         }
-      )
-      .on(
+      );
+
+    // Subscribe to products table realtime changes ONLY for non-supermarket roles (admin, warehouse, visitor)
+    if (role !== 'supermarket') {
+      channelBuilder = channelBuilder.on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'products' },
         () => {
           if (currentUserIdRef.current) scheduleReload(['products']);
         }
-      )
+      );
+    }
+
+    channelBuilder = channelBuilder
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'reassignment_requests' },
@@ -914,8 +995,9 @@ export function useSupabaseSync({
         () => {
           if (currentUserIdRef.current) scheduleReload(['inventory_transactions']);
         }
-      )
-      .subscribe();
+      );
+
+    const realtimeChannel = channelBuilder.subscribe();
 
     return () => {
       clearInterval(interval);

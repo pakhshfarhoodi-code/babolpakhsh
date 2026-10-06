@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fa" dir="rtl">
+<html lang="fa" dir="rtl" class="no-transition">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -10,11 +10,47 @@
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" type="image/webp" href="/favicon.webp" />
     <link rel="alternate icon" type="image/png" href="/favicon.png" />
-    <meta name="theme-color" content="#0F172A" />
+    <meta name="theme-color" content="#f1f5f9" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="بارفروش" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- Preload primary Vazirmatn fonts to eliminate layout shift -->
+    <link rel="preload" href="/fonts/Vazirmatn-Variable.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/Vazirmatn-Regular.woff2" as="font" type="font/woff2" crossorigin />
+
+    <!-- Instant Inline Theme Initializer (Prevents Theme Flash Before CSS Load) -->
+    <script>
+      (function() {
+        try {
+          var savedTheme = localStorage.getItem('alborz_theme') || 'light';
+          var isLight = savedTheme === 'light';
+          var root = document.documentElement;
+          root.classList.add('no-transition');
+          if (isLight) {
+            root.classList.add('theme-light');
+            root.classList.remove('dark');
+            root.style.colorScheme = 'light';
+            root.style.backgroundColor = '#f1f5f9';
+          } else {
+            root.classList.remove('theme-light');
+            root.classList.add('dark');
+            root.style.colorScheme = 'dark';
+            root.style.backgroundColor = '#0b1329';
+          }
+          var metaThemeColor = document.querySelector('meta[name="theme-color"]');
+          if (metaThemeColor) {
+            metaThemeColor.setAttribute('content', isLight ? '#f1f5f9' : '#0F172A');
+          }
+          requestAnimationFrame(function() {
+            requestAnimationFrame(function() {
+              root.classList.remove('no-transition');
+            });
+          });
+        } catch(e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

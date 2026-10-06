@@ -14,6 +14,7 @@ import {
   AlertCircle,
   Sun,
   Moon,
+  Loader2,
 } from 'lucide-react';
 import { UserRole } from '../types';
 import { SupermarketRegisterModal } from './SupermarketRegisterModal';
@@ -23,10 +24,17 @@ import appLogo from '../assets/images/farhoodi_b2b_logo.webp';
 interface LoginScreenProps {
   initialRole?: UserRole;
   allowedRoles?: UserRole[];
+  onLoginStart?: () => void;
+  onLoginComplete?: () => void;
 }
 
-export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRoles }) => {
-  const { loginWithCredentials, theme, toggleTheme } = useApp();
+export const LoginScreen: React.FC<LoginScreenProps> = ({
+  initialRole,
+  allowedRoles,
+  onLoginStart,
+  onLoginComplete,
+}) => {
+  const { loginWithCredentials, isLoggedIn, isDataReady, theme, toggleTheme } = useApp();
   const [activeTab, setActiveTab] = useState<UserRole>(() => {
     if (initialRole) return initialRole;
     if (allowedRoles && allowedRoles.length > 0) return allowedRoles[0];
@@ -37,6 +45,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
   const [passwordInput, setPasswordInput] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isFadingOut, setIsFadingOut] = useState(false);
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
 
   // Sync activeTab if initialRole changes
@@ -45,6 +55,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
       setActiveTab(initialRole);
     }
   }, [initialRole]);
+
+  // Transition to app only after isDataReady is true
+  useEffect(() => {
+    if (isLoggingIn && isDataReady) {
+      setIsFadingOut(true);
+      const timer = setTimeout(() => {
+        onLoginComplete?.();
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoggingIn, isDataReady, onLoginComplete]);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,11 +90,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
 
       if (!result.success) {
         setErrorMessage(result.message || 'شماره یا رمز عبور نادرست است.');
+        setIsSubmitting(false);
+      } else {
+        onLoginStart?.();
+        setIsLoggingIn(true);
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'خطا در برقراری ارتباط با سامانه.';
       setErrorMessage(message);
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -114,7 +138,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
   const currentTheme = getRoleTheme(activeTab);
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden selection:bg-blue-500 selection:text-white">
+    <div className={`min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden selection:bg-blue-500 selection:text-white transition-opacity duration-150 ${
+      isFadingOut ? 'opacity-0 pointer-events-none' : 'opacity-100'
+    }`}>
       {/* Background Logistics & Food Distribution Hero Image */}
       <div 
         className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-all duration-700 scale-105"
@@ -365,11 +391,20 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ initialRole, allowedRo
           <button
             id="login-submit-btn"
             type="submit"
-            disabled={isSubmitting}
-            className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-[0.99] text-white rounded-xl text-sm font-bold transition cursor-pointer shadow-lg shadow-blue-600/25 disabled:opacity-50 mt-2"
+            disabled={isSubmitting || isLoggingIn}
+            className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-[0.99] text-white rounded-xl text-sm font-bold transition cursor-pointer shadow-lg shadow-blue-600/25 disabled:opacity-75 mt-2"
           >
-            <LogIn className="w-4 h-4" />
-            <span>ورود به سامانه</span>
+            {isSubmitting || isLoggingIn ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>در حال ورود به سامانه...</span>
+              </>
+            ) : (
+              <>
+                <LogIn className="w-4 h-4" />
+                <span>ورود به سامانه</span>
+              </>
+            )}
           </button>
         </form>
 

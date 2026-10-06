@@ -39,6 +39,15 @@
     word-spacing: 0;
   }
 
+  /* Disable transitions on initial load to prevent theme color flash */
+  .no-transition,
+  .no-transition *,
+  .no-transition *::before,
+  .no-transition *::after {
+    transition: none !important;
+    animation-duration: 0s !important;
+  }
+
   html.theme-light, .theme-light {
     color-scheme: light;
   }

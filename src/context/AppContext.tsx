@@ -62,6 +62,7 @@ interface AppContextType {
   selectedSupermarketId: string;
   setSelectedSupermarketId: (id: string) => void;
 
+  authReady: boolean;
   isLoggedIn: boolean;
   currentUser: CurrentUser;
   loginWithCredentials: (username: string, password: string, allowedRoles?: UserRole[]) => Promise<{ success: boolean; message?: string }>;
@@ -1039,6 +1040,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSelectedVisitorId: auth.setSelectedVisitorId,
     selectedSupermarketId: auth.selectedSupermarketId,
     setSelectedSupermarketId: auth.setSelectedSupermarketId,
+    authReady: auth.authReady,
     isLoggedIn: auth.isLoggedIn,
     currentUser: auth.currentUser,
     loginWithCredentials: auth.loginWithCredentials,

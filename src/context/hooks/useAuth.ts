@@ -20,6 +20,9 @@ interface UseAuthProps {
 }
 
 export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }: UseAuthProps) {
+  // Auth readiness state (true after getSession & profile fetch or immediately if offline/mock)
+  const [authReady, setAuthReady] = useState<boolean>(!isSupabaseConfigured);
+
   // Persisted auth state
   const [isLoggedIn, setIsLoggedInState] = useState<boolean>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.AUTH_LOGGED_IN);
@@ -197,21 +200,35 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
   // Supabase Session Management:
   // Strictly avoid duplicate queries: profile is fetched once, and onAuthStateChange has NO await
   useEffect(() => {
-    if (!isSupabaseConfigured || !supabase) return;
+    if (!isSupabaseConfigured || !supabase) {
+      setAuthReady(true);
+      return;
+    }
 
     // 1. Initial session check on mount (restoreSession)
-    supabase.auth.getSession().then(({ data: { session }, error: sessionError }) => {
-      if (sessionError || !session?.user) {
-        if (!authenticatedProfile) {
+    (async () => {
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError || !session?.user) {
+          lastProfileFetchedUserIdRef.current = null;
           setIsLoggedInState(false);
           setAuthProfile(null);
+          localStorage.setItem(STORAGE_KEYS.AUTH_LOGGED_IN, 'false');
+          localStorage.removeItem(STORAGE_KEYS.AUTH_ROLE);
+          localStorage.removeItem(STORAGE_KEYS.AUTH_VISITOR_ID);
+          localStorage.removeItem(STORAGE_KEYS.AUTH_SUPERMARKET_ID);
+          localStorage.removeItem('alborz_auth_profile');
+        } else if (session?.user) {
+          if (lastProfileFetchedUserIdRef.current !== session.user.id) {
+            await syncUserProfile(session.user.id);
+          }
         }
-        return;
+      } catch (err) {
+        console.warn('Initial session restore error:', err);
+      } finally {
+        setAuthReady(true);
       }
-      if (lastProfileFetchedUserIdRef.current !== session.user.id) {
-        syncUserProfile(session.user.id);
-      }
-    });
+    })();
 
     // 2. Auth State Change Listener (Synchronous callback with NO await inside)
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
@@ -242,7 +259,7 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
     return () => {
       authListener?.subscription?.unsubscribe();
     };
-  }, [syncUserProfile, setAuthProfile, authenticatedProfile]);
+  }, [syncUserProfile, setAuthProfile]);
 
   const currentUser: CurrentUser = useMemo(() => {
     if (role === 'admin') {
@@ -422,8 +439,9 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
     [syncUserProfile]
   );
 
-  const logout = useCallback(async () => {
+  const logout = useCallback(() => {
     lastProfileFetchedUserIdRef.current = null;
+    activeProfilePromiseRef.current = null;
     setIsLoggedInState(false);
     localStorage.setItem(STORAGE_KEYS.AUTH_LOGGED_IN, 'false');
     localStorage.removeItem(STORAGE_KEYS.AUTH_ROLE);
@@ -431,13 +449,20 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
     localStorage.removeItem(STORAGE_KEYS.AUTH_SUPERMARKET_ID);
     localStorage.removeItem('alborz_auth_profile');
     setAuthProfile(null);
-    if (isSupabaseConfigured && supabase) {
-      try {
-        await supabase.auth.signOut();
-      } catch (e) {
-        console.warn('Supabase signOut error:', e);
-      }
+
+    // Synchronously replace browser history to root without pushing an extra entry
+    if (typeof window !== 'undefined') {
+      const pathname = window.location.pathname.toLowerCase();
+      const base = pathname.startsWith('/babolpakhsh') ? '/babolpakhsh' : '';
+      window.history.replaceState({}, '', base ? `${base}/` : '/');
     }
+
+    // Heavy async signOut deferred to next frame so LoginScreen renders immediately
+    setTimeout(() => {
+      if (isSupabaseConfigured && supabase) {
+        supabase.auth.signOut().catch((e) => console.warn('Supabase signOut error:', e));
+      }
+    }, 0);
   }, [setAuthProfile]);
 
   // Account Creation: registerSupermarket
@@ -657,6 +682,7 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
   );
 
   return {
+    authReady,
     isLoggedIn,
     setIsLoggedIn,
     role,

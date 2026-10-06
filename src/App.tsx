@@ -7,6 +7,8 @@ import { SupermarketPortal } from './components/SupermarketPortal';
 import { WarehousePanel } from './components/WarehousePanel';
 import { LoginScreen } from './components/LoginScreen';
 import { UserRole } from './types';
+import appLogo from './assets/images/farhoodi_b2b_logo.webp';
+import { AlertTriangle, RefreshCw, Loader2 } from 'lucide-react';
 
 // Helper to detect base path (e.g. '/babolpakhsh' on GitHub Pages or '' for root/ArvanCloud)
 function getBasePath(): string {
@@ -31,11 +33,27 @@ function getNormalizedPath(): string {
   return '/';
 }
 
-import { AlertTriangle, RefreshCw, Loader2 } from 'lucide-react';
+function getExpectedPathForRole(userRole: UserRole): string {
+  if (userRole === 'visitor') return '/visitor';
+  if (userRole === 'admin' || userRole === 'warehouse') return '/admin';
+  return '/';
+}
 
 export const App: React.FC = () => {
-  const { role, setRole, isLoggedIn, isOnlineDb, isDataReady, fetchError, retryFetch } = useApp();
+  const {
+    role,
+    isLoggedIn,
+    authReady,
+    isOnlineDb,
+    isDataReady,
+    fetchError,
+    retryFetch,
+    theme,
+  } = useApp();
+
   const [currentPath, setCurrentPath] = useState<string>(getNormalizedPath);
+  const [justLoggedIn, setJustLoggedIn] = useState(false);
+
   const [adminActiveTab, setAdminActiveTab] = useState<AdminTabKey>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('pakhsh_admin_active_tab');
@@ -43,6 +61,7 @@ export const App: React.FC = () => {
     }
     return 'overview';
   });
+
   const [warehouseActiveTab, setWarehouseActiveTab] = useState<'pending' | 'history'>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('pakhsh_warehouse_active_tab');
@@ -59,7 +78,7 @@ export const App: React.FC = () => {
     localStorage.setItem('pakhsh_warehouse_active_tab', warehouseActiveTab);
   }, [warehouseActiveTab]);
 
-  // Synchronize route changes via popstate and custom navigation
+  // Synchronize route changes via replaceState without redundant history entries
   const navigateTo = useCallback((targetPath: string) => {
     if (typeof window !== 'undefined') {
       const base = getBasePath();
@@ -67,7 +86,7 @@ export const App: React.FC = () => {
       const currentNorm = window.location.pathname.replace(/\/+$/, '');
       const targetNorm = fullPath.replace(/\/+$/, '');
       if (currentNorm !== targetNorm) {
-        window.history.pushState({}, '', fullPath);
+        window.history.replaceState({}, '', fullPath);
       }
     }
     setCurrentPath(targetPath);
@@ -84,57 +103,60 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Route Guard: Ensure logged-in user is redirected to their authorized route
-  useEffect(() => {
-    if (!isLoggedIn) return;
+  // Synchronous Route Guard calculation in render (Point 5)
+  const expectedPath = isLoggedIn ? getExpectedPathForRole(role) : currentPath;
 
-    if (role === 'visitor') {
-      if (currentPath !== '/visitor') {
-        navigateTo('/visitor');
-      }
-    } else if (role === 'supermarket') {
-      if (currentPath !== '/') {
-        navigateTo('/');
-      }
-    } else if (role === 'admin' || role === 'warehouse') {
-      if (currentPath !== '/admin') {
-        navigateTo('/admin');
-      }
+  if (isLoggedIn && currentPath !== expectedPath) {
+    if (typeof window !== 'undefined') {
+      const base = getBasePath();
+      const fullPath = expectedPath === '/' ? (base ? `${base}/` : '/') : `${base}${expectedPath}`;
+      window.history.replaceState({}, '', fullPath);
     }
-  }, [currentPath, role, isLoggedIn, navigateTo]);
+  }
 
-  // If user is not logged in, show tailored login screen for the route
-  if (!isLoggedIn) {
-    if (currentPath === '/admin') {
-      return (
-        <LoginScreen
-          initialRole="admin"
-          allowedRoles={['admin', 'warehouse']}
-        />
-      );
-    }
-    if (currentPath === '/visitor') {
-      return (
-        <LoginScreen
-          initialRole="visitor"
-          allowedRoles={['visitor']}
-        />
-      );
-    }
-    // Default '/' is supermarkets
+  const effectivePath = isLoggedIn ? expectedPath : currentPath;
+
+  // 1. Initial Startup Splash Screen (Point 2: shown until authReady is true)
+  if (!authReady) {
+    return (
+      <div className={`min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-200 ${
+        theme === 'light' ? 'bg-slate-100 text-slate-900' : 'bg-slate-950 text-slate-100'
+      }`}>
+        <div className="flex flex-col items-center gap-4 animate-in fade-in duration-300">
+          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden shadow-xl border border-slate-700/40 bg-slate-900 flex items-center justify-center p-2">
+            <img src={appLogo} alt="بارفروش" className="w-full h-full object-contain" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Loader2 className={`w-5 h-5 animate-spin ${theme === 'light' ? 'text-blue-600' : 'text-blue-400'}`} />
+            <span className="text-xs font-semibold opacity-80">در حال راه‌اندازی سامانه...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Unauthenticated or in the middle of fresh login from LoginScreen (Point 3)
+  if (!isLoggedIn || justLoggedIn) {
+    const initialRole = effectivePath === '/admin' ? 'admin' : (effectivePath === '/visitor' ? 'visitor' : 'supermarket');
+    const allowedRoles = effectivePath === '/admin' ? ['admin', 'warehouse'] : (effectivePath === '/visitor' ? ['visitor'] : ['supermarket']);
+
     return (
       <LoginScreen
-        initialRole="supermarket"
-        allowedRoles={['supermarket']}
+        initialRole={initialRole as UserRole}
+        allowedRoles={allowedRoles as UserRole[]}
+        onLoginStart={() => setJustLoggedIn(true)}
+        onLoginComplete={() => setJustLoggedIn(false)}
       />
     );
   }
 
-  // Database-first Fetch Error Screen: ONLY when fetchError is non-empty
+  // 3. Database-first Fetch Error Screen: ONLY when fetchError is non-empty
   if (isOnlineDb && Boolean(fetchError)) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-blue-600 selection:text-white">
-        <Header currentPath={currentPath} onNavigate={navigateTo} />
+      <div className={`min-h-screen flex flex-col selection:bg-blue-600 selection:text-white ${
+        theme === 'light' ? 'bg-slate-100 text-slate-900' : 'bg-slate-950 text-slate-100'
+      }`}>
+        <Header currentPath={effectivePath} onNavigate={navigateTo} />
         <main className="flex-1 max-w-xl w-full mx-auto px-4 py-16 flex items-center justify-center">
           <div className="w-full bg-rose-950/40 border border-rose-800/80 rounded-3xl p-8 text-center shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200">
             <div className="w-16 h-16 bg-rose-900/50 rounded-2xl flex items-center justify-center mx-auto mb-5 border border-rose-700/60 shadow-lg text-rose-400">
@@ -165,49 +187,59 @@ export const App: React.FC = () => {
     );
   }
 
-  // Database-first Loading Skeleton: displayed while loading is in progress (isDataReady=false and fetchError=null)
+  // 4. Database-first Loading Skeleton: displayed ONLY on page refresh (isDataReady=false and not fresh login)
   if (isOnlineDb && !isDataReady && !fetchError) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-blue-600 selection:text-white">
-        <Header currentPath={currentPath} onNavigate={navigateTo} />
+      <div className={`min-h-screen flex flex-col selection:bg-blue-600 selection:text-white ${
+        theme === 'light' ? 'bg-slate-100 text-slate-900' : 'bg-slate-950 text-slate-100'
+      }`}>
+        <Header currentPath={effectivePath} onNavigate={navigateTo} />
         <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-8 space-y-6">
-          <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-slate-900/60 border border-slate-800 animate-pulse">
+          <div className={`flex items-center justify-between gap-4 p-4 rounded-2xl border animate-pulse ${
+            theme === 'light' ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'
+          }`}>
             <div className="flex items-center gap-3">
-              <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
-              <div className="h-5 w-48 bg-slate-800 rounded-lg"></div>
+              <Loader2 className={`w-5 h-5 animate-spin ${theme === 'light' ? 'text-blue-600' : 'text-blue-400'}`} />
+              <div className={`h-5 w-48 rounded-lg ${theme === 'light' ? 'bg-slate-200' : 'bg-slate-800'}`}></div>
             </div>
-            <div className="h-5 w-24 bg-slate-800 rounded-lg"></div>
+            <div className={`h-5 w-24 rounded-lg ${theme === 'light' ? 'bg-slate-200' : 'bg-slate-800'}`}></div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {[1, 2, 3, 4].map((i) => (
               <div
                 key={i}
-                className="h-28 rounded-2xl bg-slate-900/40 border border-slate-800/80 p-4 flex flex-col justify-between animate-pulse"
+                className={`h-28 rounded-2xl border p-4 flex flex-col justify-between animate-pulse ${
+                  theme === 'light' ? 'bg-white border-slate-200' : 'bg-slate-900/40 border-slate-800/80'
+                }`}
               >
-                <div className="h-4 w-24 bg-slate-800 rounded"></div>
-                <div className="h-8 w-32 bg-slate-800 rounded-lg"></div>
+                <div className={`h-4 w-24 rounded ${theme === 'light' ? 'bg-slate-200' : 'bg-slate-800'}`}></div>
+                <div className={`h-8 w-32 rounded-lg ${theme === 'light' ? 'bg-slate-200' : 'bg-slate-800'}`}></div>
               </div>
             ))}
           </div>
-          <div className="h-96 rounded-2xl bg-slate-900/40 border border-slate-800/80 p-6 flex flex-col gap-4 animate-pulse">
-            <div className="h-6 w-40 bg-slate-800 rounded"></div>
-            <div className="h-full bg-slate-800/30 rounded-xl"></div>
+          <div className={`h-96 rounded-2xl border p-6 flex flex-col gap-4 animate-pulse ${
+            theme === 'light' ? 'bg-white border-slate-200' : 'bg-slate-900/40 border-slate-800/80'
+          }`}>
+            <div className={`h-6 w-40 rounded ${theme === 'light' ? 'bg-slate-200' : 'bg-slate-800'}`}></div>
+            <div className={`h-full rounded-xl ${theme === 'light' ? 'bg-slate-100' : 'bg-slate-800/30'}`}></div>
           </div>
         </main>
       </div>
     );
   }
 
-  // Render main screen matching the route
+  // 5. Render main screen matching the route
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-blue-600 selection:text-white">
+    <div className={`min-h-screen flex flex-col selection:bg-blue-600 selection:text-white ${
+      theme === 'light' ? 'bg-slate-100 text-slate-900' : 'bg-slate-950 text-slate-100'
+    }`}>
       <Header
-        currentPath={currentPath}
+        currentPath={effectivePath}
         onNavigate={navigateTo}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
-        {currentPath === '/admin' ? (
+        {effectivePath === '/admin' ? (
           role === 'warehouse' ? (
             <WarehousePanel
               activeTab={warehouseActiveTab}
@@ -219,7 +251,7 @@ export const App: React.FC = () => {
               onTabChange={setAdminActiveTab}
             />
           )
-        ) : currentPath === '/visitor' ? (
+        ) : effectivePath === '/visitor' ? (
           <VisitorPortal />
         ) : (
           <SupermarketPortal />
@@ -234,7 +266,7 @@ export const App: React.FC = () => {
               <button
                 onClick={() => navigateTo('/')}
                 className={`hover:text-amber-400 transition cursor-pointer ${
-                  currentPath === '/' ? 'text-amber-400 font-bold underline' : 'text-slate-500'
+                  effectivePath === '/' ? 'text-amber-400 font-bold underline' : 'text-slate-500'
                 }`}
               >
                 / (فروشگاه‌ها)
@@ -243,7 +275,7 @@ export const App: React.FC = () => {
               <button
                 onClick={() => navigateTo('/visitor')}
                 className={`hover:text-emerald-400 transition cursor-pointer ${
-                  currentPath === '/visitor' ? 'text-emerald-400 font-bold underline' : 'text-slate-500'
+                  effectivePath === '/visitor' ? 'text-emerald-400 font-bold underline' : 'text-slate-500'
                 }`}
               >
                 /visitor (ویزیتورها)
@@ -252,7 +284,7 @@ export const App: React.FC = () => {
               <button
                 onClick={() => navigateTo('/admin')}
                 className={`hover:text-blue-400 transition cursor-pointer ${
-                  currentPath === '/admin' ? 'text-blue-400 font-bold underline' : 'text-slate-500'
+                  effectivePath === '/admin' ? 'text-blue-400 font-bold underline' : 'text-slate-500'
                 }`}
               >
                 /admin (مدیر و انبار)

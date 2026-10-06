@@ -88,6 +88,11 @@ export interface Supermarket {
   created_at?: string;
   founder_discount_enabled?: boolean;
   founder_discount_percent?: number;
+  approval_status?: 'pending' | 'approved' | 'rejected';
+  registration_source?: string;
+  approved_at?: string | null;
+  approved_by?: string | null;
+  approval_note?: string | null;
 }
 
 export type OrderStatus = 'assigned' | 'loading' | 'delegated' | 'delivered' | 'undelivered';

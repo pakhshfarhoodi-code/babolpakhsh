@@ -11,6 +11,7 @@ import {
   Store,
   MapPin,
   Filter,
+  Clock,
 } from 'lucide-react';
 import { ProductRow } from './shop/ProductRow';
 import { FilterSheet } from './shop/FilterSheet';
@@ -40,6 +41,8 @@ export const NewOrderModal: React.FC<Props> = ({
     supermarkets,
     visitors,
     createOrder,
+    showToast,
+    refreshData,
   } = useApp();
 
   const [selectedSupermarketId, setSelectedSupermarketId] = useState<string>(
@@ -239,6 +242,15 @@ export const NewOrderModal: React.FC<Props> = ({
       return;
     }
 
+    if (currentSupermarket?.approval_status === 'pending') {
+      showToast('حساب این مشتری هنوز توسط ادمین تایید نشده است.', 'warning', 5000);
+      return;
+    }
+    if (currentSupermarket?.approval_status === 'rejected') {
+      showToast('حساب این مشتری توسط ادمین تایید نشده است.', 'warning', 5000);
+      return;
+    }
+
     isSubmittingRef.current = true;
     setIsSubmitting(true);
 
@@ -275,10 +287,16 @@ export const NewOrderModal: React.FC<Props> = ({
         setCart({});
         setDiscountPercent(0);
       } else {
-        setFeedback({ type: 'error', message: res.message });
+        const errorMsg = res.message || 'خطا در ثبت سفارش روی سرور.';
+        showToast(errorMsg, 'warning', 5000);
+        await refreshData();
+        setFeedback({ type: 'error', message: errorMsg });
       }
     } catch {
-      setFeedback({ type: 'error', message: 'خطای ارتباط با سرور در ثبت سفارش.' });
+      const errorMsg = 'خطای ارتباط با سرور در ثبت سفارش.';
+      showToast(errorMsg, 'warning', 5000);
+      await refreshData();
+      setFeedback({ type: 'error', message: errorMsg });
     } finally {
       isSubmittingRef.current = false;
       setIsSubmitting(false);
@@ -396,9 +414,15 @@ export const NewOrderModal: React.FC<Props> = ({
                   <Store className="w-3 h-3" />
                 </div>
                 {currentSupermarket ? (
-                  <div className="truncate">
+                  <div className="truncate flex items-center gap-1.5 flex-wrap">
                     <span className="font-bold text-slate-100">{currentSupermarket.name}</span>
-                    <span className="text-slate-400 text-xs mr-1.5">({currentSupermarket.owner})</span>
+                    <span className="text-slate-400 text-xs mr-1">({currentSupermarket.owner})</span>
+                    {currentSupermarket.approval_status === 'pending' && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                        <Clock className="w-3 h-3 text-amber-400" />
+                        <span>در انتظار تایید ادمین</span>
+                      </span>
+                    )}
                   </div>
                 ) : (
                   <span className="text-slate-500">انتخاب سوپرمارکت مقصد...</span>
@@ -466,6 +490,12 @@ export const NewOrderModal: React.FC<Props> = ({
                               <span className="text-xs text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700/60">
                                 {s.owner}
                               </span>
+                              {s.approval_status === 'pending' && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                  <Clock className="w-3 h-3 text-amber-400" />
+                                  <span>در انتظار تایید ادمین</span>
+                                </span>
+                              )}
                             </div>
                             {s.address && (
                               <div className="flex items-center gap-1 text-xs text-slate-400 mt-1 truncate">

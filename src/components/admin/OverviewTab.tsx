@@ -31,7 +31,7 @@ interface OverviewTabProps {
   loadingBills?: LoadingBill[];
   onNavigateToOrders: (statusFilter?: string) => void;
   onNavigateToProducts: (filterType?: 'lowStock') => void;
-  onNavigateToTeam: () => void;
+  onNavigateToTeam: (statusFilter?: string) => void;
   onNavigateToLoadingBills?: (statusFilter?: string) => void;
 }
 
@@ -106,11 +106,18 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
     return supermarkets.filter((s) => storeIdsWithOrders.has(s.id)).length;
   }, [orders, supermarkets]);
 
+  // F. Pending store approval requests
+  const pendingApprovalStores = useMemo(
+    () => supermarkets.filter((s) => s.approval_status === 'pending'),
+    [supermarkets]
+  );
+
   const totalActionItems =
     delegatedOrders.length +
     lowStockProducts.length +
     inactiveStores.length +
-    pendingBills.length;
+    pendingBills.length +
+    pendingApprovalStores.length;
 
   return (
     <div className="space-y-6">
@@ -182,6 +189,36 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
 
       {/* Action Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Action: Pending Store Approvals (Only shown when pendingApprovalStores.length > 0) */}
+        {pendingApprovalStores.length > 0 && (
+          <div className="p-4 rounded-2xl bg-slate-900 border border-amber-500/50 flex flex-col justify-between space-y-4 hover:border-amber-400 transition shadow-md shadow-amber-500/10 animate-in fade-in">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center border border-amber-500/30">
+                  <Store className="w-5 h-5" />
+                </div>
+                <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                  {pendingApprovalStores.length} فروشگاه
+                </span>
+              </div>
+
+              <h3 className="font-bold text-sm text-slate-100">{pendingApprovalStores.length} فروشگاه در انتظار تایید</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                فروشگاه‌های ثبت‌نام شده نیازمند احراز و تایید حساب برای ثبت اولین سفارش هستند.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onNavigateToTeam('pending')}
+              className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-98 text-slate-950 text-xs font-bold transition shadow-md shadow-amber-500/20 cursor-pointer"
+            >
+              <span>بررسی و تایید فروشگاه‌ها</span>
+              <ArrowLeft className="w-4 h-4 text-slate-950" />
+            </button>
+          </div>
+        )}
+
         {/* Action 0: Supermarkets List */}
         <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col justify-between space-y-4 hover:border-purple-500/50 transition shadow-sm">
           <div className="space-y-2">
@@ -202,7 +239,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
 
           <button
             type="button"
-            onClick={onNavigateToTeam}
+            onClick={() => onNavigateToTeam()}
             className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 transition cursor-pointer"
           >
             <span>مدیریت فروشگاه‌ها و ویزیتورها</span>
@@ -347,7 +384,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
 
           <button
             type="button"
-            onClick={onNavigateToTeam}
+            onClick={() => onNavigateToTeam()}
             className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-98 text-slate-200 text-xs font-bold transition cursor-pointer"
           >
             <span>مدیریت تیم و مشتریان</span>

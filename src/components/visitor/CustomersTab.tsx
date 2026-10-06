@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Supermarket, Order } from '../../types';
+import { useApp } from '../../context/AppContext';
 import {
   Search,
   X,
@@ -10,6 +11,7 @@ import {
   ChevronLeft,
   ShoppingBag,
   UserPlus,
+  Clock,
 } from 'lucide-react';
 import { CustomerDetailSheet } from './CustomerDetailSheet';
 
@@ -26,6 +28,7 @@ export const CustomersTab: React.FC<CustomersTabProps> = ({
   onOpenNewOrder,
   onOpenRegisterCustomer,
 }) => {
+  const { showToast } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCustomerForDetail, setSelectedCustomerForDetail] = useState<Supermarket | null>(null);
 
@@ -115,9 +118,17 @@ export const CustomersTab: React.FC<CustomersTabProps> = ({
                       <Store className="w-4 h-4" />
                     </div>
                     <div className="min-w-0">
-                      <h3 className="font-bold text-sm text-slate-100 truncate group-hover:text-blue-300 transition">
-                        {shop.name}
-                      </h3>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-bold text-sm text-slate-100 truncate group-hover:text-blue-300 transition">
+                          {shop.name}
+                        </h3>
+                        {shop.approval_status === 'pending' && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                            <Clock className="w-3 h-3 text-amber-400" />
+                            <span>در انتظار تایید ادمین</span>
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-slate-400 mt-0.5">مدیریت: {shop.owner}</p>
                     </div>
                   </div>
@@ -147,11 +158,15 @@ export const CustomersTab: React.FC<CustomersTabProps> = ({
                   <span>{shop.phone}</span>
                 </a>
 
-                {/* Fast New Order Button */}
+                {/* Fast New Order Button (Not disabled, intercepts pending with 5-second toast) */}
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
+                    if (shop.approval_status === 'pending') {
+                      showToast('حساب این مشتری هنوز توسط ادمین تایید نشده است.', 'warning', 5000);
+                      return;
+                    }
                     onOpenNewOrder(shop.id);
                   }}
                   className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-bold text-xs transition shadow-md shadow-blue-600/20 cursor-pointer"

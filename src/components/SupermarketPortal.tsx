@@ -23,6 +23,9 @@ import {
   RotateCcw,
   FileText,
   Printer,
+  Clock,
+  AlertCircle,
+  Phone,
 } from 'lucide-react';
 
 export const SupermarketPortal: React.FC = () => {
@@ -36,6 +39,7 @@ export const SupermarketPortal: React.FC = () => {
     createOrder,
     currentUser,
     invoiceSettings,
+    refreshData,
   } = useApp();
 
   const defaultFallbackStore: Supermarket = useMemo(() => ({
@@ -91,18 +95,47 @@ export const SupermarketPortal: React.FC = () => {
   const [placedOrderObject, setPlacedOrderObject] = useState<Order | null>(null);
   const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState<Order | null>(null);
 
-  // Toast / Short notice message
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  // Store Approval Status: 'pending' | 'approved' | 'rejected' (default 'approved')
+  const approvalStatus: 'pending' | 'approved' | 'rejected' = currentStore?.approval_status || 'approved';
+  const isNotApproved = approvalStatus === 'pending' || approvalStatus === 'rejected';
 
-  const showToast = useCallback((msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => {
-      setToastMessage((prev) => (prev === msg ? null : prev));
-    }, 3500);
+  // Toast / Floating message with customizable duration & type
+  const [portalToast, setPortalToast] = useState<{
+    message: string;
+    type?: 'info' | 'success' | 'amber' | 'error';
+    id: number;
+  } | null>(null);
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const showToast = useCallback((msg: string, type: 'info' | 'success' | 'amber' | 'error' = 'info', durationMs: number = 3500) => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+    const id = Date.now();
+    setPortalToast({ message: msg, type, id });
+    toastTimeoutRef.current = setTimeout(() => {
+      setPortalToast((prev) => (prev?.id === id ? null : prev));
+    }, durationMs);
   }, []);
 
-  // Cart state persisted per supermarket: alborz_cart_{storeId}
+  const showApprovalPendingToast = useCallback(() => {
+    showToast('لطفا صبر کنید تا احراز هویت شما توسط ادمین ثبت و حساب کاربری شما تایید گردد.', 'amber', 5000);
+  }, [showToast]);
+
+  // Status transition detection: from 'pending' to 'approved'
   const storeId = currentStore?.id || 'sm-default';
+  useEffect(() => {
+    if (!storeId || storeId === 'sm-default') return;
+    const storageKeyStatus = `alborz_store_approval_status_${storeId}`;
+    const lastSeenStatus = localStorage.getItem(storageKeyStatus);
+
+    if (lastSeenStatus === 'pending' && approvalStatus === 'approved') {
+      showToast('حساب شما تایید شد؛ اکنون می‌توانید سفارش ثبت کنید', 'success', 6000);
+    }
+    localStorage.setItem(storageKeyStatus, approvalStatus);
+  }, [storeId, approvalStatus, showToast]);
+
+  // Cart state persisted per supermarket: alborz_cart_{storeId}
   const storageKey = `alborz_cart_${storeId}`;
 
   const [cart, setCart] = useState<Record<string, number>>(() => {
@@ -209,6 +242,11 @@ export const SupermarketPortal: React.FC = () => {
   // Quick reorder handler
   const handleReorder = useCallback(
     (order: Order) => {
+      if (isNotApproved) {
+        showApprovalPendingToast();
+        return;
+      }
+
       const {
         cart: newItems,
         unavailableItems,
@@ -230,12 +268,18 @@ export const SupermarketPortal: React.FC = () => {
       // Auto switch to catalog so user sees their updated cart
       setActiveTab('catalog');
     },
-    [products, showToast]
+    [products, showToast, isNotApproved, showApprovalPendingToast]
   );
 
 
   // Checkout submission
   const handleCheckoutSubmit = async () => {
+    // Intercept if store account is not approved by admin
+    if (isNotApproved) {
+      showApprovalPendingToast();
+      return;
+    }
+
     if (isSubmittingOrderRef.current || isSubmittingOrder) return;
 
     const items = Object.entries(cart)
@@ -284,27 +328,90 @@ export const SupermarketPortal: React.FC = () => {
           setPlacedOrderObject(res.order);
         }
       } else {
-        setOrderError(res.message || 'خطا در ثبت سفارش. لطفاً موجودی را بررسی کنید.');
+        const errMsg = res.message || 'خطا در ثبت سفارش. لطفاً موجودی را بررسی کنید.';
+        showToast(errMsg, 'amber', 5000);
+        refreshData();
+        setOrderError(errMsg);
       }
     } catch {
-      setOrderError('خطای ارتباط با سرور. لطفاً مجدداً تلاش کنید.');
+      const errMsg = 'خطای ارتباط با سرور. لطفاً مجدداً تلاش کنید.';
+      showToast(errMsg, 'amber', 5000);
+      refreshData();
+      setOrderError(errMsg);
     } finally {
       isSubmittingOrderRef.current = false;
       setIsSubmittingOrder(false);
     }
   };
 
+  const centralDistributorPhone = invoiceSettings?.phones?.[0]?.number || '';
+
   return (
     <div className="space-y-3 pb-20 lg:pb-8 max-w-[1600px] mx-auto">
+      {/* 1. Approval Status Banners */}
+      {approvalStatus === 'pending' && (
+        <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs font-medium flex items-center gap-2.5 shadow-sm animate-in fade-in">
+          <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+          <p className="leading-relaxed flex-1">
+            برای ثبت اولین سفارش، حساب کاربری شما نیازمند احراز و تایید توسط ادمین است. پس از تایید حساب کاربری شما، به شماره ثبت‌شده در سیستم اطلاع‌رسانی خواهد شد.
+          </p>
+        </div>
+      )}
+
+      {approvalStatus === 'rejected' && (
+        <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-xs space-y-1.5 shadow-sm animate-in fade-in">
+          <div className="flex items-center gap-2 font-bold text-rose-300">
+            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span>درخواست احراز حساب شما تایید نشد.</span>
+          </div>
+          {currentStore?.approval_note && (
+            <p className="text-xs text-rose-300/90 pr-6 leading-relaxed">
+              علت: {currentStore.approval_note}
+            </p>
+          )}
+          {centralDistributorPhone && (
+            <p className="text-xs text-rose-300/90 pr-6 leading-relaxed">
+              برای پیگیری با{' '}
+              <a
+                href={`tel:${centralDistributorPhone}`}
+                className="underline font-mono dir-ltr font-bold text-rose-200 hover:text-white"
+              >
+                {centralDistributorPhone}
+              </a>{' '}
+              تماس بگیرید.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed top-16 inset-x-4 z-50 max-w-md mx-auto p-3 rounded-2xl bg-slate-900 border border-emerald-500/50 text-slate-100 text-xs font-semibold shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-top-3">
-          <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-          <p className="flex-1 leading-snug">{toastMessage}</p>
+      {portalToast && (
+        <div
+          role="status"
+          className={`fixed top-16 inset-x-4 z-50 max-w-md mx-auto p-3 rounded-2xl text-xs font-semibold shadow-2xl flex items-center gap-2.5 animate-in fade-in slide-in-from-top-3 ${
+            portalToast.type === 'amber'
+              ? 'bg-amber-950/95 border border-amber-500/60 text-amber-100 shadow-amber-950/50'
+              : portalToast.type === 'success'
+              ? 'bg-slate-900/95 border border-emerald-500/60 text-emerald-100 shadow-emerald-950/50'
+              : portalToast.type === 'error'
+              ? 'bg-rose-950/95 border border-rose-500/60 text-rose-100 shadow-rose-950/50'
+              : 'bg-slate-900 border border-slate-700 text-slate-100'
+          }`}
+        >
+          {portalToast.type === 'amber' ? (
+            <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+          ) : portalToast.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          ) : portalToast.type === 'error' ? (
+            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+          ) : (
+            <div className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
+          )}
+          <p className="flex-1 leading-snug">{portalToast.message}</p>
           <button
             type="button"
-            onClick={() => setToastMessage(null)}
-            className="text-slate-400 hover:text-slate-200 p-1"
+            onClick={() => setPortalToast(null)}
+            className="text-slate-400 hover:text-slate-200 p-1 cursor-pointer"
           >
             <X className="w-3.5 h-3.5" />
           </button>

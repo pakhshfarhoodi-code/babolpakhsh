@@ -47,7 +47,7 @@ import { useCatalog } from './hooks/useCatalog';
 import { useWarehouse } from './hooks/useWarehouse';
 import { useOrders, CreateOrderPayload } from './hooks/useOrders';
 import { useSupabaseSync } from './hooks/useSupabaseSync';
-import { CheckCircle2, AlertTriangle, Info, X, Bell } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Info, X, Bell, Clock } from 'lucide-react';
 
 // Re-export helpers for backwards compatibility
 export { generateUniqueId, toSyntheticEmail };
@@ -66,7 +66,7 @@ interface AppContextType {
   currentUser: CurrentUser;
   loginWithCredentials: (username: string, password: string, allowedRoles?: UserRole[]) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
-  showToast: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
+  showToast: (message: string, type?: 'info' | 'success' | 'warning' | 'error', durationMs?: number) => void;
 
   categories: Category[];
   brands: string[];
@@ -300,11 +300,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     type: 'info' | 'success' | 'warning' | 'error';
   } | null>(null);
 
-  const showToast = useCallback((message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
+  const toastTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  const showToast = useCallback((message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info', durationMs: number = 5000) => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
     setGlobalToast({ message, type });
-    setTimeout(() => {
+    toastTimeoutRef.current = setTimeout(() => {
       setGlobalToast((curr) => (curr?.message === message ? null : curr));
-    }, 5000);
+    }, durationMs);
   }, []);
 
   // Hook 5: Supabase Realtime / Polling Sync & LocalStorage Cross-Tab Sync
@@ -1195,7 +1200,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ) : globalToast.type === 'error' ? (
                 <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
               ) : globalToast.type === 'warning' ? (
-                <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+                <Clock className="w-5 h-5 text-amber-400 shrink-0" />
               ) : (
                 <Bell className="w-5 h-5 text-blue-400 shrink-0 animate-bounce" />
               )}

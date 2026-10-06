@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Visitor, Supermarket, Order } from '../../types';
 import { useApp } from '../../context/AppContext';
 import {
@@ -26,6 +26,9 @@ import {
   Check,
   AlertTriangle,
   FileText,
+  Clock,
+  MessageSquare,
+  Copy,
 } from 'lucide-react';
 import { SupermarketRegisterModal } from '../SupermarketRegisterModal';
 import { DirectInvoiceSheet } from './DirectInvoiceSheet';
@@ -36,12 +39,14 @@ interface TeamTabProps {
   visitors: Visitor[];
   supermarkets: Supermarket[];
   orders: Order[];
+  initialStoreStatusFilter?: 'all' | 'active' | 'inactive' | 'pending';
 }
 
 export const TeamTab: React.FC<TeamTabProps> = ({
   visitors,
   supermarkets,
   orders,
+  initialStoreStatusFilter,
 }) => {
   const {
     currentUser,
@@ -54,10 +59,30 @@ export const TeamTab: React.FC<TeamTabProps> = ({
     resetSupermarketPassword,
     resetVisitorPassword,
     refreshData,
+    invoiceSettings,
   } = useApp();
   const [selectedVisitorFilter, setSelectedVisitorFilter] = useState<string | null>(null);
   const [storeSearchTerm, setStoreSearchTerm] = useState('');
-  const [storeStatusFilter, setStoreStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [storeStatusFilter, setStoreStatusFilter] = useState<'all' | 'active' | 'inactive' | 'pending'>(initialStoreStatusFilter || 'all');
+
+  useEffect(() => {
+    if (initialStoreStatusFilter) {
+      setStoreStatusFilter(initialStoreStatusFilter);
+    }
+  }, [initialStoreStatusFilter]);
+
+  // Approval Modals State
+  const [approvingStoreModal, setApprovingStoreModal] = useState<Supermarket | null>(null);
+  const [rejectingStoreModal, setRejectingStoreModal] = useState<Supermarket | null>(null);
+  const [rejectNote, setRejectNote] = useState('');
+  const [smsNotificationModal, setSmsNotificationModal] = useState<{
+    store: Supermarket;
+    phone: string;
+    name: string;
+    smsText: string;
+  } | null>(null);
+  const [isProcessingApproval, setIsProcessingApproval] = useState(false);
+
   const [isRegisterStoreModalOpen, setIsRegisterStoreModalOpen] = useState(false);
   const [togglingStoreId, setTogglingStoreId] = useState<string | null>(null);
   const [toastNotification, setToastNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -594,6 +619,88 @@ export const TeamTab: React.FC<TeamTabProps> = ({
     }
   };
 
+  // Admin Set Store Approval (pending -> approved | rejected)
+  const handleAdminSetStoreApproval = async (
+    shop: Supermarket,
+    status: 'approved' | 'rejected',
+    note?: string
+  ) => {
+    setIsProcessingApproval(true);
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const { data, error } = await supabase.rpc('admin_set_store_approval', {
+          p_store_id: shop.id,
+          p_status: status,
+          p_note: note ? note.trim() : null,
+        });
+
+        if (error) {
+          setToastNotification({
+            type: 'error',
+            message: error.message || 'خطا در تغییر وضعیت تایید فروشگاه.',
+          });
+          return;
+        }
+
+        if (data && (data as any).success === false) {
+          setToastNotification({
+            type: 'error',
+            message: (data as any).message || 'خطا در تغییر وضعیت تایید در سرور.',
+          });
+          return;
+        }
+
+        const realMsg =
+          (data as any)?.message ||
+          (status === 'approved'
+            ? `حساب فروشگاه «${shop.name}» با موفقیت تایید شد.`
+            : `درخواست فروشگاه «${shop.name}» رد شد.`);
+        setToastNotification({
+          type: 'success',
+          message: realMsg,
+        });
+      } else {
+        setToastNotification({
+          type: 'success',
+          message:
+            status === 'approved'
+              ? `حساب فروشگاه «${shop.name}» با موفقیت تایید شد.`
+              : `درخواست فروشگاه «${shop.name}» رد شد.`,
+        });
+      }
+
+      await refreshData();
+
+      // Close approval modals
+      setApprovingStoreModal(null);
+      setRejectingStoreModal(null);
+      setRejectNote('');
+
+      if (status === 'approved') {
+        const brandName = invoiceSettings?.brand_name || 'بارفروش';
+        const defaultSms = `حساب فروشگاه شما در ${brandName} تایید شد. اکنون می‌توانید سفارش ثبت کنید.`;
+        setSmsNotificationModal({
+          store: shop,
+          phone: shop.phone,
+          name: shop.name,
+          smsText: defaultSms,
+        });
+      }
+    } catch (err: any) {
+      setToastNotification({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در تغییر وضعیت تایید.',
+      });
+    } finally {
+      setIsProcessingApproval(false);
+      setTimeout(() => setToastNotification(null), 4000);
+    }
+  };
+
+  const pendingStoresCount = useMemo(() => {
+    return supermarkets.filter((s) => s.approval_status === 'pending').length;
+  }, [supermarkets]);
+
   // Filtered supermarkets based on visitor click, search term, and approval status
   const filteredSupermarkets = useMemo(() => {
     return supermarkets.filter((shop) => {
@@ -606,10 +713,16 @@ export const TeamTab: React.FC<TeamTabProps> = ({
           return false;
         }
       }
-      if (storeStatusFilter === 'inactive' && shop.is_active !== false) {
+      if (storeStatusFilter === 'pending' && shop.approval_status !== 'pending') {
         return false;
       }
-      if (storeStatusFilter === 'active' && shop.is_active === false) {
+      if (storeStatusFilter === 'inactive' && shop.is_active !== false && shop.approval_status !== 'rejected') {
+        return false;
+      }
+      if (
+        storeStatusFilter === 'active' &&
+        (shop.is_active === false || shop.approval_status === 'pending' || shop.approval_status === 'rejected')
+      ) {
         return false;
       }
       if (storeSearchTerm.trim()) {
@@ -902,12 +1015,28 @@ export const TeamTab: React.FC<TeamTabProps> = ({
               </button>
             </div>
 
-            {/* Status Filter Tabs (All / Active / Inactive) */}
-            <div className="flex items-center gap-1.5 mt-3 p-1 rounded-xl bg-slate-950 border border-slate-800 text-xs">
+            {/* Status Filter Tabs */}
+            <div className="flex items-center gap-1.5 mt-3 p-1 rounded-xl bg-slate-950 border border-slate-800 text-xs overflow-x-auto">
+              {/* If pendingStoresCount > 0: Put pending chip first and highlighted */}
+              {pendingStoresCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setStoreStatusFilter('pending')}
+                  className={`py-1.5 px-3 rounded-lg font-bold transition cursor-pointer text-center flex items-center justify-center gap-1.5 shrink-0 ${
+                    storeStatusFilter === 'pending'
+                      ? 'bg-amber-500 text-slate-950 font-black shadow-md border border-amber-400'
+                      : 'bg-amber-500/25 text-amber-300 border border-amber-500/50 hover:bg-amber-500/35 animate-pulse'
+                  }`}
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>در انتظار تایید ({pendingStoresCount})</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() => setStoreStatusFilter('all')}
-                className={`flex-1 py-1.5 rounded-lg font-bold transition cursor-pointer text-center ${
+                className={`flex-1 py-1.5 px-2 rounded-lg font-bold transition cursor-pointer text-center shrink-0 ${
                   storeStatusFilter === 'all'
                     ? 'bg-slate-800 text-slate-100 shadow-xs'
                     : 'text-slate-400 hover:text-slate-200'
@@ -919,26 +1048,41 @@ export const TeamTab: React.FC<TeamTabProps> = ({
               <button
                 type="button"
                 onClick={() => setStoreStatusFilter('active')}
-                className={`flex-1 py-1.5 rounded-lg font-bold transition cursor-pointer text-center ${
+                className={`flex-1 py-1.5 px-2 rounded-lg font-bold transition cursor-pointer text-center shrink-0 ${
                   storeStatusFilter === 'active'
                     ? 'bg-emerald-600 text-white shadow-xs'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                دسترسی فعال ({supermarkets.filter((s) => s.is_active !== false).length})
+                دسترسی فعال ({supermarkets.filter((s) => s.is_active !== false && s.approval_status !== 'pending' && s.approval_status !== 'rejected').length})
               </button>
 
               <button
                 type="button"
                 onClick={() => setStoreStatusFilter('inactive')}
-                className={`flex-1 py-1.5 rounded-lg font-bold transition cursor-pointer text-center ${
+                className={`flex-1 py-1.5 px-2 rounded-lg font-bold transition cursor-pointer text-center shrink-0 ${
                   storeStatusFilter === 'inactive'
                     ? 'bg-rose-600 text-white shadow-xs'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                غیرفعال ({supermarkets.filter((s) => s.is_active === false).length})
+                غیرفعال ({supermarkets.filter((s) => s.is_active === false || s.approval_status === 'rejected').length})
               </button>
+
+              {/* If pendingStoresCount === 0: Show pending chip in normal position */}
+              {pendingStoresCount === 0 && (
+                <button
+                  type="button"
+                  onClick={() => setStoreStatusFilter('pending')}
+                  className={`flex-1 py-1.5 px-2 rounded-lg font-bold transition cursor-pointer text-center shrink-0 ${
+                    storeStatusFilter === 'pending'
+                      ? 'bg-amber-500 text-slate-950 shadow-xs'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  در انتظار تایید (۰)
+                </button>
+              )}
             </div>
 
             {/* Filter banner if active */}
@@ -1048,13 +1192,25 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <p className="font-bold text-sm text-slate-100 truncate">{shop.name}</p>
-                              {!isApproved ? (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-950/80 text-rose-300 border border-rose-800/50">
-                                  غیرفعال
+                              {shop.approval_status === 'pending' ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
+                                  <Clock className="w-3 h-3 text-amber-400" />
+                                  <span>در انتظار تایید</span>
+                                </span>
+                              ) : shop.approval_status === 'rejected' ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                                  <X className="w-3 h-3 text-rose-400" />
+                                  <span>ردشده</span>
                                 </span>
                               ) : (
-                                <span className="px-1.5 py-0.2 rounded-md text-[10px] font-semibold bg-emerald-950/80 text-emerald-300 border border-emerald-800/50">
-                                  دسترسی فعال
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                                  <Check className="w-3 h-3 text-emerald-400" />
+                                  <span>تاییدشده</span>
+                                </span>
+                              )}
+                              {!isApproved && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-950/80 text-rose-300 border border-rose-800/50">
+                                  غیرفعال
                                 </span>
                               )}
                             </div>
@@ -1074,6 +1230,51 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                         <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
                         <span className="truncate">{shop.address}</span>
                       </div>
+
+                      {/* 3 Actions for pending and rejected stores: Approve (dialog), Reject (optional reason dialog), Call (tel: link) */}
+                      {(shop.approval_status === 'pending' || shop.approval_status === 'rejected') && (
+                        <div className="mt-2 p-2.5 rounded-xl bg-slate-900/95 border border-amber-500/35 flex flex-wrap items-center justify-between gap-2 shadow-inner">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => setApprovingStoreModal(shop)}
+                              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs transition shadow-sm cursor-pointer"
+                              title="تایید حساب کاربری و فعال‌سازی ثبت سفارش"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>تایید حساب</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setRejectingStoreModal(shop);
+                                setRejectNote(shop.approval_note || '');
+                              }}
+                              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 font-bold text-xs transition cursor-pointer"
+                              title="رد درخواست احراز هویت با دلیل اختیاری"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                              <span>رد درخواست</span>
+                            </button>
+
+                            <a
+                              href={`tel:${shop.phone}`}
+                              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-blue-400 hover:text-blue-300 text-xs font-mono font-bold transition dir-ltr cursor-pointer"
+                              title="تماس مستقیم با فروشگاه"
+                            >
+                              <Phone className="w-3.5 h-3.5" />
+                              <span>تماس</span>
+                            </a>
+                          </div>
+
+                          {shop.approval_note && (
+                            <span className="text-[11px] text-rose-300 bg-rose-950/60 border border-rose-800/40 px-2.5 py-1 rounded-lg">
+                              علت رد: {shop.approval_note}
+                            </span>
+                          )}
+                        </div>
+                      )}
 
                       {/* Bottom row: Assigned Visitor + Approval Toggle Button + Edit & Delete Actions */}
                       <div className="mt-2.5 pt-2 border-t border-slate-900 flex flex-wrap items-center justify-between gap-2">
@@ -2165,6 +2366,169 @@ export const TeamTab: React.FC<TeamTabProps> = ({
             refreshData();
           }}
         />
+      )}
+
+      {/* 1. Modal: Confirm Store Approval */}
+      {approvingStoreModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-emerald-500/40 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-100">تایید حساب فروشگاه</h3>
+                <p className="text-xs text-slate-400">احراز هویت و فعال‌سازی ثبت سفارش</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed bg-slate-950 p-3 rounded-xl border border-slate-800">
+              آیا از تایید حساب کاربری فروشگاه <strong className="text-emerald-400">«{approvingStoreModal.name}»</strong> با مدیریت آقای/خانم <strong className="text-slate-100">{approvingStoreModal.owner}</strong> اطمینان دارید؟ با تایید حساب، امکان ثبت سفارش برای این فروشگاه فعال خواهد شد.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                disabled={isProcessingApproval}
+                onClick={() => setApprovingStoreModal(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition cursor-pointer"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                disabled={isProcessingApproval}
+                onClick={() => handleAdminSetStoreApproval(approvingStoreModal, 'approved')}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-lg shadow-emerald-600/30 cursor-pointer disabled:opacity-50"
+              >
+                {isProcessingApproval ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                <span>تایید حساب کاربری</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Modal: Reject Store Approval with optional reason */}
+      {rejectingStoreModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-rose-500/40 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center border border-rose-500/30">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-100">رد درخواست احراز فروشگاه</h3>
+                <p className="text-xs text-slate-400">ثبت وضعیت رد احراز برای فروشگاه</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300">
+              درخواست فروشگاه <strong className="text-rose-400">«{rejectingStoreModal.name}»</strong> رد خواهد شد.
+            </p>
+
+            <div className="space-y-1.5">
+              <label className="text-xs text-slate-400 font-medium">دلیل رد درخواست (اختیاری):</label>
+              <textarea
+                rows={3}
+                value={rejectNote}
+                onChange={(e) => setRejectNote(e.target.value)}
+                placeholder="مثلاً: اطلاعات پروانه کسب ناقص است یا عدم احراز موقعیت مکانی..."
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 transition"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                disabled={isProcessingApproval}
+                onClick={() => setRejectingStoreModal(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition cursor-pointer"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                disabled={isProcessingApproval}
+                onClick={() => handleAdminSetStoreApproval(rejectingStoreModal, 'rejected', rejectNote)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition shadow-lg shadow-rose-600/30 cursor-pointer disabled:opacity-50"
+              >
+                {isProcessingApproval ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                <span>ثبت رد درخواست</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Modal: Send SMS Notification after Approval */}
+      {smsNotificationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-blue-500/40 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center border border-blue-500/30">
+                  <MessageSquare className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-100">ارسال پیامک اطلاع‌رسانی</h3>
+                  <p className="text-xs text-slate-400">به شماره {smsNotificationModal.phone}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSmsNotificationModal(null)}
+                className="text-slate-400 hover:text-slate-200 p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              حساب فروشگاه <strong className="text-emerald-400">«{smsNotificationModal.name}»</strong> تایید شد. جهت اطلاع به فروشگاه می‌توانید پیامک زیر را ارسال کنید:
+            </p>
+
+            <div className="space-y-1.5">
+              <label className="text-xs text-slate-400 font-medium">متن پیامک ارسالی:</label>
+              <textarea
+                rows={3}
+                value={smsNotificationModal.smsText}
+                onChange={(e) =>
+                  setSmsNotificationModal((prev) =>
+                    prev ? { ...prev, smsText: e.target.value } : null
+                  )
+                }
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 font-sans"
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(smsNotificationModal.smsText);
+                  setToastNotification({
+                    type: 'success',
+                    message: 'متن پیامک کپی شد.',
+                  });
+                  setTimeout(() => setToastNotification(null), 3000);
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition cursor-pointer"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>کپی متن پیامک</span>
+              </button>
+
+              <a
+                href={`sms:${smsNotificationModal.phone}?body=${encodeURIComponent(smsNotificationModal.smsText)}`}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-md shadow-blue-600/30 cursor-pointer"
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span>ارسال پیامک اطلاع‌رسانی</span>
+              </a>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

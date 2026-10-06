@@ -30,7 +30,7 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
   onSuccess,
   defaultVisitorId,
 }) => {
-  const { visitors, registerSupermarket } = useApp();
+  const { visitors, registerSupermarket, role, loginWithCredentials } = useApp();
 
   const [name, setName] = useState('');
   const [owner, setOwner] = useState('');
@@ -54,6 +54,7 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
   if (!isOpen) return null;
 
   const isRegisteredByVisitor = Boolean(defaultVisitorId);
+  const isSelfRegistration = !isRegisteredByVisitor && role !== 'admin' && role !== 'visitor';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,13 +111,21 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
     }
   };
 
-  const handleCloseAll = () => {
+  const handleCloseAll = async () => {
     setIsSuccessModal(false);
     onClose();
+    if (isSelfRegistration && phone && password) {
+      try {
+        await loginWithCredentials(normalizePhone(phone), password.trim(), ['supermarket']);
+      } catch (err) {
+        console.error('Auto login error:', err);
+      }
+    }
   };
 
   if (isSuccessModal) {
     const registeredPhone = normalizePhone(phone);
+
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
         <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden p-6 text-center space-y-4">
@@ -124,19 +133,31 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
             <Check className="w-7 h-7 stroke-[3]" />
           </div>
 
-          <div className="space-y-1.5">
-            <h3 className="text-base font-bold text-slate-100">حساب کاربری شما با موفقیت ایجاد و فعال شد</h3>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              حساب فروشگاه <strong className="text-amber-400">«{name}»</strong> فعال گردید. اکنون می‌توانید با شماره موبایل <strong className="text-amber-300 font-mono dir-ltr">{registeredPhone}</strong> و رمز عبور تعیین‌شده وارد سامانه شوید.
-            </p>
-          </div>
+          {isSelfRegistration ? (
+            <div className="space-y-2">
+              <h3 className="text-base font-bold text-slate-100">ثبت‌نام انجام شد</h3>
+              <p className="text-xs text-amber-300 font-medium leading-relaxed bg-amber-500/10 border border-amber-500/25 p-3 rounded-xl">
+                ثبت‌نام انجام شد. برای ثبت اولین سفارش، حساب شما باید توسط ادمین تایید شود.
+              </p>
+              <p className="text-[11px] text-slate-400">
+                حساب فروشگاه <strong className="text-slate-200">«{name}»</strong> ثبت شد. پس از تایید مدیریت، پیامک اطلاع‌رسانی به شماره <span className="font-mono dir-ltr text-slate-300">{registeredPhone}</span> ارسال خواهد شد.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <h3 className="text-base font-bold text-slate-100">حساب کاربری با موفقیت ایجاد شد</h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                حساب فروشگاه <strong className="text-amber-400">«{name}»</strong> ثبت گردید. با شماره موبایل <strong className="text-amber-300 font-mono dir-ltr">{registeredPhone}</strong> می‌توانید وارد سامانه شوید.
+              </p>
+            </div>
+          )}
 
           <button
             type="button"
             onClick={handleCloseAll}
             className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition cursor-pointer shadow-md shadow-amber-500/20"
           >
-            بستن و ورود به حساب
+            {isSelfRegistration ? 'ورود به برنامه' : 'بستن و ادامه'}
           </button>
         </div>
       </div>

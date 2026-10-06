@@ -636,6 +636,8 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
           assigned_visitor_id: assignedVisitorId,
           username: cleanPhone,
           is_active: true,
+          approval_status: 'pending',
+          registration_source: 'self_register',
           created_at: new Date().toISOString(),
         };
 

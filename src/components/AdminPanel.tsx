@@ -85,6 +85,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     return supermarkets.filter((s) => s.is_active === false).length;
   }, [supermarkets]);
 
+  const pendingStoresCount = useMemo(() => {
+    return supermarkets.filter((s) => s.approval_status === 'pending').length;
+  }, [supermarkets]);
+
   const pendingBillsCount = useMemo(() => {
     return loadingBills.filter((b) => b.status === 'pending').length;
   }, [loadingBills]);
@@ -93,8 +97,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const delegatedCount = orders.filter((o) => o.status === 'delegated').length;
     const lowStockCount = products.filter((p) => (Math.round((p.stock - p.reserved_stock) * 1000) / 1000) < LOW_STOCK_THRESHOLD).length;
     const inactiveStoresCount = supermarkets.filter((s) => s.is_active !== false && isStoreInactiveFor30Days(s.id, orders)).length;
-    return delegatedCount + lowStockCount + inactiveStoresCount + pendingBillsCount;
-  }, [orders, products, supermarkets, pendingBillsCount]);
+    return delegatedCount + lowStockCount + inactiveStoresCount + pendingBillsCount + pendingStoresCount;
+  }, [orders, products, supermarkets, pendingBillsCount, pendingStoresCount]);
 
   // Tab Navigation Handlers from Overview Cards
   const handleNavigateToOrders = (statusFilter = 'all') => {
@@ -116,7 +120,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setActiveTab('products');
   };
 
-  const handleNavigateToTeam = () => {
+  const [teamStoreFilterHint, setTeamStoreFilterHint] = useState<'all' | 'active' | 'inactive' | 'pending'>('all');
+
+  const handleNavigateToTeam = (statusFilter: string = 'all') => {
+    setTeamStoreFilterHint((statusFilter as any) || 'all');
     setActiveTab('team');
   };
 
@@ -231,6 +238,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   title={`${pendingBillsCount} فاکتور منتظر بررسی ادمین`}
                 >
                   {pendingBillsCount}
+                </span>
+              )}
+              {item.id === 'team' && pendingStoresCount > 0 && (
+                <span
+                  className="px-1.5 py-0.2 rounded-full font-black text-[11px] bg-amber-400 text-slate-950 font-mono shadow-sm animate-pulse"
+                  title={`${pendingStoresCount} فروشگاه در انتظار تایید`}
+                >
+                  {pendingStoresCount}
                 </span>
               )}
             </button>
@@ -373,6 +388,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           visitors={visitors}
           supermarkets={supermarkets}
           orders={orders}
+          initialStoreStatusFilter={teamStoreFilterHint}
         />
       )}
 

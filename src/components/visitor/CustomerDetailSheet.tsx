@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Supermarket, Order } from '../../types';
+import { useApp } from '../../context/AppContext';
 import {
   X,
   Store,
@@ -33,6 +34,7 @@ export const CustomerDetailSheet: React.FC<CustomerDetailSheetProps> = ({
   onClose,
   onNewOrder,
 }) => {
+  const { showToast } = useApp();
   const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState<Order | null>(null);
 
   if (!isOpen || !customer) return null;
@@ -58,8 +60,16 @@ export const CustomerDetailSheet: React.FC<CustomerDetailSheetProps> = ({
               <Store className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <h3 className="text-sm font-bold text-slate-100 truncate">{customer.name}</h3>
-              <p className="text-xs text-slate-400 truncate">مدیریت: {customer.owner}</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm font-bold text-slate-100 truncate">{customer.name}</h3>
+                {customer.approval_status === 'pending' && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                    <Clock className="w-3 h-3 text-amber-400" />
+                    <span>در انتظار تایید ادمین</span>
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 truncate mt-0.5">مدیریت: {customer.owner}</p>
             </div>
           </div>
           <button
@@ -190,6 +200,10 @@ export const CustomerDetailSheet: React.FC<CustomerDetailSheetProps> = ({
           <button
             type="button"
             onClick={() => {
+              if (customer.approval_status === 'pending') {
+                showToast('حساب این مشتری هنوز توسط ادمین تایید نشده است.', 'warning', 5000);
+                return;
+              }
               onClose();
               onNewOrder(customer.id);
             }}

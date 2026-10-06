@@ -52,7 +52,12 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
   isOpen,
   onToggleOpen,
 }) => {
-  const { loadingBills, products, showToast, refreshData } = useApp();
+  const {
+    loadingBills,
+    products,
+    showToast,
+    refreshData,
+  } = useApp();
 
   // Active Draft / Current Invoice state
   const [activeBill, setActiveBill] = useState<LoadingBill | null>(null);
@@ -1315,8 +1320,8 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
                       className="p-4 rounded-2xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 text-xs"
                     >
                       <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-sm text-slate-100">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-sm text-slate-100 font-mono">
                             {b.invoice_no || b.id}
                           </span>
                           {renderStatusBadge(b.status)}

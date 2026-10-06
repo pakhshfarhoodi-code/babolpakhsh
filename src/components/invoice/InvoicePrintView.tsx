@@ -39,7 +39,11 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
   orders = [],
   showCustomerBreakdown = false,
 }) => {
-  const { invoiceSettings: contextSettings } = useApp();
+  const {
+    invoiceSettings: contextSettings,
+    getAccountSummary,
+    getInvoiceSettlementStatus,
+  } = useApp();
   const settings: InvoiceSettings = contextSettings || DEFAULT_INVOICE_SETTINGS;
   const currencyLabel = settings.currency_label || 'تومان';
 
@@ -102,8 +106,14 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
   }
 
   const aggregatedList = Array.from(aggregatedItemsMap.values());
-  const grandTotal = aggregatedList.reduce((acc, it) => acc + it.totalAmount, 0);
+  const officialCost = Number(bill.total_visitor_cost || 0);
+  const grandTotal = officialCost > 0 ? officialCost : aggregatedList.reduce((acc, it) => acc + it.totalAmount, 0);
   const totalUnits = Math.round(aggregatedList.reduce((acc, it) => acc + (Number(it.totalQuantity) || 0), 0) * 1000) / 1000;
+
+  // Real Financial Ledger Data (Same source of truth as Admin Panel)
+  const settlement = getInvoiceSettlementStatus(bill.id, grandTotal);
+  const visitorAccount = getAccountSummary(visitor.id);
+  const isAccountActive = Boolean(visitorAccount?.is_active);
 
   // 2. Customer Groups for Page 2 (Breakdown without prices)
   const customerGroupsMap = new Map<
@@ -337,13 +347,93 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
           </div>
 
           {/* Words Total Box */}
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs mb-8 print-avoid-break">
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs mb-3 print-avoid-break">
             <div>
               <span className="text-slate-600 font-semibold">مبلغ کل فاکتور به حروف: </span>
               <strong className="font-black text-slate-900">{numberToPersianWords(grandTotal)} {currencyLabel} تمام</strong>
             </div>
             <div className="text-slate-500 text-[11px]">
               این برگه به منزله رسید قطعی بارگیری و تحویل از انبار شرکت پخش {settings.brand_name || 'مرکزی'} می‌باشد.
+            </div>
+          </div>
+
+          {/* Financial Status Summary Box (وضعیت مالی فاکتور و مانده کل حساب ویزیتور) */}
+          <div className="print-avoid-break mb-6 rounded-xl border border-slate-300 bg-slate-50/70 p-3 text-xs">
+            <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-200">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-900 text-xs">وضعیت مالی و تسویه فاکتور</span>
+                {isAccountActive ? (
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    حساب دفتری فعال ({visitorAccount?.account_number})
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-200 text-slate-600">
+                    حساب دفتری غیرفعال
+                  </span>
+                )}
+              </div>
+              <div className="text-[10px] text-slate-500 font-medium">
+                دفتر مالی و گردش حساب مرکزی
+              </div>
+            </div>
+
+            <div className="grid grid-cols-4 gap-2 text-center">
+              {/* ۱. مبلغ کل فاکتور */}
+              <div className="p-2 rounded-lg bg-white border border-slate-200">
+                <span className="block text-[10px] text-slate-500 font-semibold mb-0.5">مبلغ کل فاکتور</span>
+                <div className="font-mono font-black text-xs text-slate-900">
+                  {formatPrice(grandTotal)} <span className="text-[9px] font-normal text-slate-500 font-sans">{currencyLabel}</span>
+                </div>
+                <span className="block text-[9px] text-slate-400 mt-0.5">جمع خرید ویزیتور</span>
+              </div>
+
+              {/* ۲. پرداخت‌شده این فاکتور */}
+              <div className="p-2 rounded-lg bg-white border border-slate-200">
+                <span className="block text-[10px] text-emerald-700 font-semibold mb-0.5">پرداخت‌شده این فاکتور</span>
+                <div className="font-mono font-black text-xs text-emerald-700">
+                  {formatPrice(settlement.totalPaid)} <span className="text-[9px] font-normal text-slate-500 font-sans">{currencyLabel}</span>
+                </div>
+                <span className="block text-[9px] text-slate-500 mt-0.5">
+                  {settlement.allocationsCount > 0 ? `${toPersianDigits(settlement.allocationsCount)} واریزی تخصیص‌یافته` : 'بدون واریز مستقیم'}
+                </span>
+              </div>
+
+              {/* ۳. معوق این فاکتور */}
+              <div className="p-2 rounded-lg bg-white border border-slate-200">
+                <span className="block text-[10px] text-amber-800 font-semibold mb-0.5">معوق این فاکتور</span>
+                <div className="font-mono font-black text-xs text-amber-900">
+                  {formatPrice(settlement.remainingDue)} <span className="text-[9px] font-normal text-slate-500 font-sans">{currencyLabel}</span>
+                </div>
+                <span className="block text-[9px] font-bold mt-0.5">
+                  {settlement.remainingDue === 0 ? (
+                    <span className="text-emerald-700">✓ تسویه کامل</span>
+                  ) : settlement.totalPaid > 0 ? (
+                    <span className="text-amber-700">پرداخت ناقص</span>
+                  ) : (
+                    <span className="text-rose-700">پرداخت‌نشده</span>
+                  )}
+                </span>
+              </div>
+
+              {/* ۴. مانده کل حساب ویزیتور بعد از این فاکتور */}
+              <div className="p-2 rounded-lg bg-white border border-slate-200">
+                <span className="block text-[10px] text-blue-800 font-semibold mb-0.5">مانده کل حساب ویزیتور</span>
+                <div className="font-mono font-black text-xs text-blue-900">
+                  {visitorAccount ? formatPrice(Math.abs(visitorAccount.current_balance)) : 0}{' '}
+                  <span className="text-[9px] font-normal text-slate-500 font-sans">{currencyLabel}</span>
+                </div>
+                <span className="block text-[9px] font-bold mt-0.5">
+                  {!isAccountActive ? (
+                    <span className="text-slate-400">حساب غیرفعال</span>
+                  ) : (visitorAccount?.current_balance ?? 0) > 0 ? (
+                    <span className="text-rose-700">بدهکار به شرکت</span>
+                  ) : (visitorAccount?.current_balance ?? 0) < 0 ? (
+                    <span className="text-emerald-700">بستانکار از شرکت</span>
+                  ) : (
+                    <span className="text-slate-600">تسویه و بی‌حساب</span>
+                  )}
+                </span>
+              </div>
             </div>
           </div>
         </div>

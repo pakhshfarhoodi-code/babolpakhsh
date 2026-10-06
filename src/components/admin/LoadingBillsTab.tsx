@@ -6,6 +6,7 @@ import { formatPrice } from './helpers';
 import { formatOrderDate } from '../visitor/helpers';
 import { VisitorInvoicePrintModal } from '../visitor/VisitorInvoicePrintModal';
 import { DirectInvoiceSheet } from './DirectInvoiceSheet';
+import { RecordPaymentModal } from './RecordPaymentModal';
 import {
   Search,
   Truck,
@@ -32,6 +33,8 @@ import {
   Calendar,
   Layers,
   Check,
+  CreditCard,
+  Wallet,
 } from 'lucide-react';
 
 export interface BillAgeInfo {
@@ -97,12 +100,25 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
   initialStatusFilter = 'pending',
   onNavigateToOrder,
 }) => {
-  const { loadingBills, orders, products, visitors, currentUser, showToast, refreshData } = useApp();
+  const {
+    loadingBills,
+    orders,
+    products,
+    visitors,
+    currentUser,
+    getAccountSummary,
+    getInvoiceSettlementStatus,
+    showToast,
+    refreshData,
+  } = useApp();
 
   // Active status filter (default 'pending' as specified)
   const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter || 'pending');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBillId, setSelectedBillId] = useState<string | null>(initialBillId || null);
+
+  // Financial payment modal state
+  const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
 
   // View switch: 'by_product' (به تفکیک کالا) vs 'by_customer' (به تفکیک مشتری)
   const [viewMode, setViewMode] = useState<'by_product' | 'by_customer'>('by_product');
@@ -1035,8 +1051,21 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
                 </div>
               </div>
 
-              {/* Action Toolbar: Approve, Cancel, Print (Only allowed states) */}
+              {/* Action Toolbar: Approve, Cancel, Print, Record Payment */}
               <div className="flex items-center gap-2 flex-wrap">
+                {/* 0. Record Financial Payment Button (only for approved or loaded bills) */}
+                {(activeBill.status === 'approved' || activeBill.status === 'loaded') && (
+                  <button
+                    type="button"
+                    onClick={() => setIsRecordPaymentOpen(true)}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold transition shadow-md shadow-emerald-600/20 cursor-pointer"
+                    title="ثبت دریافت و پرداخت مالی برای این فاکتور یا فاکتورهای دیگر"
+                  >
+                    <CreditCard className="w-4 h-4" />
+                    <span>ثبت پرداخت مالی</span>
+                  </button>
+                )}
+
                 {/* 1. Official Print / Preview Button */}
                 {activeBill.status === 'approved' || activeBill.status === 'loaded' ? (
                   <button
@@ -1087,6 +1116,100 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
                 )}
               </div>
             </div>
+
+            {/* 4-Metric Financial Ledger Summary Card */}
+            {(() => {
+              const billCost = Number(activeBill.total_visitor_cost || 0);
+              const settlement = getInvoiceSettlementStatus(activeBill.id, billCost);
+              const visitorAccount = getAccountSummary(activeBill.visitor_id);
+              const isAccountActive = Boolean(visitorAccount?.is_active);
+
+              return (
+                <div className="rounded-2xl bg-slate-950/80 border border-slate-800 p-3.5 sm:p-4 space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                    <div className="flex items-center gap-2">
+                      <CreditCard className="w-4 h-4 text-emerald-400" />
+                      <span className="font-bold text-xs text-slate-200">وضعیت مالی و تسویه فاکتور</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isAccountActive ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                          حساب دفتری فعال ({visitorAccount.account_number})
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">
+                          حساب دفتری غیرفعال
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 text-xs">
+                    {/* Metric 1: مبلغ فاکتور */}
+                    <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+                      <span className="text-[11px] text-slate-400 block font-medium">مبلغ فاکتور</span>
+                      <div className="font-mono font-black text-sm text-slate-100">
+                        {formatPrice(billCost)}{' '}
+                        <span className="text-[10px] font-normal text-slate-500 font-sans">تومان</span>
+                      </div>
+                      <span className="text-[10px] text-slate-500 block">جمع خرید ویزیتور</span>
+                    </div>
+
+                    {/* Metric 2: پرداخت‌شده این فاکتور */}
+                    <div className="p-3 rounded-xl bg-emerald-950/20 border border-emerald-500/30 space-y-1">
+                      <span className="text-[11px] text-emerald-300 block font-medium">پرداخت‌شده این فاکتور</span>
+                      <div className="font-mono font-black text-sm text-emerald-400">
+                        {formatPrice(settlement.totalPaid)}{' '}
+                        <span className="text-[10px] font-normal text-emerald-500/70 font-sans">تومان</span>
+                      </div>
+                      <span className="text-[10px] text-emerald-400/80 block">
+                        {settlement.allocationsCount > 0
+                          ? `${settlement.allocationsCount} تراکنش تخصیصی`
+                          : 'بدون پرداخت مستقیم'}
+                      </span>
+                    </div>
+
+                    {/* Metric 3: معوق این فاکتور */}
+                    <div className="p-3 rounded-xl bg-amber-950/20 border border-amber-500/30 space-y-1">
+                      <span className="text-[11px] text-amber-300 block font-medium">معوق این فاکتور</span>
+                      <div className="font-mono font-black text-sm text-amber-400">
+                        {formatPrice(settlement.remainingDue)}{' '}
+                        <span className="text-[10px] font-normal text-amber-500/70 font-sans">تومان</span>
+                      </div>
+                      <span className="text-[10px] block font-semibold">
+                        {settlement.remainingDue === 0 ? (
+                          <span className="text-emerald-400 font-bold">✓ تسویه کامل</span>
+                        ) : settlement.totalPaid > 0 ? (
+                          <span className="text-amber-400 font-bold">پرداخت ناقص</span>
+                        ) : (
+                          <span className="text-rose-400 font-bold">پرداخت نشده</span>
+                        )}
+                      </span>
+                    </div>
+
+                    {/* Metric 4: مانده کل حساب ویزیتور (کاملاً مجزا از معوق این فاکتور) */}
+                    <div className="p-3 rounded-xl bg-blue-950/25 border border-blue-500/40 space-y-1">
+                      <span className="text-[11px] text-blue-300 block font-medium">مانده کل حساب ویزیتور</span>
+                      <div className="font-mono font-black text-sm text-blue-200">
+                        {visitorAccount ? formatPrice(Math.abs(visitorAccount.current_balance)) : 0}{' '}
+                        <span className="text-[10px] font-normal text-blue-400/70 font-sans">تومان</span>
+                      </div>
+                      <span className="text-[10px] block font-bold">
+                        {!isAccountActive ? (
+                          <span className="text-slate-400">حساب غیرفعال</span>
+                        ) : visitorAccount.current_balance > 0 ? (
+                          <span className="text-rose-400">بدهکار به شرکت</span>
+                        ) : visitorAccount.current_balance < 0 ? (
+                          <span className="text-emerald-400">بستانکار از شرکت</span>
+                        ) : (
+                          <span className="text-slate-300">بی‌حساب و تسویه</span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Warning if warehouse stock shortage */}
             {hasAnyShortage && activeBill.status !== 'loaded' && (
@@ -1933,6 +2056,19 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
           mode={directInvoiceMode}
           priceMode={directInvoiceMode === 'direct_store' ? 'store' : 'visitor'}
           onClose={() => setIsDirectInvoiceOpen(false)}
+          onSuccess={() => {
+            refreshData();
+          }}
+        />
+      )}
+
+      {/* Record Financial Payment Modal */}
+      {isRecordPaymentOpen && activeBill && (
+        <RecordPaymentModal
+          isOpen={isRecordPaymentOpen}
+          onClose={() => setIsRecordPaymentOpen(false)}
+          profileId={activeBill.visitor_id}
+          defaultInvoiceId={activeBill.id}
           onSuccess={() => {
             refreshData();
           }}

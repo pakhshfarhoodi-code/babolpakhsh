@@ -7,6 +7,7 @@ import { ProductsTab } from './admin/ProductsTab';
 import { TeamTab } from './admin/TeamTab';
 import { ReportsTab } from './admin/ReportsTab';
 import { InvoiceSettingsTab } from './admin/InvoiceSettingsTab';
+import { FinancialAccountsTab } from './admin/FinancialAccountsTab';
 import { LOW_STOCK_THRESHOLD, isStoreInactiveFor30Days } from './admin/helpers';
 import {
   AlertTriangle,
@@ -20,9 +21,17 @@ import {
   FileText,
   Truck,
   FileSpreadsheet,
+  Wallet,
 } from 'lucide-react';
 
-export type AdminTabKey = 'overview' | 'orders' | 'products' | 'team' | 'reports' | 'invoice_settings';
+export type AdminTabKey =
+  | 'overview'
+  | 'orders'
+  | 'products'
+  | 'team'
+  | 'financial_accounts'
+  | 'reports'
+  | 'invoice_settings';
 
 interface AdminPanelProps {
   activeTab?: AdminTabKey;
@@ -164,6 +173,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       icon: Users,
       badge: supermarkets.length,
       badgeColor: 'bg-slate-800 text-slate-300 font-semibold',
+      activeStyle:
+        'bg-blue-600 text-white shadow-md shadow-blue-600/30 border-blue-500 font-bold',
+      inactiveHover: 'hover:text-blue-300 hover:bg-slate-900',
+    },
+    {
+      id: 'financial_accounts' as const,
+      label: 'حساب‌های دفتری',
+      icon: Wallet,
+      badge: null,
+      badgeColor: '',
       activeStyle:
         'bg-blue-600 text-white shadow-md shadow-blue-600/30 border-blue-500 font-bold',
       inactiveHover: 'hover:text-blue-300 hover:bg-slate-900',
@@ -390,6 +409,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           orders={orders}
           initialStoreStatusFilter={teamStoreFilterHint}
         />
+      )}
+
+      {/* Tab: Financial Accounts (حساب‌های دفتری) */}
+      {activeTab === 'financial_accounts' && (
+        <FinancialAccountsTab />
       )}
 
       {/* Tab 5: Reports */}

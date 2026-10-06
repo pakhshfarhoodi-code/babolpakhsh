@@ -29,9 +29,13 @@ import {
   Clock,
   MessageSquare,
   Copy,
+  Wallet,
+  ShieldAlert,
 } from 'lucide-react';
 import { SupermarketRegisterModal } from '../SupermarketRegisterModal';
 import { DirectInvoiceSheet } from './DirectInvoiceSheet';
+import { AccountLedgerModal } from './AccountLedgerModal';
+import { formatPrice } from './helpers';
 import { normalizePhone, isValidMobile, MIN_PASSWORD_LENGTH } from '../../context/utils';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 
@@ -60,10 +64,24 @@ export const TeamTab: React.FC<TeamTabProps> = ({
     resetVisitorPassword,
     refreshData,
     invoiceSettings,
+    financialAccounts,
+    activateFinancialAccount,
+    deactivateFinancialAccount,
+    getAccountSummary,
+    showToast,
   } = useApp();
   const [selectedVisitorFilter, setSelectedVisitorFilter] = useState<string | null>(null);
   const [storeSearchTerm, setStoreSearchTerm] = useState('');
   const [storeStatusFilter, setStoreStatusFilter] = useState<'all' | 'active' | 'inactive' | 'pending'>(initialStoreStatusFilter || 'all');
+
+  // Visitor Financial Account States
+  const [selectedVisitorForLedger, setSelectedVisitorForLedger] = useState<string | null>(null);
+  const [activatingVisitorId, setActivatingVisitorId] = useState<string | null>(null);
+  const [activatingCreditLimit, setActivatingCreditLimit] = useState<number | ''>(50000000);
+  const [isActivatingAccount, setIsActivatingAccount] = useState(false);
+  const [deactivatingAccountModal, setDeactivatingAccountModal] = useState<{ id: string; name: string } | null>(null);
+  const [deactivateAccountReason, setDeactivateAccountReason] = useState('');
+  const [isDeactivatingAccount, setIsDeactivatingAccount] = useState(false);
 
   useEffect(() => {
     if (initialStoreStatusFilter) {
@@ -859,6 +877,9 @@ export const TeamTab: React.FC<TeamTabProps> = ({
               const assignedStores = supermarkets.filter((s) => s.assigned_visitor_id === visitor.id);
               const visitorOrders = orders.filter((o) => o.assigned_visitor_id === visitor.id);
               const isSelected = selectedVisitorFilter === visitor.id;
+              const visitorAcc = financialAccounts.find((a) => a.profile_id === visitor.id);
+              const isAccActive = visitorAcc?.is_active || false;
+              const visitorSummary = getAccountSummary(visitor.id);
 
               return (
                 <div
@@ -908,6 +929,87 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                       <p className="text-xs text-slate-400">
                         {visitorOrders.length} سفارش جاری
                       </p>
+                    </div>
+                  </div>
+
+                  {/* Financial Account Status Bar */}
+                  <div className="mt-2.5 p-2 rounded-xl bg-slate-900/90 border border-slate-800/80 flex items-center justify-between text-xs flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <Wallet className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                      <span className="font-semibold text-slate-300">حساب دفتری:</span>
+                      {isAccActive ? (
+                        <span className="inline-flex items-center gap-1 font-mono text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                          <ShieldCheck className="w-3 h-3" />
+                          فعال ({visitorAcc?.account_number})
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 border border-slate-700">
+                          <ShieldAlert className="w-3 h-3" />
+                          غیرفعال
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2.5">
+                      {isAccActive && visitorSummary && (
+                        <div className="text-[11px] font-mono">
+                          <span className="text-slate-400 ml-1">مانده:</span>
+                          <span
+                            className={
+                              visitorSummary.current_balance > 0
+                                ? 'text-rose-400 font-bold'
+                                : visitorSummary.current_balance < 0
+                                ? 'text-emerald-400 font-bold'
+                                : 'text-slate-400 font-bold'
+                            }
+                          >
+                            {formatPrice(Math.abs(visitorSummary.current_balance))} ت
+                            {visitorSummary.current_balance > 0
+                              ? ' (بدهکار)'
+                              : visitorSummary.current_balance < 0
+                              ? ' (بستانکار)'
+                              : ' (تسویه)'}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Financial Actions Buttons */}
+                      <div className="flex items-center gap-1.5">
+                        {isAccActive ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedVisitorForLedger(visitor.id)}
+                              className="px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/40 transition cursor-pointer flex items-center gap-1"
+                              title="مشاهده گردش‌ها و دفتر حساب"
+                            >
+                              <Wallet className="w-3 h-3 text-blue-400" />
+                              <span>مشاهده دفتر حساب</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeactivatingAccountModal({ id: visitorAcc!.id, name: visitor.name })}
+                              className="px-2 py-1 rounded-lg text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition cursor-pointer"
+                              title="غیرفعال‌سازی حساب (حفظ کلیه سوابق قبلی)"
+                            >
+                              غیرفعال‌سازی
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActivatingVisitorId(visitor.id);
+                              setActivatingCreditLimit(visitorAcc?.credit_limit || 50000000);
+                            }}
+                            className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 transition cursor-pointer flex items-center gap-1"
+                            title="فعال‌سازی حساب دفتری این ویزیتور"
+                          >
+                            <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                            <span>فعال‌سازی حساب دفتری</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -2526,6 +2628,159 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                 <MessageSquare className="w-3.5 h-3.5" />
                 <span>ارسال پیامک اطلاع‌رسانی</span>
               </a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. Modal: Visitor Financial Account Ledger */}
+      {selectedVisitorForLedger && (
+        <AccountLedgerModal
+          isOpen={Boolean(selectedVisitorForLedger)}
+          onClose={() => setSelectedVisitorForLedger(null)}
+          profileId={selectedVisitorForLedger}
+        />
+      )}
+
+      {/* 5. Modal: Quick Activate Financial Account */}
+      {activatingVisitorId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setActivatingVisitorId(null)}
+        >
+          <div
+            className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-100">فعال‌سازی حساب دفتری ویزیتور</h3>
+                <p className="text-xs text-slate-400">ایجاد تعهد و ثبت گردش‌های مالی</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              با فعال‌سازی حساب دفتری، امکان ثبت فاکتورهای معوق، دریافت و پرداخت‌های نقدی و چک برای این ویزیتور فعال خواهد شد.
+            </p>
+
+            <div className="space-y-1.5">
+              <label className="text-xs text-slate-300 font-medium">سقف اعتبار مجاز (تومان):</label>
+              <input
+                type="number"
+                value={activatingCreditLimit}
+                onChange={(e) => setActivatingCreditLimit(e.target.value === '' ? '' : Number(e.target.value))}
+                placeholder="50000000"
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setActivatingVisitorId(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium cursor-pointer"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                disabled={isActivatingAccount}
+                onClick={async () => {
+                  if (!activatingVisitorId) return;
+                  setIsActivatingAccount(true);
+                  try {
+                    const res = await activateFinancialAccount(activatingVisitorId, Number(activatingCreditLimit) || 0);
+                    if (res.success) {
+                      showToast(res.message, 'success');
+                      setActivatingVisitorId(null);
+                    } else {
+                      showToast(res.message, 'error');
+                    }
+                  } finally {
+                    setIsActivatingAccount(false);
+                  }
+                }}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-lg shadow-emerald-600/30 cursor-pointer disabled:opacity-50"
+              >
+                {isActivatingAccount ? 'در حال فعال‌سازی...' : 'تایید و فعال‌سازی'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. Modal: Deactivate Account Confirm (Requirement 3: Preserves history) */}
+      {deactivatingAccountModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setDeactivatingAccountModal(null)}
+        >
+          <div
+            className="bg-slate-900 border border-rose-500/40 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center border border-rose-500/30">
+                <ShieldAlert className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-100">غیرفعال‌سازی حساب دفتری</h3>
+                <p className="text-xs text-slate-400">حساب «{deactivatingAccountModal.name}»</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              غیرفعال‌سازی حساب فقط وضعیت آن را تغییر می‌دهد و <strong>هیچ‌یک از سوابق مالی قبلی حذف نخواهد شد</strong>.
+            </p>
+
+            <div className="space-y-1.5">
+              <label className="text-xs text-slate-400 font-medium">دلیل غیرفعال‌سازی (اختیاری):</label>
+              <input
+                type="text"
+                value={deactivateAccountReason}
+                onChange={(e) => setDeactivateAccountReason(e.target.value)}
+                placeholder="دلیل..."
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-100 focus:outline-none focus:border-rose-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setDeactivatingAccountModal(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium cursor-pointer"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                disabled={isDeactivatingAccount}
+                onClick={async () => {
+                  if (!deactivatingAccountModal) return;
+                  setIsDeactivatingAccount(true);
+                  try {
+                    const res = await deactivateFinancialAccount(
+                      deactivatingAccountModal.id,
+                      deactivateAccountReason
+                    );
+                    if (res.success) {
+                      showToast(res.message, 'success');
+                      setDeactivatingAccountModal(null);
+                      setDeactivateAccountReason('');
+                    } else {
+                      showToast(res.message, 'error');
+                    }
+                  } finally {
+                    setIsDeactivatingAccount(false);
+                  }
+                }}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition shadow-lg shadow-rose-600/30 cursor-pointer disabled:opacity-50"
+              >
+                {isDeactivatingAccount ? 'در حال ثبت...' : 'تایید غیرفعال‌سازی'}
+              </button>
             </div>
           </div>
         </div>

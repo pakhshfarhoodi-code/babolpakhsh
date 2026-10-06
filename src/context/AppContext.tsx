@@ -20,6 +20,14 @@ import {
   InvoiceSettings,
   DEFAULT_INVOICE_SETTINGS,
   getInvoiceSettings,
+  FinancialAccount,
+  AccountTransaction,
+  Cheque,
+  PaymentAllocation,
+  FinancialAccountSummary,
+  ChequeStatus,
+  ChequeDetailsInput,
+  PaymentAllocationInput,
 } from '../types';
 import {
   INITIAL_CATEGORIES,
@@ -47,6 +55,7 @@ import { useCatalog } from './hooks/useCatalog';
 import { useWarehouse } from './hooks/useWarehouse';
 import { useOrders, CreateOrderPayload } from './hooks/useOrders';
 import { useSupabaseSync } from './hooks/useSupabaseSync';
+import { useFinancialAccounts } from './hooks/useFinancialAccounts';
 import { CheckCircle2, AlertTriangle, Info, X, Bell, Clock } from 'lucide-react';
 
 // Re-export helpers for backwards compatibility
@@ -180,6 +189,33 @@ interface AppContextType {
   toggleTheme: () => void;
   invoiceSettings: InvoiceSettings;
   updateInvoiceSettings: (settings: InvoiceSettings) => Promise<{ success: boolean; message: string }>;
+  financialAccounts: FinancialAccount[];
+  accountTransactions: AccountTransaction[];
+  cheques: Cheque[];
+  paymentAllocations: PaymentAllocation[];
+  isFinancialLoading: boolean;
+  activateFinancialAccount: (profileId: string, creditLimit?: number, notes?: string) => Promise<{ success: boolean; message: string; account?: FinancialAccount }>;
+  deactivateFinancialAccount: (accountId: string, reason?: string) => Promise<{ success: boolean; message: string }>;
+  recordFinancialPayment: (payload: {
+    profileId: string;
+    paymentType: 'cash_payment' | 'bank_transfer' | 'cheque_payment';
+    amount: number;
+    referenceId?: string;
+    description?: string;
+    chequeDetails?: ChequeDetailsInput;
+    allocations?: PaymentAllocationInput[];
+  }) => Promise<{ success: boolean; message: string }>;
+  updateChequeStatus: (chequeId: string, status: ChequeStatus, reason?: string) => Promise<{ success: boolean; message: string }>;
+  manualFinancialEntry: (payload: {
+    profileId: string;
+    type: 'manual_debit' | 'manual_credit' | 'opening_balance' | 'refund' | 'account_adjustment';
+    amount: number;
+    description: string;
+    referenceId?: string;
+    entryType?: 'debit' | 'credit';
+  }) => Promise<{ success: boolean; message: string }>;
+  getAccountSummary: (profileId: string) => FinancialAccountSummary | null;
+  getInvoiceSettlementStatus: (invoiceId: string, invoiceTotal: number) => { totalPaid: number; remainingDue: number; status: 'settled' | 'partially_paid' | 'unpaid'; allocationsCount: number };
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -297,6 +333,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     visitors,
     orders: orders.orders,
     setOrders: orders.setOrders,
+  });
+
+  const financial = useFinancialAccounts({
+    visitors,
+    supermarkets,
+    loadingBills: warehouse.loadingBills,
+    reloadCounter,
+    currentUser: auth.currentUser,
   });
 
   // Global Toast notification system
@@ -1111,6 +1155,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     theme,
     toggleTheme,
     showToast,
+    financialAccounts: financial.accounts,
+    accountTransactions: financial.transactions,
+    cheques: financial.cheques,
+    paymentAllocations: financial.allocations,
+    isFinancialLoading: financial.isLoading,
+    activateFinancialAccount: financial.activateAccount,
+    deactivateFinancialAccount: financial.deactivateAccount,
+    recordFinancialPayment: financial.recordPayment,
+    updateChequeStatus: financial.updateChequeStatus,
+    manualFinancialEntry: financial.manualFinancialEntry,
+    getAccountSummary: financial.getAccountSummary,
+    getInvoiceSettlementStatus: financial.getInvoiceSettlementStatus,
   }), [
     auth.role,
     auth.setRole,
@@ -1182,6 +1238,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast,
     invoiceSettings,
     updateInvoiceSettings,
+    financial.accounts,
+    financial.transactions,
+    financial.cheques,
+    financial.allocations,
+    financial.isLoading,
+    financial.activateAccount,
+    financial.deactivateAccount,
+    financial.recordPayment,
+    financial.updateChequeStatus,
+    financial.manualFinancialEntry,
+    financial.getAccountSummary,
+    financial.getInvoiceSettlementStatus,
   ]);
 
   return (

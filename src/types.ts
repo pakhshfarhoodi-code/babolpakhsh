@@ -804,5 +804,135 @@ export function getInvoiceSettings(raw?: unknown): InvoiceSettings {
   };
 }
 
+// =========================================================================
+// Financial Accounts & Ledger Types (سیستم حساب دفتری و گردش‌های مالی)
+// =========================================================================
+
+export interface FinancialAccount {
+  id: string;
+  profile_id: string;
+  account_number: string;
+  is_active: boolean;
+  credit_limit: number;
+  currency: string;
+  notes?: string | null;
+  activated_at?: string | null;
+  activated_by?: string | null;
+  deactivated_at?: string | null;
+  deactivated_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type AccountTransactionType =
+  | 'invoice_debt'
+  | 'cash_payment'
+  | 'bank_transfer'
+  | 'cheque_payment'
+  | 'manual_debit'
+  | 'manual_credit'
+  | 'refund'
+  | 'cheque_return'
+  | 'account_adjustment'
+  | 'opening_balance';
+
+export type AccountEntryType = 'debit' | 'credit';
+
+export interface AccountTransaction {
+  id: string;
+  account_id: string;
+  profile_id: string;
+  transaction_type: AccountTransactionType;
+  entry_type: AccountEntryType;
+  amount: number;
+  transaction_date: string;
+  reference_id?: string | null;
+  reference_invoice_id?: string | null;
+  reference_order_id?: string | null;
+  description?: string | null;
+  metadata?: Record<string, unknown> | null;
+  created_by?: string | null;
+  created_by_name?: string | null;
+  created_at: string;
+}
+
+export type ChequeStatus = 'pending' | 'cleared' | 'returned' | 'cancelled';
+
+export interface Cheque {
+  id: string;
+  account_id: string;
+  profile_id: string;
+  transaction_id?: string | null;
+  invoice_id?: string | null;
+  amount: number;
+  cheque_number: string;
+  sayad_number?: string | null;
+  bank_name: string;
+  branch_name?: string | null;
+  account_owner: string;
+  issue_date: string;
+  due_date: string;
+  status: ChequeStatus;
+  description?: string | null;
+  cleared_at?: string | null;
+  returned_at?: string | null;
+  return_reason?: string | null;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PaymentAllocation {
+  id: string;
+  transaction_id: string;
+  invoice_type: 'loading_bill' | 'order';
+  invoice_id: string;
+  allocated_amount: number;
+  notes?: string | null;
+  created_by?: string | null;
+  created_at: string;
+}
+
+export interface FinancialAccountSummary {
+  account_id: string;
+  profile_id: string;
+  profile_name: string;
+  profile_role: string;
+  profile_phone: string;
+  account_number: string;
+  is_active: boolean;
+  credit_limit: number;
+  total_debit: number;
+  total_credit: number;
+  current_balance: number; // positive: debtor (بدهکار به شرکت), negative: creditor (بستانکار)
+  transactions_count: number;
+  last_transaction_at?: string | null;
+}
+
+export interface ChequeDetailsInput {
+  cheque_number: string;
+  sayad_number?: string;
+  bank_name: string;
+  branch_name?: string;
+  account_owner: string;
+  issue_date?: string;
+  due_date: string;
+  description?: string;
+}
+
+export interface PaymentAllocationInput {
+  invoice_id: string;
+  amount: number;
+}
+
+export interface ManualFinancialEntryInput {
+  profileId: string;
+  type: 'manual_debit' | 'manual_credit' | 'opening_balance' | 'refund' | 'account_adjustment';
+  amount: number;
+  description: string;
+  referenceId?: string;
+  entryType?: 'debit' | 'credit';
+}
+
 
 

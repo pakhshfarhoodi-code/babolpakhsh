@@ -23,6 +23,10 @@ export const STORAGE_KEYS = {
   DELETED_PRODUCT_IDS: 'farhoodi_deleted_product_ids_v1',
   DELETED_SUPERMARKET_IDS: 'farhoodi_deleted_supermarket_ids_v1',
   DELETED_VISITOR_IDS: 'farhoodi_deleted_visitor_ids_v1',
+  FINANCIAL_ACCOUNTS: 'farhoodi_financial_accounts_v1',
+  ACCOUNT_TRANSACTIONS: 'farhoodi_account_transactions_v1',
+  CHEQUES: 'farhoodi_cheques_v1',
+  PAYMENT_ALLOCATIONS: 'farhoodi_payment_allocations_v1',
 } as const;
 
 // Read tombstoned deleted IDs from localStorage

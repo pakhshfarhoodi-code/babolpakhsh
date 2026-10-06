@@ -40,6 +40,8 @@ interface ExcelImportModalProps {
       consumer_price?: number;
       stock?: number;
       unit?: string;
+      image_url?: string;
+      items_per_package?: number;
       is_active?: boolean;
     }>
   ) => Promise<any> | void;
@@ -56,6 +58,7 @@ interface ColumnMapping {
   stockCol: string;
   unitCol: string;
   itemsPerPackageCol: string;
+  imageUrlCol: string;
 }
 
 const STANDARD_UNITS = ['عدد', 'باکس', 'کارتن', 'کیلوگرم', 'بسته', 'بطری', 'دبه', 'کیسه', 'شانه', 'قوطی'];
@@ -83,6 +86,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     stockCol: '',
     unitCol: '',
     itemsPerPackageCol: '',
+    imageUrlCol: '',
   });
 
   const { addCategory } = useApp();
@@ -138,6 +142,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
       stock: number;
       unit: string;
       items_per_package?: number;
+      image_url?: string;
       isNew: boolean;
       isValid: boolean;
       error?: string;
@@ -216,6 +221,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         'countperpack',
         'packqty',
       ]) || (columns.some((c) => normalize(c).includes('موجودی')) ? findMatch(['تعداد']) : ''),
+      imageUrlCol: findMatch(['لینکعکس', 'تصویرکالا', 'لینکتصویر', 'عکسکالا', 'تصویر', 'عکس', 'imageurl', 'image', 'picture', 'photo', 'img', 'url']),
     };
   };
 
@@ -372,6 +378,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
 
       const rawItemsPerPackage = mapping.itemsPerPackageCol ? cleanNum(row[mapping.itemsPerPackageCol]) : 0;
       const finalItemsPerPackage = rawItemsPerPackage > 0 ? rawItemsPerPackage : undefined;
+      const rawImageUrlFromExcel = mapping.imageUrlCol ? String(row[mapping.imageUrlCol] || '').trim() : '';
 
       rows.push({
         id: rawId,
@@ -385,6 +392,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         stock,
         unit: finalUnit,
         items_per_package: finalItemsPerPackage,
+        image_url: rawImageUrlFromExcel || undefined,
         isNew: !isExisting,
         isValid,
         error,
@@ -490,6 +498,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
           stock: r.stock,
           unit: r.unit,
           items_per_package: r.items_per_package,
+          image_url: r.image_url,
           is_active: true,
         }))
       );
@@ -514,6 +523,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         'موجودی': 100,
         'واحد': 'کارتن',
         'تعداد در کارتن/بسته': 24,
+        'لینک مستقیم تصویر کالا': 'https://images.unsplash.com/photo-1551024601-bec78aea704b?w=400',
       },
       {
         'کد کالا': 'prod-102',
@@ -525,6 +535,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         'موجودی': 45,
         'واحد': 'کیلوگرم',
         'تعداد در کارتن/بسته': '',
+        'لینک مستقیم تصویر کالا': '',
       },
       {
         'کد کالا': 'prod-103',
@@ -862,6 +873,26 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
                     >
                       <option value="">-- در اکسل ستون تعداد نیست --</option>
+                      {headers.map((h) => (
+                        <option key={h} value={h}>
+                          {h}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Image URL Column */}
+                  <div className="p-3 rounded-xl bg-slate-950 border border-slate-800/80 space-y-1.5">
+                    <label className="text-xs font-bold text-slate-200 flex items-center justify-between">
+                      <span>لینک مستقیم تصویر کالا</span>
+                      <span className="text-[10px] text-amber-400 font-bold">اختیاری</span>
+                    </label>
+                    <select
+                      value={mapping.imageUrlCol}
+                      onChange={(e) => setMapping((prev) => ({ ...prev, imageUrlCol: e.target.value }))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
+                    >
+                      <option value="">-- در اکسل ستون تصویر نیست --</option>
                       {headers.map((h) => (
                         <option key={h} value={h}>
                           {h}

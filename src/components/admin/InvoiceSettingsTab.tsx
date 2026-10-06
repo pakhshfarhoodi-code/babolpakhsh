@@ -11,6 +11,7 @@ import {
   DEFAULT_INVOICE_SETTINGS,
   DEFAULT_INVOICE_STYLE_SETTINGS,
   DEFAULT_COLUMN_WIDTHS,
+  DEFAULT_TABLE_COLUMNS,
   getInvoiceSettings,
 } from '../../types';
 import { InvoiceDocument } from '../invoice/InvoiceDocument';
@@ -308,6 +309,72 @@ export const InvoiceSettingsTab: React.FC = () => {
       },
     }));
     showToast('عرض ستون‌ها به حالت پیش‌فرض بازگردانده شد.', 'info');
+  };
+
+  const handleColumnOrderChange = (index: number, direction: 'up' | 'down') => {
+    setForm((prev) => {
+      const cols = [...(prev.table_columns || DEFAULT_TABLE_COLUMNS)];
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= cols.length) return prev;
+      const temp = cols[index];
+      cols[index] = cols[targetIndex];
+      cols[targetIndex] = temp;
+      return { ...prev, table_columns: cols };
+    });
+  };
+
+  const handleColumnLabelChange = (index: number, newLabel: string) => {
+    setForm((prev) => {
+      const cols = [...(prev.table_columns || DEFAULT_TABLE_COLUMNS)];
+      cols[index] = { ...cols[index], label: newLabel };
+      return { ...prev, table_columns: cols };
+    });
+  };
+
+  const handleColumnVisibilityToggle = (index: number, visible: boolean) => {
+    setForm((prev) => {
+      const cols = [...(prev.table_columns || DEFAULT_TABLE_COLUMNS)];
+      const targetCol = cols[index];
+      cols[index] = { ...targetCol, visible };
+
+      const colVisibilityKeyMap: Record<TableColumnKey, keyof InvoiceShowSettings> = {
+        row_index: 'col_row_index',
+        product_name: 'col_product_name',
+        items_per_package: 'col_items_per_package',
+        quantity_unit: 'col_quantity_unit',
+        unit_price: 'col_unit_price',
+        discount_percent: 'col_discount_percent',
+        total_price: 'col_total_price',
+      };
+
+      const showKey = colVisibilityKeyMap[targetCol.key];
+      return {
+        ...prev,
+        table_columns: cols,
+        show: {
+          ...prev.show,
+          [showKey]: visible,
+        },
+      };
+    });
+  };
+
+  const handleResetTableColumns = () => {
+    setForm((prev) => ({
+      ...prev,
+      table_columns: DEFAULT_TABLE_COLUMNS.map((col) => ({ ...col })),
+      show: {
+        ...prev.show,
+        col_row_index: true,
+        col_product_name: true,
+        col_items_per_package: true,
+        col_quantity_unit: true,
+        col_unit_price: true,
+        col_discount_percent: false,
+        col_total_price: true,
+      },
+    }));
+    showToast('ترتیب و عناوین ستون‌های جدول به پیش‌فرض بازگشت.', 'info');
   };
 
   const handleColumnWidthChange = (columnKey: TableColumnKey, newWidth: number) => {
@@ -688,154 +755,9 @@ export const InvoiceSettingsTab: React.FC = () => {
               )}
             </div>
 
-            {/* 2. Sizing & Typography (اندازه فونت‌ها و باکس‌ها) */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-md">
-              <button
-                type="button"
-                onClick={() => toggleSection('typography')}
-                className="w-full p-4 bg-slate-850 flex items-center justify-between text-right cursor-pointer hover:bg-slate-800/80 transition"
-              >
-                <div className="flex items-center gap-2.5">
-                  <Type className="w-4 h-4 text-pink-400" />
-                  <span className="font-bold text-sm text-slate-200">
-                    ۲. اندازه فونت‌ها، عناوین، ابعاد و پدینگ باکس‌ها
-                  </span>
-                </div>
-                <ChevronDown
-                  className={`w-4 h-4 text-slate-400 transition-transform ${
-                    openSections.typography ? 'rotate-180' : ''
-                  }`}
-                />
-              </button>
 
-              {openSections.typography && (
-                <div className="p-4 space-y-4 border-t border-slate-800 bg-slate-900/50">
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div className="space-y-1">
-                      <label className="text-slate-300 font-bold">مقیاس کلی اندازه قلم:</label>
-                      <select
-                        value={form.style.base_font_size}
-                        onChange={(e) =>
-                          handleStyleChange('base_font_size', e.target.value as any)
-                        }
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-slate-200 text-xs"
-                      >
-                        <option value="small">فشرده و کوچک (۱۰px)</option>
-                        <option value="normal">استاندارد (۱۱px)</option>
-                        <option value="large">بزرگ و خوانا (۱۲.۵px)</option>
-                      </select>
-                    </div>
 
-                    <div className="space-y-1">
-                      <label className="text-slate-300 font-bold">اندازه تیتر عنوان فاکتور:</label>
-                      <select
-                        value={form.style.header_title_size}
-                        onChange={(e) =>
-                          handleStyleChange('header_title_size', e.target.value as any)
-                        }
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-slate-200 text-xs"
-                      >
-                        <option value="small">کوچک (۱۲px)</option>
-                        <option value="medium">متوسط استاندارد (۱۴px)</option>
-                        <option value="large">بزرگ برجسته (۱۶px)</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-slate-300 font-bold">اندازه نام برند / شرکت:</label>
-                      <select
-                        value={form.style.brand_title_size}
-                        onChange={(e) =>
-                          handleStyleChange('brand_title_size', e.target.value as any)
-                        }
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-slate-200 text-xs"
-                      >
-                        <option value="small">کوچک</option>
-                        <option value="medium">متوسط استاندارد</option>
-                        <option value="large">بزرگ برجسته</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-slate-300 font-bold">پدینگ و اندازه باکس‌ها:</label>
-                      <select
-                        value={form.style.card_padding}
-                        onChange={(e) =>
-                          handleStyleChange('card_padding', e.target.value as any)
-                        }
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-slate-200 text-xs"
-                      >
-                        <option value="compact">فشرده و کم‌حجم</option>
-                        <option value="normal">استاندارد متعادل</option>
-                        <option value="spacious">جادار و باز</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-slate-300 font-bold">تراکم سطرهای جدول اقلام:</label>
-                      <select
-                        value={form.style.table_density}
-                        onChange={(e) =>
-                          handleStyleChange('table_density', e.target.value as any)
-                        }
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-slate-200 text-xs"
-                      >
-                        <option value="compact">بسیار فشرده (اقلام زیاد)</option>
-                        <option value="normal">استاندارد</option>
-                        <option value="spacious">جادار و عریض</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-slate-300 font-bold">اندازه فونت جدول کالاها:</label>
-                      <select
-                        value={form.style.table_font_size}
-                        onChange={(e) =>
-                          handleStyleChange('table_font_size', e.target.value as any)
-                        }
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-slate-200 text-xs"
-                      >
-                        <option value="small">کوچک</option>
-                        <option value="normal">استاندارد</option>
-                        <option value="large">بزرگ</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-slate-300 font-bold">ارتفاع کادرهای امضا:</label>
-                      <select
-                        value={form.style.signatures_height}
-                        onChange={(e) =>
-                          handleStyleChange('signatures_height', e.target.value as any)
-                        }
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-slate-200 text-xs"
-                      >
-                        <option value="small">کوچک (۴۸px)</option>
-                        <option value="medium">استاندارد (۶۴px)</option>
-                        <option value="large">بزرگ (۹۶px)</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-slate-300 font-bold">ضخامت خطوط کادرها:</label>
-                      <select
-                        value={form.style.border_thickness}
-                        onChange={(e) =>
-                          handleStyleChange('border_thickness', e.target.value as any)
-                        }
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-slate-200 text-xs"
-                      >
-                        <option value="thin">نازک و ظریف (۱px)</option>
-                        <option value="medium">متوسط (۲px خاکستری)</option>
-                        <option value="thick">پررنگ و شاخص (۲px تیره)</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* 3. Seller & Central Phones */}
+            {/* 2. Seller & Central Phones */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-md">
               <button
                 type="button"
@@ -845,7 +767,7 @@ export const InvoiceSettingsTab: React.FC = () => {
                 <div className="flex items-center gap-2.5">
                   <Phone className="w-4 h-4 text-emerald-400" />
                   <span className="font-bold text-sm text-slate-200">
-                    ۳. مشخصات فروشنده، تلفن‌ها و شناسه قانونی
+                    ۲. مشخصات فروشنده، تلفن‌ها و شناسه قانونی
                   </span>
                 </div>
                 <ChevronDown
@@ -1052,7 +974,7 @@ export const InvoiceSettingsTab: React.FC = () => {
               )}
             </div>
 
-            {/* 4. Table Columns & Discount Settings */}
+            {/* 3. Table Columns & Discount Settings */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-md">
               <button
                 type="button"
@@ -1062,7 +984,7 @@ export const InvoiceSettingsTab: React.FC = () => {
                 <div className="flex items-center gap-2.5">
                   <Table className="w-4 h-4 text-cyan-400" />
                   <span className="font-bold text-sm text-slate-200">
-                    ۴. ستون‌های جدول اقلام، کارتن و تخفیف‌ها
+                    ۳. ستون‌های جدول اقلام، کارتن و تخفیف‌ها
                   </span>
                 </div>
                 <ChevronDown
@@ -1074,80 +996,90 @@ export const InvoiceSettingsTab: React.FC = () => {
 
               {openSections.table && (
                 <div className="p-4 space-y-4 border-t border-slate-800 bg-slate-900/50">
-                  <div className="space-y-2">
-                    <span className="text-xs font-bold text-slate-300 block mb-2">
-                      ستون‌های فعال در جدول اقلام:
-                    </span>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
-                      <label className="flex items-center gap-2 cursor-pointer text-slate-300">
-                        <input
-                          type="checkbox"
-                          checked={form.show.col_row_index}
-                          onChange={(e) => handleShowChange('col_row_index', e.target.checked)}
-                          className="w-4 h-4 rounded text-blue-600 bg-slate-800 border-slate-700"
-                        />
-                        <span>ردیف (#)</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer text-slate-300">
-                        <input
-                          type="checkbox"
-                          checked={form.show.col_product_name}
-                          onChange={(e) => handleShowChange('col_product_name', e.target.checked)}
-                          className="w-4 h-4 rounded text-blue-600 bg-slate-800 border-slate-700"
-                        />
-                        <span>شرح کالا</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer text-emerald-300 font-bold">
-                        <input
-                          type="checkbox"
-                          checked={form.show.col_items_per_package}
-                          onChange={(e) =>
-                            handleShowChange('col_items_per_package', e.target.checked)
-                          }
-                          className="w-4 h-4 rounded text-blue-600 bg-slate-800 border-slate-700"
-                        />
-                        <Box className="w-3.5 h-3.5 inline text-emerald-400" />
-                        <span>تعداد در کارتن</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer text-slate-300">
-                        <input
-                          type="checkbox"
-                          checked={form.show.col_quantity_unit}
-                          onChange={(e) => handleShowChange('col_quantity_unit', e.target.checked)}
-                          className="w-4 h-4 rounded text-blue-600 bg-slate-800 border-slate-700"
-                        />
-                        <span>تعداد / واحد</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer text-slate-300">
-                        <input
-                          type="checkbox"
-                          checked={form.show.col_unit_price}
-                          onChange={(e) => handleShowChange('col_unit_price', e.target.checked)}
-                          className="w-4 h-4 rounded text-blue-600 bg-slate-800 border-slate-700"
-                        />
-                        <span>قیمت واحد (فی)</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer text-amber-300 font-bold">
-                        <input
-                          type="checkbox"
-                          checked={form.show.col_discount_percent}
-                          onChange={(e) =>
-                            handleShowChange('col_discount_percent', e.target.checked)
-                          }
-                          className="w-4 h-4 rounded text-blue-600 bg-slate-800 border-slate-700"
-                        />
-                        <Percent className="w-3.5 h-3.5 inline text-amber-400" />
-                        <span>درصد تخفیف هر قلم</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer text-slate-300">
-                        <input
-                          type="checkbox"
-                          checked={form.show.col_total_price}
-                          onChange={(e) => handleShowChange('col_total_price', e.target.checked)}
-                          className="w-4 h-4 rounded text-blue-600 bg-slate-800 border-slate-700"
-                        />
-                        <span>مبلغ کل</span>
-                      </label>
+                  {/* Table Column Reordering, Custom Titles & Visibility */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-300">
+                        ترتیب، عناوین سفارشی و نمایش ستون‌های جدول:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleResetTableColumns}
+                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs flex items-center gap-1 cursor-pointer transition"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>بازگشت به پیش‌فرض ستون‌ها</span>
+                      </button>
+                    </div>
+
+                    <div className="space-y-2">
+                      {(form.table_columns || DEFAULT_TABLE_COLUMNS).map((col, idx) => {
+                        const defaultLabels: Record<TableColumnKey, string> = {
+                          row_index: '#',
+                          product_name: 'شرح کالا / خدمات',
+                          items_per_package: 'تعداد در کارتن',
+                          quantity_unit: 'تعداد / واحد',
+                          unit_price: `فی (${form.currency_label || 'تومان'})`,
+                          discount_percent: 'تخفیف (٪)',
+                          total_price: `مبلغ کل (${form.currency_label || 'تومان'})`,
+                        };
+
+                        return (
+                          <div
+                            key={col.key}
+                            className="flex items-center justify-between gap-2 p-2 rounded-xl bg-slate-950 border border-slate-800 text-xs"
+                          >
+                            <div className="flex items-center gap-2 flex-1">
+                              <label className="flex items-center gap-1.5 cursor-pointer text-slate-300 shrink-0">
+                                <input
+                                  type="checkbox"
+                                  checked={col.visible}
+                                  onChange={(e) => handleColumnVisibilityToggle(idx, e.target.checked)}
+                                  className="w-4 h-4 rounded text-blue-600 bg-slate-800 border-slate-700"
+                                />
+                                <span className="font-semibold text-slate-400 text-[11px] min-w-[70px]">
+                                  {col.key === 'row_index' ? 'ردیف (#)' :
+                                   col.key === 'product_name' ? 'شرح کالا' :
+                                   col.key === 'items_per_package' ? 'تعداد در کارتن' :
+                                   col.key === 'quantity_unit' ? 'تعداد/واحد' :
+                                   col.key === 'unit_price' ? 'قیمت واحد (فی)' :
+                                   col.key === 'discount_percent' ? 'درصد تخفیف' :
+                                   'مبلغ کل'}
+                                </span>
+                              </label>
+
+                              <input
+                                type="text"
+                                value={col.label}
+                                onChange={(e) => handleColumnLabelChange(idx, e.target.value)}
+                                placeholder={defaultLabels[col.key]}
+                                className="flex-1 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-xs font-medium focus:outline-none focus:border-blue-500"
+                              />
+                            </div>
+
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleColumnOrderChange(idx, 'up')}
+                                disabled={idx === 0}
+                                className="p-1 rounded hover:bg-slate-800 text-slate-400 disabled:opacity-30 cursor-pointer"
+                                title="انتقال به بالا"
+                              >
+                                <ArrowUp className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleColumnOrderChange(idx, 'down')}
+                                disabled={idx === (form.table_columns?.length || DEFAULT_TABLE_COLUMNS.length) - 1}
+                                className="p-1 rounded hover:bg-slate-800 text-slate-400 disabled:opacity-30 cursor-pointer"
+                                title="انتقال به پایین"
+                              >
+                                <ArrowDown className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -1209,7 +1141,7 @@ export const InvoiceSettingsTab: React.FC = () => {
                 <div className="flex items-center gap-2.5">
                   <Store className="w-4 h-4 text-amber-400" />
                   <span className="font-bold text-sm text-slate-200">
-                    ۵. مشخصات خریدار، ویزیتور و نوع فروش
+                    ۴. مشخصات خریدار، ویزیتور و نوع فروش
                   </span>
                 </div>
                 <ChevronDown
@@ -1301,7 +1233,7 @@ export const InvoiceSettingsTab: React.FC = () => {
               )}
             </div>
 
-            {/* 6. Totals, Taxes & Payment */}
+            {/* 5. Totals, Taxes & Payment */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-md">
               <button
                 type="button"
@@ -1311,7 +1243,7 @@ export const InvoiceSettingsTab: React.FC = () => {
                 <div className="flex items-center gap-2.5">
                   <DollarSign className="w-4 h-4 text-yellow-400" />
                   <span className="font-bold text-sm text-slate-200">
-                    ۶. محاسبات، مالیات، حساب بانکی و امضاها
+                    ۵. محاسبات، مالیات، حساب بانکی و امضاها
                   </span>
                 </div>
                 <ChevronDown
@@ -1325,46 +1257,40 @@ export const InvoiceSettingsTab: React.FC = () => {
                 <div className="p-4 space-y-4 border-t border-slate-800 bg-slate-900/50">
                   {/* Currency & Unit Settings */}
                   <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 space-y-3">
-                    <span className="text-xs font-bold text-slate-200 block">واحد پول و تبدیل مبالغ:</span>
+                    <span className="text-xs font-bold text-slate-200 block">واحد پول و نمایش مبالغ:</span>
                     
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                       <div className="space-y-1">
-                        <label className="text-slate-400 font-medium">واحد پولی فاکتور:</label>
+                        <label className="text-slate-400 font-medium">برچسب واحد پولی فاکتور:</label>
                         <div className="flex items-center gap-1.5">
                           <input
                             type="text"
-                            value={form.currency_label || 'ریال'}
+                            value={form.currency_label || 'تومان'}
                             onChange={(e) => handleFieldChange('currency_label', e.target.value)}
-                            placeholder="مثال: ریال یا تومان"
+                            placeholder="مثال: تومان یا ریال"
                             className="flex-1 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-xs font-bold"
                           />
                           <button
                             type="button"
-                            onClick={() => {
-                              handleFieldChange('currency_label', 'ریال');
-                              handleFieldChange('divide_price_by_10', false);
-                            }}
+                            onClick={() => handleFieldChange('currency_label', 'تومان')}
                             className={`px-2 py-1.5 rounded-lg border text-xs cursor-pointer font-bold transition ${
-                              form.currency_label === 'ریال' && !form.divide_price_by_10
-                                ? 'bg-blue-600 border-blue-500 text-white'
-                                : 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800'
-                            }`}
-                          >
-                            ریال
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleFieldChange('currency_label', 'تومان');
-                              handleFieldChange('divide_price_by_10', true);
-                            }}
-                            className={`px-2 py-1.5 rounded-lg border text-xs cursor-pointer font-bold transition ${
-                              form.currency_label === 'تومان' && form.divide_price_by_10
+                              form.currency_label === 'تومان'
                                 ? 'bg-amber-600 border-amber-500 text-white'
                                 : 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800'
                             }`}
                           >
                             تومان
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleFieldChange('currency_label', 'ریال')}
+                            className={`px-2 py-1.5 rounded-lg border text-xs cursor-pointer font-bold transition ${
+                              form.currency_label === 'ریال'
+                                ? 'bg-blue-600 border-blue-500 text-white'
+                                : 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800'
+                            }`}
+                          >
+                            ریال
                           </button>
                         </div>
                       </div>
@@ -1379,18 +1305,22 @@ export const InvoiceSettingsTab: React.FC = () => {
                           className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-xs"
                         />
                       </div>
-                    </div>
 
-                    <div className="pt-1">
-                      <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-amber-300">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(form.divide_price_by_10)}
-                          onChange={(e) => handleFieldChange('divide_price_by_10', e.target.checked)}
-                          className="w-4 h-4 rounded text-blue-600 bg-slate-800 border-slate-700"
-                        />
-                        <span>نمایش مبالغ به تومان (تقسیم بر ۱۰ — فقط در نمایش فاکتور، بدون تغییر داده‌ها در دیتابیس)</span>
-                      </label>
+                      <div className="space-y-1 col-span-full pt-1 border-t border-slate-800">
+                        <label className="text-slate-300 font-bold text-xs block">درصد تخفیف تحویل سفارش درب انبار (پیش‌فرض فروشگاه‌ها):</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={0.5}
+                            value={form.pickup_discount_percent ?? 3}
+                            onChange={(e) => handleFieldChange('pickup_discount_percent', Number(e.target.value) || 0)}
+                            className="w-24 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-xs font-bold num-fa text-center"
+                          />
+                          <span className="text-xs text-slate-400 font-medium">درصد (٪) — فروشگاه هنگام ثبت سفارش تحویل انبار این تخفیف را دریافت می‌کند.</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -1661,7 +1591,7 @@ export const InvoiceSettingsTab: React.FC = () => {
                 <div className="flex items-center gap-2.5">
                   <Type className="w-4 h-4 text-pink-400" />
                   <span className="font-bold text-sm text-slate-200">
-                    ۷. تنظیم ظاهر، فونت‌ها، ابعاد کادرها و خطوط فاکتور
+                    ۶. تنظیم ظاهر، فونت‌ها، ابعاد کادرها و خطوط فاکتور
                   </span>
                 </div>
                 <ChevronDown
@@ -1865,7 +1795,7 @@ export const InvoiceSettingsTab: React.FC = () => {
                 <div className="flex items-center gap-2.5">
                   <Table className="w-4 h-4 text-cyan-400" />
                   <span className="font-bold text-sm text-slate-200">
-                    ۸. تنظیم عرض ستون‌های جدول اقلام و چیدمان بخش‌ها
+                    ۷. تنظیم عرض ستون‌های جدول اقلام و چیدمان بخش‌ها
                   </span>
                 </div>
                 <ChevronDown
@@ -2327,7 +2257,7 @@ export const InvoiceSettingsTab: React.FC = () => {
               >
                 <div className="flex items-center gap-2.5">
                   <Printer className="w-4 h-4 text-rose-400" />
-                  <span className="font-bold text-sm text-slate-200">۹. قطع کاغذ و ابعاد چاپ</span>
+                  <span className="font-bold text-sm text-slate-200">۸. قطع کاغذ و ابعاد چاپ</span>
                 </div>
                 <ChevronDown
                   className={`w-4 h-4 text-slate-400 transition-transform ${

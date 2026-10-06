@@ -20,6 +20,7 @@ export interface CreateOrderPayload {
   supermarketId: string;
   visitorId: string;
   orderSource?: 'visitor' | 'supermarket';
+  pickupDiscountPercent?: number;
   items: {
     productId: string;
     name: string;
@@ -313,6 +314,26 @@ export function useOrders({
 
         if (data && (data as any).success === false) {
           return { success: false, message: (data as any).message || 'خطا در ثبت تراکنشی سفارش روی سرور.' };
+        }
+
+        // Store-self orders pickup discount application (Visitors orders NEVER get pickup discount)
+        const finalPickupDiscountPercent = orderSource === 'visitor' ? 0 : (payload.pickupDiscountPercent || 0);
+        if (finalPickupDiscountPercent > 0) {
+          await supabase.from('orders').update({ pickup_discount_percent: finalPickupDiscountPercent }).eq('id', newOrder.id);
+        }
+
+        // Read back server-side calculated discounts
+        const { data: serverOrderData } = await supabase
+          .from('orders')
+          .select('pickup_discount_percent, founder_discount_percent, discount_percent, discount_status')
+          .eq('id', newOrder.id)
+          .single();
+
+        if (serverOrderData) {
+          newOrder.pickup_discount_percent = serverOrderData.pickup_discount_percent;
+          newOrder.founder_discount_percent = serverOrderData.founder_discount_percent;
+          newOrder.discount_percent = serverOrderData.discount_percent;
+          newOrder.discount_status = serverOrderData.discount_status;
         }
       }
 

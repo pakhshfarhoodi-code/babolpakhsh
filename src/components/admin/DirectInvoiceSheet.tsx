@@ -139,6 +139,7 @@ export const DirectInvoiceSheet: React.FC<DirectInvoiceSheetProps> = ({
 
   // Store Mode Immediate Delivery Toggle (تحویل فوری)
   const [deliverNow, setDeliverNow] = useState<boolean>(false);
+  const [storeDiscountPercent, setStoreDiscountPercent] = useState<number>(0);
 
   // Tab for Left Column: 'catalog' (manual lines) or 'orders' (system orders for visitor mode)
   const [leftTab, setLeftTab] = useState<'catalog' | 'orders'>('catalog');
@@ -404,6 +405,17 @@ export const DirectInvoiceSheet: React.FC<DirectInvoiceSheetProps> = ({
         message: string;
         order_id: string;
       };
+
+      if (res.order_id && storeDiscountPercent > 0) {
+        try {
+          await supabase.rpc('set_order_discount', {
+            p_order_id: res.order_id,
+            p_percent: storeDiscountPercent,
+          });
+        } catch (err) {
+          console.error('Error setting order discount:', err);
+        }
+      }
 
       showToast(res.message || 'فاکتور مستقیم فروشگاه با موفقیت صادر گردید.', 'success');
 
@@ -1036,19 +1048,37 @@ export const DirectInvoiceSheet: React.FC<DirectInvoiceSheetProps> = ({
                   </div>
 
                   {/* Deliver Now Toggle */}
-                  <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
-                    <label className="flex items-center gap-2 text-xs font-bold text-slate-300 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={deliverNow}
-                        onChange={(e) => setDeliverNow(e.target.checked)}
-                        className="w-4 h-4 rounded text-blue-600 bg-slate-900 border-slate-700 focus:ring-0 cursor-pointer"
-                      />
-                      <span className="flex items-center gap-1.5">
-                        <Zap className="w-3.5 h-3.5 text-amber-400" />
-                        <span>تحویل فوری بار (کسر آنی از انبار و وضعیت Delivered)</span>
-                      </span>
-                    </label>
+                  <div className="pt-2 border-t border-slate-800/80 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-2 text-xs font-bold text-slate-300 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={deliverNow}
+                          onChange={(e) => setDeliverNow(e.target.checked)}
+                          className="w-4 h-4 rounded text-blue-600 bg-slate-900 border-slate-700 focus:ring-0 cursor-pointer"
+                        />
+                        <span className="flex items-center gap-1.5">
+                          <Zap className="w-3.5 h-3.5 text-amber-400" />
+                          <span>تحویل فوری بار (کسر آنی از انبار و وضعیت Delivered)</span>
+                        </span>
+                      </label>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1 text-xs">
+                      <span className="text-slate-400 font-medium">درصد تخفیف کل سفارش:</span>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={storeDiscountPercent}
+                          onChange={(e) => setStoreDiscountPercent(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+                          className="w-20 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-xs dir-ltr num-fa font-bold text-center"
+                          placeholder="0"
+                        />
+                        <span className="text-slate-400 font-bold">٪</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}

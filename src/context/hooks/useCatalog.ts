@@ -613,6 +613,7 @@ export function useCatalog() {
     stock?: number;
     unit?: string;
     items_per_package?: number;
+    image_url?: string;
     is_active?: boolean;
   }>): Promise<{ success: boolean; createdCount: number; updatedCount: number; message: string }> => {
     if (!items || items.length === 0) {
@@ -662,12 +663,13 @@ export function useCatalog() {
         : Math.round(storePrice * 0.85);
       const stockQty = item.stock !== undefined ? Math.max(0, Number(item.stock) || 0) : 50;
       const unitStr = (item.unit || '').trim() || 'عدد';
+      const imageUrlStr = item.image_url && item.image_url.trim() ? item.image_url.trim() : undefined;
 
-        const parsedPackQty = item.items_per_package !== undefined && Number(item.items_per_package) > 0
-          ? Number(item.items_per_package)
-          : undefined;
+      const parsedPackQty = item.items_per_package !== undefined && Number(item.items_per_package) > 0
+        ? Number(item.items_per_package)
+        : undefined;
 
-        if (matchIndex >= 0) {
+      if (matchIndex >= 0) {
         // Update existing product
         const current = updatedProducts[matchIndex];
         const hasPriceChanged = current.price !== storePrice || current.visitor_price !== visitorPrice;
@@ -696,6 +698,7 @@ export function useCatalog() {
           stock: stockQty !== undefined ? stockQty : current.stock,
           unit: unitStr || current.unit,
           items_per_package: parsedPackQty !== undefined ? parsedPackQty : current.items_per_package,
+          image_url: imageUrlStr || current.image_url,
           is_active: item.is_active !== undefined ? item.is_active : current.is_active,
         };
         updatedProducts[matchIndex] = updatedProd;
@@ -717,7 +720,7 @@ export function useCatalog() {
           reserved_stock: 0,
           unit: unitStr,
           items_per_package: parsedPackQty,
-          image_url: 'https://images.unsplash.com/photo-1551024601-bec78aea704b?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer',
+          image_url: imageUrlStr || 'https://images.unsplash.com/photo-1551024601-bec78aea704b?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer',
           is_active: item.is_active !== undefined ? item.is_active : true,
           created_at: new Date().toISOString(),
         };
@@ -821,7 +824,7 @@ export function useCatalog() {
             reserved_stock: 0,
             unit: p.unit || 'عدد',
             items_per_package: p.items_per_package !== undefined && Number(p.items_per_package) > 0 ? Number(p.items_per_package) : null,
-            image_url: 'https://images.unsplash.com/photo-1551024601-bec78aea704b?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer',
+            image_url: p.image_url && p.image_url.trim() ? p.image_url.trim() : 'https://images.unsplash.com/photo-1551024601-bec78aea704b?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer',
             is_active: p.is_active ?? true,
           });
         });

@@ -563,6 +563,37 @@ export const TeamTab: React.FC<TeamTabProps> = ({
     }
   };
 
+  const handleUpdateFounderDiscount = async (shop: Supermarket, enabled: boolean, percent: number) => {
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const { data, error } = await supabase.rpc('admin_set_store_founder_discount', {
+          p_store_id: shop.id,
+          p_enabled: enabled,
+          p_percent: percent,
+        });
+
+        if (error) {
+          setToastNotification({
+            type: 'error',
+            message: error.message || 'خطا در تغییر وضعیت تخفیف ۱۰۰ نفر اول.',
+          });
+        } else {
+          const res = data as { success: boolean; message: string };
+          setToastNotification({
+            type: res.success !== false ? 'success' : 'error',
+            message: res.message || 'وضعیت تخفیف ۱۰۰ نفر اول با موفقیت به‌روزرسانی شد.',
+          });
+          refreshData();
+        }
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطا در به‌روزرسانی تخفیف ۱۰۰ نفر اول.';
+      setToastNotification({ type: 'error', message: msg });
+    } finally {
+      setTimeout(() => setToastNotification(null), 3500);
+    }
+  };
+
   // Filtered supermarkets based on visitor click, search term, and approval status
   const filteredSupermarkets = useMemo(() => {
     return supermarkets.filter((shop) => {
@@ -1085,6 +1116,34 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                         </div>
 
                         <div className="flex items-center gap-1.5 flex-wrap">
+                          {/* Founder Discount Toggle & Percentage Input */}
+                          <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(shop.founder_discount_enabled)}
+                              onChange={(e) => handleUpdateFounderDiscount(shop, e.target.checked, shop.founder_discount_percent || 3)}
+                              className="w-3.5 h-3.5 accent-purple-500 rounded cursor-pointer shrink-0"
+                              title="فعال/غیرفعال‌سازی تخفیف ۱۰۰ نفر اول"
+                            />
+                            <span className="text-xs text-slate-300 font-medium whitespace-nowrap">تخفیف ۱۰۰ نفر اول</span>
+                            <input
+                              type="number"
+                              defaultValue={shop.founder_discount_percent ?? 3}
+                              step="0.5"
+                              min="0"
+                              max="100"
+                              onBlur={(e) => {
+                                const val = parseFloat(e.target.value);
+                                if (!isNaN(val) && val >= 0 && val <= 100) {
+                                  handleUpdateFounderDiscount(shop, Boolean(shop.founder_discount_enabled), val);
+                                }
+                              }}
+                              className="w-12 h-6 bg-slate-900 border border-slate-700 rounded text-center text-xs text-purple-300 focus:outline-none focus:border-purple-500 font-mono font-bold"
+                              title="درصد تخفیف (ذخیره با کلیک در خارج از کادر)"
+                            />
+                            <span className="text-[10px] text-slate-500 font-mono">%</span>
+                          </div>
+
                           {/* Direct Store Invoice Action */}
                           <button
                             type="button"

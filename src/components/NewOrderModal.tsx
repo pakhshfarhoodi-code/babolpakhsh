@@ -17,7 +17,8 @@ import { FilterSheet } from './shop/FilterSheet';
 import { formatPrice, filterCatalogProducts } from './shop/shopUtils';
 import { Order, Supermarket, Visitor } from '../types';
 import { OrderInvoiceModal } from './invoice/OrderInvoiceModal';
-import { FileText, Printer } from 'lucide-react';
+import { FileText, Printer, Percent } from 'lucide-react';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 interface Props {
   isOpen: boolean;
@@ -54,6 +55,7 @@ export const NewOrderModal: React.FC<Props> = ({
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [cart, setCart] = useState<Record<string, number>>({});
+  const [discountPercent, setDiscountPercent] = useState<number>(0);
   const [feedback, setFeedback] = useState<{ type: 'error' | 'success'; message: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
@@ -256,11 +258,22 @@ export const NewOrderModal: React.FC<Props> = ({
       });
 
       if (res.success) {
+        if (res.order?.id && discountPercent > 0 && isSupabaseConfigured && supabase) {
+          try {
+            await supabase.rpc('set_order_discount', {
+              p_order_id: res.order.id,
+              p_percent: discountPercent,
+            });
+          } catch (err) {
+            console.error('Error setting order discount:', err);
+          }
+        }
         setFeedback({ type: 'success', message: res.message });
         if (res.order) {
           setCreatedOrder(res.order);
         }
         setCart({});
+        setDiscountPercent(0);
       } else {
         setFeedback({ type: 'error', message: res.message });
       }
@@ -636,7 +649,31 @@ export const NewOrderModal: React.FC<Props> = ({
             </div>
 
             <div className="pt-4 border-t border-slate-800 space-y-3">
-              <div className="flex items-center justify-between text-xs">
+              <div className="space-y-1">
+                <label className="text-[11px] text-slate-400 font-medium flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Percent className="w-3 h-3 text-amber-400" />
+                    <span>درصد تخفیف پیشنهادی:</span>
+                  </span>
+                  <span className="text-[10px] text-amber-400">
+                    {discountPercent > 0 ? '(نیازمند تأیید مدیریت)' : ''}
+                  </span>
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={discountPercent}
+                    onChange={(e) => setDiscountPercent(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-xs dir-ltr num-fa font-bold text-center"
+                    placeholder="0"
+                  />
+                  <span className="text-xs text-slate-400 font-bold">٪</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-xs pt-1">
                 <span className="text-slate-400">جمع کل فاکتور:</span>
                 <span className="text-base font-bold text-emerald-400">
                   {formatPrice(cartTotalAmount)} تومان

@@ -10,6 +10,7 @@ import {
   DEFAULT_INVOICE_SETTINGS,
   DEFAULT_INVOICE_LAYOUT_SETTINGS,
   DEFAULT_INVOICE_STYLE_SETTINGS,
+  DEFAULT_TABLE_COLUMNS,
 } from '../../types';
 import { numberToPersianWords } from '../../utils/numberToPersianWords';
 import { formatOrderDate } from '../../utils/dateUtils';
@@ -191,12 +192,10 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
   // ---------------------------------------------------------------------------
   // Currency & Formatting
   // ---------------------------------------------------------------------------
-  const isDivideBy10 = Boolean(settings.divide_price_by_10);
-  const currencyLabel = settings.currency_label || (isDivideBy10 ? 'تومان' : 'ریال');
+  const currencyLabel = settings.currency_label || 'تومان';
 
   const formatMoney = (rawAmount: number): string => {
-    const val = isDivideBy10 ? Math.round(rawAmount / 10) : rawAmount;
-    return val.toLocaleString('fa-IR');
+    return Math.round(rawAmount).toLocaleString('fa-IR');
   };
 
   // ---------------------------------------------------------------------------
@@ -251,35 +250,42 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
   // Financial & Discount Calculations
   // ---------------------------------------------------------------------------
   const rawItems = order.items || [];
-  const rawSubtotal = rawItems.reduce((sum, item) => {
-    const qty = Number(item.quantity) || 0;
-    const price = Number(item.price) || 0;
-    const itemDiscount = Number((item as any).discount_percent) || 0;
-    const lineTotal = show.col_discount_percent && itemDiscount > 0
-      ? qty * price * (1 - itemDiscount / 100)
-      : qty * price;
-    return sum + lineTotal;
+
+  const pickupDiscountPercent = order.pickup_discount_percent || 0;
+  const founderDiscountPercent = order.founder_discount_percent || 0;
+  const manualDiscountPercent = order.discount_status === 'approved' ? (order.discount_percent || 0) : 0;
+  const totalDiscountPercent = Math.min(100, Math.max(0, pickupDiscountPercent + founderDiscountPercent + manualDiscountPercent));
+
+  // originalSubtotal is the sum of raw item totals before discount
+  const originalSubtotal = rawItems.reduce((sum, item) => {
+    return sum + (Number(item.price) || 0) * (Number(item.quantity) || 0);
   }, 0);
 
-  const subtotal = rawSubtotal > 0 ? rawSubtotal : (order.total_amount || 0);
+  const subtotal = originalSubtotal > 0 ? originalSubtotal : (order.total_amount || 0);
 
-  // Overall Discount
-  const hasOverallDiscount = Boolean(
-    show.summary_discount && settings.has_overall_discount && (settings.discount_percent || 0) > 0
-  );
-  const overallDiscountPercent = Number(settings.discount_percent) || 0;
-  const overallDiscountAmount = hasOverallDiscount
-    ? Math.round(subtotal * (overallDiscountPercent / 100))
-    : 0;
-  const totalAfterDiscount = Math.max(0, subtotal - overallDiscountAmount);
+  // Calculate discounted row totals and sum them up
+  const discountedSubtotal = rawItems.reduce((sum, item) => {
+    const qty = Number(item.quantity) || 0;
+    const price = Number(item.price) || 0;
+    const discountedPrice = Math.round(price * (100 - totalDiscountPercent) / 100);
+    return sum + (discountedPrice * qty);
+  }, 0);
+
+  // Discount Amounts for Summary
+  const pickupDiscountAmount = Math.round(subtotal * (pickupDiscountPercent / 100));
+  const founderDiscountAmount = Math.round(subtotal * (founderDiscountPercent / 100));
+  const manualDiscountAmount = Math.round(subtotal * (manualDiscountPercent / 100));
+
+  const hasOverallDiscount = totalDiscountPercent > 0;
 
   // VAT
   const hasVat = Boolean(settings.has_vat);
   const vatPercent = Number(settings.vat_percent) || 0;
-  const vatAmount = hasVat ? Math.round(totalAfterDiscount * (vatPercent / 100)) : 0;
-  const finalTotal = totalAfterDiscount + vatAmount;
+  const vatAmount = hasVat ? Math.round(discountedSubtotal * (vatPercent / 100)) : 0;
 
-  const finalDisplayAmount = isDivideBy10 ? Math.round(finalTotal / 10) : finalTotal;
+  const finalTotal = discountedSubtotal + vatAmount;
+
+  const finalDisplayAmount = finalTotal;
   const priceInWords = show.amount_in_words
     ? `${numberToPersianWords(finalDisplayAmount)} ${currencyLabel} تمام`
     : '';
@@ -471,6 +477,28 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
   // ---------------------------------------------------------------------------
   const activeColumns = useMemo(() => {
     const rawWidths = layout.column_widths || DEFAULT_COLUMN_WIDTHS;
+    const tableCols = settings.table_columns || DEFAULT_TABLE_COLUMNS;
+
+    const alignClassMap: Record<TableColumnKey, string> = {
+      row_index: 'text-center',
+      product_name: 'text-right',
+      items_per_package: 'text-center',
+      quantity_unit: 'text-center',
+      unit_price: 'text-center',
+      discount_percent: 'text-center',
+      total_price: 'text-center',
+    };
+
+    const defaultLabelMap: Record<TableColumnKey, string> = {
+      row_index: '#',
+      product_name: 'شرح کالا / خدمات',
+      items_per_package: 'تعداد در کارتن',
+      quantity_unit: 'تعداد / واحد',
+      unit_price: totalDiscountPercent > 0 ? `قیمت اصلی (${currencyLabel})` : `فی (${currencyLabel})`,
+      discount_percent: totalDiscountPercent > 0 ? `قیمت با تخفیف (${currencyLabel})` : 'تخفیف (٪)',
+      total_price: `مبلغ کل (${currencyLabel})`,
+    };
+
     const cols: {
       key: TableColumnKey;
       label: string;
@@ -478,69 +506,46 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
       rawWidth: number;
     }[] = [];
 
-    if (show.col_row_index) {
+    tableCols.forEach((colConfig) => {
+      // Force discount_percent to be visible if totalDiscountPercent > 0
+      const isVisible = colConfig.key === 'discount_percent' && totalDiscountPercent > 0
+        ? true
+        : colConfig.visible;
+
+      if (!isVisible) return;
+
+      let displayLabel = colConfig.label?.trim();
+      
+      // Override label with dynamic label map if it is empty, or matching previous default labels
+      if (!displayLabel || 
+          displayLabel === 'فی' || 
+          displayLabel === 'تخفیف' || 
+          displayLabel === 'تخفیف (٪)' || 
+          displayLabel === `فی (${currencyLabel})` || 
+          displayLabel === `قیمت اصلی (${currencyLabel})` || 
+          displayLabel === `قیمت با تخفیف (${currencyLabel})`
+      ) {
+        displayLabel = defaultLabelMap[colConfig.key];
+      }
+
+      if (colConfig.key === 'total_price' && (displayLabel === 'مبلغ کل' || displayLabel === `مبلغ کل (${currencyLabel})`)) {
+        displayLabel = `مبلغ کل (${currencyLabel})`;
+      }
+
       cols.push({
-        key: 'row_index',
-        label: '#',
-        alignClass: 'text-center',
-        rawWidth: rawWidths.row_index ?? DEFAULT_COLUMN_WIDTHS.row_index,
+        key: colConfig.key,
+        label: displayLabel,
+        alignClass: alignClassMap[colConfig.key] || 'text-center',
+        rawWidth: rawWidths[colConfig.key] ?? DEFAULT_COLUMN_WIDTHS[colConfig.key],
       });
-    }
-    if (show.col_product_name) {
-      cols.push({
-        key: 'product_name',
-        label: 'شرح کالا / خدمات',
-        alignClass: 'text-right',
-        rawWidth: rawWidths.product_name ?? DEFAULT_COLUMN_WIDTHS.product_name,
-      });
-    }
-    if (show.col_items_per_package) {
-      cols.push({
-        key: 'items_per_package',
-        label: 'تعداد در کارتن',
-        alignClass: 'text-center',
-        rawWidth: rawWidths.items_per_package ?? DEFAULT_COLUMN_WIDTHS.items_per_package,
-      });
-    }
-    if (show.col_quantity_unit) {
-      cols.push({
-        key: 'quantity_unit',
-        label: 'تعداد / واحد',
-        alignClass: 'text-center',
-        rawWidth: rawWidths.quantity_unit ?? DEFAULT_COLUMN_WIDTHS.quantity_unit,
-      });
-    }
-    if (show.col_unit_price) {
-      cols.push({
-        key: 'unit_price',
-        label: `فی (${currencyLabel})`,
-        alignClass: 'text-center',
-        rawWidth: rawWidths.unit_price ?? DEFAULT_COLUMN_WIDTHS.unit_price,
-      });
-    }
-    if (show.col_discount_percent) {
-      cols.push({
-        key: 'discount_percent',
-        label: 'تخفیف (٪)',
-        alignClass: 'text-center',
-        rawWidth: rawWidths.discount_percent ?? DEFAULT_COLUMN_WIDTHS.discount_percent,
-      });
-    }
-    if (show.col_total_price) {
-      cols.push({
-        key: 'total_price',
-        label: `مبلغ کل (${currencyLabel})`,
-        alignClass: 'text-center',
-        rawWidth: rawWidths.total_price ?? DEFAULT_COLUMN_WIDTHS.total_price,
-      });
-    }
+    });
 
     const totalRaw = cols.reduce((sum, c) => sum + (c.rawWidth || 10), 0) || 100;
     return cols.map((c) => ({
       ...c,
       normalizedPercent: Number(((c.rawWidth / totalRaw) * 100).toFixed(2)),
     }));
-  }, [show, layout.column_widths, currencyLabel]);
+  }, [settings.table_columns, layout.column_widths, currencyLabel, totalDiscountPercent]);
 
   // Pointer drag resizing state
   const tableRef = useRef<HTMLTableElement>(null);
@@ -775,10 +780,8 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
   const renderItemRow = (item: typeof rawItems[0], globalIndex: number) => {
     const qty = Number(item.quantity) || 0;
     const unitPrice = Number(item.price) || 0;
-    const itemDiscount = Number((item as any).discount_percent) || 0;
-    const lineTotal = show.col_discount_percent && itemDiscount > 0
-      ? qty * unitPrice * (1 - itemDiscount / 100)
-      : qty * unitPrice;
+    const discountedUnitPrice = Math.round(unitPrice * (100 - totalDiscountPercent) / 100);
+    const lineTotal = discountedUnitPrice * qty;
 
     // Lookup missing items_per_package and unit from AppContext products
     const product = products.find((p) => p.id === item.product_id);
@@ -826,9 +829,9 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
             {formatMoney(unitPrice)}
           </td>
         )}
-        {show.col_discount_percent && (
+        {(show.col_discount_percent || totalDiscountPercent > 0) && (
           <td className={`${tableRowPaddingClass} text-center num-fa font-bold text-slate-700 border-l border-slate-200`}>
-            {itemDiscount > 0 ? `${itemDiscount.toLocaleString('fa-IR')}٪` : '۰٪'}
+            {totalDiscountPercent > 0 ? formatMoney(discountedUnitPrice) : '۰٪'}
           </td>
         )}
         {show.col_total_price && (
@@ -940,23 +943,41 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
 
           {show.summary_subtotal && (
             <div className="flex items-center justify-between text-slate-700">
-              <span className={cardLabelClass}>جمع کل اقلام:</span>
+              <span className={cardLabelClass}>جمع کل اقلام (قبل از تخفیف):</span>
               <span className={`num-fa ${cardValueClass}`}>
                 {formatMoney(subtotal)} {currencyLabel}
               </span>
             </div>
           )}
 
-          {hasOverallDiscount && (
-            <div className="flex items-center justify-between text-emerald-700 font-medium">
-              <span className={cardLabelClass}>تخفیف روی کل سفارش ({overallDiscountPercent}٪):</span>
-              <span className={`num-fa font-bold text-emerald-700 ${cardValueClass}`}>
-                -{formatMoney(overallDiscountAmount)} {currencyLabel}
+          {pickupDiscountPercent > 0 && pickupDiscountAmount > 0 && (
+            <div className="flex items-center justify-between text-blue-700 font-medium">
+              <span className={cardLabelClass}>تخفیف تحویل درب انبار ({pickupDiscountPercent}٪):</span>
+              <span className={`num-fa font-bold text-blue-700 ${cardValueClass}`}>
+                -{formatMoney(pickupDiscountAmount)} {currencyLabel}
               </span>
             </div>
           )}
 
-          {show.summary_vat && hasVat && (
+          {founderDiscountPercent > 0 && founderDiscountAmount > 0 && (
+            <div className="flex items-center justify-between text-purple-700 font-medium">
+              <span className={cardLabelClass}>تخفیف ۱۰۰ نفر اول ({founderDiscountPercent}٪):</span>
+              <span className={`num-fa font-bold text-purple-700 ${cardValueClass}`}>
+                -{formatMoney(founderDiscountAmount)} {currencyLabel}
+              </span>
+            </div>
+          )}
+
+          {manualDiscountPercent > 0 && manualDiscountAmount > 0 && (
+            <div className="flex items-center justify-between text-amber-700 font-medium">
+              <span className={cardLabelClass}>تخفیف دستی ({manualDiscountPercent}٪):</span>
+              <span className={`num-fa font-bold text-amber-700 ${cardValueClass}`}>
+                -{formatMoney(manualDiscountAmount)} {currencyLabel}
+              </span>
+            </div>
+          )}
+
+          {show.summary_vat && hasVat && vatAmount > 0 && (
             <div className="flex items-center justify-between text-slate-700">
               <span className={cardLabelClass}>مالیات و ارزش افزوده ({vatPercent}٪):</span>
               <span className={`num-fa ${cardValueClass}`}>
@@ -990,10 +1011,23 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
   };
 
   const renderSignatures = () => {
-    if (!hasAnySignature) return null;
+    const activeBoxesCount = [
+      show.signatures_seller,
+      show.signatures_buyer,
+      show.signatures_receiver,
+    ].filter(Boolean).length;
+
+    if (!hasAnySignature || activeBoxesCount === 0) return null;
+
+    const gridColsClass =
+      activeBoxesCount === 1
+        ? 'grid-cols-1 max-w-sm mx-auto'
+        : activeBoxesCount === 2
+        ? 'grid-cols-2'
+        : 'grid-cols-3';
 
     return (
-      <div className="grid grid-cols-3 gap-2 text-center text-[11px] break-inside-avoid pt-1">
+      <div className={`grid ${gridColsClass} gap-2 text-center text-[11px] break-inside-avoid pt-1`}>
         {show.signatures_seller && (
           <div className={`${cardBorderClass} p-2 bg-slate-50/40 ${signaturesHeightClass} flex flex-col justify-between`}>
             <span className="font-bold text-slate-800">امضا و مهر فروشنده</span>

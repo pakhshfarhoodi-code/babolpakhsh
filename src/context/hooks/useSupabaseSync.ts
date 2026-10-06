@@ -200,7 +200,7 @@ export function useSupabaseSync({
     const { data: ords, error: ordsErr } = await withTimeout(
       supabase
         .from('orders')
-        .select('id, supermarket_id, supermarket_name, assigned_visitor_id, visitor_name, status, total_amount, order_source, order_channel, reassignment_id, loading_bill_id, invoice_revised_at, order_date, stock_deducted, items:order_items(id, order_id, product_id, name, price, quantity, items_per_package, unit, created_at)'),
+        .select('id, supermarket_id, supermarket_name, assigned_visitor_id, visitor_name, status, total_amount, order_source, order_channel, reassignment_id, loading_bill_id, invoice_revised_at, order_date, stock_deducted, discount_percent, discount_status, discount_set_by, discount_reviewed_by, discount_reviewed_at, pickup_discount_percent, founder_discount_percent, items:order_items(id, order_id, product_id, name, price, quantity, items_per_package, unit, created_at)'),
       15000,
       'مهلت زمانی دریافت اطلاعات سفارش‌ها به پایان رسید'
     );
@@ -212,7 +212,7 @@ export function useSupabaseSync({
       const { data: rawOrders, error: rawOrdersErr } = await withTimeout(
         supabase
           .from('orders')
-          .select('id, supermarket_id, supermarket_name, assigned_visitor_id, visitor_name, status, total_amount, order_source, order_channel, reassignment_id, loading_bill_id, invoice_revised_at, order_date, stock_deducted'),
+          .select('id, supermarket_id, supermarket_name, assigned_visitor_id, visitor_name, status, total_amount, order_source, order_channel, reassignment_id, loading_bill_id, invoice_revised_at, order_date, stock_deducted, discount_percent, discount_status, discount_set_by, discount_reviewed_by, discount_reviewed_at, pickup_discount_percent, founder_discount_percent'),
         15000,
         'مهلت زمانی دریافت اطلاعات سفارش‌ها به پایان رسید'
       );
@@ -328,7 +328,7 @@ export function useSupabaseSync({
       withTimeout(
         supabase
           .from('supermarkets')
-          .select('id, name, owner, phone, address, assigned_visitor_id, is_active, username, created_at'),
+          .select('id, name, owner, phone, address, assigned_visitor_id, is_active, username, created_at, founder_discount_enabled, founder_discount_percent'),
         15000,
         'مهلت زمانی دریافت اطلاعات فروشگاه‌ها به پایان رسید'
       ),
@@ -357,6 +357,8 @@ export function useSupabaseSync({
         is_active: sm.is_active ?? true,
         username: profUsername || sm.username || sm.phone || '',
         created_at: sm.created_at,
+        founder_discount_enabled: Boolean(sm.founder_discount_enabled),
+        founder_discount_percent: typeof sm.founder_discount_percent === 'number' ? sm.founder_discount_percent : 3,
       };
     });
 

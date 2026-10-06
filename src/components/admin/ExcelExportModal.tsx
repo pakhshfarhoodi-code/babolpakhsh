@@ -22,6 +22,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
   const [selectedBrand, setSelectedBrand] = useState<string>('all');
   const [includeStock, setIncludeStock] = useState<boolean>(true);
   const [includeVisitorPrice, setIncludeVisitorPrice] = useState<boolean>(true);
+  const [includeImage, setIncludeImage] = useState<boolean>(true);
 
   if (!isOpen) return null;
 
@@ -56,6 +57,9 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
 
       row['واحد شمارش'] = p.unit;
       row['تعداد در کارتن/بسته'] = p.items_per_package && p.items_per_package > 0 ? p.items_per_package : '';
+      if (includeImage) {
+        row['لینک مستقیم تصویر کالا'] = p.image_url || '';
+      }
       row['وضعیت کالا'] = p.is_active ? 'فعال' : 'غیرفعال';
 
       return row;
@@ -182,6 +186,18 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
               />
               <span className="text-xs text-slate-200">
                 درج اطلاعات تفصیلی موجودی انبار (کل، رزرو شده، آزاد)
+              </span>
+            </label>
+
+            <label className="flex items-center gap-2 p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={includeImage}
+                onChange={(e) => setIncludeImage(e.target.checked)}
+                className="w-4 h-4 rounded text-blue-600 focus:ring-0 cursor-pointer"
+              />
+              <span className="text-xs text-slate-200">
+                درج ستون لینک مستقیم تصویر کالا (جهت خروجی گرفتن و جای‌گذاری تصاویر)
               </span>
             </label>
           </div>

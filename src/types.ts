@@ -86,6 +86,8 @@ export interface Supermarket {
   is_active: boolean;
   username?: string;
   created_at?: string;
+  founder_discount_enabled?: boolean;
+  founder_discount_percent?: number;
 }
 
 export type OrderStatus = 'assigned' | 'loading' | 'delegated' | 'delivered' | 'undelivered';
@@ -120,6 +122,13 @@ export interface Order {
   order_date: string;
   items?: OrderItem[];
   stock_deducted?: boolean;
+  discount_percent?: number;
+  discount_status?: 'none' | 'pending' | 'approved' | 'rejected';
+  discount_set_by?: string;
+  discount_reviewed_by?: string;
+  discount_reviewed_at?: string;
+  pickup_discount_percent?: number;
+  founder_discount_percent?: number;
 }
 
 export interface OrderVisitorHistory {
@@ -439,13 +448,14 @@ export interface InvoiceSettings {
   show_page_number?: boolean;
 
   // F. Amount, Currency and Payment
-  currency_label: string; // 'ریال' | 'تومان' | متن دلخواه
-  divide_price_by_10: boolean; // نمایش مبالغ به تومان با تقسیم بر ۱۰
+  currency_label: string; // 'تومان' | 'ریال' | متن دلخواه
   default_unit_name: string; // پیش‌فرض واحد کالا (مثلا 'عدد')
   has_vat: boolean;
   vat_percent: number;
   has_overall_discount?: boolean;
   discount_percent?: number;
+  pickup_discount_percent: number; // پیش‌فرض درصد تخفیف تحویل درب انبار (پیش‌فرض ۳)
+  max_visitor_discount_percent: number; // حداکثر درصد تخفیف مجاز ویزیتور (پیش‌فرض ۱۰)
   bank_account_holder: string;
   card_number: string;
   iban: string;
@@ -468,7 +478,26 @@ export interface InvoiceSettings {
 
   // K. Visual Styling & Typography
   style: InvoiceStyleSettings;
+
+  // L. Table Columns Configuration
+  table_columns: InvoiceTableColumnConfig[];
 }
+
+export interface InvoiceTableColumnConfig {
+  key: TableColumnKey;
+  label: string;
+  visible: boolean;
+}
+
+export const DEFAULT_TABLE_COLUMNS: InvoiceTableColumnConfig[] = [
+  { key: 'row_index', label: '#', visible: true },
+  { key: 'product_name', label: 'شرح کالا / خدمات', visible: true },
+  { key: 'items_per_package', label: 'تعداد در کارتن', visible: true },
+  { key: 'quantity_unit', label: 'تعداد / واحد', visible: true },
+  { key: 'unit_price', label: 'فی', visible: true },
+  { key: 'discount_percent', label: 'تخفیف (٪)', visible: false },
+  { key: 'total_price', label: 'مبلغ کل', visible: true },
+];
 
 export const DEFAULT_INVOICE_SHOW_SETTINGS: InvoiceShowSettings = {
   logo: true,
@@ -618,13 +647,14 @@ export const DEFAULT_INVOICE_SETTINGS: InvoiceSettings = {
   show_amount_in_words: true,
   show_signature_boxes: true,
   show_page_number: true,
-  currency_label: 'ریال',
-  divide_price_by_10: false,
+  currency_label: 'تومان',
   default_unit_name: 'عدد',
   has_vat: false,
   vat_percent: 10,
   has_overall_discount: false,
   discount_percent: 0,
+  pickup_discount_percent: 3,
+  max_visitor_discount_percent: 10,
   bank_account_holder: 'صنایع غذایی فرهودی',
   card_number: '',
   iban: '',
@@ -637,6 +667,7 @@ export const DEFAULT_INVOICE_SETTINGS: InvoiceSettings = {
   show: DEFAULT_INVOICE_SHOW_SETTINGS,
   layout: DEFAULT_INVOICE_LAYOUT_SETTINGS,
   style: DEFAULT_INVOICE_STYLE_SETTINGS,
+  table_columns: DEFAULT_TABLE_COLUMNS,
 };
 
 export function getInvoiceSettings(raw?: unknown): InvoiceSettings {
@@ -684,15 +715,56 @@ export function getInvoiceSettings(raw?: unknown): InvoiceSettings {
     ...rawStyle,
   };
 
+  // Visibility mapping
+  const colVisibilityKeyMap: Record<TableColumnKey, keyof InvoiceShowSettings> = {
+    row_index: 'col_row_index',
+    product_name: 'col_product_name',
+    items_per_package: 'col_items_per_package',
+    quantity_unit: 'col_quantity_unit',
+    unit_price: 'col_unit_price',
+    discount_percent: 'col_discount_percent',
+    total_price: 'col_total_price',
+  };
+
+  let mergedColumns: InvoiceTableColumnConfig[] = [];
+  if (Array.isArray(r.table_columns) && r.table_columns.length > 0) {
+    mergedColumns = r.table_columns.map((col) => ({
+      ...col,
+      visible: show[colVisibilityKeyMap[col.key]] ?? col.visible ?? true,
+    }));
+    // Append any missing column key
+    DEFAULT_TABLE_COLUMNS.forEach((defCol) => {
+      if (!mergedColumns.some((c) => c.key === defCol.key)) {
+        mergedColumns.push({
+          ...defCol,
+          visible: show[colVisibilityKeyMap[defCol.key]] ?? defCol.visible,
+        });
+      }
+    });
+  } else {
+    mergedColumns = DEFAULT_TABLE_COLUMNS.map((defCol) => ({
+      ...defCol,
+      visible: show[colVisibilityKeyMap[defCol.key]] ?? defCol.visible,
+    }));
+  }
+
   return {
     ...DEFAULT_INVOICE_SETTINGS,
     ...r,
-    currency_label: r.currency_label || 'ریال',
-    divide_price_by_10: r.divide_price_by_10 ?? false,
+    currency_label: r.currency_label || 'تومان',
+    pickup_discount_percent:
+      typeof r.pickup_discount_percent === 'number' && r.pickup_discount_percent >= 0
+        ? r.pickup_discount_percent
+        : 3,
+    max_visitor_discount_percent:
+      typeof r.max_visitor_discount_percent === 'number' && r.max_visitor_discount_percent >= 0
+        ? r.max_visitor_discount_percent
+        : 10,
     default_unit_name: r.default_unit_name || 'عدد',
     show,
     layout,
     style,
+    table_columns: mergedColumns,
     phones: Array.isArray(r.phones) ? r.phones : DEFAULT_INVOICE_SETTINGS.phones,
   };
 }

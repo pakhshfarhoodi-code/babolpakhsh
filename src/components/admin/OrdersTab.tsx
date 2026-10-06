@@ -20,11 +20,14 @@ import {
   Trash2,
   X,
   AlertTriangle,
+  Percent,
 } from 'lucide-react';
 import { isToday, isWithinDays, formatPrice, formatOrderDate } from './helpers';
 import { OrderOverrideModal } from './OrderOverrideModal';
 import { OrderInvoiceModal } from '../invoice/OrderInvoiceModal';
 import { getOrderChannel } from '../../context/utils';
+import { useApp } from '../../context/AppContext';
+import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 
 interface OrdersTabProps {
   orders: Order[];
@@ -51,6 +54,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
   onDeleteOrder,
   onOpenBill,
 }) => {
+  const { refreshData } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter);
   type ChannelFilterType = 'all' | 'visitor_field' | 'store_self' | 'store_direct';
@@ -73,6 +77,71 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
 
   // Invoice view / print modal state
   const [invoiceModalOrder, setInvoiceModalOrder] = useState<Order | null>(null);
+
+  // Discount review modal state
+  const [discountReviewModalOrder, setDiscountReviewModalOrder] = useState<Order | null>(null);
+  const [reviewPercent, setReviewPercent] = useState<number>(0);
+  const [isReviewing, setIsReviewing] = useState(false);
+
+  const handleReviewDiscount = async (orderId: string, action: 'approve' | 'reject', percent: number) => {
+    setIsReviewing(true);
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const { data, error } = await supabase.rpc('review_order_discount', {
+          p_order_id: orderId,
+          p_action: action,
+          p_percent: percent,
+        });
+
+        if (error) {
+          setFeedbackToast({ type: 'error', message: error.message || 'خطا در بررسی تخفیف سفارش' });
+        } else {
+          const res = data as { success: boolean; message: string };
+          setFeedbackToast({
+            type: res.success !== false ? 'success' : 'error',
+            message: res.message || (action === 'approve' ? 'تخفیف با موفقیت بررسی و اعمال گردید.' : 'تخفیف رد شد.'),
+          });
+          setTimeout(() => setFeedbackToast(null), 4000);
+        }
+      } else {
+        setFeedbackToast({ type: 'error', message: 'پایگاه داده متصل نیست.' });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'خطای غیرمنتظره در بررسی تخفیف.';
+      setFeedbackToast({ type: 'error', message: msg });
+    } finally {
+      setIsReviewing(false);
+      setDiscountReviewModalOrder(null);
+    }
+  };
+
+  const handleToggleOrderPickupDiscount = async (order: Order) => {
+    if (order.status === 'delivered') return;
+    const newEnabled = !(order.pickup_discount_percent && order.pickup_discount_percent > 0);
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const { data, error } = await supabase.rpc('admin_set_order_pickup_discount', {
+          p_order_id: order.id,
+          p_enabled: newEnabled,
+        });
+
+        if (error) {
+          setFeedbackToast({ type: 'error', message: error.message || 'خطا در تغییر تخفیف تحویل درب انبار' });
+        } else {
+          const res = data as { success: boolean; message: string };
+          setFeedbackToast({
+            type: res.success !== false ? 'success' : 'error',
+            message: res.message || 'تخفیف تحویل درب انبار به روز شد.',
+          });
+          setTimeout(() => setFeedbackToast(null), 4000);
+          refreshData();
+        }
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'خطا در اعمال تخفیف تحویل.';
+      setFeedbackToast({ type: 'error', message: msg });
+    }
+  };
 
   // Status Chip config (with 'loading' added between assigned and delegated)
   const statusChips = [
@@ -474,7 +543,44 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                         </div>
                       </td>
                       <td className="py-3 px-4 font-bold text-slate-100">
-                        {formatPrice(order.total_amount)}
+                        <div>{formatPrice(order.total_amount)}</div>
+                        <div className="flex flex-col items-start gap-1 mt-1">
+                          {(orderChannel === 'store_self' || orderChannel === 'store_direct') && (
+                            <button
+                              type="button"
+                              disabled={order.status === 'delivered'}
+                              onClick={() => handleToggleOrderPickupDiscount(order)}
+                              className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition flex items-center gap-1 cursor-pointer ${
+                                (order.pickup_discount_percent ?? 0) > 0
+                                  ? 'bg-blue-500/20 text-blue-300 border-blue-500/50 hover:bg-blue-500/30'
+                                  : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                              } ${order.status === 'delivered' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              title={order.status === 'delivered' ? 'سفارش تحویل شده است و امکان تغییر تخفیف ندارد.' : 'فعال/غیرفعال‌سازی تخفیف تحویل درب انبار'}
+                            >
+                              <span>تخفیف تحویل ({(order.pickup_discount_percent ?? 0) > 0 ? `${order.pickup_discount_percent}٪` : 'غیرفعال'})</span>
+                            </button>
+                          )}
+
+                          {(order.founder_discount_percent ?? 0) > 0 && (
+                            <div className="inline-flex items-center gap-1 bg-purple-500/15 border border-purple-500/40 text-purple-300 px-2 py-0.5 rounded-lg text-[10px] font-bold">
+                              <span>تخفیف ۱۰۰ نفر اول: {order.founder_discount_percent}٪</span>
+                            </div>
+                          )}
+
+                          {order.discount_status === 'pending' && (
+                            <div className="inline-flex items-center gap-1 bg-amber-500/15 border border-amber-500/40 text-amber-300 px-2 py-0.5 rounded-lg text-[10px] font-bold">
+                              <Percent className="w-3 h-3 text-amber-400 shrink-0" />
+                              <span>تخفیف در انتظار: {order.discount_percent || 0}٪</span>
+                            </div>
+                          )}
+
+                          {order.discount_status === 'approved' && (order.discount_percent ?? 0) > 0 && (
+                            <div className="inline-flex items-center gap-1 bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 px-2 py-0.5 rounded-lg text-[10px] font-bold">
+                              <Percent className="w-3 h-3 text-emerald-400 shrink-0" />
+                              <span>تخفیف تأییدشده: {order.discount_percent}٪</span>
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3 px-4 text-slate-400 font-mono">
                         {formatOrderDate(order.order_date)}
@@ -488,6 +594,22 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                       </td>
                       <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                          {/* Discount Review Button if discount is pending */}
+                          {order.discount_status === 'pending' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDiscountReviewModalOrder(order);
+                                setReviewPercent(order.discount_percent || 0);
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/50 text-xs font-bold transition cursor-pointer flex items-center gap-1"
+                              title="بررسی و تأیید/رد تخفیف پیشنهادی"
+                            >
+                              <Percent className="w-3 h-3 text-amber-400 shrink-0" />
+                              <span>بررسی تخفیف ({order.discount_percent || 0}٪)</span>
+                            </button>
+                          )}
+
                           {/* Invoice View & Print / PDF Button */}
                           <button
                             type="button"
@@ -798,6 +920,87 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                 <Building2 className="w-4 h-4" />
                 <span>تغییر کانال به خرید مستقیم پخش مرکزی</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Discount Review Modal */}
+      {discountReviewModalOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md shadow-2xl p-5 sm:p-6 space-y-4">
+            <div className="flex items-center gap-3 pb-3 border-b border-slate-800">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0">
+                <Percent className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-100">
+                  بررسی و تعیین تکلیف تخفیف سفارش
+                </h3>
+                <p className="text-xs text-slate-400 font-mono">{discountReviewModalOrder.id}</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-950 rounded-2xl border border-slate-800 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">سوپرمارکت:</span>
+                <span className="font-bold text-slate-200">{discountReviewModalOrder.supermarket_name}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">مبلغ کل سفارش:</span>
+                <span className="font-mono font-bold text-emerald-400">
+                  {formatPrice(discountReviewModalOrder.total_amount)} تومان
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">درصد درخواستی اولیه:</span>
+                <span className="font-bold text-amber-300">{discountReviewModalOrder.discount_percent || 0}٪</span>
+              </div>
+            </div>
+
+            <div className="space-y-1.5 pt-1">
+              <label className="text-xs font-bold text-slate-300 block">درصد تخفیف نهایی قابل‌اعمال:</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={reviewPercent}
+                  onChange={(e) => setReviewPercent(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 text-xs font-bold dir-ltr num-fa text-center"
+                />
+                <span className="text-xs text-slate-400 font-bold">٪</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                disabled={isReviewing}
+                onClick={() => handleReviewDiscount(discountReviewModalOrder.id, 'reject', 0)}
+                className="px-4 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 text-xs font-bold transition cursor-pointer"
+              >
+                رد کامل تخفیف (۰٪)
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isReviewing}
+                  onClick={() => setDiscountReviewModalOrder(null)}
+                  className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition cursor-pointer"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="button"
+                  disabled={isReviewing}
+                  onClick={() => handleReviewDiscount(discountReviewModalOrder.id, 'approve', reviewPercent)}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg transition cursor-pointer"
+                >
+                  تأیید و اعمال ({reviewPercent}٪)
+                </button>
+              </div>
             </div>
           </div>
         </div>

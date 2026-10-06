@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Product } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { QuantityStepper } from './QuantityStepper';
@@ -6,6 +6,11 @@ import { formatPrice, LOW_STOCK_THRESHOLD } from './shopUtils';
 import { Price } from './Price';
 import { Package, Maximize2, X, Tag, Warehouse, Heart, Clock, Sparkles, Check } from 'lucide-react';
 import { SafeImage } from '../common/SafeImage';
+import {
+  getStorePickupDiscountEnabled,
+  calculateTotalDiscountPercent,
+  calculateDiscountedPrice,
+} from '../../utils/storeDiscount';
 
 interface ProductRowProps {
   product: Product;
@@ -22,11 +27,19 @@ export const ProductRow: React.FC<ProductRowProps> = ({
   onExceedLimit,
   priceMode = 'store',
 }) => {
-  const { productLikes, toggleProductLike, currentUser, selectedSupermarketId, supermarkets } = useApp();
+  const { invoiceSettings, productLikes, toggleProductLike, currentUser, selectedSupermarketId, supermarkets } = useApp();
   const [imageError, setImageError] = useState(false);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [isLiking, setIsLiking] = useState(false);
   const [likeError, setLikeError] = useState<string | null>(null);
+
+  // Discount re-evaluation listener
+  const [, setDiscountVersion] = useState(0);
+  useEffect(() => {
+    const handler = () => setDiscountVersion((v) => v + 1);
+    window.addEventListener('store-discount-changed', handler);
+    return () => window.removeEventListener('store-discount-changed', handler);
+  }, []);
 
   const isMarketTest = Boolean(product.is_market_test);
   const available = Math.round(Math.max(0, product.stock - product.reserved_stock) * 1000) / 1000;
@@ -47,6 +60,19 @@ export const ProductRow: React.FC<ProductRowProps> = ({
     owner: currentShop?.owner || '',
     phone: currentShop?.phone || currentUser.phone || '',
   };
+
+  const pickupPercent = invoiceSettings?.pickup_discount_percent || 3;
+  const pickupEnabled = priceMode === 'store' && getStorePickupDiscountEnabled(shopInfo.id);
+  const founderEnabled = priceMode === 'store' && Boolean(currentShop?.founder_discount_enabled);
+  const founderPercent = currentShop?.founder_discount_percent || 3;
+
+  const totalDiscountPercent = calculateTotalDiscountPercent(
+    pickupEnabled ? pickupPercent : 0,
+    founderEnabled ? founderPercent : 0,
+    0
+  );
+
+  const discountedPrice = calculateDiscountedPrice(displayPrice, totalDiscountPercent);
 
   const itemLikes = productLikes.filter((pl) => pl.product_id === product.id);
   const hasLiked = itemLikes.some((pl) => pl.supermarket_id === shopInfo.id);
@@ -148,15 +174,34 @@ export const ProductRow: React.FC<ProductRowProps> = ({
           {/* Line 3: Price block with mt-auto, flex-col without wrap */}
           <div className="mt-auto flex flex-col gap-0.5 pt-0.5 leading-tight min-w-0">
             {/* Purchase Price: 14px bold number + 'تومان / واحد' with Price component and whitespace-nowrap */}
-            <div className="flex items-baseline whitespace-nowrap min-w-0">
-              <Price
-                value={displayPrice}
-                size="lg"
-                tone={isMarketTest ? 'violet' : 'success'}
-                unit={`تومان / ${product.unit}`}
-                bold
-                className="truncate text-[13px] sm:text-[14px]"
-              />
+            <div className="flex items-baseline whitespace-nowrap min-w-0 flex-wrap gap-1">
+              {totalDiscountPercent > 0 ? (
+                <>
+                  <span className="line-through text-slate-500 text-[11px] font-mono shrink-0">
+                    {formatPrice(displayPrice)}
+                  </span>
+                  <Price
+                    value={discountedPrice}
+                    size="lg"
+                    tone="success"
+                    unit={`تومان / ${product.unit}`}
+                    bold
+                    className="truncate text-[13px] sm:text-[14px]"
+                  />
+                  <span className="text-[10px] font-bold text-emerald-300 bg-emerald-950/80 px-1 py-0.2 rounded border border-emerald-800/60 shrink-0">
+                    ({totalDiscountPercent}٪ تخفیف)
+                  </span>
+                </>
+              ) : (
+                <Price
+                  value={displayPrice}
+                  size="lg"
+                  tone={isMarketTest ? 'violet' : 'success'}
+                  unit={`تومان / ${product.unit}`}
+                  bold
+                  className="truncate text-[13px] sm:text-[14px]"
+                />
+              )}
             </div>
 
             {/* Consumer Price (Only when consumer_price > 0): 11px amber, whitespace-nowrap */}

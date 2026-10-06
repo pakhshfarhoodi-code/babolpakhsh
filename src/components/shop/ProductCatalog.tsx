@@ -5,6 +5,10 @@ import { ProductRow } from './ProductRow';
 import { BrandDropdown } from './BrandDropdown';
 import { filterCatalogProducts, sortCatalogProducts } from './shopUtils';
 import {
+  getStorePickupDiscountEnabled,
+  setStorePickupDiscountEnabled,
+} from '../../utils/storeDiscount';
+import {
   Search,
   X,
   Package,
@@ -14,7 +18,131 @@ import {
   ArrowDownNarrowWide,
   SlidersHorizontal,
   Info,
+  Lock,
+  Percent,
 } from 'lucide-react';
+
+const StoreDiscountSwitchesBox: React.FC = () => {
+  const { invoiceSettings, currentUser, selectedSupermarketId, supermarkets } = useApp();
+  const currentShop = supermarkets.find(
+    (s) => s.id === selectedSupermarketId || (currentUser?.id && s.id === currentUser.id)
+  );
+  const storeId = currentShop?.id || currentUser?.id || 'store_default';
+  const pickupPercent = invoiceSettings?.pickup_discount_percent || 3;
+
+  const [pickupEnabled, setPickupEnabled] = useState<boolean>(() => {
+    return getStorePickupDiscountEnabled(storeId);
+  });
+
+  useEffect(() => {
+    setPickupEnabled(getStorePickupDiscountEnabled(storeId));
+  }, [storeId]);
+
+  const handleTogglePickup = () => {
+    const nextVal = !pickupEnabled;
+    setPickupEnabled(nextVal);
+    setStorePickupDiscountEnabled(storeId, nextVal);
+    // Dispatch custom event so ProductRow & CartSheet re-evaluate instantly
+    window.dispatchEvent(new Event('store-discount-changed'));
+  };
+
+  const founderEnabled = Boolean(currentShop?.founder_discount_enabled);
+  const founderPercent = currentShop?.founder_discount_percent || 3;
+  const [showFounderInfo, setShowFounderInfo] = useState(false);
+
+  return (
+    <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 space-y-2.5 shadow-sm">
+      <div className="flex items-center justify-between text-xs font-bold text-slate-200">
+        <span className="flex items-center gap-1.5 text-emerald-400">
+          <Percent className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>تخفیف‌های ویژه تحویل و عضویت فروشگاه:</span>
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+        {/* Switch A: Pickup Discount */}
+        <div
+          onClick={handleTogglePickup}
+          className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition select-none ${
+            pickupEnabled
+              ? 'bg-blue-950/60 border-blue-500/60 text-blue-200'
+              : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <div
+              className={`w-8 h-4.5 rounded-full p-0.5 transition-colors duration-200 ease-in-out shrink-0 ${
+                pickupEnabled ? 'bg-blue-500' : 'bg-slate-700'
+              }`}
+            >
+              <div
+                className={`w-3.5 h-3.5 rounded-full bg-white transition-transform duration-200 ease-in-out ${
+                  pickupEnabled ? 'translate-x-[-14px]' : 'translate-x-0'
+                }`}
+              />
+            </div>
+            <span className="font-bold">
+              {pickupPercent}٪ تخفیف تحویل سفارش درب انبار فرهودی
+            </span>
+          </div>
+          <span
+            className={`text-[10px] px-2 py-0.5 rounded-md font-bold ${
+              pickupEnabled ? 'bg-blue-500/20 text-blue-300' : 'bg-slate-800 text-slate-500'
+            }`}
+          >
+            {pickupEnabled ? 'فعال' : 'غیرفعال'}
+          </span>
+        </div>
+
+        {/* Switch B: Founder Discount (Read-only / Locked) */}
+        <div
+          onClick={() => setShowFounderInfo(true)}
+          className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition select-none ${
+            founderEnabled
+              ? 'bg-purple-950/60 border-purple-500/60 text-purple-200'
+              : 'bg-slate-950/60 border-slate-800/80 text-slate-400 hover:border-slate-700'
+          }`}
+          title="جهت مشاهده راهنما کلیک کنید"
+        >
+          <div className="flex items-center gap-2">
+            <Lock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+            <span className="font-bold">
+              {founderPercent}٪ تخفیف ۱۰۰ نفر اول ثبت‌نام‌شده در سامانه
+            </span>
+          </div>
+          <span
+            className={`text-[10px] px-2 py-0.5 rounded-md font-bold ${
+              founderEnabled
+                ? 'bg-purple-500/20 text-purple-300'
+                : 'bg-slate-800 text-slate-500'
+            }`}
+          >
+            {founderEnabled ? 'فعال' : 'غیرفعال'}
+          </span>
+        </div>
+      </div>
+
+      {/* Info notice when clicking Founder switch */}
+      {showFounderInfo && (
+        <div className="p-2.5 rounded-xl bg-purple-950/80 border border-purple-500/40 text-purple-200 text-xs flex items-start justify-between gap-2 animate-in fade-in">
+          <div className="flex items-start gap-2">
+            <Info className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+            <span>
+              اگر جزء ۱۰۰ نفر اول باشید این گزینه خود به خود برای شما فعال خواهد بود.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowFounderInfo(false)}
+            className="text-purple-400 hover:text-white p-0.5 cursor-pointer shrink-0"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export interface ProductCatalogProps {
   products: Product[];
@@ -376,6 +504,9 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
           </div>
         )}
       </div>
+
+      {/* Store Discount Options Box (Top of Catalog) */}
+      <StoreDiscountSwitchesBox />
 
       {/* 2. Products Grid */}
       {filteredProducts.length === 0 ? (

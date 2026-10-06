@@ -14,7 +14,12 @@ import {
   FileText,
   Printer,
   AlertTriangle,
+  Percent,
 } from 'lucide-react';
+import {
+  calculateTotalDiscountPercent,
+  calculateDiscountedPrice,
+} from '../../utils/storeDiscount';
 
 interface OrderCardProps {
   order: Order;
@@ -32,6 +37,18 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   const [isExpanded, setIsExpanded] = useState(false);
   const statusInfo = getOrderStatusLabel(order.status);
 
+  const pickupDiscount = order.pickup_discount_percent || 0;
+  const founderDiscount = order.founder_discount_percent || 0;
+  const manualDiscount = order.discount_status === 'approved' ? (order.discount_percent || 0) : 0;
+  const totalDiscountPercent = calculateTotalDiscountPercent(pickupDiscount, founderDiscount, manualDiscount);
+
+  const discountedTotal = order.items && order.items.length > 0
+    ? order.items.reduce((sum, item) => {
+        const discountedUnitPrice = calculateDiscountedPrice(item.price, totalDiscountPercent);
+        return sum + discountedUnitPrice * item.quantity;
+      }, 0)
+    : calculateDiscountedPrice(order.total_amount, totalDiscountPercent);
+
   return (
     <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3 shadow-xs hover:border-slate-700 transition">
       {/* Top Row: Order ID, Date, Status Badge */}
@@ -45,7 +62,23 @@ export const OrderCard: React.FC<OrderCardProps> = ({
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {pickupDiscount > 0 && (
+            <span className="px-2 py-0.5 rounded-lg text-[11px] font-bold bg-blue-500/15 text-blue-300 border border-blue-500/30">
+              تخفیف تحویل {pickupDiscount}٪
+            </span>
+          )}
+          {founderDiscount > 0 && (
+            <span className="px-2 py-0.5 rounded-lg text-[11px] font-bold bg-purple-500/15 text-purple-300 border border-purple-500/30">
+              تخفیف ۱۰۰ نفر اول {founderDiscount}٪
+            </span>
+          )}
+          {manualDiscount > 0 && (
+            <span className="px-2 py-0.5 rounded-lg text-[11px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+              تخفیف فاکتور {manualDiscount}٪
+            </span>
+          )}
+
           {order.invoice_revised_at && (
             <span
               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30"
@@ -121,20 +154,39 @@ export const OrderCard: React.FC<OrderCardProps> = ({
       </div>
 
       {/* Summary Row: Price & Actions */}
-      <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 gap-2">
-        <div className="text-xs flex items-baseline gap-1">
+      <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 gap-2 flex-wrap sm:flex-nowrap">
+        <div className="text-xs flex items-center flex-wrap gap-1.5 min-w-0">
           <span className="text-slate-400">مبلغ سفارش: </span>
-          <Price
-            value={order.total_amount}
-            size="md"
-            tone="success"
-            unit="تومان"
-            bold
-            className="text-sm font-extrabold"
-          />
+          {totalDiscountPercent > 0 ? (
+            <div className="flex items-baseline gap-1.5 flex-wrap">
+              <span className="line-through text-slate-500 text-[11px] font-mono">
+                {formatPrice(order.total_amount)}
+              </span>
+              <Price
+                value={discountedTotal}
+                size="md"
+                tone="success"
+                unit="تومان"
+                bold
+                className="text-sm font-extrabold"
+              />
+              <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-1 py-0.2 rounded border border-emerald-800/50">
+                ({totalDiscountPercent}٪ تخفیف)
+              </span>
+            </div>
+          ) : (
+            <Price
+              value={order.total_amount}
+              size="md"
+              tone="success"
+              unit="تومان"
+              bold
+              className="text-sm font-extrabold"
+            />
+          )}
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 shrink-0">
           {/* If undelivered: Call visitor or central distribution button */}
           {order.status === 'undelivered' && (
             <a
@@ -197,26 +249,37 @@ export const OrderCard: React.FC<OrderCardProps> = ({
           )}
 
           <div className="p-2.5 rounded-xl bg-slate-950/60 divide-y divide-slate-800/60 space-y-1.5">
-            {order.items.map((item, idx) => (
-              <div key={idx} className="pt-1.5 first:pt-0 flex items-center justify-between">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <Package className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                  <span className="text-slate-200 truncate">{item.name || 'کالا'}</span>
-                  <span className="text-slate-500 text-[11px] num-fa">
-                    × {item.quantity.toLocaleString('fa-IR')} {item.unit || ''}
-                    {item.items_per_package && item.items_per_package > 1 && ` (${item.items_per_package.toLocaleString('fa-IR')} عددی)`}
-                  </span>
+            {order.items && order.items.map((item, idx) => {
+              const originalRowTotal = item.price * item.quantity;
+              const discountedRowTotal = calculateDiscountedPrice(item.price, totalDiscountPercent) * item.quantity;
+              return (
+                <div key={idx} className="pt-1.5 first:pt-0 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Package className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                    <span className="text-slate-200 truncate">{item.name || 'کالا'}</span>
+                    <span className="text-slate-500 text-[11px] num-fa">
+                      × {item.quantity.toLocaleString('fa-IR')} {item.unit || ''}
+                      {item.items_per_package && item.items_per_package > 1 && ` (${item.items_per_package.toLocaleString('fa-IR')} عددی)`}
+                    </span>
+                  </div>
+                  <div className="text-left shrink-0">
+                    {totalDiscountPercent > 0 && (
+                      <span className="line-through text-slate-500 font-mono text-[10px] block text-left">
+                        {formatPrice(originalRowTotal)}
+                      </span>
+                    )}
+                    <Price
+                      value={discountedRowTotal}
+                      size="sm"
+                      tone="default"
+                      unit="تومان"
+                      bold
+                      className="text-slate-300 font-bold"
+                    />
+                  </div>
                 </div>
-                <Price
-                  value={item.price * item.quantity}
-                  size="sm"
-                  tone="default"
-                  unit="تومان"
-                  bold
-                  className="text-slate-300 font-bold"
-                />
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

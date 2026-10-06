@@ -10,6 +10,7 @@ import {
   buildCartFromOrder,
   clampQuantity,
 } from './shop/shopUtils';
+import { getStorePickupDiscountEnabled } from '../utils/storeDiscount';
 import {
   Search,
   X,
@@ -34,6 +35,7 @@ export const SupermarketPortal: React.FC = () => {
     orders,
     createOrder,
     currentUser,
+    invoiceSettings,
   } = useApp();
 
   const defaultFallbackStore: Supermarket = useMemo(() => ({
@@ -260,10 +262,14 @@ export const SupermarketPortal: React.FC = () => {
     setOrderError(null);
 
     try {
+      const isPickupEnabled = getStorePickupDiscountEnabled(currentStore?.id || '');
+      const pickupPercent = invoiceSettings?.pickup_discount_percent || 3;
+
       const res = await createOrder({
         supermarketId: currentStore?.id || '',
         visitorId: assignedVisitor?.id || 'direct',
         orderSource: 'supermarket',
+        pickupDiscountPercent: isPickupEnabled ? pickupPercent : 0,
         items,
       });
 

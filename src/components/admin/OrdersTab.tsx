@@ -710,7 +710,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                   {renderSortTh('total_amount', 'مبلغ کل (تومان)')}
                   {renderSortTh('order_date', 'تاریخ ثبت')}
                   {renderSortTh('status', 'وضعیت', 'center')}
-                  <th className="py-3 px-4 font-semibold text-center select-none">عملیات مدیریتی</th>
+                  <th className="py-3 px-4 font-semibold text-center select-none whitespace-nowrap min-w-[240px]">عملیات مدیریتی</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
@@ -774,7 +774,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                         isDirect ? 'bg-amber-500/[0.02]' : ''
                       }`}
                     >
-                      <td className="py-3 px-4">
+                      <td className="py-3 px-4 whitespace-nowrap">
                         <div className="flex flex-col items-start gap-1">
                           <span className="font-bold text-blue-400 font-mono text-xs">{order.id}</span>
                           {order.loading_bill_id && (
@@ -790,10 +790,10 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                           )}
                         </div>
                       </td>
-                      <td className="py-3 px-4 font-medium text-slate-200">
+                      <td className="py-3 px-4 font-medium text-slate-200 whitespace-nowrap">
                         {order.supermarket_name}
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3 px-4 whitespace-nowrap">
                         <div className="flex flex-col items-start gap-1">
                           <div
                             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold border ${chBadge.bg}`}
@@ -809,7 +809,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                           )}
                         </div>
                       </td>
-                      <td className="py-3 px-4 font-bold text-slate-100">
+                      <td className="py-3 px-4 font-bold text-slate-100 whitespace-nowrap">
                         <div>{formatPrice(getCalculatedOrderTotal(order))}</div>
                         <div className="flex flex-col items-start gap-1 mt-1">
                           {(orderChannel === 'store_self' || orderChannel === 'store_direct') && (
@@ -849,18 +849,18 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                           )}
                         </div>
                       </td>
-                      <td className="py-3 px-4 text-slate-400 font-mono">
+                      <td className="py-3 px-4 text-slate-400 font-mono whitespace-nowrap">
                         {formatOrderDate(order.order_date)}
                       </td>
-                      <td className="py-3 px-4 text-center">
+                      <td className="py-3 px-4 text-center whitespace-nowrap">
                         <span
                           className={`inline-block px-2.5 py-0.5 rounded-full font-medium border text-xs ${currentStatus.bg}`}
                         >
                           {currentStatus.text}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-center">
-                        <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                      <td className="py-3 px-4 text-center whitespace-nowrap">
+                        <div className="inline-flex items-center justify-center gap-1.5 flex-nowrap">
                           {/* Discount Review Button if discount is pending */}
                           {order.discount_status === 'pending' && (
                             <button
@@ -869,10 +869,10 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                                 setDiscountReviewModalOrder(order);
                                 setReviewPercent(order.discount_percent || 0);
                               }}
-                              className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/50 text-xs font-bold transition cursor-pointer flex items-center gap-1"
+                              className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/50 text-xs font-semibold transition cursor-pointer inline-flex items-center gap-1 shrink-0"
                               title="بررسی و تأیید/رد تخفیف پیشنهادی"
                             >
-                              <Percent className="w-3 h-3 text-amber-400 shrink-0" />
+                              <Percent className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                               <span>بررسی تخفیف ({order.discount_percent || 0}٪)</span>
                             </button>
                           )}
@@ -881,10 +881,10 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                           <button
                             type="button"
                             onClick={() => setInvoiceModalOrder(order)}
-                            className="px-2.5 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/30 text-xs font-semibold transition cursor-pointer flex items-center gap-1"
+                            className="px-2.5 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/30 text-xs font-semibold transition cursor-pointer inline-flex items-center gap-1 shrink-0"
                             title="مشاهده و چاپ فاکتور"
                           >
-                            <FileText className="w-3 h-3" />
+                            <FileText className="w-3.5 h-3.5 shrink-0" />
                             <span>فاکتور</span>
                           </button>
 
@@ -893,7 +893,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                             <button
                               type="button"
                               onClick={() => onUpdateOrderStatus(order.id, 'undelivered')}
-                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-500 text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
+                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-500 text-xs font-semibold transition shadow-xs cursor-pointer inline-flex items-center gap-1.5 shrink-0"
                               title="سفارش تحویل شده است (کلیک جهت بازگردانی به وضعیت عدم تحویل)"
                             >
                               <CheckCircle className="w-3.5 h-3.5 shrink-0" />
@@ -903,7 +903,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                             <button
                               type="button"
                               onClick={() => onUpdateOrderStatus(order.id, 'delivered')}
-                              className="px-2.5 py-1 rounded-lg bg-rose-500/15 hover:bg-emerald-600 text-rose-300 hover:text-white border border-rose-500/30 hover:border-emerald-500 text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 group"
+                              className="px-2.5 py-1 rounded-lg bg-rose-500/15 hover:bg-emerald-600 text-rose-300 hover:text-white border border-rose-500/30 hover:border-emerald-500 text-xs font-semibold transition cursor-pointer inline-flex items-center gap-1.5 group shrink-0"
                               title="سفارش هنوز تحویل نشده است (کلیک جهت تغییر به تحویل شده)"
                             >
                               <XCircle className="w-3.5 h-3.5 text-rose-400 group-hover:text-white shrink-0" />
@@ -915,9 +915,9 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                           <button
                             type="button"
                             onClick={() => handleOpenAssignModal(order)}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1 border ${
+                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer inline-flex items-center gap-1 shrink-0 border ${
                               isDirect
-                                ? 'bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border-amber-500/40 font-bold'
+                                ? 'bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border-amber-500/40'
                                 : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
                             }`}
                             title={
@@ -926,7 +926,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                                 : 'تغییر یا واگذاری ویزیتور'
                             }
                           >
-                            <ArrowRightLeft className="w-3 h-3" />
+                            <ArrowRightLeft className="w-3.5 h-3.5 shrink-0" />
                             <span>{isDirect ? 'تخصیص ویزیتور' : 'انتقال ویزیتور'}</span>
                           </button>
 
@@ -935,10 +935,10 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                             <button
                               type="button"
                               onClick={() => setDeleteConfirmOrder(order)}
-                              className="p-1.5 rounded-lg bg-rose-600/15 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 text-xs font-semibold transition cursor-pointer"
+                              className="p-1.5 rounded-lg bg-rose-600/15 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 text-xs font-semibold transition cursor-pointer inline-flex items-center justify-center shrink-0"
                               title="حذف کامل سفارش و آزادسازی موجودی"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Trash2 className="w-3.5 h-3.5 shrink-0" />
                             </button>
                           )}
                         </div>

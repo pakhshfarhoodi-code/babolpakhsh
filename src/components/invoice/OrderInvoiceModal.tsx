@@ -34,7 +34,7 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static print:inset-auto">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-4xl max-h-[94vh] flex flex-col shadow-2xl overflow-hidden print:border-none print:shadow-none print:max-w-none print:max-h-none print:w-full print:bg-white">
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-4xl max-h-[94vh] h-[94vh] flex flex-col shadow-2xl overflow-hidden print:border-none print:shadow-none print:max-w-none print:max-h-none print:w-full print:bg-white">
         {/* Top Control Bar (Hidden in Print) */}
         <div className="no-print p-3 border-b border-slate-800 bg-slate-950/80 flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-2">
@@ -73,8 +73,8 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
         </div>
 
         {/* Invoice Viewport Container */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-5 print:p-0 print:overflow-visible">
-          <div id="printable-invoice" ref={printRef}>
+        <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-5 pb-16 sm:pb-20 print:p-0 print:overflow-visible flex justify-center">
+          <div id="printable-invoice" ref={printRef} className="w-full flex justify-center">
             <InvoiceDocument
               order={order}
               settings={settings}

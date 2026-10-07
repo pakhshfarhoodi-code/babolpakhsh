@@ -69,11 +69,11 @@ export const VisitorInvoicePrintModal: React.FC<VisitorInvoicePrintModalProps> =
       dir="rtl"
     >
       <div
-        className="w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl flex flex-col my-auto max-h-[94vh] overflow-hidden"
+        className="w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl flex flex-col my-auto max-h-[94vh] h-[94vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Top Bar (Controls & Actions) */}
-        <div className="flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5 bg-slate-950/80 border-b border-slate-800">
+        <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 sm:p-4 bg-slate-950/90 border-b border-slate-800 shrink-0">
           <div className="flex items-center gap-2.5 flex-wrap">
             <h3 className="text-sm sm:text-base font-black text-slate-100 flex items-center gap-2">
               <Printer className="w-5 h-5 text-blue-400" />
@@ -145,11 +145,11 @@ export const VisitorInvoicePrintModal: React.FC<VisitorInvoicePrintModalProps> =
         </div>
 
         {/* Paper Invoice Preview Scrollable Container */}
-        <div className="p-4 sm:p-6 overflow-y-auto max-h-[calc(94vh-80px)] bg-slate-950/50 flex justify-center">
+        <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-6 pb-16 sm:pb-20 bg-slate-950/60 flex justify-center">
           <div
             ref={printRef}
             id="printable-invoice"
-            className="invoice-paper bg-white text-slate-900 rounded-2xl shadow-xl w-full max-w-[210mm] border border-slate-200 overflow-hidden"
+            className="invoice-paper bg-white text-slate-900 rounded-2xl shadow-xl w-full max-w-[210mm] border border-slate-200 overflow-visible mb-6"
           >
             <InvoicePrintView
               bill={bill}

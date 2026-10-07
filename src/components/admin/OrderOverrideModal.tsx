@@ -129,7 +129,7 @@ export const OrderOverrideModal: React.FC<OrderOverrideModalProps> = ({
               className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-md shadow-blue-600/30 flex items-center gap-1.5 cursor-pointer"
             >
               <CheckCircle className="w-4 h-4" />
-              <span>تایید تغییر وضعیت</span>
+              <span>ثبت تغییر وضعیت دستی</span>
             </button>
           </div>
         </form>

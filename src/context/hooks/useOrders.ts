@@ -460,12 +460,12 @@ export function useOrders({
             if (isSupabaseConfigured && supabase) {
               supabase
                 .rpc('override_order_delivery', { p_order_id: orderId })
-                .then(({ error }) => {
-                  if (error) {
-                    console.warn('RPC override_order_delivery failed, falling back to direct updates:', error);
-                    supabase.from('orders').update({ status: 'delivered', stock_deducted: true }).eq('id', orderId).then(() => {});
-                  }
-                });
+                .then(() => {}, () => {});
+              supabase
+                .from('orders')
+                .update({ status: 'delivered', stock_deducted: true })
+                .eq('id', orderId)
+                .then(() => {});
             }
           }
         } else {

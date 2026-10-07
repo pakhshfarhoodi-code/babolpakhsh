@@ -24,11 +24,14 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  Plus,
+  ChevronDown,
 } from 'lucide-react';
 import { isToday, isWithinDays, formatPrice, formatOrderDate } from './helpers';
 import { getTehranDateParts } from '../../utils/dateUtils';
 import { OrderOverrideModal } from './OrderOverrideModal';
 import { OrderInvoiceModal } from '../invoice/OrderInvoiceModal';
+import { DirectInvoiceSheet } from './DirectInvoiceSheet';
 import { getOrderChannel } from '../../context/utils';
 import { useApp } from '../../context/AppContext';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
@@ -133,6 +136,11 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
 
   // Invoice view / print modal state
   const [invoiceModalOrder, setInvoiceModalOrder] = useState<Order | null>(null);
+
+  // Direct Invoice Sheet Modal State
+  const [isDirectInvoiceOpen, setIsDirectInvoiceOpen] = useState(false);
+  const [directInvoiceMode, setDirectInvoiceMode] = useState<'visitor' | 'direct_store'>('visitor');
+  const [isDirectInvoiceMenuOpen, setIsDirectInvoiceMenuOpen] = useState(false);
 
   // Discount review modal state
   const [discountReviewModalOrder, setDiscountReviewModalOrder] = useState<Order | null>(null);
@@ -522,6 +530,65 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
               );
             })}
           </div>
+
+          {/* Direct Invoice Dropdown Menu */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsDirectInvoiceMenuOpen((prev) => !prev)}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold transition shadow-md shadow-emerald-600/30 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>+ صدور فاکتور مستقیم</span>
+              <ChevronDown className="w-3.5 h-3.5 mr-0.5" />
+            </button>
+
+            {isDirectInvoiceMenuOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-20"
+                  onClick={() => setIsDirectInvoiceMenuOpen(false)}
+                />
+                <div className="absolute left-0 mt-2 w-56 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl z-30 py-1.5 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDirectInvoiceMode('visitor');
+                      setIsDirectInvoiceOpen(true);
+                      setIsDirectInvoiceMenuOpen(false);
+                    }}
+                    className="w-full px-3.5 py-2.5 text-right text-xs font-semibold text-slate-200 hover:bg-slate-800 hover:text-emerald-400 flex items-center gap-2.5 transition cursor-pointer"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center">
+                      <Truck className="w-4 h-4" />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="font-bold">برای ویزیتور</span>
+                      <span className="text-[10px] text-slate-400">تخصیص سفارش و اقلام مازاد</span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDirectInvoiceMode('direct_store');
+                      setIsDirectInvoiceOpen(true);
+                      setIsDirectInvoiceMenuOpen(false);
+                    }}
+                    className="w-full px-3.5 py-2.5 text-right text-xs font-semibold text-slate-200 hover:bg-slate-800 hover:text-blue-400 flex items-center gap-2.5 transition cursor-pointer border-t border-slate-800/80"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-blue-500/15 text-blue-400 flex items-center justify-center">
+                      <Store className="w-4 h-4" />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="font-bold">برای فروشگاه</span>
+                      <span className="text-[10px] text-slate-400">صدور فاکتور و تحویل مستقیم</span>
+                    </div>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Status Chips */}
@@ -810,59 +877,36 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                             </button>
                           )}
 
-                          {/* Invoice View & Print / PDF Button */}
+                          {/* Invoice View & Print Button */}
                           <button
                             type="button"
                             onClick={() => setInvoiceModalOrder(order)}
                             className="px-2.5 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/30 text-xs font-semibold transition cursor-pointer flex items-center gap-1"
-                            title="مشاهده فاکتور، چاپ کاغذی و خروجی PDF"
+                            title="مشاهده و چاپ فاکتور"
                           >
                             <FileText className="w-3 h-3" />
-                            <span>فاکتور / PDF</span>
+                            <span>فاکتور</span>
                           </button>
 
-                          {/* Deliver button (only if not delivered) */}
-                          {order.status !== 'delivered' && (
+                          {/* Single Delivery Status Toggle Button */}
+                          {order.status === 'delivered' ? (
                             <button
                               type="button"
-                              onClick={() => handleOpenOverride(order, 'delivered')}
-                              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1 border ${
-                                order.status === 'loading'
-                                  ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/50'
-                                  : 'bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30'
-                              }`}
-                              title={
-                                order.status === 'loading'
-                                  ? 'هشدار: این سفارش در برگه بارگیری است! تغییر دستی ممکن است با کسر موجودی انبار ناسازگار شود.'
-                                  : 'تایید تحویل سفارش توسط مدیریت'
-                              }
+                              onClick={() => onUpdateOrderStatus(order.id, 'undelivered')}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-500 text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
+                              title="سفارش تحویل شده است (کلیک جهت بازگردانی به وضعیت عدم تحویل)"
                             >
-                              {order.status === 'loading' && (
-                                <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
-                              )}
-                              <span>تایید تحویل</span>
+                              <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+                              <span>تحویل شده</span>
                             </button>
-                          )}
-
-                          {/* Undeliver override button (if not undelivered) */}
-                          {order.status !== 'undelivered' && (
+                          ) : (
                             <button
                               type="button"
-                              onClick={() => handleOpenOverride(order, 'undelivered')}
-                              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1 border ${
-                                order.status === 'loading'
-                                  ? 'bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border-rose-800/60'
-                                  : 'bg-rose-600/15 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30'
-                              }`}
-                              title={
-                                order.status === 'loading'
-                                  ? 'هشدار: این سفارش در برگه بارگیری است! تغییر دستی ممکن است با کسر موجودی انبار ناسازگار شود.'
-                                  : 'تغییر وضعیت به عدم تحویل با ثبت دلیل'
-                              }
+                              onClick={() => onUpdateOrderStatus(order.id, 'delivered')}
+                              className="px-2.5 py-1 rounded-lg bg-rose-500/15 hover:bg-emerald-600 text-rose-300 hover:text-white border border-rose-500/30 hover:border-emerald-500 text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 group"
+                              title="سفارش هنوز تحویل نشده است (کلیک جهت تغییر به تحویل شده)"
                             >
-                              {order.status === 'loading' && (
-                                <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" />
-                              )}
+                              <XCircle className="w-3.5 h-3.5 text-rose-400 group-hover:text-white shrink-0" />
                               <span>عدم تحویل</span>
                             </button>
                           )}
@@ -1217,6 +1261,19 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
             : null
         }
       />
+
+      {/* Direct Invoice Sheet Modal */}
+      {isDirectInvoiceOpen && (
+        <DirectInvoiceSheet
+          isOpen={isDirectInvoiceOpen}
+          mode={directInvoiceMode}
+          priceMode={directInvoiceMode === 'visitor' ? 'visitor' : 'store'}
+          onClose={() => setIsDirectInvoiceOpen(false)}
+          onSuccess={() => {
+            refreshData();
+          }}
+        />
+      )}
     </div>
   );
 };

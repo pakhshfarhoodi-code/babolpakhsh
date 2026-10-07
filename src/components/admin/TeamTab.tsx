@@ -25,7 +25,6 @@ import {
   Building,
   Check,
   AlertTriangle,
-  FileText,
   Clock,
   MessageSquare,
   Copy,
@@ -33,7 +32,6 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { SupermarketRegisterModal } from '../SupermarketRegisterModal';
-import { DirectInvoiceSheet } from './DirectInvoiceSheet';
 import { AccountLedgerModal } from './AccountLedgerModal';
 import { formatPrice } from './helpers';
 import { normalizePhone, isValidMobile, MIN_PASSWORD_LENGTH } from '../../context/utils';
@@ -104,10 +102,6 @@ export const TeamTab: React.FC<TeamTabProps> = ({
   const [isRegisterStoreModalOpen, setIsRegisterStoreModalOpen] = useState(false);
   const [togglingStoreId, setTogglingStoreId] = useState<string | null>(null);
   const [toastNotification, setToastNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-
-  // Direct Invoice Modal State
-  const [directInvoiceVisitorId, setDirectInvoiceVisitorId] = useState<string | null>(null);
-  const [directInvoiceStoreId, setDirectInvoiceStoreId] = useState<string | null>(null);
 
   // Password Reset State
   const [resettingPerson, setResettingPerson] = useState<{
@@ -1034,16 +1028,6 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <button
                         type="button"
-                        onClick={() => setDirectInvoiceVisitorId(visitor.id)}
-                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition flex items-center gap-1 cursor-pointer"
-                        title="صدور فاکتور مستقیم برای این ویزیتور"
-                      >
-                        <FileText className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>صدور فاکتور مستقیم</span>
-                      </button>
-
-                      <button
-                        type="button"
                         onClick={() => {
                           setResettingPerson({
                             id: visitor.id,
@@ -1446,17 +1430,6 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                             />
                             <span className="text-[10px] text-slate-500 font-mono">%</span>
                           </div>
-
-                          {/* Direct Store Invoice Action */}
-                          <button
-                            type="button"
-                            onClick={() => setDirectInvoiceStoreId(shop.id)}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-semibold transition cursor-pointer"
-                            title="صدور فاکتور مستقیم برای این فروشگاه"
-                          >
-                            <FileText className="w-3.5 h-3.5 text-blue-400" />
-                            <span>صدور فاکتور مستقیم</span>
-                          </button>
 
                           {/* Password Reset Button */}
                           <button
@@ -2440,34 +2413,6 @@ export const TeamTab: React.FC<TeamTabProps> = ({
             </form>
           </div>
         </div>
-      )}
-
-      {/* Direct Visitor Invoice Sheet Modal */}
-      {directInvoiceVisitorId && (
-        <DirectInvoiceSheet
-          isOpen={Boolean(directInvoiceVisitorId)}
-          mode="visitor"
-          priceMode="visitor"
-          initialVisitorId={directInvoiceVisitorId}
-          onClose={() => setDirectInvoiceVisitorId(null)}
-          onSuccess={() => {
-            refreshData();
-          }}
-        />
-      )}
-
-      {/* Direct Store Invoice Sheet Modal */}
-      {directInvoiceStoreId && (
-        <DirectInvoiceSheet
-          isOpen={Boolean(directInvoiceStoreId)}
-          mode="direct_store"
-          priceMode="store"
-          initialSupermarketId={directInvoiceStoreId}
-          onClose={() => setDirectInvoiceStoreId(null)}
-          onSuccess={() => {
-            refreshData();
-          }}
-        />
       )}
 
       {/* 1. Modal: Confirm Store Approval */}

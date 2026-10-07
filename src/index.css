@@ -91,35 +91,93 @@ html.theme-light select option,
 /* Light Theme Component & Utility Overrides */
 html.theme-light .bg-slate-950,
 .theme-light .bg-slate-950,
+html.theme-light .bg-slate-950\/95,
+.theme-light .bg-slate-950\/95,
 html.theme-light .bg-slate-950\/90,
 .theme-light .bg-slate-950\/90,
+html.theme-light .bg-slate-950\/85,
+.theme-light .bg-slate-950\/85,
 html.theme-light .bg-slate-950\/80,
 .theme-light .bg-slate-950\/80,
+html.theme-light .bg-slate-950\/70,
+.theme-light .bg-slate-950\/70,
 html.theme-light .bg-slate-950\/60,
-.theme-light .bg-slate-950\/60 {
+.theme-light .bg-slate-950\/60,
+html.theme-light .bg-slate-950\/50,
+.theme-light .bg-slate-950\/50,
+html.theme-light .bg-slate-950\/40,
+.theme-light .bg-slate-950\/40,
+html.theme-light .bg-slate-950\/30,
+.theme-light .bg-slate-950\/30,
+html.theme-light .bg-slate-950\/20,
+.theme-light .bg-slate-950\/20 {
   background-color: #ffffff !important;
 }
 
 html.theme-light .bg-slate-900,
 .theme-light .bg-slate-900,
+html.theme-light .bg-slate-900\/95,
+.theme-light .bg-slate-900\/95,
 html.theme-light .bg-slate-900\/90,
 .theme-light .bg-slate-900\/90,
 html.theme-light .bg-slate-900\/80,
 .theme-light .bg-slate-900\/80,
+html.theme-light .bg-slate-900\/70,
+.theme-light .bg-slate-900\/70,
 html.theme-light .bg-slate-900\/60,
 .theme-light .bg-slate-900\/60,
 html.theme-light .bg-slate-900\/50,
-.theme-light .bg-slate-900\/50 {
+.theme-light .bg-slate-900\/50,
+html.theme-light .bg-slate-900\/40,
+.theme-light .bg-slate-900\/40,
+html.theme-light .bg-slate-900\/30,
+.theme-light .bg-slate-900\/30,
+html.theme-light .bg-slate-900\/20,
+.theme-light .bg-slate-900\/20 {
   background-color: #f8fafc !important;
 }
 
 html.theme-light .bg-slate-800,
 .theme-light .bg-slate-800,
+html.theme-light .bg-slate-800\/90,
+.theme-light .bg-slate-800\/90,
 html.theme-light .bg-slate-800\/80,
 .theme-light .bg-slate-800\/80,
+html.theme-light .bg-slate-800\/70,
+.theme-light .bg-slate-800\/70,
+html.theme-light .bg-slate-800\/60,
+.theme-light .bg-slate-800\/60,
 html.theme-light .bg-slate-800\/50,
-.theme-light .bg-slate-800\/50 {
-  background-color: #e2e8f0 !important;
+.theme-light .bg-slate-800\/50,
+html.theme-light .bg-slate-800\/40,
+.theme-light .bg-slate-800\/40,
+html.theme-light .bg-slate-800\/35,
+.theme-light .bg-slate-800\/35,
+html.theme-light .bg-slate-800\/30,
+.theme-light .bg-slate-800\/30,
+html.theme-light .bg-slate-800\/20,
+.theme-light .bg-slate-800\/20 {
+  background-color: #f1f5f9 !important;
+}
+
+/* Modals & Dialogs in Light Mode */
+html.theme-light .bg-slate-900.border.border-slate-800.rounded-3xl,
+.theme-light .bg-slate-900.border.border-slate-800.rounded-3xl,
+html.theme-light [role="dialog"],
+.theme-light [role="dialog"] {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.15) !important;
+}
+
+/* Modal Backdrops in Light Theme - clean darkened overlay without muddy gray */
+html.theme-light .bg-black\/60,
+.theme-light .bg-black\/60,
+html.theme-light .bg-slate-950\/90,
+.theme-light .bg-slate-950\/90,
+html.theme-light .bg-slate-950\/85,
+.theme-light .bg-slate-950\/85 {
+  background-color: rgba(15, 23, 42, 0.5) !important;
 }
 
 html.theme-light .border-slate-800,
@@ -132,7 +190,7 @@ html.theme-light .border-slate-800\/50,
 .theme-light .border-slate-800\/50,
 html.theme-light .border-slate-900,
 .theme-light .border-slate-900 {
-  border-color: #cbd5e1 !important;
+  border-color: #e2e8f0 !important;
 }
 
 html.theme-light .border-slate-700,
@@ -140,8 +198,10 @@ html.theme-light .border-slate-700,
 html.theme-light .border-slate-700\/80,
 .theme-light .border-slate-700\/80,
 html.theme-light .border-slate-700\/60,
-.theme-light .border-slate-700\/60 {
-  border-color: #94a3b8 !important;
+.theme-light .border-slate-700\/60,
+html.theme-light .border-slate-700\/50,
+.theme-light .border-slate-700\/50 {
+  border-color: #cbd5e1 !important;
 }
 
 html.theme-light .text-slate-100,

@@ -20,6 +20,7 @@ import {
   getBaseUnit,
   getUnitColumnText,
   getUnitPriceFromOrderItem,
+  getItemUnitPriceAndTotal,
   computeLine,
 } from '../../utils/orderLine';
 import { Building2, Store } from 'lucide-react';
@@ -265,22 +266,13 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
   const manualDiscountPercent = order.discount_status === 'approved' ? (order.discount_percent || 0) : 0;
   const totalDiscountPercent = Math.min(100, Math.max(0, pickupDiscountPercent + founderDiscountPercent + manualDiscountPercent));
 
+  const isVisitorOrder =
+    !isDirectOrder || order.order_channel === 'visitor_field' || order.order_source === 'visitor';
+
   // originalSubtotal is the sum of raw item totals before discount
   const originalSubtotal = rawItems.reduce((sum, item) => {
     const product = products.find((p) => p.id === item.product_id);
-    const rawItemsPerPkg =
-      item.items_per_package ||
-      (item as any).product?.items_per_package ||
-      (product as any)?.items_per_package ||
-      '';
-    const pack = getPackSize(rawItemsPerPkg);
-    const unitPrice = getUnitPriceFromOrderItem({ price: item.price, items_per_package: pack });
-    const { total } = computeLine({
-      quantity: Number(item.quantity) || 0,
-      pack,
-      unitPrice,
-      discountPercent: 0,
-    });
+    const { total } = getItemUnitPriceAndTotal(item, product, isVisitorOrder);
     return sum + total;
   }, 0);
 
@@ -289,13 +281,7 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
   // Calculate discounted row totals and sum them up with computeLine
   const discountedSubtotal = rawItems.reduce((sum, item) => {
     const product = products.find((p) => p.id === item.product_id);
-    const rawItemsPerPkg =
-      item.items_per_package ||
-      (item as any).product?.items_per_package ||
-      (product as any)?.items_per_package ||
-      '';
-    const pack = getPackSize(rawItemsPerPkg);
-    const unitPrice = getUnitPriceFromOrderItem({ price: item.price, items_per_package: pack });
+    const { pack, unitPrice } = getItemUnitPriceAndTotal(item, product, isVisitorOrder);
     const { total } = computeLine({
       quantity: Number(item.quantity) || 0,
       pack,
@@ -816,19 +802,12 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
   const renderItemRow = (item: typeof rawItems[0], globalIndex: number) => {
     // Lookup missing items_per_package and unit from AppContext products
     const product = products.find((p) => p.id === item.product_id);
-    const rawItemsPerPkg =
-      item.items_per_package ||
-      (item as any).product?.items_per_package ||
-      (product as any)?.items_per_package ||
-      '';
-
-    const pack = getPackSize(rawItemsPerPkg);
+    const { pack, unitPrice } = getItemUnitPriceAndTotal(item, product, isVisitorOrder);
     const packaged = isPackaged(pack);
     const rawUnit = (item as any).unit || product?.unit || settings.default_unit_name || 'عدد';
     const baseUnit = getBaseUnit(rawUnit, pack);
 
     const qty = Number(item.quantity) || 0;
-    const unitPrice = getUnitPriceFromOrderItem({ price: item.price, items_per_package: pack });
     const { discountedUnitPrice, total: lineTotal } = computeLine({
       quantity: qty,
       pack,

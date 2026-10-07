@@ -73,10 +73,9 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
   // Active Tab inside Ledger
   const [activeTab, setActiveTab] = useState<'journal' | 'invoices' | 'cheques'>('journal');
 
-  // Modals for actions
-  const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
-  const [isManualDebitOpen, setIsManualDebitOpen] = useState(false);
-  const [isManualCreditOpen, setIsManualCreditOpen] = useState(false);
+  // Modals for the two primary financial operations
+  const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false); // دریافت از طرف حساب
+  const [isPayModalOpen, setIsPayModalOpen] = useState(false);         // پرداخت به طرف حساب
   const [isActivateModalOpen, setIsActivateModalOpen] = useState(false);
   const [isDeactivateConfirmOpen, setIsDeactivateConfirmOpen] = useState(false);
 
@@ -86,7 +85,7 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
   const [deactivateReason, setDeactivateReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Record Payment Form
+  // 1. Receive From Counterparty Form states (دریافت از طرف حساب)
   const [paymentType, setPaymentType] = useState<'cash_payment' | 'bank_transfer' | 'cheque_payment'>('cash_payment');
   const [paymentAmount, setPaymentAmount] = useState<number | ''>('');
   const [paymentRefId, setPaymentRefId] = useState('');
@@ -100,21 +99,14 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
     due_date: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
     description: '',
   });
-
-  // Allocations to invoices in payment modal
+  // Allocations to invoices in receive modal
   const [selectedAllocations, setSelectedAllocations] = useState<Record<string, number>>({});
 
-  // Manual Debit Form
-  const [manualDebitAmount, setManualDebitAmount] = useState<number | ''>('');
-  const [manualDebitDesc, setManualDebitDesc] = useState('');
-  const [manualDebitRef, setManualDebitRef] = useState('');
-
-  // Manual Credit Form
-  const [manualCreditType, setManualCreditType] = useState<'manual_credit' | 'account_adjustment' | 'opening_balance'>('manual_credit');
-  const [adjustmentDirection, setAdjustmentDirection] = useState<'credit' | 'debit'>('credit');
-  const [manualCreditAmount, setManualCreditAmount] = useState<number | ''>('');
-  const [manualCreditDesc, setManualCreditDesc] = useState('');
-  const [manualCreditRef, setManualCreditRef] = useState('');
+  // 2. Pay To Counterparty Form states (پرداخت به طرف حساب)
+  const [payoutMethod, setPayoutMethod] = useState<'bank_transfer' | 'cash_payment'>('bank_transfer');
+  const [payoutAmount, setPayoutAmount] = useState<number | ''>('');
+  const [payoutRefId, setPayoutRefId] = useState('');
+  const [payoutDescription, setPayoutDescription] = useState('');
 
   // Cheque action state (clearing / returning / cancelling)
   const [selectedChequeForAction, setSelectedChequeForAction] = useState<Cheque | null>(null);
@@ -256,12 +248,12 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
     setSelectedAllocations(newAllocs);
   };
 
-  // Handle Submit Payment
-  const handleSubmitPayment = async (e: React.FormEvent) => {
+  // 1. Handle Submit Receive from counterparty (دریافت از طرف حساب)
+  const handleSubmitReceive = async (e: React.FormEvent) => {
     e.preventDefault();
     const amount = Number(paymentAmount);
     if (!amount || amount <= 0) {
-      showToast('لطفاً مبلغ معتبر برای پرداخت وارد کنید.', 'warning');
+      showToast('لطفاً مبلغ معتبر برای دریافت وارد کنید.', 'warning');
       return;
     }
 
@@ -290,8 +282,8 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
       });
 
       if (res.success) {
-        showToast(res.message, 'success');
-        setIsRecordPaymentOpen(false);
+        showToast(res.message || 'دریافت از طرف حساب با موفقیت ثبت شد.', 'success');
+        setIsReceiveModalOpen(false);
         setPaymentAmount('');
         setPaymentRefId('');
         setPaymentDescription('');
@@ -304,18 +296,21 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
     }
   };
 
-  // Handle Manual Debit Submit
-  const handleSubmitManualDebit = async (e: React.FormEvent) => {
+  // 2. Handle Submit Payout to counterparty (پرداخت به طرف حساب)
+  const handleSubmitPayout = async (e: React.FormEvent) => {
     e.preventDefault();
-    const amount = Number(manualDebitAmount);
+    const amount = Number(payoutAmount);
     if (!amount || amount <= 0) {
-      showToast('لطفاً مبلغ معتبر وارد کنید.', 'warning');
+      showToast('لطفاً مبلغ معتبر برای پرداخت وارد کنید.', 'warning');
       return;
     }
-    if (!manualDebitDesc.trim()) {
-      showToast('لطفاً دلیل و توضیحات افزایش بدهی را وارد کنید.', 'warning');
+    if (!payoutDescription.trim()) {
+      showToast('لطفاً بابت و شرح پرداخت را وارد کنید.', 'warning');
       return;
     }
+
+    const methodLabel = payoutMethod === 'bank_transfer' ? 'حواله / کارت بانکی' : 'پرداخت نقدی';
+    const fullDesc = `پرداخت به طرف حساب (${methodLabel}): ${payoutDescription.trim()}`;
 
     setIsSubmitting(true);
     try {
@@ -323,60 +318,17 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
         profileId,
         type: 'manual_debit',
         amount,
-        description: manualDebitDesc.trim(),
-        referenceId: manualDebitRef.trim() || undefined,
+        description: fullDesc,
+        referenceId: payoutRefId.trim() || undefined,
         entryType: 'debit',
       });
 
       if (res.success) {
-        showToast(res.message, 'success');
-        setIsManualDebitOpen(false);
-        setManualDebitAmount('');
-        setManualDebitDesc('');
-        setManualDebitRef('');
-      } else {
-        showToast(res.message, 'error');
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // Handle Manual Credit Submit
-  const handleSubmitManualCredit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const amount = Number(manualCreditAmount);
-    if (!amount || amount <= 0) {
-      showToast('لطفاً مبلغ معتبر وارد کنید.', 'warning');
-      return;
-    }
-    if (!manualCreditDesc.trim()) {
-      showToast('لطفاً توضیحات بستانکاری/اصلاح را وارد کنید.', 'warning');
-      return;
-    }
-
-    const entryType =
-      manualCreditType === 'account_adjustment' || manualCreditType === 'opening_balance'
-        ? adjustmentDirection
-        : 'credit';
-
-    setIsSubmitting(true);
-    try {
-      const res = await manualFinancialEntry({
-        profileId,
-        type: manualCreditType,
-        amount,
-        description: manualCreditDesc.trim(),
-        referenceId: manualCreditRef.trim() || undefined,
-        entryType,
-      });
-
-      if (res.success) {
-        showToast(res.message, 'success');
-        setIsManualCreditOpen(false);
-        setManualCreditAmount('');
-        setManualCreditDesc('');
-        setManualCreditRef('');
+        showToast(res.message || 'پرداخت به طرف حساب با موفقیت ثبت شد.', 'success');
+        setIsPayModalOpen(false);
+        setPayoutAmount('');
+        setPayoutRefId('');
+        setPayoutDescription('');
       } else {
         showToast(res.message, 'error');
       }
@@ -413,21 +365,21 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
       case 'invoice_debt':
         return 'بدهی فاکتور';
       case 'cash_payment':
-        return 'پرداخت نقدی';
+        return 'دریافت نقدی';
       case 'bank_transfer':
-        return 'حواله / کارت بانکی';
+        return 'دریافت حواله / کارت';
       case 'cheque_payment':
-        return 'پرداخت با چک';
+        return 'دریافت با چک';
       case 'manual_debit':
-        return 'افزایش دستی بدهی';
+        return 'پرداخت به طرف حساب';
       case 'manual_credit':
-        return 'بستانکاری دستی';
+        return 'دریافت از طرف حساب';
       case 'refund':
         return 'برگشت وجه';
       case 'cheque_return':
         return 'برگشت چک';
       case 'account_adjustment':
-        return 'اصلاح حساب';
+        return 'تعدیل حساب';
       case 'opening_balance':
         return 'مانده اولیه';
       default:
@@ -474,7 +426,7 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto"
       onClick={onClose}
       dir="rtl"
     >
@@ -483,7 +435,7 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5 bg-slate-950/80 border-b border-slate-800">
+        <div className="flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5 bg-slate-950 border-b border-slate-800">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-2xl bg-blue-600/20 text-blue-400 flex items-center justify-center border border-blue-500/30 shadow-inner">
               <Wallet className="w-6 h-6" />
@@ -509,7 +461,7 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
               <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
                 <span className="font-mono">{personPhone}</span>
                 {account && (
-                  <span className="font-mono bg-slate-800/80 px-2 py-0.5 rounded text-slate-300">
+                  <span className="font-mono bg-slate-800 px-2 py-0.5 rounded text-slate-300 border border-slate-700/50">
                     شماره حساب: {account.account_number}
                   </span>
                 )}
@@ -550,15 +502,15 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
         </div>
 
         {/* Account Summary Cards */}
-        <div className="p-4 sm:p-5 bg-slate-900/60 border-b border-slate-800/80 grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+        <div className="p-4 sm:p-5 bg-slate-900 border-b border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
           {/* Card 1: Current Net Balance */}
           <div
             className={`p-3.5 rounded-2xl border ${
               isDebtor
-                ? 'bg-rose-950/30 border-rose-500/40 text-rose-300'
+                ? 'bg-rose-950/20 border-rose-500/40 text-rose-300'
                 : isCreditor
-                ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300'
-                : 'bg-slate-950/40 border-slate-800 text-slate-300'
+                ? 'bg-emerald-950/20 border-emerald-500/40 text-emerald-300'
+                : 'bg-slate-950 border-slate-800 text-slate-300'
             }`}
           >
             <div className="flex items-center justify-between text-xs font-semibold mb-1">
@@ -578,7 +530,7 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
           </div>
 
           {/* Card 2: Total Debit */}
-          <div className="p-3.5 rounded-2xl bg-slate-950/40 border border-slate-800/80 text-slate-200">
+          <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 text-slate-200">
             <div className="flex items-center justify-between text-xs font-semibold text-slate-400 mb-1">
               <span>جمع بدهکاری (فاکتورها و...)</span>
               <ArrowDownLeft className="w-3.5 h-3.5 text-rose-400" />
@@ -590,7 +542,7 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
           </div>
 
           {/* Card 3: Total Credit */}
-          <div className="p-3.5 rounded-2xl bg-slate-950/40 border border-slate-800/80 text-slate-200">
+          <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 text-slate-200">
             <div className="flex items-center justify-between text-xs font-semibold text-slate-400 mb-1">
               <span>جمع بستانکاری (پرداخت‌ها)</span>
               <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400" />
@@ -602,7 +554,7 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
           </div>
 
           {/* Card 4: Pending Cheques Amount */}
-          <div className="p-3.5 rounded-2xl bg-slate-950/40 border border-slate-800/80 text-slate-200">
+          <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 text-slate-200">
             <div className="flex items-center justify-between text-xs font-semibold text-slate-400 mb-1">
               <span>چک‌های در جریان وصول</span>
               <Clock className="w-3.5 h-3.5 text-amber-400" />
@@ -617,7 +569,7 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
         </div>
 
         {/* Action Toolbar & Navigation Tabs */}
-        <div className="px-4 sm:px-5 py-3 bg-slate-950/50 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
+        <div className="px-4 sm:px-5 py-3 bg-slate-950 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
           {/* Tabs switch */}
           <div className="flex items-center gap-1.5 p-1 bg-slate-900 rounded-xl border border-slate-800">
             <button
@@ -658,8 +610,9 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
             </button>
           </div>
 
-          {/* Action Buttons (Strictly enabled only when account is active) */}
+          {/* Action Buttons (Strictly only the 2 primary operations: دریافت از طرف حساب و پرداخت به طرف حساب) */}
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Button 1: دریافت از طرف حساب */}
             <button
               type="button"
               disabled={!isAccountActive}
@@ -668,57 +621,39 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
                   showToast('حساب دفتری غیرفعال است. ابتدا آن را فعال کنید.', 'warning');
                   return;
                 }
-                setIsRecordPaymentOpen(true);
+                setIsReceiveModalOpen(true);
               }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
                 isAccountActive
                   ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20 cursor-pointer active:scale-95'
                   : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700/50'
               }`}
-              title={!isAccountActive ? 'ثبت تراکنش برای حساب غیرفعال مجاز نیست' : ''}
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>ثبت دریافت / پرداخت</span>
-            </button>
-
-            <button
-              type="button"
-              disabled={!isAccountActive}
-              onClick={() => {
-                if (!isAccountActive) {
-                  showToast('حساب دفتری غیرفعال است.', 'warning');
-                  return;
-                }
-                setIsManualDebitOpen(true);
-              }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
-                isAccountActive
-                  ? 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 cursor-pointer active:scale-95'
-                  : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700/50'
-              }`}
+              title={!isAccountActive ? 'ثبت تراکنش برای حساب غیرفعال مجاز نیست' : 'طرف حساب به ما پول پرداخت می‌کند (کاهش بدهی یا ثبت بستانکاری مازاد)'}
             >
               <ArrowDownLeft className="w-3.5 h-3.5" />
-              <span>افزایش بدهی</span>
+              <span>دریافت از طرف حساب</span>
             </button>
 
+            {/* Button 2: پرداخت به طرف حساب */}
             <button
               type="button"
               disabled={!isAccountActive}
               onClick={() => {
                 if (!isAccountActive) {
-                  showToast('حساب دفتری غیرفعال است.', 'warning');
+                  showToast('حساب دفتری غیرفعال است. ابتدا آن را فعال کنید.', 'warning');
                   return;
                 }
-                setIsManualCreditOpen(true);
+                setIsPayModalOpen(true);
               }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
                 isAccountActive
-                  ? 'bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 border border-blue-500/30 cursor-pointer active:scale-95'
+                  ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-md shadow-rose-600/20 cursor-pointer active:scale-95'
                   : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700/50'
               }`}
+              title={!isAccountActive ? 'ثبت تراکنش برای حساب غیرفعال مجاز نیست' : 'ما به طرف حساب پول پرداخت می‌کنیم (کاهش بستانکاری یا افزایش بدهی)'}
             >
               <ArrowUpRight className="w-3.5 h-3.5" />
-              <span>ثبت بستانکاری / اصلاح</span>
+              <span>پرداخت به طرف حساب</span>
             </button>
           </div>
         </div>
@@ -748,46 +683,46 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
                 >
                   <option value="all">همه انواع گردش‌ها</option>
                   <option value="invoice_debt">بدهی فاکتور</option>
-                  <option value="cash_payment">پرداخت نقدی</option>
-                  <option value="bank_transfer">حواله / کارت بانکی</option>
-                  <option value="cheque_payment">پرداخت با چک</option>
-                  <option value="manual_debit">افزایش دستی بدهی</option>
-                  <option value="manual_credit">بستانکاری دستی</option>
+                  <option value="cash_payment">دریافت نقدی</option>
+                  <option value="bank_transfer">دریافت حواله / کارت</option>
+                  <option value="cheque_payment">دریافت با چک</option>
+                  <option value="manual_debit">پرداخت به طرف حساب</option>
+                  <option value="manual_credit">دریافت از طرف حساب</option>
                   <option value="cheque_return">برگشت چک</option>
-                  <option value="account_adjustment">اصلاح حساب</option>
+                  <option value="account_adjustment">تعدیل حساب</option>
                 </select>
               </div>
             </div>
 
             {/* Transactions Table */}
             {filteredTxs.length === 0 ? (
-              <div className="p-12 text-center bg-slate-950/40 rounded-2xl border border-slate-800/80">
-                <FileText className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-                <p className="text-sm font-bold text-slate-300">هیچ گردشی در دفتر این حساب یافت نشد</p>
-                <p className="text-xs text-slate-500 mt-1">تراکنش‌های ثبت‌شده، فاکتورها و پرداخت‌ها در اینجا فهرست می‌شوند.</p>
+              <div className="p-12 text-center bg-slate-950 rounded-2xl border border-slate-800">
+                <FileText className="w-10 h-10 text-slate-500 mx-auto mb-3" />
+                <p className="text-sm font-bold text-slate-200">هیچ گردشی در دفتر این حساب یافت نشد</p>
+                <p className="text-xs text-slate-400 mt-1">تراکنش‌های ثبت‌شده، فاکتورها و دریافت/پرداخت‌ها در اینجا فهرست می‌شوند.</p>
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/50">
+              <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950">
                 <table className="w-full text-right border-collapse text-xs">
                   <thead>
-                    <tr className="bg-slate-900/90 text-slate-400 border-b border-slate-800">
+                    <tr className="bg-slate-900 text-slate-400 border-b border-slate-800">
                       <th className="p-3 font-semibold">تاریخ و زمان</th>
                       <th className="p-3 font-semibold">نوع عملیات</th>
                       <th className="p-3 font-semibold">شرح سند / پیگیری</th>
-                      <th className="p-3 font-semibold text-rose-400">بدهکار (افزایش بدهی)</th>
-                      <th className="p-3 font-semibold text-emerald-400">بستانکار (پرداخت)</th>
+                      <th className="p-3 font-semibold text-rose-400">بدهکار (پرداخت به وی / بدهی)</th>
+                      <th className="p-3 font-semibold text-emerald-400">بستانکار (دریافت از وی / تسویه)</th>
                       <th className="p-3 font-semibold">ثبت‌کننده</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800/60 text-slate-200">
+                  <tbody className="divide-y divide-slate-800 text-slate-200">
                     {filteredTxs.map((tx) => {
                       const isDebit = tx.entry_type === 'debit';
                       const isCredit = tx.entry_type === 'credit';
                       return (
-                        <tr key={tx.id} className="hover:bg-slate-800/30 transition">
+                        <tr key={tx.id} className="hover:bg-slate-900/50 transition">
                           <td className="p-3 text-slate-400 font-mono text-[11px] whitespace-nowrap">
                             {new Date(tx.transaction_date).toLocaleDateString('fa-IR')}
-                            <span className="text-[10px] text-slate-500 mr-1.5">
+                            <span className="text-[10px] text-slate-400 mr-1.5">
                               {new Date(tx.transaction_date).toLocaleTimeString('fa-IR', {
                                 hour: '2-digit',
                                 minute: '2-digit',
@@ -835,7 +770,7 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
         {/* TAB 2: INVOICES & SETTLEMENTS */}
         {activeTab === 'invoices' && (
           <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
-            <div className="bg-slate-950/60 p-3 rounded-2xl border border-slate-800 text-xs text-slate-300 flex items-center justify-between">
+            <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800 text-xs text-slate-300 flex items-center justify-between">
               <span>
                 فهرست حواله‌ها و فاکتورهای بارگیری این ویزیتور و میزان تسویه هر فاکتور:
               </span>
@@ -843,15 +778,15 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
             </div>
 
             {unsettledInvoices.length === 0 ? (
-              <div className="p-12 text-center bg-slate-950/40 rounded-2xl border border-slate-800">
-                <Layers className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-                <p className="text-sm font-bold text-slate-300">هیچ فاکتوری برای این ویزیتور ثبت نشده است.</p>
+              <div className="p-12 text-center bg-slate-950 rounded-2xl border border-slate-800">
+                <Layers className="w-10 h-10 text-slate-500 mx-auto mb-3" />
+                <p className="text-sm font-bold text-slate-200">هیچ فاکتوری برای این ویزیتور ثبت نشده است.</p>
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/50">
+              <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950">
                 <table className="w-full text-right border-collapse text-xs">
                   <thead>
-                    <tr className="bg-slate-900/90 text-slate-400 border-b border-slate-800">
+                    <tr className="bg-slate-900 text-slate-400 border-b border-slate-800">
                       <th className="p-3 font-semibold">شماره فاکتور</th>
                       <th className="p-3 font-semibold">تاریخ ثبت</th>
                       <th className="p-3 font-semibold">وضعیت فاکتور</th>
@@ -908,11 +843,11 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
                                 setPaymentAmount(inv.remainingDue);
                                 setSelectedAllocations({ [inv.id]: inv.remainingDue });
                                 setPaymentDescription(`تسویه فاکتور ${inv.invoice_no || inv.id}`);
-                                setIsRecordPaymentOpen(true);
+                                setIsReceiveModalOpen(true);
                               }}
                               className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 transition cursor-pointer"
                             >
-                              ثبت پرداخت
+                              دریافت وجه فاکتور
                             </button>
                           )}
                         </td>
@@ -928,24 +863,24 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
         {/* TAB 3: CHEQUES MANAGEMENT */}
         {activeTab === 'cheques' && (
           <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
-            <div className="bg-slate-950/60 p-3 rounded-2xl border border-slate-800 text-xs text-slate-300 flex items-center justify-between">
+            <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800 text-xs text-slate-300 flex items-center justify-between">
               <span>مدیریت چک‌های صیادی و عادی دریافت‌شده از این ویزیتور:</span>
               <span className="text-slate-400 font-bold">{accountCheques.length} فقره چک</span>
             </div>
 
             {accountCheques.length === 0 ? (
-              <div className="p-12 text-center bg-slate-950/40 rounded-2xl border border-slate-800">
-                <CreditCard className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-                <p className="text-sm font-bold text-slate-300">هیچ چکی برای این حساب ثبت نشده است.</p>
-                <p className="text-xs text-slate-500 mt-1">
+              <div className="p-12 text-center bg-slate-950 rounded-2xl border border-slate-800">
+                <CreditCard className="w-10 h-10 text-slate-500 mx-auto mb-3" />
+                <p className="text-sm font-bold text-slate-200">هیچ چکی برای این حساب ثبت نشده است.</p>
+                <p className="text-xs text-slate-400 mt-1">
                   در زمان ثبت پرداخت با انتخاب نوع «پرداخت با چک»، چک به این لیست اضافه خواهد شد.
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/50">
+              <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950">
                 <table className="w-full text-right border-collapse text-xs">
                   <thead>
-                    <tr className="bg-slate-900/90 text-slate-400 border-b border-slate-800">
+                    <tr className="bg-slate-900 text-slate-400 border-b border-slate-800">
                       <th className="p-3 font-semibold">شماره چک</th>
                       <th className="p-3 font-semibold">شناسه صیادی</th>
                       <th className="p-3 font-semibold">بانک و شعبه</th>
@@ -956,9 +891,9 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
                       <th className="p-3 font-semibold text-center">اقدامات ادمین</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800/60 text-slate-200">
+                  <tbody className="divide-y divide-slate-800 text-slate-200">
                     {accountCheques.map((chk) => (
-                      <tr key={chk.id} className="hover:bg-slate-800/30 transition">
+                      <tr key={chk.id} className="hover:bg-slate-900/50 transition">
                         <td className="p-3 font-bold font-mono text-blue-400">{chk.cheque_number}</td>
                         <td className="p-3 font-mono text-slate-300">{chk.sayad_number || '-'}</td>
                         <td className="p-3">
@@ -1021,31 +956,56 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
           </div>
         )}
 
-        {/* MODAL 1: RECORD PAYMENT */}
-        {isRecordPaymentOpen && (
+        {/* ========================================================================= */}
+        {/* OPERATION 1: RECEIVE FROM COUNTERPARTY (دریافت از طرف حساب)                */}
+        {/* ========================================================================= */}
+        {isReceiveModalOpen && (
           <div
-            className="fixed inset-0 z-60 flex items-center justify-center p-3 bg-slate-950/90 backdrop-blur-sm overflow-y-auto"
-            onClick={() => setIsRecordPaymentOpen(false)}
+            className="fixed inset-0 z-60 flex items-center justify-center p-3 bg-black/60 backdrop-blur-sm overflow-y-auto"
+            onClick={() => setIsReceiveModalOpen(false)}
           >
             <div
               className="w-full max-w-xl bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl space-y-4 my-auto max-h-[92vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                <h4 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                  <Plus className="w-5 h-5 text-emerald-400" />
-                  <span>ثبت دریافت وجه / پرداخت مالی</span>
-                </h4>
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-2xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
+                    <ArrowDownLeft className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                      <span>دریافت از طرف حساب</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-400">
+                      کاهش بدهی یا ثبت بستانکاری مازاد - طرف حساب: <strong className="text-slate-200">{personName}</strong>
+                    </p>
+                  </div>
+                </div>
                 <button
                   type="button"
-                  onClick={() => setIsRecordPaymentOpen(false)}
-                  className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 cursor-pointer"
+                  onClick={() => setIsReceiveModalOpen(false)}
+                  className="p-1.5 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <form onSubmit={handleSubmitPayment} className="space-y-4">
+              {/* Account Status Info Box */}
+              <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs">
+                <span className="text-slate-400">مانده کل حساب پیش از دریافت:</span>
+                <span className="font-mono font-bold">
+                  {isDebtor ? (
+                    <span className="text-rose-400">{formatPrice(currentBalance)} تومان بدهکار به شرکت</span>
+                  ) : isCreditor ? (
+                    <span className="text-emerald-400">{formatPrice(Math.abs(currentBalance))} تومان بستانکار از شرکت</span>
+                  ) : (
+                    <span className="text-slate-400">تسویه کامل (۰ تومان)</span>
+                  )}
+                </span>
+              </div>
+
+              <form onSubmit={handleSubmitReceive} className="space-y-4">
                 {/* Method selector */}
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1.5">روش پرداخت</label>
@@ -1284,7 +1244,7 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
                 <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
                   <button
                     type="button"
-                    onClick={() => setIsRecordPaymentOpen(false)}
+                    onClick={() => setIsReceiveModalOpen(false)}
                     className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
                   >
                     انصراف
@@ -1294,7 +1254,7 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
                     disabled={isSubmitting}
                     className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20 cursor-pointer disabled:opacity-50"
                   >
-                    {isSubmitting ? 'در حال ثبت...' : 'ثبت قطعی پرداخت'}
+                    {isSubmitting ? 'در حال ثبت...' : 'ثبت دریافت از طرف حساب'}
                   </button>
                 </div>
               </form>
@@ -1302,79 +1262,151 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
           </div>
         )}
 
-        {/* MODAL 2: MANUAL DEBIT */}
-        {isManualDebitOpen && (
+        {/* ========================================================================= */}
+        {/* OPERATION 2: PAY TO COUNTERPARTY (پرداخت به طرف حساب)                      */}
+        {/* ========================================================================= */}
+        {isPayModalOpen && (
           <div
-            className="fixed inset-0 z-60 flex items-center justify-center p-3 bg-slate-950/90 backdrop-blur-sm"
-            onClick={() => setIsManualDebitOpen(false)}
+            className="fixed inset-0 z-60 flex items-center justify-center p-3 bg-black/60 backdrop-blur-sm overflow-y-auto"
+            onClick={() => setIsPayModalOpen(false)}
           >
             <div
-              className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl space-y-4"
+              className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl space-y-4 my-auto max-h-[92vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                <h4 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                  <ArrowDownLeft className="w-5 h-5 text-rose-400" />
-                  <span>افزایش دستی بدهی حساب</span>
-                </h4>
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-2xl bg-rose-500/15 text-rose-400 border border-rose-500/30 flex items-center justify-center">
+                    <ArrowUpRight className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                      <span>پرداخت به طرف حساب</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-400">
+                      خروج وجه از شرکت (کاهش بستانکاری / افزایش بدهی) - طرف حساب: <strong className="text-slate-200">{personName}</strong>
+                    </p>
+                  </div>
+                </div>
                 <button
                   type="button"
-                  onClick={() => setIsManualDebitOpen(false)}
-                  className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 cursor-pointer"
+                  onClick={() => setIsPayModalOpen(false)}
+                  className="p-1.5 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <form onSubmit={handleSubmitManualDebit} className="space-y-3.5">
+              {/* Dynamic Balance Impact Explainer */}
+              <div
+                className={`p-3.5 rounded-2xl border text-xs leading-relaxed ${
+                  isCreditor
+                    ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-300'
+                    : isDebtor
+                    ? 'bg-rose-950/20 border-rose-500/30 text-rose-300'
+                    : 'bg-slate-950 border-slate-800 text-slate-300'
+                }`}
+              >
+                {isCreditor ? (
+                  <div>
+                    <strong className="block mb-1 text-emerald-200">وضعیت فعلی: بستانکار ({formatPrice(Math.abs(currentBalance))} تومان)</strong>
+                    طرف حساب در حال حاضر از شرکت طلبکار (بستانکار) است. پرداخت شما تا این مبلغ، طلب ایشان را تسویه خواهد کرد؛ هر مبلغ مازادی به عنوان بدهی جدید ایشان ثبت می‌گردد.
+                  </div>
+                ) : isDebtor ? (
+                  <div>
+                    <strong className="block mb-1 text-rose-200">وضعیت فعلی: بدهکار ({formatPrice(currentBalance)} تومان)</strong>
+                    طرف حساب در حال حاضر به شرکت بدهکار است. پرداخت این مبلغ مستقیماً به جمع بدهی‌های ایشان به شرکت افزوده خواهد شد.
+                  </div>
+                ) : (
+                  <div>
+                    <strong className="block mb-1 text-slate-200">وضعیت فعلی: تسویه کامل (۰ تومان)</strong>
+                    طرف حساب در حال حاضر بی‌حساب است. با ثبت این پرداخت، معادل همین مبلغ به عنوان بدهی ایشان به شرکت ثبت خواهد شد.
+                  </div>
+                )}
+              </div>
+
+              <form onSubmit={handleSubmitPayout} className="space-y-4">
+                {/* Method selector */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">
-                    مبلغ بدهی (تومان) <span className="text-rose-400">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    value={manualDebitAmount}
-                    onChange={(e) => setManualDebitAmount(e.target.value === '' ? '' : Number(e.target.value))}
-                    placeholder="مثال: 5000000"
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm font-mono text-slate-100 focus:outline-none focus:border-rose-500"
-                    required
-                  />
-                  {typeof manualDebitAmount === 'number' && manualDebitAmount > 0 && (
-                    <p className="text-[11px] text-rose-400 mt-1 font-mono">
-                      {formatPrice(manualDebitAmount)} تومان
-                    </p>
-                  )}
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">روش پرداخت وجه</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPayoutMethod('bank_transfer')}
+                      className={`p-2.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                        payoutMethod === 'bank_transfer'
+                          ? 'bg-blue-600 text-white border-blue-500 shadow-sm'
+                          : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      حواله / کارت‌به‌کارت بانکی
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPayoutMethod('cash_payment')}
+                      className={`p-2.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                        payoutMethod === 'cash_payment'
+                          ? 'bg-blue-600 text-white border-blue-500 shadow-sm'
+                          : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      پرداخت نقدی
+                    </button>
+                  </div>
                 </div>
 
+                {/* Amount and Ref */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">
+                      مبلغ پرداختی (تومان) <span className="text-rose-400">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      value={payoutAmount}
+                      onChange={(e) => setPayoutAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                      placeholder="مثال: 5000000"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm font-mono text-slate-100 focus:outline-none focus:border-rose-500"
+                      required
+                    />
+                    {typeof payoutAmount === 'number' && payoutAmount > 0 && (
+                      <p className="text-[11px] text-rose-400 mt-1 font-mono">
+                        {formatPrice(payoutAmount)} تومان
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">شماره سند / کد پیگیری بانکی</label>
+                    <input
+                      type="text"
+                      value={payoutRefId}
+                      onChange={(e) => setPayoutRefId(e.target.value)}
+                      placeholder="شماره فیش، شماره ارجاع و..."
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm font-mono text-slate-100 focus:outline-none focus:border-rose-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Description (Required) */}
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1">
-                    دلیل و شرح سند <span className="text-rose-400">*</span>
+                    بابت و شرح پرداخت <span className="text-rose-400">*</span>
                   </label>
                   <textarea
                     rows={2}
-                    value={manualDebitDesc}
-                    onChange={(e) => setManualDebitDesc(e.target.value)}
-                    placeholder="علت افزایش بدهی (مثلاً: جریمه، اقلام تحویلی خارج از سامانه و...)"
+                    value={payoutDescription}
+                    onChange={(e) => setPayoutDescription(e.target.value)}
+                    placeholder="علت پرداخت (مثلاً: تسویه طلب بستانکاری، مساعده، برگشت وجه، کارمزد و...)"
                     className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-rose-500"
                     required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">شماره سند / مرجع پیگیری</label>
-                  <input
-                    type="text"
-                    value={manualDebitRef}
-                    onChange={(e) => setManualDebitRef(e.target.value)}
-                    placeholder="شماره فیش، نامه یا..."
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-100"
                   />
                 </div>
 
                 <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
                   <button
                     type="button"
-                    onClick={() => setIsManualDebitOpen(false)}
+                    onClick={() => setIsPayModalOpen(false)}
                     className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
                   >
                     انصراف
@@ -1384,159 +1416,7 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
                     disabled={isSubmitting}
                     className="px-5 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-md shadow-rose-600/20 cursor-pointer disabled:opacity-50"
                   >
-                    {isSubmitting ? 'در حال ثبت...' : 'ثبت افزایش بدهی'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* MODAL 3: MANUAL CREDIT / ADJUSTMENT */}
-        {isManualCreditOpen && (
-          <div
-            className="fixed inset-0 z-60 flex items-center justify-center p-3 bg-slate-950/90 backdrop-blur-sm"
-            onClick={() => setIsManualCreditOpen(false)}
-          >
-            <div
-              className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl space-y-4"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                <h4 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                  <ArrowUpRight className="w-5 h-5 text-emerald-400" />
-                  <span>ثبت بستانکاری / اصلاح حساب</span>
-                </h4>
-                <button
-                  type="button"
-                  onClick={() => setIsManualCreditOpen(false)}
-                  className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <form onSubmit={handleSubmitManualCredit} className="space-y-3.5">
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">نوع عملیات</label>
-                  <select
-                    value={manualCreditType}
-                    onChange={(e) => setManualCreditType(e.target.value as any)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-100"
-                  >
-                    <option value="manual_credit">افزایش دستی بستانکاری (کاهش بدهی)</option>
-                    <option value="account_adjustment">اصلاح حساب / تعدیل مغایرت</option>
-                    <option value="opening_balance">ثبت مانده اولیه حساب</option>
-                  </select>
-                </div>
-
-                {/* Direction Selector for Adjustments and Opening Balance */}
-                {(manualCreditType === 'account_adjustment' || manualCreditType === 'opening_balance') && (
-                  <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                      جهت اثر مالی <span className="text-rose-400">*</span>
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setAdjustmentDirection('credit')}
-                        className={`px-3 py-2 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition cursor-pointer ${
-                          adjustmentDirection === 'credit'
-                            ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 shadow-sm'
-                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-                        }`}
-                      >
-                        <ArrowUpRight className="w-4 h-4 text-emerald-400" />
-                        <span>بستانکار (کاهش بدهی)</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAdjustmentDirection('debit')}
-                        className={`px-3 py-2 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition cursor-pointer ${
-                          adjustmentDirection === 'debit'
-                            ? 'bg-rose-500/20 border-rose-500 text-rose-300 shadow-sm'
-                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-                        }`}
-                      >
-                        <ArrowDownLeft className="w-4 h-4 text-rose-400" />
-                        <span>بدهکار (افزایش بدهی)</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">
-                    مبلغ (تومان) <span className="text-rose-400">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    value={manualCreditAmount}
-                    onChange={(e) => setManualCreditAmount(e.target.value === '' ? '' : Number(e.target.value))}
-                    placeholder="مثال: 5000000"
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm font-mono text-slate-100 focus:outline-none focus:border-emerald-500"
-                    required
-                  />
-                  {typeof manualCreditAmount === 'number' && manualCreditAmount > 0 && (
-                    <p className="text-[11px] text-emerald-400 mt-1 font-mono">
-                      {formatPrice(manualCreditAmount)} تومان
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">
-                    شرح سند / علت اصلاح <span className="text-rose-400">*</span>
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={manualCreditDesc}
-                    onChange={(e) => setManualCreditDesc(e.target.value)}
-                    placeholder="دلیل اعمال بستانکاری..."
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-100"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">شماره سند / مرجع پیگیری</label>
-                  <input
-                    type="text"
-                    value={manualCreditRef}
-                    onChange={(e) => setManualCreditRef(e.target.value)}
-                    placeholder="شماره سند حسابداری یا پیگیری..."
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-100"
-                  />
-                </div>
-
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
-                  <button
-                    type="button"
-                    onClick={() => setIsManualCreditOpen(false)}
-                    className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
-                  >
-                    انصراف
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className={`px-5 py-2 rounded-xl text-xs font-bold text-white shadow-md cursor-pointer disabled:opacity-50 ${
-                      (manualCreditType === 'account_adjustment' || manualCreditType === 'opening_balance') && adjustmentDirection === 'debit'
-                        ? 'bg-rose-600 hover:bg-rose-500 shadow-rose-600/20'
-                        : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20'
-                    }`}
-                  >
-                    {isSubmitting
-                      ? 'در حال ثبت...'
-                      : manualCreditType === 'account_adjustment'
-                      ? adjustmentDirection === 'debit'
-                        ? 'ثبت بدهکاری تعدیلی'
-                        : 'ثبت بستانکاری تعدیلی'
-                      : manualCreditType === 'opening_balance'
-                      ? adjustmentDirection === 'debit'
-                        ? 'ثبت مانده اولیه (بدهکار)'
-                        : 'ثبت مانده اولیه (بستانکار)'
-                      : 'ثبت بستانکاری'}
+                    {isSubmitting ? 'در حال ثبت...' : 'ثبت پرداخت به طرف حساب'}
                   </button>
                 </div>
               </form>
@@ -1547,7 +1427,7 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
         {/* MODAL 4: ACTIVATE ACCOUNT PROMPT */}
         {isActivateModalOpen && (
           <div
-            className="fixed inset-0 z-60 flex items-center justify-center p-3 bg-slate-950/90 backdrop-blur-sm"
+            className="fixed inset-0 z-60 flex items-center justify-center p-3 bg-black/60 backdrop-blur-sm"
             onClick={() => setIsActivateModalOpen(false)}
           >
             <div
@@ -1621,7 +1501,7 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
         {/* MODAL 5: DEACTIVATE CONFIRMATION (REQUIREMENT 3: DOES NOT DELETE HISTORY) */}
         {isDeactivateConfirmOpen && (
           <div
-            className="fixed inset-0 z-60 flex items-center justify-center p-3 bg-slate-950/90 backdrop-blur-sm"
+            className="fixed inset-0 z-60 flex items-center justify-center p-3 bg-black/60 backdrop-blur-sm"
             onClick={() => setIsDeactivateConfirmOpen(false)}
           >
             <div
@@ -1638,7 +1518,7 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
                 </div>
               </div>
 
-              <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800 text-xs text-slate-300 leading-relaxed">
+              <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 text-xs text-slate-300 leading-relaxed">
                 با غیرفعال کردن این حساب، صرفاً امکان ثبت تراکنش یا فاکتور جدید تا زمان فعال‌سازی مجدد مسدود می‌شود. کلیه
                 اسناد، چک‌ها و مانده بدهی/طلب قبلی عیناً در سیستم باقی خواهند ماند.
               </div>
@@ -1678,7 +1558,7 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
         {/* MODAL 6: CHEQUE STATUS ACTION PROMPT (CLEAR / RETURN / CANCEL) */}
         {selectedChequeForAction && chequeActionType && (
           <div
-            className="fixed inset-0 z-60 flex items-center justify-center p-3 bg-slate-950/90 backdrop-blur-sm"
+            className="fixed inset-0 z-60 flex items-center justify-center p-3 bg-black/60 backdrop-blur-sm"
             onClick={() => {
               setSelectedChequeForAction(null);
               setChequeActionType(null);

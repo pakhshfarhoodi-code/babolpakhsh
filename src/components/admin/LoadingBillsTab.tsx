@@ -8,6 +8,12 @@ import { VisitorInvoicePrintModal } from '../visitor/VisitorInvoicePrintModal';
 import { DirectInvoiceSheet } from './DirectInvoiceSheet';
 import { RecordPaymentModal } from './RecordPaymentModal';
 import {
+  computeLine,
+  getPackSize,
+  getBaseUnit,
+  getUnitColumnText,
+} from '../../utils/orderLine';
+import {
   Search,
   Truck,
   Clock,
@@ -35,6 +41,7 @@ import {
   Check,
   CreditCard,
   Wallet,
+  ArrowDownLeft,
 } from 'lucide-react';
 
 export interface BillAgeInfo {
@@ -318,7 +325,25 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
     });
   }, [loadingBills, statusFilter, searchTerm]);
 
-  // Aggregated items for the selected bill (Strictly visitor purchase price, no retail prices, no margin)
+  // Helper to accurately calculate total visitor cost of any bill considering pack multipliers
+  const calculateBillVisitorTotal = useCallback((bill: LoadingBill): number => {
+    if (bill.items && bill.items.length > 0) {
+      return bill.items.reduce((acc, it) => {
+        const prod = productMap.get(it.product_id);
+        const pack = getPackSize(it.items_per_package || prod?.items_per_package);
+        const vPrice = Number(it.visitor_price ?? prod?.visitor_price ?? 0);
+        return acc + computeLine({
+          quantity: it.quantity,
+          pack,
+          unitPrice: vPrice,
+          discountPercent: 0,
+        }).total;
+      }, 0);
+    }
+    return Number(bill.total_visitor_cost || 0);
+  }, [productMap]);
+
+  // Aggregated items for the selected bill (Strictly visitor purchase price, factoring in carton/package multipliers)
   const aggregatedBillItems = useMemo(() => {
     if (!activeBill?.items) return [];
 
@@ -327,6 +352,8 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
       {
         productId: string;
         productName: string;
+        pack: number;
+        baseUnit: string;
         unit: string;
         totalQuantity: number;
         visitorPrice: number;
@@ -341,25 +368,35 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
 
     for (const it of activeBill.items) {
       const prod = productMap.get(it.product_id);
-      const unit = prod?.unit || 'بسته';
+      const pack = getPackSize(it.items_per_package || prod?.items_per_package);
+      const baseUnit = getBaseUnit(it.unit || prod?.unit, pack);
+      const unit = getUnitColumnText(pack, baseUnit);
       const curStock = prod ? prod.stock : 0;
       const resStock = prod ? prod.reserved_stock : 0;
       const availStock = Math.round(Math.max(0, curStock - resStock) * 1000) / 1000;
       const vPrice = Number(it.visitor_price ?? prod?.visitor_price ?? 0);
+      const lineCalc = computeLine({
+        quantity: it.quantity,
+        pack,
+        unitPrice: vPrice,
+        discountPercent: 0,
+      });
 
       const existing = map.get(it.product_id);
       if (existing) {
         existing.totalQuantity = Math.round((existing.totalQuantity + it.quantity) * 1000) / 1000;
-        existing.totalAmount += it.quantity * existing.visitorPrice;
+        existing.totalAmount += lineCalc.total;
         existing.lines.push(it);
       } else {
         map.set(it.product_id, {
           productId: it.product_id,
           productName: it.product_name,
+          pack,
+          baseUnit,
           unit,
           totalQuantity: it.quantity,
           visitorPrice: vPrice,
-          totalAmount: it.quantity * vPrice,
+          totalAmount: lineCalc.total,
           currentStock: curStock,
           availableStock: availStock,
           isShortage: false,
@@ -430,8 +467,15 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
         groupName = src === 'admin_manual' ? 'توافق حضوری / تلفنی ادمین' : 'اقلام مازاد ویزیتور';
       }
 
-      const itemPrice = Number(it.visitor_price || 0);
-      const rowAmount = it.quantity * itemPrice;
+      const prod = productMap.get(it.product_id);
+      const pack = getPackSize(it.items_per_package || prod?.items_per_package);
+      const itemPrice = Number(it.visitor_price ?? prod?.visitor_price ?? 0);
+      const rowAmount = computeLine({
+        quantity: it.quantity,
+        pack,
+        unitPrice: itemPrice,
+        discountPercent: 0,
+      }).total;
 
       const existing = groupMap.get(groupKey);
       if (existing) {
@@ -450,7 +494,7 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
     }
 
     return Array.from(groupMap.values());
-  }, [activeBill?.items, orders]);
+  }, [activeBill?.items, orders, productMap]);
 
   // Handlers for Operations
 
@@ -599,6 +643,13 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
     setIsApproving(true);
     try {
       if (isSupabaseConfigured && supabase) {
+        if (billTotalAmount > 0) {
+          await supabase
+            .from('loading_bills')
+            .update({ total_visitor_cost: billTotalAmount })
+            .eq('id', activeBill.id);
+        }
+
         const { data, error } = await supabase.rpc('approve_loading_bill_transaction', {
           p_loading_bill_id: activeBill.id,
           p_approved_by: currentUser.name || 'ادمین',
@@ -979,7 +1030,7 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
                       <div className="text-slate-400">
                         <span>مبلغ خرید ویزیتور: </span>
                         <span className="font-mono font-bold text-slate-200">
-                          {formatPrice(Number(bill.total_visitor_cost || 0))} تومان
+                          {formatPrice(calculateBillVisitorTotal(bill))} تومان
                         </span>
                       </div>
 
@@ -1059,10 +1110,10 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
                     type="button"
                     onClick={() => setIsRecordPaymentOpen(true)}
                     className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold transition shadow-md shadow-emerald-600/20 cursor-pointer"
-                    title="ثبت دریافت و پرداخت مالی برای این فاکتور یا فاکتورهای دیگر"
+                    title="ثبت دریافت از طرف حساب بابت تسویه این فاکتور"
                   >
-                    <CreditCard className="w-4 h-4" />
-                    <span>ثبت پرداخت مالی</span>
+                    <ArrowDownLeft className="w-4 h-4" />
+                    <span>دریافت از طرف حساب</span>
                   </button>
                 )}
 
@@ -1119,7 +1170,7 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
 
             {/* 4-Metric Financial Ledger Summary Card */}
             {(() => {
-              const billCost = Number(activeBill.total_visitor_cost || 0);
+              const billCost = billTotalAmount > 0 ? billTotalAmount : Number(activeBill.total_visitor_cost || 0);
               const settlement = getInvoiceSettlementStatus(activeBill.id, billCost);
               const visitorAccount = getAccountSummary(activeBill.visitor_id);
               const isAccountActive = Boolean(visitorAccount?.is_active);
@@ -1288,7 +1339,14 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
                               </div>
                             )}
                           </td>
-                          <td className="py-3 px-3 text-center text-slate-400">{item.unit}</td>
+                          <td className="py-3 px-3 text-center text-slate-400">
+                            <span>{item.unit}</span>
+                            {item.pack > 1 && (
+                              <span className="text-[10px] text-indigo-400 font-bold bg-indigo-950/60 px-1.5 py-0.5 rounded border border-indigo-800/40 mr-1 inline-block">
+                                ({item.pack} عددی)
+                              </span>
+                            )}
+                          </td>
                           <td className="py-3 px-3 text-center font-black text-sm text-slate-100 font-mono">
                             {item.totalQuantity}
                           </td>
@@ -1344,26 +1402,16 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
                       {isEditable && !isAddingInline && (
                         <tr
                           onClick={() => setIsAddingInline(true)}
-                          className="border-t-2 border-dashed border-purple-500/40 bg-purple-950/15 hover:bg-purple-950/35 transition cursor-pointer group"
-                          title="جهت جستجوی کالا و افزودن قلم توافقی کلیک کنید"
+                          className="border-t-2 border-dashed border-purple-500/40 bg-purple-950/15 hover:bg-purple-950/30 transition cursor-pointer group"
+                          title="برای جستجو و افزودن کالا کلیک کنید"
                         >
-                          <td className="py-3 px-3.5 text-center text-purple-400 font-mono text-xs font-bold">
+                          <td className="py-2.5 px-3 text-center text-purple-400 font-mono text-xs font-bold">
                             {aggregatedBillItems.length + 1}
                           </td>
-                          <td colSpan={isEditable ? 6 : 5} className="py-3 px-3.5">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2 text-purple-300 font-bold text-xs group-hover:text-purple-200">
-                                <div className="w-5 h-5 rounded-md bg-purple-600/30 flex items-center justify-center text-purple-300 border border-purple-500/40">
-                                  <Plus className="w-3.5 h-3.5" />
-                                </div>
-                                <span>+ افزودن قلم توافقی (سفارش تلفنی / توافق حضوری)...</span>
-                                <span className="text-[11px] text-purple-400/70 font-normal hidden sm:inline">
-                                  (کلیک کنید تا نام کالا را جستجو و وزن یا تعدادش را ثبت نمایید)
-                                </span>
-                              </div>
-                              <span className="text-[11px] font-bold text-purple-300 bg-purple-900/50 px-2.5 py-1 rounded-lg border border-purple-700/50 group-hover:border-purple-500 transition">
-                                ردیف {aggregatedBillItems.length + 1} (خام - کلیک جهت افزودن)
-                              </span>
+                          <td colSpan={isEditable ? 6 : 5} className="py-2.5 px-3">
+                            <div className="flex items-center justify-center gap-2 text-purple-300 font-bold text-xs group-hover:text-purple-200 transition">
+                              <Plus className="w-4 h-4 text-purple-400" />
+                              <span>برای جستجو و افزودن کالا کلیک کنید</span>
                             </div>
                           </td>
                         </tr>
@@ -1524,12 +1572,14 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
                             {/* Total Row Amount */}
                             <td className="py-3 px-3.5 text-left font-mono font-bold text-xs text-purple-300 align-top pt-4">
                               {formatPrice(
-                                Math.round(
-                                  (Number(agreementQty) || 0) *
-                                    (agreementUnitPrice !== ''
-                                      ? Number(agreementUnitPrice)
-                                      : (selectedInlineProduct?.visitor_price ?? 0))
-                                )
+                                computeLine({
+                                  quantity: Number(agreementQty) || 0,
+                                  pack: selectedInlineProduct ? getPackSize(selectedInlineProduct.items_per_package) : 1,
+                                  unitPrice: agreementUnitPrice !== ''
+                                    ? Number(agreementUnitPrice)
+                                    : (selectedInlineProduct?.visitor_price ?? 0),
+                                  discountPercent: 0,
+                                }).total
                               )}
                             </td>
 
@@ -1735,10 +1785,10 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
                       setViewMode('by_product');
                       setIsAddingInline(true);
                     }}
-                    className="w-full p-3.5 rounded-2xl border-2 border-dashed border-purple-500/40 bg-purple-950/20 hover:bg-purple-950/40 text-purple-300 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-sm hover:border-purple-400"
+                    className="w-full p-3 rounded-2xl border-2 border-dashed border-purple-500/40 bg-purple-950/20 hover:bg-purple-950/40 text-purple-300 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-sm hover:border-purple-400"
                   >
                     <Plus className="w-4 h-4 text-purple-400" />
-                    <span>+ افزودن قلم توافقی جدید (تلفنی / حضوری) به انتهای برگه سفارش</span>
+                    <span>برای جستجو و افزودن کالا کلیک کنید</span>
                   </button>
                 )}
               </div>

@@ -30,6 +30,7 @@ import {
   getCategorySalesSummaries,
 } from './helpers';
 import { SupplementaryReports } from './SupplementaryReports';
+import { getPackSize } from '../../utils/orderLine';
 
 interface ReportsTabProps {
   inventoryTransactions: InventoryTransaction[];
@@ -266,8 +267,9 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
                     const fallbackStorePrice = prod?.price || 0;
                     const storePrice = it.store_price ?? fallbackStorePrice;
                     const visitorPrice = it.visitor_price ?? (prod?.visitor_price ?? 0);
+                    const pack = getPackSize(it.items_per_package || prod?.items_per_package);
 
-                    totalVisitorBuyCost += visitorPrice * it.quantity;
+                    totalVisitorBuyCost += visitorPrice * pack * it.quantity;
                   }
                 });
 

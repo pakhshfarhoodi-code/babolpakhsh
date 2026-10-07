@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Order, OrderStatus, Visitor, OrderChannel } from '../../types';
 import {
   Search,
@@ -32,6 +32,7 @@ import { OrderInvoiceModal } from '../invoice/OrderInvoiceModal';
 import { getOrderChannel } from '../../context/utils';
 import { useApp } from '../../context/AppContext';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { getItemUnitPriceAndTotal } from '../../utils/orderLine';
 
 export type OrderSortField =
   | 'id'
@@ -67,7 +68,36 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
   onDeleteOrder,
   onOpenBill,
 }) => {
-  const { refreshData } = useApp();
+  const { refreshData, products = [] } = useApp();
+
+  const getCalculatedOrderTotal = useCallback(
+    (order: Order): number => {
+      if (!order.items || order.items.length === 0) return Number(order.total_amount || 0);
+
+      const isVisitorOrder =
+        order.order_channel === 'visitor_field' ||
+        order.order_source === 'visitor' ||
+        Boolean(order.assigned_visitor_id && order.assigned_visitor_id !== 'direct');
+
+      const rawSubtotal = order.items.reduce((sum, item) => {
+        const product = products.find((p) => p.id === item.product_id);
+        const { total } = getItemUnitPriceAndTotal(item, product, isVisitorOrder);
+        return sum + total;
+      }, 0);
+
+      const pickupDisc = order.pickup_discount_percent || 0;
+      const founderDisc = order.founder_discount_percent || 0;
+      const manualDisc = order.discount_status === 'approved' ? (order.discount_percent || 0) : 0;
+      const totalDiscPercent = Math.min(100, Math.max(0, pickupDisc + founderDisc + manualDisc));
+
+      if (totalDiscPercent > 0) {
+        return Math.round(rawSubtotal * (1 - totalDiscPercent / 100));
+      }
+      return rawSubtotal > 0 ? rawSubtotal : Number(order.total_amount || 0);
+    },
+    [products]
+  );
+
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter);
   type ChannelFilterType = 'all' | 'visitor_field' | 'store_self' | 'store_direct';
@@ -289,7 +319,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
           break;
         }
         case 'total_amount':
-          comparison = (Number(a.total_amount) || 0) - (Number(b.total_amount) || 0);
+          comparison = getCalculatedOrderTotal(a) - getCalculatedOrderTotal(b);
           break;
         case 'order_date': {
           const timeA = getOrderTimestamp(a);
@@ -713,7 +743,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                         </div>
                       </td>
                       <td className="py-3 px-4 font-bold text-slate-100">
-                        <div>{formatPrice(order.total_amount)}</div>
+                        <div>{formatPrice(getCalculatedOrderTotal(order))}</div>
                         <div className="flex flex-col items-start gap-1 mt-1">
                           {(orderChannel === 'store_self' || orderChannel === 'store_direct') && (
                             <button

@@ -84,14 +84,101 @@ export function getUnitColumnText(pack: number | PackInput, baseUnit: string): s
 }
 
 /**
- * Calculates unit price from order item where item.price is price per carton.
+ * Calculates unit price from order item accounting for carton vs single unit pricing.
  */
-export function getUnitPriceFromOrderItem(item: {
-  price: number;
-  items_per_package?: number | null;
-}): number {
-  const pack = getPackSize(item.items_per_package);
-  return Math.round(Number(item.price || 0) / pack);
+export function getUnitPriceFromOrderItem(
+  item: {
+    price: number;
+    items_per_package?: number | string | null;
+  },
+  product?: { price?: number; visitor_price?: number; items_per_package?: number } | null,
+  isVisitorOrder: boolean = false
+): number {
+  const pack = getPackSize(item.items_per_package || product?.items_per_package);
+  const rawPrice = Number(item.price || 0);
+
+  if (pack <= 1) return rawPrice;
+
+  // Reference base price from catalog product
+  const pVisitorPrice = Number(product?.visitor_price ?? 0);
+  const pStorePrice = Number(product?.price ?? 0);
+
+  if (isVisitorOrder) {
+    if (pVisitorPrice > 0) return pVisitorPrice;
+    if (rawPrice > 0) {
+      if (pStorePrice > 0 && Math.abs(rawPrice - pStorePrice * pack) < Math.abs(rawPrice - pStorePrice)) {
+        return Math.round(rawPrice / pack);
+      }
+      return rawPrice;
+    }
+  }
+
+  if (!isVisitorOrder && pStorePrice > 0) {
+    if (Math.abs(rawPrice - pStorePrice * pack) < Math.abs(rawPrice - pStorePrice)) {
+      // rawPrice is carton price
+      return Math.round(rawPrice / pack);
+    }
+    return pStorePrice;
+  }
+
+  return rawPrice;
+}
+
+export interface ItemPricingDetails {
+  pack: number;
+  unitPrice: number;
+  cartonPrice: number;
+  total: number;
+}
+
+/**
+ * Robust helper to calculate package multiplier, unit price, carton price, and total line amount
+ */
+export function getItemUnitPriceAndTotal(
+  item: {
+    price: number;
+    quantity: number;
+    items_per_package?: number | string | null;
+    product_id?: string;
+  },
+  product?: { price?: number; visitor_price?: number; items_per_package?: number } | null,
+  isVisitorOrder: boolean = false
+): ItemPricingDetails {
+  const pack = getPackSize(item.items_per_package || product?.items_per_package);
+  const qty = Number(item.quantity) || 0;
+  const rawPrice = Number(item.price) || 0;
+
+  const pVisitorPrice = Number(product?.visitor_price ?? 0);
+  const pStorePrice = Number(product?.price ?? 0);
+
+  let unitPrice = 0;
+
+  if (isVisitorOrder) {
+    if (pVisitorPrice > 0) {
+      unitPrice = pVisitorPrice;
+    } else if (rawPrice > 0) {
+      if (pStorePrice > 0 && Math.abs(rawPrice - pStorePrice * pack) < Math.abs(rawPrice - pStorePrice)) {
+        unitPrice = Math.round(rawPrice / pack);
+      } else {
+        unitPrice = rawPrice;
+      }
+    }
+  } else {
+    if (pStorePrice > 0) {
+      if (rawPrice > 0 && Math.abs(rawPrice - pStorePrice * pack) < Math.abs(rawPrice - pStorePrice)) {
+        unitPrice = Math.round(rawPrice / pack);
+      } else {
+        unitPrice = pStorePrice;
+      }
+    } else if (rawPrice > 0) {
+      unitPrice = rawPrice;
+    }
+  }
+
+  const cartonPrice = Math.round(unitPrice * pack);
+  const total = Math.round(qty * pack * unitPrice);
+
+  return { pack, unitPrice, cartonPrice, total };
 }
 
 export interface ComputeLineParams {

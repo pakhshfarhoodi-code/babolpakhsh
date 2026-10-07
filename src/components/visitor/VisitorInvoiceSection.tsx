@@ -68,15 +68,22 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
   const draftRequestInFlight = useRef(false);
   const lastAttemptedStatusRef = useRef<string | null>(null);
 
-  // Optimistic order selection and rapid-toggle synchronization
-  const [optimisticOrderIds, setOptimisticOrderIds] = useState<Set<string> | null>(null);
+  // Deselected order IDs (default empty set -> all eligible orders are checked by default)
+  const [deselectedOrderIds, setDeselectedOrderIds] = useState<Set<string>>(new Set());
   const pendingDraftOrdersRef = useRef<Set<string> | null>(null);
   const isSyncingOrdersRef = useRef<boolean>(false);
   const lastSyncedOrdersRef = useRef<string | null>(null);
-  const manuallyToggledOrderIdsRef = useRef<Set<string>>(new Set());
 
   // Collapsed order items state (default is open, so collapsed set starts empty)
   const [collapsedOrderIds, setCollapsedOrderIds] = useState<Set<string>>(new Set());
+
+  // Inline surplus section state (direct adding at the bottom of the order sheet)
+  const [inlineSurplusProductId, setInlineSurplusProductId] = useState<string>('');
+  const [inlineSurplusQty, setInlineSurplusQty] = useState<number | string>(1);
+  const [inlineSurplusCustomerLabel, setInlineSurplusCustomerLabel] = useState<string>('');
+  const [inlineSurplusNote, setInlineSurplusNote] = useState<string>('');
+  const [inlineSurplusSearch, setInlineSurplusSearch] = useState<string>('');
+  const [isSubmittingInlineSurplus, setIsSubmittingInlineSurplus] = useState(false);
 
   // Surplus items modal state (using shared ProductCatalog)
   const [isSurplusModalOpen, setIsSurplusModalOpen] = useState(false);
@@ -255,36 +262,33 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
   const eligibleOrders = useMemo(() => {
     return orders.filter(
       (o) =>
-        o.assigned_visitor_id === currentVisitor.id &&
+        (o.assigned_visitor_id === currentVisitor.id ||
+          (o.supermarket_id?.startsWith('self-') && o.supermarket_id === `self-${currentVisitor.id}`)) &&
         o.status === 'assigned' &&
         (!o.loading_bill_id || (activeBill && o.loading_bill_id === activeBill.id))
     );
   }, [orders, currentVisitor.id, activeBill]);
 
-  // Selected order IDs in active draft (with optimistic selection priority)
-  const selectedOrderIdsInDraft = useMemo(() => {
-    if (optimisticOrderIds !== null) {
-      return optimisticOrderIds;
-    }
-    if (!activeBill?.items) return new Set<string>();
+  // Selected order IDs: all eligible orders are checked by default unless explicitly deselected
+  const selectedOrderIds = useMemo(() => {
     const set = new Set<string>();
-    activeBill.items.forEach((it) => {
-      if (it.order_id) set.add(it.order_id);
+    eligibleOrders.forEach((o) => {
+      if (!deselectedOrderIds.has(o.id)) {
+        set.add(o.id);
+      }
     });
     return set;
-  }, [optimisticOrderIds, activeBill]);
+  }, [eligibleOrders, deselectedOrderIds]);
 
-  // Synchronize optimistic selection back to database truth when idle
-  useEffect(() => {
-    if (!isSyncingOrdersRef.current && pendingDraftOrdersRef.current === null) {
-      setOptimisticOrderIds(null);
-    }
-  }, [activeBill]);
+  const isOrderSelected = useCallback(
+    (orderId: string) => !deselectedOrderIds.has(orderId),
+    [deselectedOrderIds]
+  );
 
-  // Sequential background synchronization for rapid order toggles (latest choice wins)
+  // Sequential background synchronization for draft orders
   const syncDraftOrders = useCallback(async () => {
     if (isSyncingOrdersRef.current) return;
-    if (!activeBill?.id) return;
+    if (!activeBill?.id || activeBill.status !== 'draft') return;
 
     isSyncingOrdersRef.current = true;
     try {
@@ -307,8 +311,6 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
           const msg =
             error?.message || (data as { message?: string })?.message || 'خطا در ذخیره سفارش‌ها.';
           showToast(msg, 'error');
-          // Revert optimistic selection on error
-          setOptimisticOrderIds(null);
           pendingDraftOrdersRef.current = null;
           return;
         }
@@ -327,69 +329,61 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'خطای غیرمنتظره در ذخیره سفارش‌ها.';
       showToast(msg, 'error');
-      setOptimisticOrderIds(null);
       pendingDraftOrdersRef.current = null;
     } finally {
       isSyncingOrdersRef.current = false;
     }
-  }, [activeBill?.id, showToast, refreshData]);
+  }, [activeBill?.id, activeBill?.status, showToast, refreshData]);
 
-  // Handle toggling an order's inclusion in draft bill (Optimistic, non-blocking, no success toast)
+  // Synchronize draft when selectedOrderIds change or upon draft opening
+  useEffect(() => {
+    if (!activeBill || activeBill.status !== 'draft') return;
+    if (eligibleOrders.length === 0) return;
+
+    const targetIds = Array.from(selectedOrderIds);
+    const targetKey = targetIds.slice().sort().join(',');
+
+    // Current orders in draft
+    const currentDraftOrderIds = new Set<string>();
+    (activeBill.items || []).forEach((it) => {
+      if (it.order_id) currentDraftOrderIds.add(it.order_id);
+    });
+    const currentKey = Array.from(currentDraftOrderIds).sort().join(',');
+
+    if (lastSyncedOrdersRef.current === targetKey || currentKey === targetKey) {
+      return;
+    }
+
+    pendingDraftOrdersRef.current = selectedOrderIds;
+    syncDraftOrders();
+  }, [activeBill, selectedOrderIds, syncDraftOrders, eligibleOrders.length]);
+
+  // Handle toggling an order's inclusion in draft bill
   const handleToggleOrder = (orderId: string) => {
     if (!activeBill || activeBill.status !== 'draft') return;
 
-    manuallyToggledOrderIdsRef.current.add(orderId);
-
-    const currentSelected = new Set(
-      optimisticOrderIds ?? Array.from(selectedOrderIdsInDraft)
-    );
-
-    if (currentSelected.has(orderId)) {
-      currentSelected.delete(orderId);
-    } else {
-      currentSelected.add(orderId);
-    }
-
-    const nextSet = new Set(currentSelected);
-    setOptimisticOrderIds(nextSet);
-    pendingDraftOrdersRef.current = nextSet;
-    syncDraftOrders();
+    setDeselectedOrderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(orderId)) {
+        next.delete(orderId); // becomes checked
+      } else {
+        next.add(orderId); // becomes unchecked
+      }
+      return next;
+    });
   };
 
-  // Identify new orders arrived after draft creation that are not yet in the draft
-  const newArrivedOrders = useMemo(() => {
-    if (!activeBill || activeBill.status !== 'draft') return [];
-    const draftCreatedAt = activeBill.created_at ? new Date(activeBill.created_at).getTime() : 0;
-
-    return eligibleOrders.filter((ord) => {
-      if (selectedOrderIdsInDraft.has(ord.id)) return false;
-      if (manuallyToggledOrderIdsRef.current.has(ord.id)) return false;
-
-      const ordDate = ord.order_date;
-      if (draftCreatedAt > 0 && ordDate) {
-        return new Date(ordDate).getTime() > draftCreatedAt;
-      }
-      return false;
-    });
-  }, [activeBill, eligibleOrders, selectedOrderIdsInDraft]);
-
-  // Handle "Add All" for newly arrived orders
-  const handleAddAllNewOrders = () => {
+  // Handle Select All / Deselect All
+  const handleToggleAllOrders = () => {
     if (!activeBill || activeBill.status !== 'draft') return;
 
-    const currentSelected = new Set(
-      optimisticOrderIds ?? Array.from(selectedOrderIdsInDraft)
-    );
-
-    newArrivedOrders.forEach((o) => {
-      currentSelected.add(o.id);
-      manuallyToggledOrderIdsRef.current.delete(o.id);
-    });
-
-    const nextSet = new Set(currentSelected);
-    setOptimisticOrderIds(nextSet);
-    pendingDraftOrdersRef.current = nextSet;
-    syncDraftOrders();
+    if (selectedOrderIds.size === eligibleOrders.length) {
+      // Uncheck all
+      setDeselectedOrderIds(new Set(eligibleOrders.map((o) => o.id)));
+    } else {
+      // Check all
+      setDeselectedOrderIds(new Set());
+    }
   };
 
   // Toggle order items accordion collapse
@@ -547,6 +541,108 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
       return sum + lineCalc.total;
     }, 0);
   }, [surplusCart, productMap, products]);
+
+  // Available products for inline surplus selection (active products with visitor price)
+  const availableSurplusProducts = useMemo(() => {
+    return products.filter((p) => p.is_active !== false && (p.visitor_price ?? 0) > 0);
+  }, [products]);
+
+  const selectedSurplusProduct = useMemo(() => {
+    return availableSurplusProducts.find((p) => p.id === inlineSurplusProductId);
+  }, [availableSurplusProducts, inlineSurplusProductId]);
+
+  const filteredQuickProducts = useMemo(() => {
+    const q = inlineSurplusSearch.trim().toLowerCase();
+    return availableSurplusProducts
+      .filter((p) => {
+        const freeStock = Math.max(0, p.stock - p.reserved_stock);
+        if (freeStock <= 0) return false;
+        if (!q) return true;
+        return (
+          p.name.toLowerCase().includes(q) ||
+          (p.brand && p.brand.toLowerCase().includes(q))
+        );
+      })
+      .slice(0, 12);
+  }, [availableSurplusProducts, inlineSurplusSearch]);
+
+  const currentManualLines = useMemo(() => {
+    return (activeBill?.items || []).filter(
+      (it) => it.source === 'visitor_manual' || it.source === 'admin_manual'
+    );
+  }, [activeBill?.items]);
+
+  const totalSurplusAmountInBill = useMemo(() => {
+    return currentManualLines.reduce(
+      (sum, it) => sum + it.quantity * (it.visitor_price || 0),
+      0
+    );
+  }, [currentManualLines]);
+
+  // Handle direct addition of surplus item (from inline form or quick cards)
+  const handleAddInlineSurplus = async (productIdToAdd?: string, qtyToAdd?: number) => {
+    const prodId = productIdToAdd || inlineSurplusProductId;
+    const qty = qtyToAdd !== undefined ? qtyToAdd : parseFloat(String(inlineSurplusQty)) || 0;
+
+    if (!activeBill || activeBill.status !== 'draft') {
+      showToast('تنها در وضعیت پیش‌نویس فاکتور امکان افزودن بار مازاد وجود دارد.', 'error');
+      return;
+    }
+
+    if (!prodId) {
+      showToast('لطفاً یک کالا را برای افزودن به بار مازاد انتخاب فرمایید.', 'error');
+      return;
+    }
+
+    if (qty <= 0) {
+      showToast('تعداد کالا باید بزرگتر از صفر باشد.', 'error');
+      return;
+    }
+
+    const prod = productMap.get(prodId) || products.find((p) => p.id === prodId);
+    if (!prod?.visitor_price || prod.visitor_price <= 0) {
+      showToast(`قیمت خرید ویزیتور برای کالای «${prod?.name || 'انتخاب شده'}» تعریف نشده است.`, 'error');
+      return;
+    }
+
+    setIsSubmittingInlineSurplus(true);
+    const finalLabel = inlineSurplusCustomerLabel.trim() || 'مازاد خودرو / مستقیم';
+
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const { data, error } = await supabase.rpc('invoice_add_manual_line', {
+          p_invoice_id: activeBill.id,
+          p_product_id: prodId,
+          p_qty: Math.round(qty * 1000) / 1000,
+          p_customer_label: finalLabel,
+          p_source: 'visitor_manual',
+          p_line_note: inlineSurplusNote.trim() || null,
+          p_unit_price: null,
+          p_actor: currentVisitor.name,
+        });
+
+        if (error || !data || (data as { success?: boolean }).success === false) {
+          const msg =
+            error?.message ||
+            (data as { message?: string })?.message ||
+            'خطا در افزودن کالا به اقلام مازاد.';
+          showToast(msg, 'error');
+          return;
+        }
+
+        showToast(`کالای «${prod.name}» با تعداد ${qty} به فاکتور بار افزوده شد.`, 'success');
+        setInlineSurplusProductId('');
+        setInlineSurplusQty(1);
+        setInlineSurplusNote('');
+        refreshData();
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'خطای غیرمنتظره در ثبت قلم مازاد.';
+      showToast(msg, 'error');
+    } finally {
+      setIsSubmittingInlineSurplus(false);
+    }
+  };
 
   // Open print modal with validation
   const handleOpenPrintModal = (billToPrint: LoadingBill) => {
@@ -1126,45 +1222,32 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
                 )}
               </div>
 
-              {/* 2. MIDDLE SECTION: Eligible Orders Checklist */}
+              {/* 2. MIDDLE SECTION: Eligible Orders Checklist (Default all checked) */}
               <div className="space-y-3 pt-4 border-t border-slate-800">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-2">
                     <Truck className="w-4 h-4 text-blue-400" />
                     <h4 className="text-xs sm:text-sm font-bold text-slate-200">
                       سفارش‌های قابل بارگیری (مشتریان سامانه)
                     </h4>
                   </div>
-                  <span className="text-xs text-slate-400">
-                    {selectedOrderIdsInDraft.size} از {eligibleOrders.length} انتخاب شده
-                  </span>
-                </div>
-
-                {/* New Orders Arrived Banner */}
-                {newArrivedOrders.length > 0 && !isReadOnly && (
-                  <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 flex flex-wrap items-center justify-between gap-3 shadow-sm">
-                    <div className="flex items-center gap-2.5">
-                      <div className="p-1.5 rounded-xl bg-amber-500/20 text-amber-400">
-                        <Bell className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <span className="text-xs sm:text-sm font-bold block">
-                          {newArrivedOrders.length} سفارش جدید رسیده
-                        </span>
-                        <span className="text-[11px] text-amber-400/80">
-                          این سفارش‌ها پس از ایجاد پیش‌نویس ثبت شده‌اند.
-                        </span>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleAddAllNewOrders}
-                      className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition cursor-pointer shadow-sm active:scale-95"
-                    >
-                      افزودن همه
-                    </button>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-slate-400">
+                      {selectedOrderIds.size} از {eligibleOrders.length} انتخاب شده (پیش‌فرض همه)
+                    </span>
+                    {!isReadOnly && eligibleOrders.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleToggleAllOrders}
+                        className="text-xs text-blue-400 hover:text-blue-300 hover:underline font-semibold cursor-pointer"
+                      >
+                        {selectedOrderIds.size === eligibleOrders.length
+                          ? 'لغو انتخاب همه'
+                          : 'انتخاب همه سفارش‌ها'}
+                      </button>
+                    )}
                   </div>
-                )}
+                </div>
 
                 {eligibleOrders.length === 0 ? (
                   <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 text-center text-slate-400 text-xs">
@@ -1173,7 +1256,7 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-[30rem] overflow-y-auto pr-1">
                     {eligibleOrders.map((ord) => {
-                      const isChecked = selectedOrderIdsInDraft.has(ord.id);
+                      const isChecked = isOrderSelected(ord.id);
                       const isCollapsed = collapsedOrderIds.has(ord.id);
                       const { items: orderVisitorItems, orderTotal: orderVisitorTotal } =
                         getOrderVisitorDetails(ord);
@@ -1275,7 +1358,276 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
                 )}
               </div>
 
-              {/* 3. BOTTOM SUBMIT ACTION BAR */}
+              {/* 3. SECTION: افزودن بار مازاد / کالا (Surplus Goods Management) */}
+              <div className="space-y-4 pt-5 border-t border-slate-800">
+                {/* Header */}
+                <div className="flex flex-wrap items-center justify-between gap-3 bg-purple-950/20 border border-purple-800/40 p-4 rounded-2xl">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-purple-600/20 text-purple-400 border border-purple-500/30">
+                      <Package className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-bold text-slate-100 flex items-center gap-2">
+                        <span>افزودن بار مازاد / کالا</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-normal border border-purple-500/30">
+                          قیمت خرید همکار
+                        </span>
+                      </h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        افزودن مستقیم کالاها به برگه بارگیری با تعداد دلخواه (مازاد خودرو، فروش مستقیم، یا توافق حضوری)
+                      </p>
+                    </div>
+                  </div>
+
+                  {!isReadOnly && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSurplusCart({});
+                        setSurplusCustomerLabel('');
+                        setIsSurplusModalOpen(true);
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 text-xs font-bold border border-purple-500/30 transition cursor-pointer shadow-xs active:scale-95"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>کاتالوگ تصویری کامل</span>
+                    </button>
+                  )}
+                </div>
+
+                {!isReadOnly && (
+                  <>
+                    {/* Direct Inline Add Form */}
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3 shadow-xs">
+                      <div className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                        <Plus className="w-4 h-4 text-purple-400" />
+                        <span>افزودن سریع کالا به برگه بارگیری:</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                        {/* Product Select */}
+                        <div className="sm:col-span-5 space-y-1">
+                          <label className="text-[11px] text-slate-400 font-semibold block">
+                            انتخاب کالا:
+                          </label>
+                          <select
+                            value={inlineSurplusProductId}
+                            onChange={(e) => setInlineSurplusProductId(e.target.value)}
+                            className="w-full h-10 px-3 rounded-xl bg-slate-950 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-purple-500 cursor-pointer"
+                          >
+                            <option value="">-- لطفاً یک کالا انتخاب کنید --</option>
+                            {availableSurplusProducts.map((p) => {
+                              const freeStock = Math.max(0, p.stock - p.reserved_stock);
+                              return (
+                                <option key={p.id} value={p.id}>
+                                  {p.name} | موجودی: {freeStock} | فی خرید ویزیتور: {formatPrice(p.visitor_price || 0)} تومان
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </div>
+
+                        {/* Quantity Input */}
+                        <div className="sm:col-span-2 space-y-1">
+                          <label className="text-[11px] text-slate-400 font-semibold block">
+                            تعداد ({selectedSurplusProduct?.unit || 'واحد'}):
+                          </label>
+                          <input
+                            type="number"
+                            min="0.1"
+                            step="any"
+                            value={inlineSurplusQty}
+                            onChange={(e) => setInlineSurplusQty(e.target.value)}
+                            className="w-full h-10 px-3 rounded-xl bg-slate-950 border border-slate-700 text-xs font-mono text-center text-slate-200 focus:outline-none focus:border-purple-500"
+                          />
+                        </div>
+
+                        {/* Customer / Target Label */}
+                        <div className="sm:col-span-3 space-y-1">
+                          <label className="text-[11px] text-slate-400 font-semibold block">
+                            مشتری / برچسب (اختیاری):
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="پیش‌فرض: مازاد خودرو / مستقیم"
+                            value={inlineSurplusCustomerLabel}
+                            onChange={(e) => setInlineSurplusCustomerLabel(e.target.value)}
+                            className="w-full h-10 px-3 rounded-xl bg-slate-950 border border-slate-700 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                          />
+                        </div>
+
+                        {/* Submit Button */}
+                        <div className="sm:col-span-2">
+                          <button
+                            type="button"
+                            onClick={() => handleAddInlineSurplus()}
+                            disabled={isSubmittingInlineSurplus || !inlineSurplusProductId}
+                            className="w-full h-10 flex items-center justify-center gap-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-95 text-white font-bold text-xs transition shadow-md shadow-purple-600/30 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <Plus className="w-4 h-4" />
+                            <span>{isSubmittingInlineSurplus ? 'در حال افزودن...' : 'افزودن کالا'}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Selected Product Info Preview */}
+                      {selectedSurplusProduct && (
+                        <div className="mt-2 p-2.5 rounded-xl bg-purple-950/20 border border-purple-800/30 flex flex-wrap items-center justify-between text-xs text-slate-300 gap-2">
+                          <div className="flex items-center gap-3">
+                            <span className="font-bold text-slate-200">{selectedSurplusProduct.name}</span>
+                            <span className="text-slate-400">
+                              قیمت خرید ویزیتور: <strong className="text-emerald-400 font-mono">{formatPrice(selectedSurplusProduct.visitor_price || 0)} تومان</strong>
+                            </span>
+                            <span className="text-slate-400">
+                              موجودی آزاد: <strong className="text-blue-400 font-mono">{Math.max(0, selectedSurplusProduct.stock - selectedSurplusProduct.reserved_stock)}</strong>
+                            </span>
+                          </div>
+                          <div className="text-left font-mono text-purple-300 font-bold">
+                            مبلغ این ردیف: {formatPrice((Number(inlineSurplusQty) || 0) * (selectedSurplusProduct.visitor_price || 0))} تومان
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Quick Search & Catalog Cards */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                          <ShoppingBag className="w-3.5 h-3.5 text-blue-400" />
+                          <span>کاتالوگ سریع کالاهای دارای موجودی:</span>
+                        </span>
+                        <div className="w-48 sm:w-64">
+                          <input
+                            type="text"
+                            placeholder="جستجوی نام یا برند کالا..."
+                            value={inlineSurplusSearch}
+                            onChange={(e) => setInlineSurplusSearch(e.target.value)}
+                            className="w-full h-8 px-2.5 rounded-lg bg-slate-950 border border-slate-700 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-56 overflow-y-auto pr-1">
+                        {filteredQuickProducts.map((p) => {
+                          const freeStock = Math.max(0, p.stock - p.reserved_stock);
+                          return (
+                            <div
+                              key={p.id}
+                              className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition flex flex-col justify-between gap-2"
+                            >
+                              <div>
+                                <h5 className="font-bold text-xs text-slate-200 truncate">{p.name}</h5>
+                                <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1">
+                                  <span>موجودی: <strong className="text-slate-200 font-mono">{freeStock}</strong></span>
+                                  <span className="text-emerald-400 font-mono font-bold">
+                                    {formatPrice(p.visitor_price || 0)} ت
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 pt-1 border-t border-slate-800/60">
+                                <button
+                                  type="button"
+                                  onClick={() => handleAddInlineSurplus(p.id, 1)}
+                                  disabled={isSubmittingInlineSurplus || freeStock <= 0}
+                                  className="flex-1 py-1 rounded-lg bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/30 text-[11px] font-bold transition cursor-pointer disabled:opacity-40"
+                                >
+                                  + ۱ عدد
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAddInlineSurplus(p.id, 5)}
+                                  disabled={isSubmittingInlineSurplus || freeStock < 5}
+                                  className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-bold transition cursor-pointer disabled:opacity-40"
+                                >
+                                  + ۵
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAddInlineSurplus(p.id, 10)}
+                                  disabled={isSubmittingInlineSurplus || freeStock < 10}
+                                  className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-bold transition cursor-pointer disabled:opacity-40"
+                                >
+                                  + ۱۰
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Current Surplus Lines in this Bill */}
+                {currentManualLines.length > 0 && (
+                  <div className="bg-slate-950/60 border border-purple-900/40 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-center justify-between border-b border-purple-900/30 pb-2">
+                      <span className="text-xs font-bold text-purple-300 flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-purple-400" />
+                        <span>اقلام مازاد ثبت‌شده در این فاکتور ({currentManualLines.length} قلم):</span>
+                      </span>
+                      <span className="text-xs text-emerald-400 font-mono font-bold">
+                        مجموع مازاد: {formatPrice(totalSurplusAmountInBill)} تومان
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      {currentManualLines.map((ml) => (
+                        <div
+                          key={ml.id}
+                          className="flex items-center justify-between p-2 rounded-xl bg-slate-900/80 border border-slate-800 text-xs text-slate-200"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-100">{ml.product_name}</span>
+                            <span className="px-2 py-0.5 rounded-md bg-purple-900/40 text-purple-300 text-[10px] font-bold border border-purple-700/50">
+                              {ml.customer_label || 'مازاد خودرو'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <span className="font-mono text-purple-300 font-bold">
+                              {ml.quantity} واحد
+                            </span>
+                            <span className="font-mono text-slate-400">
+                              فی: {formatPrice(ml.visitor_price || 0)}
+                            </span>
+                            <span className="font-mono font-bold text-emerald-400">
+                              {formatPrice(ml.quantity * (ml.visitor_price || 0))} ت
+                            </span>
+
+                            {!isReadOnly && (
+                              <div className="flex items-center gap-1 border-r border-slate-800 pr-2 mr-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingItem(ml);
+                                    setEditQty(ml.quantity);
+                                  }}
+                                  className="p-1 rounded hover:bg-slate-800 text-blue-400 transition cursor-pointer"
+                                  title="ویرایش تعداد"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveLine(ml.id)}
+                                  className="p-1 rounded hover:bg-slate-800 text-rose-400 transition cursor-pointer"
+                                  title="حذف قلم"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 4. BOTTOM SUBMIT ACTION BAR */}
               {!isReadOnly && (
                 <div className="pt-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
                   <div className="text-xs text-slate-400 flex items-center gap-1.5">

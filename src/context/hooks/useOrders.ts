@@ -15,6 +15,7 @@ import { STORAGE_KEYS, generateUniqueId } from '../utils';
 import { LEGACY_MOCK_NAMES } from './useCatalog';
 
 import { generateStructuredInvoiceNumber } from '../../utils/numberToPersianWords';
+import { getItemUnitPriceAndTotal, getPackSize } from '../../utils/orderLine';
 
 export interface CreateOrderPayload {
   supermarketId: string;
@@ -26,6 +27,8 @@ export interface CreateOrderPayload {
     name: string;
     price: number;
     quantity: number;
+    items_per_package?: number | string | null;
+    unit?: string;
   }[];
 }
 
@@ -87,7 +90,25 @@ export function useOrders({
   // Create Order (Reserves stock & appends audit ledger, ISO timestamp)
   const createOrder = useCallback(
     async (payload: CreateOrderPayload): Promise<{ success: boolean; message: string; orderId?: string; order?: Order }> => {
+      const isSelfBuyer = Boolean(payload.supermarketId?.startsWith('self-'));
+      const selfVisitorId = isSelfBuyer ? payload.supermarketId.replace('self-', '') : '';
+      const selfVisitor = isSelfBuyer ? visitors.find((v) => v.id === selfVisitorId) : null;
+
       const supermarket =
+        (isSelfBuyer
+          ? {
+              id: payload.supermarketId,
+              name: `خودم (${selfVisitor?.name || 'ویزیتور'})`,
+              owner: selfVisitor?.name || 'ویزیتور',
+              phone: selfVisitor?.phone || '',
+              address: 'خرید شخصی ویزیتور',
+              assigned_visitor_id: '',
+              username: selfVisitor?.username || 'visitor',
+              credit_limit: 100000000,
+              current_debt: 0,
+              is_active: true,
+            }
+          : null) ||
         supermarkets.find((s) => s.id === payload.supermarketId) ||
         supermarkets[0] ||
         {
@@ -116,7 +137,10 @@ export function useOrders({
 
       let finalAssignedVisitorId: string = 'direct';
       let finalVisitorName: string = 'خرید مستقیم از پخش مرکزی';
-      if (!isDirectOrder) {
+      if (isSelfBuyer || payload.visitorId === '') {
+        finalAssignedVisitorId = '';
+        finalVisitorName = '';
+      } else if (!isDirectOrder) {
         const foundVisitor =
           visitors.find((v) => v.id === payload.visitorId) ||
           visitors.find((v) => v.id === supermarket.assigned_visitor_id);
@@ -201,7 +225,13 @@ export function useOrders({
       }
 
       const orderIsoDate = new Date().toISOString();
-      const totalAmount = payload.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      const isVisitorChannel = orderSource === 'visitor' || Boolean(finalAssignedVisitorId && finalAssignedVisitorId !== 'direct');
+
+      const totalAmount = payload.items.reduce((sum, item) => {
+        const prod = products.find((p) => p.id === item.productId);
+        const { total } = getItemUnitPriceAndTotal(item, prod, isVisitorChannel);
+        return sum + total;
+      }, 0);
 
       // Determine explicit order channel:
       // direct -> store_direct, registered by visitor -> visitor_field, store self with visitor -> store_self
@@ -218,21 +248,26 @@ export function useOrders({
         id: orderId,
         supermarket_id: supermarket.id,
         supermarket_name: supermarket.name,
-        assigned_visitor_id: finalAssignedVisitorId,
-        visitor_name: finalVisitorName,
+        assigned_visitor_id: isSelfBuyer ? null : (finalAssignedVisitorId || null),
+        visitor_name: isSelfBuyer ? '' : finalVisitorName,
         status: 'assigned',
         total_amount: totalAmount,
         order_source: orderSource,
         order_channel: orderChannel,
         order_date: orderIsoDate,
-        items: payload.items.map((i, idx) => ({
-          id: `item-${Date.now()}-${idx}`,
-          order_id: orderId,
-          product_id: i.productId,
-          name: i.name,
-          price: i.price,
-          quantity: i.quantity,
-        })),
+        items: payload.items.map((i, idx) => {
+          const prod = products.find((p) => p.id === i.productId);
+          return {
+            id: `item-${Date.now()}-${idx}`,
+            order_id: orderId,
+            product_id: i.productId,
+            name: i.name,
+            price: i.price,
+            quantity: i.quantity,
+            items_per_package: getPackSize(i.items_per_package ?? prod?.items_per_package),
+            unit: i.unit ?? prod?.unit,
+          };
+        }),
       };
 
       const newTxList: InventoryTransaction[] = payload.items.map((item) => ({
@@ -300,12 +335,17 @@ export function useOrders({
           p_status: newOrder.status,
           p_total_amount: newOrder.total_amount,
           p_order_channel: newOrder.order_channel,
-          p_items: payload.items.map((i) => ({
-            productId: i.productId,
-            name: i.name,
-            price: i.price,
-            quantity: Math.round((Number(i.quantity) || 0) * 1000) / 1000,
-          })),
+          p_items: payload.items.map((i) => {
+            const prod = products.find((p) => p.id === i.productId);
+            return {
+              productId: i.productId,
+              name: i.name,
+              price: i.price,
+              quantity: Math.round((Number(i.quantity) || 0) * 1000) / 1000,
+              items_per_package: i.items_per_package ?? prod?.items_per_package,
+              unit: i.unit ?? prod?.unit,
+            };
+          }),
         });
 
         if (error) {
@@ -795,7 +835,14 @@ export function useOrders({
   const updateOrder = useCallback(
     async (
       orderId: string,
-      updatedItems: { productId: string; name: string; price: number; quantity: number }[]
+      updatedItems: {
+        productId: string;
+        name: string;
+        price: number;
+        quantity: number;
+        items_per_package?: number | string | null;
+        unit?: string;
+      }[]
     ): Promise<{ success: boolean; message: string }> => {
       const targetOrder = orders.find((o) => o.id === orderId);
       if (!targetOrder) return { success: false, message: 'سفارش مورد نظر یافت نشد.' };
@@ -845,20 +892,34 @@ export function useOrders({
         })
       );
 
-      const newTotalAmount = updatedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      const isVisitorChannel =
+        targetOrder.order_channel === 'visitor_field' ||
+        targetOrder.order_source === 'visitor' ||
+        Boolean(targetOrder.assigned_visitor_id && targetOrder.assigned_visitor_id !== 'direct');
+
+      const newTotalAmount = updatedItems.reduce((sum, item) => {
+        const prod = products.find((p) => p.id === item.productId);
+        const { total } = getItemUnitPriceAndTotal(item, prod, isVisitorChannel);
+        return sum + total;
+      }, 0);
 
       const updatedOrderObj: Order = {
         ...targetOrder,
         total_amount: newTotalAmount,
         invoice_revised_at: nowIso,
-        items: updatedItems.map((i, idx) => ({
-          id: `item-${Date.now()}-${idx}`,
-          order_id: orderId,
-          product_id: i.productId,
-          name: i.name,
-          price: i.price,
-          quantity: i.quantity,
-        })),
+        items: updatedItems.map((i, idx) => {
+          const prod = products.find((p) => p.id === i.productId);
+          return {
+            id: `item-${Date.now()}-${idx}`,
+            order_id: orderId,
+            product_id: i.productId,
+            name: i.name,
+            price: i.price,
+            quantity: i.quantity,
+            items_per_package: getPackSize(i.items_per_package ?? prod?.items_per_package),
+            unit: i.unit ?? prod?.unit,
+          };
+        }),
       };
 
       // Supabase sync
@@ -866,13 +927,18 @@ export function useOrders({
         try {
           await supabase.from('order_items').delete().eq('order_id', orderId);
 
-          const itemRows = updatedItems.map((i) => ({
-            order_id: orderId,
-            product_id: i.productId,
-            name: i.name,
-            price: i.price,
-            quantity: i.quantity,
-          }));
+          const itemRows = updatedItems.map((i) => {
+            const prod = products.find((p) => p.id === i.productId);
+            return {
+              order_id: orderId,
+              product_id: i.productId,
+              name: i.name,
+              price: i.price,
+              quantity: i.quantity,
+              items_per_package: i.items_per_package ?? prod?.items_per_package,
+              unit: i.unit ?? prod?.unit,
+            };
+          });
           await supabase.from('order_items').insert(itemRows);
 
           await supabase

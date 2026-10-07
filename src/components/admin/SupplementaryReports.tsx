@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { LoadingBill, Visitor } from '../../types';
 import { formatPrice } from './helpers';
+import { getPackSize } from '../../utils/orderLine';
 
 interface SupplementaryReportsProps {
   loadingBills: LoadingBill[];
@@ -66,7 +67,7 @@ export const SupplementaryReports: React.FC<SupplementaryReportsProps> = ({
         bill.total_visitor_cost !== undefined && bill.total_visitor_cost !== null
           ? Number(bill.total_visitor_cost)
           : (bill.items || []).reduce(
-              (sum, item) => sum + (item.visitor_price || 0) * item.quantity,
+              (sum, item) => sum + (item.visitor_price || 0) * getPackSize(item.items_per_package) * item.quantity,
               0
             );
 
@@ -75,7 +76,7 @@ export const SupplementaryReports: React.FC<SupplementaryReportsProps> = ({
         bill.total_store_amount !== undefined && bill.total_store_amount !== null
           ? Number(bill.total_store_amount)
           : (bill.items || []).reduce(
-              (sum, item) => sum + (item.store_price || 0) * item.quantity,
+              (sum, item) => sum + (item.store_price || 0) * getPackSize(item.items_per_package) * item.quantity,
               0
             );
 

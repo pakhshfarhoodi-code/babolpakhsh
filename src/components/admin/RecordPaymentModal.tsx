@@ -281,7 +281,7 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/85 backdrop-blur-sm overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-sm overflow-y-auto"
       onClick={onClose}
       dir="rtl"
     >
@@ -297,10 +297,10 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
             </div>
             <div>
               <h3 className="font-bold text-sm sm:text-base text-slate-100 flex items-center gap-2">
-                <span>ثبت دریافت و پرداخت مالی</span>
+                <span>دریافت از طرف حساب</span>
               </h3>
               <p className="text-[11px] text-slate-400">
-                حساب دفتری: <strong className="text-slate-200">{profile.name}</strong>
+                تسویه بدهی یا ثبت بستانکاری - حساب دفتری: <strong className="text-slate-200">{profile.name}</strong>
                 {accountSummary && (
                   <span className="font-mono text-emerald-400 mr-2">
                     (مانده فعلی: {formatPrice(accountSummary.current_balance)} تومان)
@@ -535,7 +535,7 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
                 هیچ فاکتور نهایی‌شده‌ای برای این ویزیتور ثبت نشده است. کل مبلغ به عنوان بستانکاری در مانده حساب ذخیره خواهد شد.
               </div>
             ) : (
-              <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950/60 divide-y divide-slate-800/80">
+              <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 divide-y divide-slate-800">
                 {profileBills.map((bill) => {
                   const billAmt = Number(bill.total_visitor_cost || 0);
                   const remDue = bill.settlement.remainingDue;
@@ -642,11 +642,11 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
                 className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition shadow-md shadow-emerald-600/20 flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? (
-                  <span>در حال ثبت پرداخت...</span>
+                  <span>در حال ثبت...</span>
                 ) : (
                   <>
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>تایید و ثبت سند مالی</span>
+                    <span>ثبت دریافت از طرف حساب</span>
                   </>
                 )}
               </button>

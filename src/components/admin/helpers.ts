@@ -117,13 +117,15 @@ export interface CategorySalesSummary {
   itemsSold: number;
 }
 
+import { getItemUnitPriceAndTotal } from '../../utils/orderLine';
+
 export const getCategorySalesSummaries = (
   categories: Category[],
   products: Product[],
   orders: Order[]
 ): CategorySalesSummary[] => {
-  const productCatMap = new Map<string, string>();
-  products.forEach((p) => productCatMap.set(p.id, p.category_id));
+  const productMap = new Map<string, Product>();
+  products.forEach((p) => productMap.set(p.id, p));
 
   const catSalesMap = new Map<string, { totalSales: number; itemsSold: number }>();
   categories.forEach((c) => catSalesMap.set(c.id, { totalSales: 0, itemsSold: 0 }));
@@ -131,12 +133,19 @@ export const getCategorySalesSummaries = (
   orders
     .filter((o) => o.status !== 'undelivered')
     .forEach((order) => {
+      const isVisitorOrder =
+        order.order_channel === 'visitor_field' ||
+        order.order_source === 'visitor' ||
+        Boolean(order.assigned_visitor_id && order.assigned_visitor_id !== 'direct');
+
       order.items?.forEach((item) => {
-        const catId = productCatMap.get(item.product_id);
+        const prod = productMap.get(item.product_id);
+        const catId = prod?.category_id;
         if (catId && catSalesMap.has(catId)) {
+          const { pack, total } = getItemUnitPriceAndTotal(item, prod, isVisitorOrder);
           const current = catSalesMap.get(catId)!;
-          current.totalSales += item.price * item.quantity;
-          current.itemsSold += item.quantity;
+          current.totalSales += total;
+          current.itemsSold += item.quantity * pack;
         }
       });
     });

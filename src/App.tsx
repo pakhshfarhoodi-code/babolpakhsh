@@ -257,42 +257,6 @@ export const App: React.FC = () => {
           <SupermarketPortal />
         )}
       </main>
-
-      <footer className="border-t border-slate-900 bg-slate-950/80 py-4 text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 flex flex-wrap items-center justify-between gap-2">
-          <span>بارفروش | شبکه پخش عمده فرهودی — سامانه جامع مدیریت سفارش و توزیع</span>
-          {role !== 'supermarket' && (
-            <div className="flex items-center gap-3 text-xs font-mono">
-              <button
-                onClick={() => navigateTo('/')}
-                className={`hover:text-amber-400 transition cursor-pointer ${
-                  effectivePath === '/' ? 'text-amber-400 font-bold underline' : 'text-slate-500'
-                }`}
-              >
-                / (فروشگاه‌ها)
-              </button>
-              <span className="text-slate-700">|</span>
-              <button
-                onClick={() => navigateTo('/visitor')}
-                className={`hover:text-emerald-400 transition cursor-pointer ${
-                  effectivePath === '/visitor' ? 'text-emerald-400 font-bold underline' : 'text-slate-500'
-                }`}
-              >
-                /visitor (ویزیتورها)
-              </button>
-              <span className="text-slate-700">|</span>
-              <button
-                onClick={() => navigateTo('/admin')}
-                className={`hover:text-blue-400 transition cursor-pointer ${
-                  effectivePath === '/admin' ? 'text-blue-400 font-bold underline' : 'text-slate-500'
-                }`}
-              >
-                /admin (مدیر و انبار)
-              </button>
-            </div>
-          )}
-        </div>
-      </footer>
     </div>
   );
 };

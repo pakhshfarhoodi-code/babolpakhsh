@@ -393,7 +393,6 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
         });
 
         if (authError || !authData?.user) {
-          console.error('[Supabase signInWithPassword Error]:', authError);
           const rawMsg = (authError?.message || '').toLowerCase();
           const errCode = (authError as { code?: string })?.code || '';
           const isInvalidCredentials =
@@ -402,9 +401,12 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
             rawMsg.includes('invalid_credentials') ||
             rawMsg.includes('invalid credentials');
 
+          // Log authentication attempt status as a warning rather than unhandled console.error
+          console.warn('[Supabase Auth]: Login attempt failed:', isInvalidCredentials ? 'invalid credentials' : authError?.message);
+
           let displayMsg: string;
           if (isInvalidCredentials) {
-            displayMsg = 'شماره یا رمز عبور نادرست است';
+            displayMsg = 'شماره موبایل یا رمز عبور نادرست است.';
           } else {
             const codeOrStatus = errCode || authError?.status;
             const codeSuffix = codeOrStatus ? ` (کد: ${codeOrStatus})` : '';

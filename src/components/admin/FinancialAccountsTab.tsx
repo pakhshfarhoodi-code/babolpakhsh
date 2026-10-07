@@ -326,7 +326,7 @@ export const FinancialAccountsTab: React.FC<FinancialAccountsTabProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full text-right border-collapse text-xs">
             <thead>
-              <tr className="bg-slate-950/80 text-slate-400 border-b border-slate-800">
+              <tr className="bg-slate-950 text-slate-400 border-b border-slate-800">
                 <th className="p-4 font-semibold">طرف حساب (نام و نقش)</th>
                 <th className="p-4 font-semibold">شماره حساب دفتری</th>
                 <th className="p-4 font-semibold">وضعیت حساب</th>
@@ -338,10 +338,10 @@ export const FinancialAccountsTab: React.FC<FinancialAccountsTabProps> = ({
                 <th className="p-4 font-semibold text-center">عملیات مالی</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60 text-slate-200">
+            <tbody className="divide-y divide-slate-800 text-slate-200">
               {filteredRows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="p-12 text-center text-slate-500">
+                  <td colSpan={9} className="p-12 text-center text-slate-400">
                     <Wallet className="w-10 h-10 mx-auto mb-3 opacity-30" />
                     <p className="font-bold text-sm">هیچ حساب دفتری مطابق با فیلترها یافت نشد.</p>
                   </td>
@@ -352,7 +352,7 @@ export const FinancialAccountsTab: React.FC<FinancialAccountsTabProps> = ({
                   const isCreditor = row.currentBalance < 0;
 
                   return (
-                    <tr key={row.profileId} className="hover:bg-slate-800/30 transition">
+                    <tr key={row.profileId} className="hover:bg-slate-800/40 transition">
                       {/* Name & Phone */}
                       <td className="p-4">
                         <div className="flex items-center gap-2.5">
@@ -498,7 +498,7 @@ export const FinancialAccountsTab: React.FC<FinancialAccountsTabProps> = ({
       {/* Quick Activate Modal */}
       {activatingProfileId && (
         <div
-          className="fixed inset-0 z-60 flex items-center justify-center p-3 bg-slate-950/90 backdrop-blur-sm"
+          className="fixed inset-0 z-60 flex items-center justify-center p-3 bg-black/60 backdrop-blur-sm"
           onClick={() => setActivatingProfileId(null)}
         >
           <div
@@ -553,7 +553,7 @@ export const FinancialAccountsTab: React.FC<FinancialAccountsTabProps> = ({
       {/* Quick Deactivate Confirm Modal */}
       {deactivatingAccount && (
         <div
-          className="fixed inset-0 z-60 flex items-center justify-center p-3 bg-slate-950/90 backdrop-blur-sm"
+          className="fixed inset-0 z-60 flex items-center justify-center p-3 bg-black/60 backdrop-blur-sm"
           onClick={() => setDeactivatingAccount(null)}
         >
           <div

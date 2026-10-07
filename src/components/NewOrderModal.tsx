@@ -12,6 +12,7 @@ import {
   MapPin,
   Filter,
   Clock,
+  User,
 } from 'lucide-react';
 import { ProductRow } from './shop/ProductRow';
 import { FilterSheet } from './shop/FilterSheet';
@@ -40,13 +41,14 @@ export const NewOrderModal: React.FC<Props> = ({
     brands,
     supermarkets,
     visitors,
+    currentUser,
     createOrder,
     showToast,
     refreshData,
   } = useApp();
 
   const [selectedSupermarketId, setSelectedSupermarketId] = useState<string>(
-    defaultSupermarketId || supermarkets[0]?.id || ''
+    defaultSupermarketId || 'self'
   );
   const [isStoreDropdownOpen, setIsStoreDropdownOpen] = useState(false);
   const [storeSearchTerm, setStoreSearchTerm] = useState('');
@@ -69,10 +71,10 @@ export const NewOrderModal: React.FC<Props> = ({
   useEffect(() => {
     if (defaultSupermarketId) {
       setSelectedSupermarketId(defaultSupermarketId);
-    } else if (!selectedSupermarketId && supermarkets.length > 0) {
-      setSelectedSupermarketId(supermarkets[0].id);
+    } else if (!selectedSupermarketId) {
+      setSelectedSupermarketId('self');
     }
-  }, [defaultSupermarketId, supermarkets, isOpen, selectedSupermarketId]);
+  }, [defaultSupermarketId, isOpen, selectedSupermarketId]);
 
   // Close customer dropdown on click outside
   useEffect(() => {
@@ -130,15 +132,55 @@ export const NewOrderModal: React.FC<Props> = ({
     is_active: true,
   }), []);
 
-  const currentSupermarket =
-    supermarkets.find((s) => s.id === selectedSupermarketId) ||
-    supermarkets[0] ||
-    defaultFallbackStore;
+  const isSelfOrder = selectedSupermarketId === 'self';
 
-  const currentVisitor =
-    visitors.find((v) => v.id === (defaultVisitorId || currentSupermarket?.assigned_visitor_id)) ||
-    visitors[0] ||
-    defaultFallbackVisitor;
+  const defaultVisitor = useMemo(() => {
+    return (
+      (defaultVisitorId ? visitors.find((v) => v.id === defaultVisitorId) : null) ||
+      (currentUser?.role === 'visitor' ? visitors.find((v) => v.id === currentUser.id) : null) ||
+      (currentUser?.role === 'visitor'
+        ? {
+            id: currentUser.id,
+            name: currentUser.name,
+            phone: currentUser.phone || '',
+            region: 'ویزیتور',
+            username: currentUser.username || 'visitor',
+            is_active: true,
+          }
+        : null) ||
+      visitors[0] ||
+      defaultFallbackVisitor
+    );
+  }, [visitors, defaultVisitorId, currentUser, defaultFallbackVisitor]);
+
+  const currentVisitorName =
+    defaultVisitor?.name ||
+    (currentUser?.role === 'visitor' ? currentUser.name : '') ||
+    'ویزیتور';
+
+  const selfBuyer: Supermarket = useMemo(() => ({
+    id: `self-${defaultVisitor.id || 'visitor'}`,
+    name: `خودم (${currentVisitorName})`,
+    owner: currentVisitorName,
+    phone: defaultVisitor.phone || '',
+    address: 'خرید شخصی ویزیتور',
+    assigned_visitor_id: '',
+    credit_limit: 100000000,
+    current_debt: 0,
+    is_active: true,
+  }), [defaultVisitor, currentVisitorName]);
+
+  const currentSupermarket = isSelfOrder
+    ? selfBuyer
+    : (supermarkets.find((s) => s.id === selectedSupermarketId) ||
+       supermarkets[0] ||
+       defaultFallbackStore);
+
+  const currentVisitor = isSelfOrder
+    ? null
+    : (visitors.find((v) => v.id === (defaultVisitorId || currentSupermarket?.assigned_visitor_id)) ||
+       visitors[0] ||
+       defaultFallbackVisitor);
 
   // Filter supermarkets by search term
   const filteredSupermarkets = supermarkets.filter((s) => {
@@ -193,12 +235,15 @@ export const NewOrderModal: React.FC<Props> = ({
       const prod = products.find((p) => p.id === productId);
       if (!prod || quantity <= 0) return null;
       const multiplier = prod.items_per_package && prod.items_per_package > 0 ? prod.items_per_package : 1;
-      const cartonPrice = prod.price * multiplier;
+      const basePrice = isSelfOrder
+        ? (Number(prod.visitor_price ?? 0) > 0 ? Number(prod.visitor_price) : prod.price)
+        : prod.price;
+      const cartonPrice = basePrice * multiplier;
       return {
         productId,
         name: prod.name,
         price: cartonPrice,
-        basePrice: prod.price,
+        basePrice,
         quantity,
         multiplier,
         unit: prod.unit,
@@ -206,7 +251,7 @@ export const NewOrderModal: React.FC<Props> = ({
         total: cartonPrice * quantity,
       };
     }).filter((i): i is NonNullable<typeof i> => i !== null);
-  }, [cart, products]);
+  }, [cart, products, isSelfOrder]);
 
   const cartTotalAmount = useMemo(() => {
     return cartItems.reduce((sum, item) => sum + item.total, 0);
@@ -220,8 +265,8 @@ export const NewOrderModal: React.FC<Props> = ({
   const handleSubmit = async () => {
     if (isSubmittingRef.current || isSubmitting) return;
 
-    if (!currentSupermarket?.id || !currentVisitor?.id) {
-      setFeedback({ type: 'error', message: 'لطفاً سوپرمارکت و ویزیتور را مشخص کنید.' });
+    if (!isSelfOrder && (!currentSupermarket?.id || !currentVisitor?.id)) {
+      setFeedback({ type: 'error', message: 'لطفاً خریدار و ویزیتور را مشخص کنید.' });
       return;
     }
 
@@ -242,11 +287,11 @@ export const NewOrderModal: React.FC<Props> = ({
       return;
     }
 
-    if (currentSupermarket?.approval_status === 'pending') {
+    if (!isSelfOrder && currentSupermarket?.approval_status === 'pending') {
       showToast('حساب این مشتری هنوز توسط ادمین تایید نشده است.', 'warning', 5000);
       return;
     }
-    if (currentSupermarket?.approval_status === 'rejected') {
+    if (!isSelfOrder && currentSupermarket?.approval_status === 'rejected') {
       showToast('حساب این مشتری توسط ادمین تایید نشده است.', 'warning', 5000);
       return;
     }
@@ -257,7 +302,7 @@ export const NewOrderModal: React.FC<Props> = ({
     try {
       const res = await createOrder({
         supermarketId: currentSupermarket.id,
-        visitorId: currentVisitor.id,
+        visitorId: isSelfOrder ? '' : (currentVisitor?.id || ''),
         orderSource: 'visitor',
         items: cartItems.map((c) => ({
           productId: c.productId,
@@ -322,7 +367,7 @@ export const NewOrderModal: React.FC<Props> = ({
               <ShoppingCart className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-slate-100">ثبت سفارش جدید و تخصیص به ویزیتور</h2>
+              <h2 className="text-sm font-bold text-slate-100">ثبت سفارش جدید</h2>
               <p className="text-xs text-slate-400">کالاهای انتخابی بلافاصله در سیستم سردخانه رزرو می‌شوند</p>
             </div>
           </div>
@@ -348,13 +393,15 @@ export const NewOrderModal: React.FC<Props> = ({
 
             <div className="w-full bg-slate-950/70 border border-slate-800 rounded-2xl p-4 text-xs space-y-2 text-right">
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">سوپرمارکت مقصد:</span>
+                <span className="text-slate-400">خریدار:</span>
                 <span className="font-bold text-slate-200">{createdOrder.supermarket_name}</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400">ویزیتور مسئول:</span>
-                <span className="font-bold text-slate-200">{createdOrder.visitor_name}</span>
-              </div>
+              {!createdOrder.supermarket_id?.startsWith('self-') && createdOrder.visitor_name && (
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">ویزیتور مسئول:</span>
+                  <span className="font-bold text-slate-200">{createdOrder.visitor_name}</span>
+                </div>
+              )}
               <div className="flex items-center justify-between pt-2 border-t border-slate-800/80">
                 <span className="text-slate-400">مبلغ کل فاکتور:</span>
                 <span className="font-bold text-emerald-400 text-sm">
@@ -399,7 +446,7 @@ export const NewOrderModal: React.FC<Props> = ({
         <div className="p-4 bg-slate-950/30 border-b border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
           {/* Custom Searchable Customer Dropdown */}
           <div className="relative" ref={storeDropdownRef}>
-            <label className="block text-slate-400 mb-1 font-medium">سوپرمارکت مقصد سفارش:</label>
+            <label className="block text-slate-400 mb-1 font-medium">خریدار:</label>
             
             {/* Dropdown trigger button */}
             <button
@@ -410,22 +457,38 @@ export const NewOrderModal: React.FC<Props> = ({
               }`}
             >
               <div className="flex items-center gap-2 min-w-0">
-                <div className="w-5 h-5 rounded bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-                  <Store className="w-3 h-3" />
-                </div>
-                {currentSupermarket ? (
-                  <div className="truncate flex items-center gap-1.5 flex-wrap">
-                    <span className="font-bold text-slate-100">{currentSupermarket.name}</span>
-                    <span className="text-slate-400 text-xs mr-1">({currentSupermarket.owner})</span>
-                    {currentSupermarket.approval_status === 'pending' && (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                        <Clock className="w-3 h-3 text-amber-400" />
-                        <span>در انتظار تایید ادمین</span>
+                {isSelfOrder ? (
+                  <>
+                    <div className="w-5 h-5 rounded bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-400 shrink-0">
+                      <User className="w-3 h-3" />
+                    </div>
+                    <div className="truncate flex items-center gap-1.5 flex-wrap">
+                      <span className="font-bold text-slate-100">خودم ({currentVisitorName})</span>
+                      <span className="text-[11px] text-purple-400 font-semibold bg-purple-950/60 px-1.5 py-0.5 rounded border border-purple-800/40">
+                        قیمت خرید ویزیتور
                       </span>
-                    )}
-                  </div>
+                    </div>
+                  </>
                 ) : (
-                  <span className="text-slate-500">انتخاب سوپرمارکت مقصد...</span>
+                  <>
+                    <div className="w-5 h-5 rounded bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                      <Store className="w-3 h-3" />
+                    </div>
+                    {currentSupermarket ? (
+                      <div className="truncate flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-slate-100">{currentSupermarket.name}</span>
+                        <span className="text-slate-400 text-xs mr-1">({currentSupermarket.owner})</span>
+                        {currentSupermarket.approval_status === 'pending' && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                            <Clock className="w-3 h-3 text-amber-400" />
+                            <span>در انتظار تایید ادمین</span>
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-slate-500">انتخاب خریدار...</span>
+                    )}
+                  </>
                 )}
               </div>
               <ChevronDown
@@ -446,7 +509,7 @@ export const NewOrderModal: React.FC<Props> = ({
                       autoFocus
                       value={storeSearchTerm}
                       onChange={(e) => setStoreSearchTerm(e.target.value)}
-                      placeholder="جستجوی نام فروشگاه یا مدیر مشتری..."
+                      placeholder="جستجوی نام یا مدیر خریدار..."
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg pr-8 pl-7 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                     />
                     {storeSearchTerm && (
@@ -462,7 +525,43 @@ export const NewOrderModal: React.FC<Props> = ({
                 </div>
 
                 <div className="max-h-52 overflow-y-auto divide-y divide-slate-800/60 no-scrollbar">
-                  {filteredSupermarkets.length === 0 ? (
+                  {/* Option: خودم (اسم ویزیتور) */}
+                  {(!storeSearchTerm.trim() ||
+                    'خودم'.includes(storeSearchTerm.trim()) ||
+                    (currentVisitorName && currentVisitorName.toLowerCase().includes(storeSearchTerm.toLowerCase()))) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedSupermarketId('self');
+                        setIsStoreDropdownOpen(false);
+                        setStoreSearchTerm('');
+                      }}
+                      className={`w-full p-2.5 text-right flex items-center justify-between gap-2 transition cursor-pointer text-xs ${
+                        isSelfOrder
+                          ? 'bg-purple-600/20 text-purple-200'
+                          : 'hover:bg-slate-800/80 text-slate-200'
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1 flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0 border border-purple-500/30">
+                          <User className="w-3.5 h-3.5" />
+                        </div>
+                        <div className="truncate">
+                          <span className="font-bold text-slate-100">خودم ({currentVisitorName})</span>
+                          <span className="text-[11px] text-purple-400 mr-2 font-medium bg-purple-950/40 px-1.5 py-0.5 rounded border border-purple-800/30">
+                            خرید با قیمت ویزیتور
+                          </span>
+                        </div>
+                      </div>
+                      {isSelfOrder && (
+                        <div className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0 border border-purple-500/40">
+                          <Check className="w-3 h-3" />
+                        </div>
+                      )}
+                    </button>
+                  )}
+
+                  {filteredSupermarkets.length === 0 && storeSearchTerm.trim() && !'خودم'.includes(storeSearchTerm.trim()) ? (
                     <div className="p-4 text-center text-slate-400 text-xs">
                       هیچ مشتری یا فروشگاهی با مشخصات «{storeSearchTerm}» یافت نشد.
                     </div>
@@ -520,11 +619,17 @@ export const NewOrderModal: React.FC<Props> = ({
 
           <div>
             <label className="block text-slate-400 mb-1 font-medium">ویزیتور تخصیص‌یافته:</label>
-            <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 font-semibold flex items-center justify-between">
-              <span>{currentVisitor?.name || 'ویزیتور عمومی'}</span>
-              <span className="text-xs text-blue-400 px-2 py-0.5 rounded bg-blue-950 border border-blue-800">
-                {currentVisitor?.region}
-              </span>
+            <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 font-semibold min-h-[38px] flex items-center justify-between">
+              {isSelfOrder ? (
+                <span></span>
+              ) : (
+                <>
+                  <span>{currentVisitor?.name || 'ویزیتور عمومی'}</span>
+                  <span className="text-xs text-blue-400 px-2 py-0.5 rounded bg-blue-950 border border-blue-800">
+                    {currentVisitor?.region}
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -634,6 +739,7 @@ export const NewOrderModal: React.FC<Props> = ({
                     quantity={cart[prod.id] || 0}
                     onChangeQuantity={(newQty) => handleSetQuantity(prod.id, newQty)}
                     onExceedLimit={handleExceedLimit}
+                    priceMode={isSelfOrder ? 'visitor' : 'store'}
                   />
                 ))
               )}

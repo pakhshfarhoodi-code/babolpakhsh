@@ -710,7 +710,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                   {renderSortTh('total_amount', 'مبلغ کل (تومان)')}
                   {renderSortTh('order_date', 'تاریخ ثبت')}
                   {renderSortTh('status', 'وضعیت', 'center')}
-                  <th className="py-3 px-4 font-semibold text-center select-none whitespace-nowrap min-w-[240px]">عملیات مدیریتی</th>
+                  <th className="py-3 px-4 font-semibold text-center select-none whitespace-nowrap min-w-[190px]">عملیات مدیریتی</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
@@ -863,83 +863,141 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                         <div className="inline-flex items-center justify-center gap-1.5 flex-nowrap">
                           {/* Discount Review Button if discount is pending */}
                           {order.discount_status === 'pending' && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setDiscountReviewModalOrder(order);
-                                setReviewPercent(order.discount_percent || 0);
-                              }}
-                              className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/50 text-xs font-semibold transition cursor-pointer inline-flex items-center gap-1 shrink-0"
-                              title="بررسی و تأیید/رد تخفیف پیشنهادی"
-                            >
-                              <Percent className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                              <span>بررسی تخفیف ({order.discount_percent || 0}٪)</span>
-                            </button>
+                            <div className="relative group/tooltip inline-flex items-center justify-center">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDiscountReviewModalOrder(order);
+                                  setReviewPercent(order.discount_percent || 0);
+                                }}
+                                className="w-8.5 h-8.5 rounded-xl bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/50 transition-all duration-150 cursor-pointer flex items-center justify-center shrink-0 relative shadow-xs"
+                                title={`بررسی تخفیف پیشنهادی (${order.discount_percent || 0}٪)`}
+                                aria-label="بررسی تخفیف"
+                              >
+                                <Percent className="w-4 h-4 shrink-0" />
+                                <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-amber-400 text-slate-950 text-[9px] font-bold rounded-full flex items-center justify-center">
+                                  !
+                                </span>
+                              </button>
+                              <div
+                                role="tooltip"
+                                className="pointer-events-none absolute bottom-full mb-2 left-1/2 -translate-x-1/2 opacity-0 group-hover/tooltip:opacity-100 transition-all duration-150 transform group-hover/tooltip:-translate-y-0.5 z-40 whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-900/95 text-amber-300 text-[11px] font-medium border border-amber-500/40 shadow-2xl backdrop-blur-xs flex items-center gap-1"
+                              >
+                                <span>بررسی تخفیف ({order.discount_percent || 0}٪)</span>
+                                <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-slate-900/95" />
+                              </div>
+                            </div>
                           )}
 
-                          {/* Invoice View & Print Button */}
-                          <button
-                            type="button"
-                            onClick={() => setInvoiceModalOrder(order)}
-                            className="px-2.5 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/30 text-xs font-semibold transition cursor-pointer inline-flex items-center gap-1 shrink-0"
-                            title="مشاهده و چاپ فاکتور"
-                          >
-                            <FileText className="w-3.5 h-3.5 shrink-0" />
-                            <span>فاکتور</span>
-                          </button>
+                          {/* 1. Invoice View & Print Button */}
+                          <div className="relative group/tooltip inline-flex items-center justify-center">
+                            <button
+                              type="button"
+                              onClick={() => setInvoiceModalOrder(order)}
+                              className="w-8.5 h-8.5 rounded-xl bg-blue-600/15 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-500/30 hover:border-blue-500 transition-all duration-150 cursor-pointer flex items-center justify-center shrink-0 shadow-xs hover:shadow-blue-500/20"
+                              title="مشاهده و چاپ فاکتور"
+                              aria-label="فاکتور"
+                            >
+                              <FileText className="w-4.5 h-4.5 shrink-0" />
+                            </button>
+                            <div
+                              role="tooltip"
+                              className="pointer-events-none absolute bottom-full mb-2 left-1/2 -translate-x-1/2 opacity-0 group-hover/tooltip:opacity-100 transition-all duration-150 transform group-hover/tooltip:-translate-y-0.5 z-40 whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-900/95 text-slate-100 text-[11px] font-medium border border-slate-700/80 shadow-2xl backdrop-blur-xs flex items-center gap-1"
+                            >
+                              <span>فاکتور</span>
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-slate-900/95" />
+                            </div>
+                          </div>
 
-                          {/* Single Delivery Status Toggle Button */}
+                          {/* 2. Single Delivery Status Toggle Button */}
                           {order.status === 'delivered' ? (
-                            <button
-                              type="button"
-                              onClick={() => onUpdateOrderStatus(order.id, 'undelivered')}
-                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-500 text-xs font-semibold transition shadow-xs cursor-pointer inline-flex items-center gap-1.5 shrink-0"
-                              title="سفارش تحویل شده است (کلیک جهت بازگردانی به وضعیت عدم تحویل)"
-                            >
-                              <CheckCircle className="w-3.5 h-3.5 shrink-0" />
-                              <span>تحویل شده</span>
-                            </button>
+                            <div className="relative group/tooltip inline-flex items-center justify-center">
+                              <button
+                                type="button"
+                                onClick={() => onUpdateOrderStatus(order.id, 'undelivered')}
+                                className="w-8.5 h-8.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-500 transition-all duration-150 shadow-xs hover:shadow-emerald-500/20 cursor-pointer flex items-center justify-center shrink-0"
+                                title="تحویل شده (کلیک جهت بازگردانی به وضعیت عدم تحویل)"
+                                aria-label="تحویل شده"
+                              >
+                                <CheckCircle className="w-4.5 h-4.5 shrink-0" />
+                              </button>
+                              <div
+                                role="tooltip"
+                                className="pointer-events-none absolute bottom-full mb-2 left-1/2 -translate-x-1/2 opacity-0 group-hover/tooltip:opacity-100 transition-all duration-150 transform group-hover/tooltip:-translate-y-0.5 z-40 whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-900/95 text-emerald-300 text-[11px] font-medium border border-emerald-500/40 shadow-2xl backdrop-blur-xs flex items-center gap-1"
+                              >
+                                <span>تحویل شده</span>
+                                <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-slate-900/95" />
+                              </div>
+                            </div>
                           ) : (
-                            <button
-                              type="button"
-                              onClick={() => onUpdateOrderStatus(order.id, 'delivered')}
-                              className="px-2.5 py-1 rounded-lg bg-rose-500/15 hover:bg-emerald-600 text-rose-300 hover:text-white border border-rose-500/30 hover:border-emerald-500 text-xs font-semibold transition cursor-pointer inline-flex items-center gap-1.5 group shrink-0"
-                              title="سفارش هنوز تحویل نشده است (کلیک جهت تغییر به تحویل شده)"
-                            >
-                              <XCircle className="w-3.5 h-3.5 text-rose-400 group-hover:text-white shrink-0" />
-                              <span>عدم تحویل</span>
-                            </button>
+                            <div className="relative group/tooltip inline-flex items-center justify-center">
+                              <button
+                                type="button"
+                                onClick={() => onUpdateOrderStatus(order.id, 'delivered')}
+                                className="w-8.5 h-8.5 rounded-xl bg-rose-500/15 hover:bg-emerald-600 text-rose-300 hover:text-white border border-rose-500/30 hover:border-emerald-500 transition-all duration-150 cursor-pointer flex items-center justify-center shrink-0 group/btn shadow-xs hover:shadow-emerald-500/20"
+                                title="عدم تحویل (کلیک جهت تغییر وضعیت به تحویل شده)"
+                                aria-label="عدم تحویل"
+                              >
+                                <XCircle className="w-4.5 h-4.5 text-rose-400 group-hover/btn:text-white shrink-0 transition-colors" />
+                              </button>
+                              <div
+                                role="tooltip"
+                                className="pointer-events-none absolute bottom-full mb-2 left-1/2 -translate-x-1/2 opacity-0 group-hover/tooltip:opacity-100 transition-all duration-150 transform group-hover/tooltip:-translate-y-0.5 z-40 whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-900/95 text-rose-300 text-[11px] font-medium border border-rose-500/40 shadow-2xl backdrop-blur-xs flex items-center gap-1"
+                              >
+                                <span>عدم تحویل</span>
+                                <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-slate-900/95" />
+                              </div>
+                            </div>
                           )}
 
-                          {/* Assignment & Delegation Button */}
-                          <button
-                            type="button"
-                            onClick={() => handleOpenAssignModal(order)}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer inline-flex items-center gap-1 shrink-0 border ${
-                              isDirect
-                                ? 'bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border-amber-500/40'
-                                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
-                            }`}
-                            title={
-                              isDirect
-                                ? 'تخصیص به ویزیتور اختصاصی'
-                                : 'تغییر یا واگذاری ویزیتور'
-                            }
-                          >
-                            <ArrowRightLeft className="w-3.5 h-3.5 shrink-0" />
-                            <span>{isDirect ? 'تخصیص ویزیتور' : 'انتقال ویزیتور'}</span>
-                          </button>
-
-                          {/* Delete Order Button */}
-                          {onDeleteOrder && (
+                          {/* 3. Assignment & Delegation Button */}
+                          <div className="relative group/tooltip inline-flex items-center justify-center">
                             <button
                               type="button"
-                              onClick={() => setDeleteConfirmOrder(order)}
-                              className="p-1.5 rounded-lg bg-rose-600/15 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 text-xs font-semibold transition cursor-pointer inline-flex items-center justify-center shrink-0"
-                              title="حذف کامل سفارش و آزادسازی موجودی"
+                              onClick={() => handleOpenAssignModal(order)}
+                              className={`w-8.5 h-8.5 rounded-xl transition-all duration-150 cursor-pointer flex items-center justify-center shrink-0 border shadow-xs ${
+                                isDirect
+                                  ? 'bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border-amber-500/30 hover:border-amber-500 hover:shadow-amber-500/20'
+                                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700 hover:border-slate-600'
+                              }`}
+                              title={
+                                isDirect
+                                  ? 'تخصیص به ویزیتور اختصاصی'
+                                  : 'تغییر یا واگذاری ویزیتور'
+                              }
+                              aria-label={isDirect ? 'تخصیص ویزیتور' : 'انتقال ویزیتور'}
                             >
-                              <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                              <ArrowRightLeft className="w-4.5 h-4.5 shrink-0" />
                             </button>
+                            <div
+                              role="tooltip"
+                              className="pointer-events-none absolute bottom-full mb-2 left-1/2 -translate-x-1/2 opacity-0 group-hover/tooltip:opacity-100 transition-all duration-150 transform group-hover/tooltip:-translate-y-0.5 z-40 whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-900/95 text-slate-100 text-[11px] font-medium border border-slate-700/80 shadow-2xl backdrop-blur-xs flex items-center gap-1"
+                            >
+                              <span>{isDirect ? 'تخصیص ویزیتور' : 'انتقال ویزیتور'}</span>
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-slate-900/95" />
+                            </div>
+                          </div>
+
+                          {/* 4. Delete Order Button */}
+                          {onDeleteOrder && (
+                            <div className="relative group/tooltip inline-flex items-center justify-center">
+                              <button
+                                type="button"
+                                onClick={() => setDeleteConfirmOrder(order)}
+                                className="w-8.5 h-8.5 rounded-xl bg-rose-600/15 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 hover:border-rose-500 transition-all duration-150 cursor-pointer flex items-center justify-center shrink-0 shadow-xs hover:shadow-rose-500/20"
+                                title="حذف کامل سفارش و آزادسازی موجودی"
+                                aria-label="حذف سفارش"
+                              >
+                                <Trash2 className="w-4.5 h-4.5 shrink-0" />
+                              </button>
+                              <div
+                                role="tooltip"
+                                className="pointer-events-none absolute bottom-full mb-2 left-1/2 -translate-x-1/2 opacity-0 group-hover/tooltip:opacity-100 transition-all duration-150 transform group-hover/tooltip:-translate-y-0.5 z-40 whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-900/95 text-rose-300 text-[11px] font-medium border border-rose-500/40 shadow-2xl backdrop-blur-xs flex items-center gap-1"
+                              >
+                                <span>حذف سفارش</span>
+                                <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-slate-900/95" />
+                              </div>
+                            </div>
                           )}
                         </div>
                       </td>

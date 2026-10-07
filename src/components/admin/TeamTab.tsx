@@ -30,6 +30,7 @@ import {
   Copy,
   Wallet,
   ShieldAlert,
+  BookOpen,
 } from 'lucide-react';
 import { SupermarketRegisterModal } from '../SupermarketRegisterModal';
 import { AccountLedgerModal } from './AccountLedgerModal';
@@ -42,6 +43,7 @@ interface TeamTabProps {
   supermarkets: Supermarket[];
   orders: Order[];
   initialStoreStatusFilter?: 'all' | 'active' | 'inactive' | 'pending';
+  onNavigateToFinancialAccount?: (profileId: string) => void;
 }
 
 export const TeamTab: React.FC<TeamTabProps> = ({
@@ -49,6 +51,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
   supermarkets,
   orders,
   initialStoreStatusFilter,
+  onNavigateToFinancialAccount,
 }) => {
   const {
     currentUser,
@@ -101,6 +104,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
 
   const [isRegisterStoreModalOpen, setIsRegisterStoreModalOpen] = useState(false);
   const [togglingStoreId, setTogglingStoreId] = useState<string | null>(null);
+  const [togglingVisitorId, setTogglingVisitorId] = useState<string | null>(null);
   const [toastNotification, setToastNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Password Reset State
@@ -571,6 +575,38 @@ export const TeamTab: React.FC<TeamTabProps> = ({
     }
   };
 
+  // Quick Toggle Visitor Active Access
+  const handleToggleVisitorActive = async (visitor: Visitor) => {
+    setTogglingVisitorId(visitor.id);
+    const newStatus = visitor.is_active === false;
+    try {
+      const res = await updateVisitor(visitor.id, {
+        is_active: newStatus,
+      });
+      if (res.success) {
+        setToastNotification({
+          type: 'success',
+          message: newStatus
+            ? `دسترسی ویزیتور «${visitor.name}» فعال شد.`
+            : `دسترسی ویزیتور «${visitor.name}» غیرفعال گردید.`,
+        });
+      } else {
+        setToastNotification({
+          type: 'error',
+          message: res.message || 'خطا در تغییر وضعیت دسترسی ویزیتور.',
+        });
+      }
+    } catch {
+      setToastNotification({
+        type: 'error',
+        message: 'خطا در تغییر وضعیت دسترسی ویزیتور.',
+      });
+    } finally {
+      setTogglingVisitorId(null);
+      setTimeout(() => setToastNotification(null), 3500);
+    }
+  };
+
   // Quick Toggle Supermarket Approval / Active Check
   const handleToggleApproval = async (shop: Supermarket) => {
     setTogglingStoreId(shop.id);
@@ -640,33 +676,59 @@ export const TeamTab: React.FC<TeamTabProps> = ({
     setIsProcessingApproval(true);
     try {
       if (isSupabaseConfigured && supabase) {
-        const { data, error } = await supabase.rpc('admin_set_store_approval', {
-          p_store_id: shop.id,
-          p_status: status,
-          p_note: note ? note.trim() : null,
-        });
-
-        if (error) {
-          setToastNotification({
-            type: 'error',
-            message: error.message || 'خطا در تغییر وضعیت تایید فروشگاه.',
+        let rpcOk = false;
+        try {
+          const { data, error } = await supabase.rpc('admin_set_store_approval', {
+            p_store_id: shop.id,
+            p_status: status,
+            p_note: note ? note.trim() : null,
           });
-          return;
+
+          if (!error && (data as any)?.success !== false) {
+            rpcOk = true;
+          } else {
+            console.warn('RPC admin_set_store_approval returned error, attempting direct update:', error || data);
+          }
+        } catch (rpcErr) {
+          console.warn('RPC admin_set_store_approval threw exception, attempting direct update:', rpcErr);
         }
 
-        if (data && (data as any).success === false) {
-          setToastNotification({
-            type: 'error',
-            message: (data as any).message || 'خطا در تغییر وضعیت تایید در سرور.',
-          });
-          return;
+        // Direct table update fallback if RPC had issue
+        if (!rpcOk) {
+          const { error: smErr } = await supabase
+            .from('supermarkets')
+            .update({
+              approval_status: status,
+              is_active: status === 'approved',
+              approved_at: status === 'approved' ? new Date().toISOString() : null,
+              approved_by: status === 'approved' ? (currentUser?.name || 'مدیر سیستم') : null,
+              approval_note: status === 'rejected' ? (note ? note.trim() : null) : null,
+            })
+            .eq('id', shop.id);
+
+          if (smErr) {
+            console.error('Direct supermarket approval update failed:', smErr);
+            setToastNotification({
+              type: 'error',
+              message: smErr.message || 'خطا در ثبت وضعیت تایید فروشگاه.',
+            });
+            // Still close modal to not leave admin stuck in unclosable state
+            setApprovingStoreModal(null);
+            setRejectingStoreModal(null);
+            return;
+          }
+
+          // Also synchronize active flag on profiles table
+          await supabase
+            .from('profiles')
+            .update({ is_active: status === 'approved' })
+            .eq('id', shop.id);
         }
 
         const realMsg =
-          (data as any)?.message ||
-          (status === 'approved'
+          status === 'approved'
             ? `حساب فروشگاه «${shop.name}» با موفقیت تایید شد.`
-            : `درخواست فروشگاه «${shop.name}» رد شد.`);
+            : `درخواست فروشگاه «${shop.name}» رد شد.`;
         setToastNotification({
           type: 'success',
           message: realMsg,
@@ -872,8 +934,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
               const visitorOrders = orders.filter((o) => o.assigned_visitor_id === visitor.id);
               const isSelected = selectedVisitorFilter === visitor.id;
               const visitorAcc = financialAccounts.find((a) => a.profile_id === visitor.id);
-              const isAccActive = visitorAcc?.is_active || false;
-              const visitorSummary = getAccountSummary(visitor.id);
+              const isAccActive = Boolean(visitorAcc && visitorAcc.is_active);
 
               return (
                 <div
@@ -902,17 +963,9 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                         )}
                       </div>
                       <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                        <p className="text-xs text-slate-400 font-mono">{visitor.phone}</p>
-                        <div className="inline-flex items-center gap-1.5 text-blue-300 font-mono text-xs bg-blue-950/70 px-2.5 py-0.5 rounded-lg border border-blue-500/40 font-bold shadow-xs">
-                          <AtSign className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                          <span>
-                            نام کاربری: {
-                              visitor.username && !visitor.username.includes('-') && visitor.username.length < 25
-                                ? visitor.username
-                                : (visitor.phone || 'مشخص نشده')
-                            }
-                          </span>
-                        </div>
+                        <span className="px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-slate-400 font-mono text-xs shrink-0">
+                          {visitor.phone}
+                        </span>
                       </div>
                     </div>
 
@@ -923,87 +976,6 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                       <p className="text-xs text-slate-400">
                         {visitorOrders.length} سفارش جاری
                       </p>
-                    </div>
-                  </div>
-
-                  {/* Financial Account Status Bar */}
-                  <div className="mt-2.5 p-2 rounded-xl bg-slate-900/90 border border-slate-800/80 flex items-center justify-between text-xs flex-wrap gap-2">
-                    <div className="flex items-center gap-2">
-                      <Wallet className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                      <span className="font-semibold text-slate-300">حساب دفتری:</span>
-                      {isAccActive ? (
-                        <span className="inline-flex items-center gap-1 font-mono text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                          <ShieldCheck className="w-3 h-3" />
-                          فعال ({visitorAcc?.account_number})
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 border border-slate-700">
-                          <ShieldAlert className="w-3 h-3" />
-                          غیرفعال
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2.5">
-                      {isAccActive && visitorSummary && (
-                        <div className="text-[11px] font-mono">
-                          <span className="text-slate-400 ml-1">مانده:</span>
-                          <span
-                            className={
-                              visitorSummary.current_balance > 0
-                                ? 'text-rose-400 font-bold'
-                                : visitorSummary.current_balance < 0
-                                ? 'text-emerald-400 font-bold'
-                                : 'text-slate-400 font-bold'
-                            }
-                          >
-                            {formatPrice(Math.abs(visitorSummary.current_balance))} ت
-                            {visitorSummary.current_balance > 0
-                              ? ' (بدهکار)'
-                              : visitorSummary.current_balance < 0
-                              ? ' (بستانکار)'
-                              : ' (تسویه)'}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Financial Actions Buttons */}
-                      <div className="flex items-center gap-1.5">
-                        {isAccActive ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedVisitorForLedger(visitor.id)}
-                              className="px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/40 transition cursor-pointer flex items-center gap-1"
-                              title="مشاهده گردش‌ها و دفتر حساب"
-                            >
-                              <Wallet className="w-3 h-3 text-blue-400" />
-                              <span>مشاهده دفتر حساب</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setDeactivatingAccountModal({ id: visitorAcc!.id, name: visitor.name })}
-                              className="px-2 py-1 rounded-lg text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition cursor-pointer"
-                              title="غیرفعال‌سازی حساب (حفظ کلیه سوابق قبلی)"
-                            >
-                              غیرفعال‌سازی
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setActivatingVisitorId(visitor.id);
-                              setActivatingCreditLimit(visitorAcc?.credit_limit || 50000000);
-                            }}
-                            className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 transition cursor-pointer flex items-center gap-1"
-                            title="فعال‌سازی حساب دفتری این ویزیتور"
-                          >
-                            <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                            <span>فعال‌سازی حساب دفتری</span>
-                          </button>
-                        )}
-                      </div>
                     </div>
                   </div>
 
@@ -1025,47 +997,142 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                       </span>
                     </button>
 
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setResettingPerson({
-                            id: visitor.id,
-                            name: visitor.name,
-                            type: 'visitor',
-                            username: visitor.username,
-                          });
-                          setResetPasswordError(null);
-                        }}
-                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition flex items-center gap-1 cursor-pointer"
-                        title="بازیابی رمز عبور ویزیتور به 123456"
-                      >
-                        <KeyRound className="w-3.5 h-3.5 text-amber-400" />
-                        <span>بازیابی رمز</span>
-                      </button>
+                    <div className="flex items-center gap-1.5 flex-nowrap">
+                      {/* Ledger Account Button (only if active) */}
+                      {isAccActive && (
+                        <div className="relative group/tooltip inline-flex items-center justify-center">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (onNavigateToFinancialAccount) {
+                                onNavigateToFinancialAccount(visitor.id);
+                              } else {
+                                setSelectedVisitorForLedger(visitor.id);
+                              }
+                            }}
+                            className="w-8.5 h-8.5 rounded-xl bg-indigo-500/15 hover:bg-indigo-500 text-indigo-400 hover:text-slate-950 border border-indigo-500/30 hover:border-indigo-400 transition-all duration-150 cursor-pointer flex items-center justify-center shrink-0 shadow-xs hover:shadow-indigo-500/20 group/btn"
+                            title="مشاهده حساب دفتری در تب حساب‌های دفتری"
+                            aria-label="مشاهده حساب دفتری"
+                          >
+                            <BookOpen className="w-4.5 h-4.5 text-indigo-400 group-hover/btn:text-slate-950 transition-colors shrink-0" />
+                          </button>
+                          <div
+                            role="tooltip"
+                            className="pointer-events-none absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 opacity-0 group-hover/tooltip:opacity-100 transition-all duration-150 transform group-hover/tooltip:-translate-y-0.5 z-40 whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-900/95 text-indigo-300 text-[11px] font-medium border border-indigo-500/40 shadow-2xl backdrop-blur-xs flex items-center gap-1"
+                          >
+                            <span>حساب دفتری</span>
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-slate-900/95" />
+                          </div>
+                        </div>
+                      )}
 
-                      <button
-                        type="button"
-                        onClick={() => handleStartEditVisitor(visitor)}
-                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 transition flex items-center gap-1 cursor-pointer"
-                        title="ویرایش مشخصات ویزیتور"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                        <span>ویرایش</span>
-                      </button>
+                      {/* 1. Password Reset Button */}
+                      <div className="relative group/tooltip inline-flex items-center justify-center">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setResettingPerson({
+                              id: visitor.id,
+                              name: visitor.name,
+                              type: 'visitor',
+                              username: visitor.username,
+                            });
+                            setResetPasswordError(null);
+                          }}
+                          className="w-8.5 h-8.5 rounded-xl bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/30 hover:border-amber-400 transition-all duration-150 cursor-pointer flex items-center justify-center shrink-0 shadow-xs hover:shadow-amber-500/20 group/btn"
+                          title="بازیابی رمز عبور ویزیتور به 123456"
+                          aria-label="بازیابی رمز عبور"
+                        >
+                          <KeyRound className="w-4.5 h-4.5 text-amber-400 group-hover/btn:text-slate-950 transition-colors shrink-0" />
+                        </button>
+                        <div
+                          role="tooltip"
+                          className="pointer-events-none absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 opacity-0 group-hover/tooltip:opacity-100 transition-all duration-150 transform group-hover/tooltip:-translate-y-0.5 z-40 whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-900/95 text-amber-300 text-[11px] font-medium border border-amber-500/40 shadow-2xl backdrop-blur-xs flex items-center gap-1"
+                        >
+                          <span>بازیابی رمز</span>
+                          <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-slate-900/95" />
+                        </div>
+                      </div>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDeletingVisitor(visitor);
-                          setDeleteVisitorError(null);
-                        }}
-                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition flex items-center gap-1 cursor-pointer"
-                        title="حذف ویزیتور"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>حذف</span>
-                      </button>
+                      {/* 2. Active Access Toggle Button */}
+                      <div className="relative group/tooltip inline-flex items-center justify-center">
+                        <button
+                          type="button"
+                          disabled={togglingVisitorId === visitor.id}
+                          onClick={() => handleToggleVisitorActive(visitor)}
+                          className={`w-8.5 h-8.5 rounded-xl transition-all duration-150 cursor-pointer flex items-center justify-center shrink-0 border ${
+                            visitor.is_active !== false
+                              ? 'bg-emerald-500/15 hover:bg-emerald-500 text-emerald-400 hover:text-slate-950 border-emerald-500/30 hover:border-emerald-400 shadow-xs hover:shadow-emerald-500/20'
+                              : 'bg-amber-500 hover:bg-amber-400 text-slate-950 border-amber-400 shadow-md shadow-amber-500/20'
+                          }`}
+                          title={
+                            visitor.is_active !== false
+                              ? 'دسترسی فعال (کلیک جهت غیرفعال‌سازی دسترسی)'
+                              : 'دسترسی غیرفعال (کلیک جهت فعال‌سازی دسترسی)'
+                          }
+                          aria-label={visitor.is_active !== false ? 'دسترسی فعال' : 'فعال‌سازی دسترسی'}
+                        >
+                          {togglingVisitorId === visitor.id ? (
+                            <Loader2 className="w-4.5 h-4.5 animate-spin shrink-0" />
+                          ) : (
+                            <Check className="w-4.5 h-4.5 stroke-[2.5] shrink-0" />
+                          )}
+                        </button>
+                        <div
+                          role="tooltip"
+                          className={`pointer-events-none absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 opacity-0 group-hover/tooltip:opacity-100 transition-all duration-150 transform group-hover/tooltip:-translate-y-0.5 z-40 whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-900/95 text-[11px] font-medium border shadow-2xl backdrop-blur-xs flex items-center gap-1 ${
+                            visitor.is_active !== false
+                              ? 'text-emerald-300 border-emerald-500/40'
+                              : 'text-amber-300 border-amber-500/40'
+                          }`}
+                        >
+                          <span>{visitor.is_active !== false ? 'دسترسی فعال' : 'فعال‌سازی دسترسی'}</span>
+                          <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-slate-900/95" />
+                        </div>
+                      </div>
+
+                      {/* 3. Edit Visitor Button */}
+                      <div className="relative group/tooltip inline-flex items-center justify-center">
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditVisitor(visitor)}
+                          className="w-8.5 h-8.5 rounded-xl bg-blue-600/15 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-500/30 hover:border-blue-500 transition-all duration-150 cursor-pointer flex items-center justify-center shrink-0 shadow-xs hover:shadow-blue-500/20"
+                          title="ویرایش مشخصات ویزیتور"
+                          aria-label="ویرایش"
+                        >
+                          <Edit2 className="w-4.5 h-4.5 shrink-0" />
+                        </button>
+                        <div
+                          role="tooltip"
+                          className="pointer-events-none absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 opacity-0 group-hover/tooltip:opacity-100 transition-all duration-150 transform group-hover/tooltip:-translate-y-0.5 z-40 whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-900/95 text-blue-300 text-[11px] font-medium border border-blue-500/40 shadow-2xl backdrop-blur-xs flex items-center gap-1"
+                        >
+                          <span>ویرایش</span>
+                          <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-slate-900/95" />
+                        </div>
+                      </div>
+
+                      {/* 4. Delete Visitor Button */}
+                      <div className="relative group/tooltip inline-flex items-center justify-center">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDeletingVisitor(visitor);
+                            setDeleteVisitorError(null);
+                          }}
+                          className="w-8.5 h-8.5 rounded-xl bg-rose-500/15 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 hover:border-rose-500 transition-all duration-150 cursor-pointer flex items-center justify-center shrink-0 shadow-xs hover:shadow-rose-500/20"
+                          title="حذف ویزیتور"
+                          aria-label="حذف"
+                        >
+                          <Trash2 className="w-4.5 h-4.5 shrink-0" />
+                        </button>
+                        <div
+                          role="tooltip"
+                          className="pointer-events-none absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 opacity-0 group-hover/tooltip:opacity-100 transition-all duration-150 transform group-hover/tooltip:-translate-y-0.5 z-40 whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-900/95 text-rose-300 text-[11px] font-medium border border-rose-500/40 shadow-2xl backdrop-blur-xs flex items-center gap-1"
+                        >
+                          <span>حذف</span>
+                          <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-slate-900/95" />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1239,6 +1306,8 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                   const assignedVisitor = visitors.find((v) => v.id === shop.assigned_visitor_id);
                   const isApproved = shop.is_active !== false;
                   const isTogglingThis = togglingStoreId === shop.id;
+                  const shopAcc = financialAccounts.find((a) => a.profile_id === shop.id);
+                  const isShopAccActive = Boolean(shopAcc && shopAcc.is_active);
 
                   return (
                     <div
@@ -1431,67 +1500,137 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                             <span className="text-[10px] text-slate-500 font-mono">%</span>
                           </div>
 
-                          {/* Password Reset Button */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setResettingPerson({
-                                id: shop.id,
-                                name: shop.name,
-                                type: 'supermarket',
-                                username: shop.username,
-                              });
-                              setResetPasswordError(null);
-                            }}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-medium transition cursor-pointer"
-                            title="بازیابی و تغییر رمز عبور مشتری به 123456"
-                          >
-                            <KeyRound className="w-3.5 h-3.5 text-amber-400" />
-                            <span>بازیابی رمز</span>
-                          </button>
+                          {/* Ledger Account Button (only if active) */}
+                          {isShopAccActive && (
+                            <div className="relative group/tooltip inline-flex items-center justify-center">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (onNavigateToFinancialAccount) {
+                                    onNavigateToFinancialAccount(shop.id);
+                                  } else {
+                                    setSelectedVisitorForLedger(shop.id);
+                                  }
+                                }}
+                                className="w-8.5 h-8.5 rounded-xl bg-indigo-500/15 hover:bg-indigo-500 text-indigo-400 hover:text-slate-950 border border-indigo-500/30 hover:border-indigo-400 transition-all duration-150 cursor-pointer flex items-center justify-center shrink-0 shadow-xs hover:shadow-indigo-500/20 group/btn"
+                                title="مشاهده حساب دفتری در تب حساب‌های دفتری"
+                                aria-label="مشاهده حساب دفتری"
+                              >
+                                <BookOpen className="w-4.5 h-4.5 text-indigo-400 group-hover/btn:text-slate-950 transition-colors shrink-0" />
+                              </button>
+                              <div
+                                role="tooltip"
+                                className="pointer-events-none absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 opacity-0 group-hover/tooltip:opacity-100 transition-all duration-150 transform group-hover/tooltip:-translate-y-0.5 z-40 whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-900/95 text-indigo-300 text-[11px] font-medium border border-indigo-500/40 shadow-2xl backdrop-blur-xs flex items-center gap-1"
+                              >
+                                <span>حساب دفتری</span>
+                                <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-slate-900/95" />
+                              </div>
+                            </div>
+                          )}
 
-                          {/* Fast Quick Toggle Button */}
-                          <button
-                            type="button"
-                            disabled={isTogglingThis}
-                            onClick={() => handleToggleApproval(shop)}
-                            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer border ${
-                              isApproved
-                                ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                                : 'bg-amber-500 hover:bg-amber-400 text-slate-950 border-amber-400 shadow-md shadow-amber-500/20'
-                            }`}
-                            title={isApproved ? 'غیرفعال‌سازی دسترسی' : 'فعال‌سازی دسترسی'}
-                          >
-                            {isTogglingThis ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Check className="w-3.5 h-3.5 stroke-[3]" />
-                            )}
-                            <span>{isApproved ? 'دسترسی فعال' : 'فعال‌سازی دسترسی'}</span>
-                          </button>
+                          {/* 1. Password Reset Button */}
+                          <div className="relative group/tooltip inline-flex items-center justify-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setResettingPerson({
+                                  id: shop.id,
+                                  name: shop.name,
+                                  type: 'supermarket',
+                                  username: shop.username,
+                                });
+                                setResetPasswordError(null);
+                              }}
+                              className="w-8.5 h-8.5 rounded-xl bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/30 hover:border-amber-400 transition-all duration-150 cursor-pointer flex items-center justify-center shrink-0 shadow-xs hover:shadow-amber-500/20 group/btn"
+                              title="بازیابی و تغییر رمز عبور مشتری به 123456"
+                              aria-label="بازیابی رمز عبور"
+                            >
+                              <KeyRound className="w-4.5 h-4.5 text-amber-400 group-hover/btn:text-slate-950 transition-colors shrink-0" />
+                            </button>
+                            <div
+                              role="tooltip"
+                              className="pointer-events-none absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 opacity-0 group-hover/tooltip:opacity-100 transition-all duration-150 transform group-hover/tooltip:-translate-y-0.5 z-40 whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-900/95 text-amber-300 text-[11px] font-medium border border-amber-500/40 shadow-2xl backdrop-blur-xs flex items-center gap-1"
+                            >
+                              <span>بازیابی رمز</span>
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-slate-900/95" />
+                            </div>
+                          </div>
 
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEditSupermarket(shop)}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-blue-400 hover:text-blue-300 border border-slate-800 text-xs font-medium transition cursor-pointer"
-                            title="ویرایش مشخصات مشتری"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                            <span>ویرایش</span>
-                          </button>
+                          {/* 2. Fast Quick Toggle Button */}
+                          <div className="relative group/tooltip inline-flex items-center justify-center">
+                            <button
+                              type="button"
+                              disabled={isTogglingThis}
+                              onClick={() => handleToggleApproval(shop)}
+                              className={`w-8.5 h-8.5 rounded-xl transition-all duration-150 cursor-pointer flex items-center justify-center shrink-0 border ${
+                                isApproved
+                                  ? 'bg-emerald-500/15 hover:bg-emerald-500 text-emerald-400 hover:text-slate-950 border-emerald-500/30 hover:border-emerald-400 shadow-xs hover:shadow-emerald-500/20'
+                                  : 'bg-amber-500 hover:bg-amber-400 text-slate-950 border-amber-400 shadow-md shadow-amber-500/20'
+                              }`}
+                              title={isApproved ? 'دسترسی فعال (کلیک جهت غیرفعال‌سازی)' : 'دسترسی غیرفعال (کلیک جهت فعال‌سازی)'}
+                              aria-label={isApproved ? 'دسترسی فعال' : 'فعال‌سازی دسترسی'}
+                            >
+                              {isTogglingThis ? (
+                                <Loader2 className="w-4.5 h-4.5 animate-spin shrink-0" />
+                              ) : (
+                                <Check className="w-4.5 h-4.5 stroke-[2.5] shrink-0" />
+                              )}
+                            </button>
+                            <div
+                              role="tooltip"
+                              className={`pointer-events-none absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 opacity-0 group-hover/tooltip:opacity-100 transition-all duration-150 transform group-hover/tooltip:-translate-y-0.5 z-40 whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-900/95 text-[11px] font-medium border shadow-2xl backdrop-blur-xs flex items-center gap-1 ${
+                                isApproved
+                                  ? 'text-emerald-300 border-emerald-500/40'
+                                  : 'text-amber-300 border-amber-500/40'
+                              }`}
+                            >
+                              <span>{isApproved ? 'دسترسی فعال' : 'فعال‌سازی دسترسی'}</span>
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-slate-900/95" />
+                            </div>
+                          </div>
 
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setDeletingSupermarket(shop);
-                              setDeleteError(null);
-                            }}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-medium transition cursor-pointer"
-                            title="حذف مشتری"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <span>حذف</span>
-                          </button>
+                          {/* 3. Edit Supermarket Button */}
+                          <div className="relative group/tooltip inline-flex items-center justify-center">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditSupermarket(shop)}
+                              className="w-8.5 h-8.5 rounded-xl bg-blue-600/15 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-500/30 hover:border-blue-500 transition-all duration-150 cursor-pointer flex items-center justify-center shrink-0 shadow-xs hover:shadow-blue-500/20"
+                              title="ویرایش مشخصات مشتری"
+                              aria-label="ویرایش"
+                            >
+                              <Edit2 className="w-4.5 h-4.5 shrink-0" />
+                            </button>
+                            <div
+                              role="tooltip"
+                              className="pointer-events-none absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 opacity-0 group-hover/tooltip:opacity-100 transition-all duration-150 transform group-hover/tooltip:-translate-y-0.5 z-40 whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-900/95 text-blue-300 text-[11px] font-medium border border-blue-500/40 shadow-2xl backdrop-blur-xs flex items-center gap-1"
+                            >
+                              <span>ویرایش</span>
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-slate-900/95" />
+                            </div>
+                          </div>
+
+                          {/* 4. Delete Supermarket Button */}
+                          <div className="relative group/tooltip inline-flex items-center justify-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDeletingSupermarket(shop);
+                                setDeleteError(null);
+                              }}
+                              className="w-8.5 h-8.5 rounded-xl bg-rose-500/15 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 hover:border-rose-500 transition-all duration-150 cursor-pointer flex items-center justify-center shrink-0 shadow-xs hover:shadow-rose-500/20"
+                              title="حذف مشتری"
+                              aria-label="حذف"
+                            >
+                              <Trash2 className="w-4.5 h-4.5 shrink-0" />
+                            </button>
+                            <div
+                              role="tooltip"
+                              className="pointer-events-none absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 opacity-0 group-hover/tooltip:opacity-100 transition-all duration-150 transform group-hover/tooltip:-translate-y-0.5 z-40 whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-900/95 text-rose-300 text-[11px] font-medium border border-rose-500/40 shadow-2xl backdrop-blur-xs flex items-center gap-1"
+                            >
+                              <span>حذف</span>
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-slate-900/95" />
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>

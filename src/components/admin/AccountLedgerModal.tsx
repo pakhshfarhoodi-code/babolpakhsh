@@ -502,10 +502,10 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
         </div>
 
         {/* Account Summary Cards */}
-        <div className="p-4 sm:p-5 bg-slate-900 border-b border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-          {/* Card 1: Current Net Balance */}
+        <div className="p-4 sm:p-5 bg-slate-900 border-b border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+          {/* Card 1: Unified Net Balance (مانده حساب) */}
           <div
-            className={`p-3.5 rounded-2xl border ${
+            className={`p-4 rounded-2xl border transition-all flex flex-col justify-between ${
               isDebtor
                 ? 'bg-rose-950/20 border-rose-500/40 text-rose-300'
                 : isCreditor
@@ -513,57 +513,86 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
                 : 'bg-slate-950 border-slate-800 text-slate-300'
             }`}
           >
-            <div className="flex items-center justify-between text-xs font-semibold mb-1">
-              <span>مانده کل حساب</span>
-              {isDebtor ? (
-                <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-500/20 font-bold">بدهکار به شرکت</span>
-              ) : isCreditor ? (
-                <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 font-bold">بستانکار از شرکت</span>
-              ) : (
-                <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 font-bold">تسویه کامل</span>
-              )}
+            <div>
+              <div className="flex items-center justify-between text-xs font-semibold mb-1.5">
+                <span className="text-slate-300 flex items-center gap-1.5">
+                  <Wallet className="w-4 h-4 text-blue-400" />
+                  مانده حساب
+                </span>
+                {isDebtor ? (
+                  <span className="text-[11px] px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/30 font-bold">
+                    بدهکار به شرکت
+                  </span>
+                ) : isCreditor ? (
+                  <span className="text-[11px] px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
+                    بستانکار از شرکت
+                  </span>
+                ) : (
+                  <span className="text-[11px] px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700 font-bold">
+                    تسویه کامل
+                  </span>
+                )}
+              </div>
+
+              <div className="my-1.5">
+                {isDebtor ? (
+                  <div className="text-xl sm:text-2xl font-black font-mono text-rose-400 flex items-baseline gap-1.5 flex-wrap">
+                    <span>{formatPrice(currentBalance)}</span>
+                    <span className="text-sm font-bold text-rose-400">تومان بدهکاری</span>
+                  </div>
+                ) : isCreditor ? (
+                  <div className="text-xl sm:text-2xl font-black font-mono text-emerald-400 flex items-baseline gap-1.5 flex-wrap">
+                    <span>{formatPrice(Math.abs(currentBalance))}</span>
+                    <span className="text-sm font-bold text-emerald-400">تومان بستانکاری</span>
+                  </div>
+                ) : (
+                  <div className="text-xl sm:text-2xl font-black font-mono text-emerald-400 flex items-baseline gap-1.5">
+                    <span>تسویه</span>
+                    <span className="text-xs font-normal text-slate-400">(مانده حساب: ۰ تومان)</span>
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="text-lg sm:text-xl font-black font-mono">
-              {formatPrice(Math.abs(currentBalance))}
-              <span className="text-xs font-normal mr-1">تومان</span>
+
+            {/* Combined breakdown summary of debit vs credit */}
+            <div className="flex items-center justify-between flex-wrap gap-2 text-[11px] text-slate-400 pt-2.5 mt-2 border-t border-slate-800/80">
+              <span className="flex items-center gap-1">
+                <span className="text-slate-500">جمع بدهکاری (فاکتورها و...):</span>
+                <span className="font-mono text-rose-400 font-semibold">{formatPrice(summary?.total_debit ?? 0)} تومان</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="text-slate-500">جمع بستانکاری (پرداخت‌ها):</span>
+                <span className="font-mono text-emerald-400 font-semibold">{formatPrice(summary?.total_credit ?? 0)} تومان</span>
+              </span>
             </div>
           </div>
 
-          {/* Card 2: Total Debit */}
-          <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 text-slate-200">
-            <div className="flex items-center justify-between text-xs font-semibold text-slate-400 mb-1">
-              <span>جمع بدهکاری (فاکتورها و...)</span>
-              <ArrowDownLeft className="w-3.5 h-3.5 text-rose-400" />
+          {/* Card 2: Pending Cheques Amount */}
+          <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-slate-200 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-xs font-semibold text-slate-400 mb-1.5">
+                <span className="text-slate-300 flex items-center gap-1.5">
+                  <Clock className="w-4 h-4 text-amber-400" />
+                  چک‌های در جریان وصول
+                </span>
+                <span className="text-[11px] px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold">
+                  نزد صندوق
+                </span>
+              </div>
+              <div className="my-1.5 text-xl sm:text-2xl font-black font-mono text-amber-400 flex items-baseline gap-1.5">
+                <span>
+                  {formatPrice(
+                    accountCheques.filter((c) => c.status === 'pending').reduce((s, c) => s + Number(c.amount || 0), 0)
+                  )}
+                </span>
+                <span className="text-xs font-normal text-slate-400">تومان</span>
+              </div>
             </div>
-            <div className="text-base sm:text-lg font-bold font-mono text-rose-400">
-              {formatPrice(summary?.total_debit ?? 0)}
-              <span className="text-xs font-normal text-slate-400 mr-1">تومان</span>
-            </div>
-          </div>
-
-          {/* Card 3: Total Credit */}
-          <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 text-slate-200">
-            <div className="flex items-center justify-between text-xs font-semibold text-slate-400 mb-1">
-              <span>جمع بستانکاری (پرداخت‌ها)</span>
-              <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400" />
-            </div>
-            <div className="text-base sm:text-lg font-bold font-mono text-emerald-400">
-              {formatPrice(summary?.total_credit ?? 0)}
-              <span className="text-xs font-normal text-slate-400 mr-1">تومان</span>
-            </div>
-          </div>
-
-          {/* Card 4: Pending Cheques Amount */}
-          <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 text-slate-200">
-            <div className="flex items-center justify-between text-xs font-semibold text-slate-400 mb-1">
-              <span>چک‌های در جریان وصول</span>
-              <Clock className="w-3.5 h-3.5 text-amber-400" />
-            </div>
-            <div className="text-base sm:text-lg font-bold font-mono text-amber-400">
-              {formatPrice(
-                accountCheques.filter((c) => c.status === 'pending').reduce((s, c) => s + Number(c.amount || 0), 0)
-              )}
-              <span className="text-xs font-normal text-slate-400 mr-1">تومان</span>
+            <div className="flex items-center justify-between text-[11px] text-slate-400 pt-2.5 mt-2 border-t border-slate-800/80">
+              <span className="text-slate-500">تعداد چک‌های ثبت‌شده در انتظار سررسید:</span>
+              <span className="font-mono text-amber-300 font-bold">
+                {accountCheques.filter((c) => c.status === 'pending').length} فقره چک
+              </span>
             </div>
           </div>
         </div>

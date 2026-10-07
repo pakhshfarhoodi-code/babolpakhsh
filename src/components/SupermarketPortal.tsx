@@ -353,31 +353,33 @@ export const SupermarketPortal: React.FC = () => {
     <div className="space-y-3 pb-20 lg:pb-8 max-w-[1600px] mx-auto">
       {/* 1. Approval Status Banners */}
       {approvalStatus === 'pending' && (
-        <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs font-medium flex items-center gap-2.5 shadow-sm animate-in fade-in">
-          <Clock className="w-4 h-4 text-amber-400 shrink-0" />
-          <p className="leading-relaxed flex-1">
+        <div className="p-3.5 rounded-2xl bg-amber-950/80 border border-amber-500/50 text-amber-100 text-xs sm:text-sm font-semibold flex items-center gap-3 shadow-lg shadow-amber-950/30 backdrop-blur-sm animate-in fade-in">
+          <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0">
+            <Clock className="w-4.5 h-4.5 text-amber-300" />
+          </div>
+          <p className="leading-relaxed flex-1 text-amber-100">
             برای ثبت اولین سفارش، حساب کاربری شما نیازمند احراز و تایید توسط ادمین است. پس از تایید حساب کاربری شما، به شماره ثبت‌شده در سیستم اطلاع‌رسانی خواهد شد.
           </p>
         </div>
       )}
 
       {approvalStatus === 'rejected' && (
-        <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-xs space-y-1.5 shadow-sm animate-in fade-in">
-          <div className="flex items-center gap-2 font-bold text-rose-300">
-            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+        <div className="p-3.5 rounded-2xl bg-rose-950/80 border border-rose-500/50 text-rose-100 text-xs space-y-1.5 shadow-lg shadow-rose-950/30 backdrop-blur-sm animate-in fade-in">
+          <div className="flex items-center gap-2 font-bold text-rose-200">
+            <AlertCircle className="w-4.5 h-4.5 text-rose-400 shrink-0" />
             <span>درخواست احراز حساب شما تایید نشد.</span>
           </div>
           {currentStore?.approval_note && (
-            <p className="text-xs text-rose-300/90 pr-6 leading-relaxed">
+            <p className="text-xs text-rose-200 leading-relaxed pr-6">
               علت: {currentStore.approval_note}
             </p>
           )}
           {centralDistributorPhone && (
-            <p className="text-xs text-rose-300/90 pr-6 leading-relaxed">
+            <p className="text-xs text-rose-200 leading-relaxed pr-6">
               برای پیگیری با{' '}
               <a
                 href={`tel:${centralDistributorPhone}`}
-                className="underline font-mono dir-ltr font-bold text-rose-200 hover:text-white"
+                className="underline font-mono dir-ltr font-bold text-white hover:text-rose-200"
               >
                 {centralDistributorPhone}
               </a>{' '}

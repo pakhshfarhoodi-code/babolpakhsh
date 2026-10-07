@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { formatPrice } from './helpers';
 import { AccountLedgerModal } from './AccountLedgerModal';
@@ -50,6 +50,21 @@ export const FinancialAccountsTab: React.FC<FinancialAccountsTabProps> = ({
 
   // Ledger Modal State
   const [selectedProfileIdForLedger, setSelectedProfileIdForLedger] = useState<string | null>(initialProfileId || null);
+
+  useEffect(() => {
+    if (initialProfileId) {
+      setSelectedProfileIdForLedger(initialProfileId);
+      const isSupermarket = supermarkets.some((s) => s.id === initialProfileId);
+      if (isSupermarket) {
+        setRoleFilter('supermarket');
+      } else {
+        const isVisitor = visitors.some((v) => v.id === initialProfileId);
+        if (isVisitor) {
+          setRoleFilter('visitor');
+        }
+      }
+    }
+  }, [initialProfileId, supermarkets, visitors]);
 
   // Quick Action Modal for Activation
   const [activatingProfileId, setActivatingProfileId] = useState<string | null>(null);

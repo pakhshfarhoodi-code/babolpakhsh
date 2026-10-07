@@ -136,6 +136,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setActiveTab('team');
   };
 
+  const [selectedFinancialProfileId, setSelectedFinancialProfileId] = useState<string | null>(null);
+  const [financialNavKey, setFinancialNavKey] = useState(0);
+
+  const handleNavigateToFinancialAccount = (profileId: string) => {
+    setSelectedFinancialProfileId(profileId);
+    setFinancialNavKey((k) => k + 1);
+    setActiveTab('financial_accounts');
+  };
+
   const navItems = [
     {
       id: 'overview' as const,
@@ -408,12 +417,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           supermarkets={supermarkets}
           orders={orders}
           initialStoreStatusFilter={teamStoreFilterHint}
+          onNavigateToFinancialAccount={handleNavigateToFinancialAccount}
         />
       )}
 
       {/* Tab: Financial Accounts (حساب‌های دفتری) */}
       {activeTab === 'financial_accounts' && (
-        <FinancialAccountsTab />
+        <FinancialAccountsTab
+          key={financialNavKey}
+          initialProfileId={selectedFinancialProfileId}
+        />
       )}
 
       {/* Tab 5: Reports */}

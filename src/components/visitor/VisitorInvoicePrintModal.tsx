@@ -47,15 +47,15 @@ export const VisitorInvoicePrintModal: React.FC<VisitorInvoicePrintModalProps> =
   const handlePrint = () => {
     if (!printRef.current) return;
 
-    // Validation: Block print if any item has missing/zero visitor_price
+    // Validation: Block print if any item has missing/zero price
     const invalidItem = (bill.items || []).find((it) => {
-      const prod = products.find((p) => p.id === it.product_id);
-      const vp = Number(prod?.visitor_price ?? (it.visitor_price ?? 0));
+      const prod = products.find((p) => p.id === it.product_id || p.name === it.product_name);
+      const vp = Number(prod?.visitor_price ?? (it.visitor_price ?? (prod?.price ?? 0)));
       return vp <= 0;
     });
 
     if (invalidItem) {
-      showToast(`قیمت خرید ویزیتور برای کالای «${invalidItem.product_name}» تعریف نشده است.`, 'error');
+      showToast(`قیمت برای کالای «${invalidItem.product_name}» تعریف نشده است.`, 'error');
       return;
     }
 

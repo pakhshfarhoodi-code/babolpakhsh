@@ -22,6 +22,7 @@ import {
   getUnitPriceFromOrderItem,
   getItemUnitPriceAndTotal,
   computeLine,
+  findProductMatch,
 } from '../../utils/orderLine';
 import { Building2, Store } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
@@ -266,12 +267,13 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
   const manualDiscountPercent = order.discount_status === 'approved' ? (order.discount_percent || 0) : 0;
   const totalDiscountPercent = Math.min(100, Math.max(0, pickupDiscountPercent + founderDiscountPercent + manualDiscountPercent));
 
-  const isVisitorOrder =
-    !isDirectOrder || order.order_channel === 'visitor_field' || order.order_source === 'visitor';
+  const isSelfOrder = Boolean(order.supermarket_id?.startsWith('self-'));
+  // Store customer invoices should always use store selling price; only visitor self-orders use visitor purchase price
+  const isVisitorOrder = isSelfOrder;
 
   // originalSubtotal is the sum of raw item totals before discount
   const originalSubtotal = rawItems.reduce((sum, item) => {
-    const product = products.find((p) => p.id === item.product_id);
+    const product = findProductMatch(item, products);
     const { total } = getItemUnitPriceAndTotal(item, product, isVisitorOrder);
     return sum + total;
   }, 0);
@@ -280,7 +282,7 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
 
   // Calculate discounted row totals and sum them up with computeLine
   const discountedSubtotal = rawItems.reduce((sum, item) => {
-    const product = products.find((p) => p.id === item.product_id);
+    const product = findProductMatch(item, products);
     const { pack, unitPrice } = getItemUnitPriceAndTotal(item, product, isVisitorOrder);
     const { total } = computeLine({
       quantity: Number(item.quantity) || 0,
@@ -330,7 +332,6 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
 
   const hasAnySummaryInfo = Boolean(
     show.summary_items_count ||
-    show.summary_subtotal ||
     hasOverallDiscount ||
     (show.summary_vat && hasVat) ||
     show.summary_final_total
@@ -800,8 +801,8 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
   };
 
   const renderItemRow = (item: typeof rawItems[0], globalIndex: number) => {
-    // Lookup missing items_per_package and unit from AppContext products
-    const product = products.find((p) => p.id === item.product_id);
+    // Lookup missing items_per_package and unit from AppContext products (matching by id or name)
+    const product = findProductMatch(item, products);
     const { pack, unitPrice } = getItemUnitPriceAndTotal(item, product, isVisitorOrder);
     const packaged = isPackaged(pack);
     const rawUnit = (item as any).unit || product?.unit || settings.default_unit_name || 'عدد';
@@ -994,66 +995,71 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
   const renderTotalsSummary = () => {
     if (!hasAnySummaryInfo) return null;
 
+    const hasTopRows = Boolean(
+      show.summary_items_count ||
+      (pickupDiscountPercent > 0 && pickupDiscountAmount > 0) ||
+      (founderDiscountPercent > 0 && founderDiscountAmount > 0) ||
+      (manualDiscountPercent > 0 && manualDiscountAmount > 0) ||
+      (show.summary_vat && hasVat && vatAmount > 0)
+    );
+
     return (
       <div
-        className={`${cardBorderClass} ${cardPaddingClass} bg-slate-50/50 flex flex-col justify-between ${totalsFontClass} break-inside-avoid`}
+        className={`${cardBorderClass} ${cardPaddingClass} bg-slate-50/50 flex flex-col ${totalsFontClass} break-inside-avoid`}
       >
-        <div className="space-y-1.5">
-          {show.summary_items_count && (
-            <div className="flex items-center justify-between text-slate-600">
-              <span className={cardLabelClass}>تعداد کل اقلام سفارش:</span>
-              <span className={`num-fa ${cardValueClass}`}>{totalItemsCount.toLocaleString('fa-IR')}</span>
-            </div>
-          )}
+        {hasTopRows && (
+          <div className="space-y-1.5 mb-1.5">
+            {show.summary_items_count && (
+              <div className="flex items-center justify-between text-slate-600">
+                <span className={cardLabelClass}>تعداد کل اقلام سفارش:</span>
+                <span className={`num-fa ${cardValueClass}`}>{totalItemsCount.toLocaleString('fa-IR')}</span>
+              </div>
+            )}
 
-          {show.summary_subtotal && (
-            <div className="flex items-center justify-between text-slate-700">
-              <span className={cardLabelClass}>جمع کل اقلام (قبل از تخفیف):</span>
-              <span className={`num-fa ${cardValueClass}`}>
-                {formatMoney(subtotal)} {currencyLabel}
-              </span>
-            </div>
-          )}
+            {pickupDiscountPercent > 0 && pickupDiscountAmount > 0 && (
+              <div className="flex items-center justify-between text-blue-700 font-medium">
+                <span className={cardLabelClass}>تخفیف تحویل درب انبار ({pickupDiscountPercent}٪):</span>
+                <span className={`num-fa font-bold text-blue-700 ${cardValueClass}`}>
+                  -{formatMoney(pickupDiscountAmount)} {currencyLabel}
+                </span>
+              </div>
+            )}
 
-          {pickupDiscountPercent > 0 && pickupDiscountAmount > 0 && (
-            <div className="flex items-center justify-between text-blue-700 font-medium">
-              <span className={cardLabelClass}>تخفیف تحویل درب انبار ({pickupDiscountPercent}٪):</span>
-              <span className={`num-fa font-bold text-blue-700 ${cardValueClass}`}>
-                -{formatMoney(pickupDiscountAmount)} {currencyLabel}
-              </span>
-            </div>
-          )}
+            {founderDiscountPercent > 0 && founderDiscountAmount > 0 && (
+              <div className="flex items-center justify-between text-purple-700 font-medium">
+                <span className={cardLabelClass}>تخفیف ۱۰۰ نفر اول ({founderDiscountPercent}٪):</span>
+                <span className={`num-fa font-bold text-purple-700 ${cardValueClass}`}>
+                  -{formatMoney(founderDiscountAmount)} {currencyLabel}
+                </span>
+              </div>
+            )}
 
-          {founderDiscountPercent > 0 && founderDiscountAmount > 0 && (
-            <div className="flex items-center justify-between text-purple-700 font-medium">
-              <span className={cardLabelClass}>تخفیف ۱۰۰ نفر اول ({founderDiscountPercent}٪):</span>
-              <span className={`num-fa font-bold text-purple-700 ${cardValueClass}`}>
-                -{formatMoney(founderDiscountAmount)} {currencyLabel}
-              </span>
-            </div>
-          )}
+            {manualDiscountPercent > 0 && manualDiscountAmount > 0 && (
+              <div className="flex items-center justify-between text-amber-700 font-medium">
+                <span className={cardLabelClass}>تخفیف دستی ({manualDiscountPercent}٪):</span>
+                <span className={`num-fa font-bold text-amber-700 ${cardValueClass}`}>
+                  -{formatMoney(manualDiscountAmount)} {currencyLabel}
+                </span>
+              </div>
+            )}
 
-          {manualDiscountPercent > 0 && manualDiscountAmount > 0 && (
-            <div className="flex items-center justify-between text-amber-700 font-medium">
-              <span className={cardLabelClass}>تخفیف دستی ({manualDiscountPercent}٪):</span>
-              <span className={`num-fa font-bold text-amber-700 ${cardValueClass}`}>
-                -{formatMoney(manualDiscountAmount)} {currencyLabel}
-              </span>
-            </div>
-          )}
-
-          {show.summary_vat && hasVat && vatAmount > 0 && (
-            <div className="flex items-center justify-between text-slate-700">
-              <span className={cardLabelClass}>مالیات و ارزش افزوده ({vatPercent}٪):</span>
-              <span className={`num-fa ${cardValueClass}`}>
-                {formatMoney(vatAmount)} {currencyLabel}
-              </span>
-            </div>
-          )}
-        </div>
+            {show.summary_vat && hasVat && vatAmount > 0 && (
+              <div className="flex items-center justify-between text-slate-700">
+                <span className={cardLabelClass}>مالیات و ارزش افزوده ({vatPercent}٪):</span>
+                <span className={`num-fa ${cardValueClass}`}>
+                  {formatMoney(vatAmount)} {currencyLabel}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
 
         {show.summary_final_total && (
-          <div className="mt-2 pt-2 border-t-2 border-slate-800 flex items-center justify-between bg-slate-100/80 -mx-2.5 -mb-2.5 p-2.5 rounded-b-lg">
+          <div
+            className={`${
+              hasTopRows ? 'mt-1 pt-1.5 border-t border-slate-300' : ''
+            } flex items-center justify-between bg-slate-100/90 p-2 rounded`}
+          >
             <span className="font-black text-slate-950 text-xs sm:text-sm">مبلغ قابل پرداخت:</span>
             <span className="num-fa font-black text-slate-950 text-sm sm:text-base">
               {formatMoney(finalTotal)} {currencyLabel}
@@ -1333,9 +1339,9 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
         const node1 = renderSectionByKey(key1, pageIndex, itemsChunk, startIndex);
         const node2 = renderSectionByKey(key2, pageIndex, itemsChunk, startIndex);
 
-        if (node1 || node2) {
+        if (node1 && node2) {
           renderedNodes.push(
-            <div key={`pair-${key1}-${key2}-${pageIndex}`} className="grid grid-cols-2 gap-2 mb-2">
+            <div key={`pair-${key1}-${key2}-${pageIndex}`} className="grid grid-cols-2 gap-2 mb-2 items-start">
               <div
                 className={`w-full ${
                   align1 === 'center' ? 'text-center' : align1 === 'left' ? 'text-left' : 'text-right'
@@ -1350,6 +1356,21 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
               >
                 {node2}
               </div>
+            </div>
+          );
+        } else if (node1 || node2) {
+          const singleNode = node1 || node2;
+          const singleKey = node1 ? key1 : key2;
+          const singleAlign = node1 ? align1 : align2;
+          const singleWidth = widths[singleKey] || 'full';
+          renderedNodes.push(
+            <div
+              key={`single-pair-${key1}-${key2}-${pageIndex}`}
+              className={`mb-2 ${singleWidth === 'half' ? 'w-full sm:w-1/2' : 'w-full'} ${
+                singleAlign === 'center' ? 'text-center' : singleAlign === 'left' ? 'text-left' : 'text-right'
+              }`}
+            >
+              {singleNode}
             </div>
           );
         }

@@ -1379,15 +1379,6 @@ export const InvoiceSettingsTab: React.FC = () => {
                     <label className="flex items-center gap-2 cursor-pointer text-slate-300">
                       <input
                         type="checkbox"
-                        checked={form.show.summary_subtotal}
-                        onChange={(e) => handleShowChange('summary_subtotal', e.target.checked)}
-                        className="w-4 h-4 rounded text-blue-600 bg-slate-800 border-slate-700"
-                      />
-                      <span>نمایش جمع کل اقلام</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer text-slate-300">
-                      <input
-                        type="checkbox"
                         checked={form.show.summary_final_total}
                         onChange={(e) => handleShowChange('summary_final_total', e.target.checked)}
                         className="w-4 h-4 rounded text-blue-600 bg-slate-800 border-slate-700"

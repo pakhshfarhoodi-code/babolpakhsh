@@ -47,9 +47,12 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
   const settings: InvoiceSettings = contextSettings || DEFAULT_INVOICE_SETTINGS;
   const currencyLabel = settings.currency_label || 'تومان';
 
-  // Map products for fast lookup
+  // Map products for fast lookup (by id and normalized name)
   const productMap = new Map<string, Product>();
-  products.forEach((p) => productMap.set(p.id, p));
+  products.forEach((p) => {
+    productMap.set(p.id, p);
+    if (p.name) productMap.set(p.name.trim().toLowerCase(), p);
+  });
 
   // Map orders for fast lookup of customer / supermarket names
   const orderMap = new Map<string, Order>();
@@ -72,10 +75,24 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
 
   if (bill.items) {
     for (const it of bill.items) {
-      const prod = productMap.get(it.product_id);
+      const prod = productMap.get(it.product_id) || (it.product_name ? productMap.get(it.product_name.trim().toLowerCase()) : undefined);
       const pack = getPackSize(it.items_per_package || prod?.items_per_package);
       const baseUnit = getBaseUnit(it.unit || prod?.unit, pack);
-      const vPrice = Number(prod?.visitor_price ?? (it.visitor_price ?? 0));
+
+      const liveVisitorPrice = Number(prod?.visitor_price ?? 0);
+      const liveStorePrice = Number(prod?.price ?? 0);
+      const savedVisitorPrice = Number(it.visitor_price ?? 0);
+      const savedStorePrice = Number(it.store_price ?? 0);
+
+      // Prioritize live catalog price if valid (> 1), especially if saved price was a dummy placeholder (<= 1)
+      const vPrice = liveVisitorPrice > 1
+        ? liveVisitorPrice
+        : (savedVisitorPrice > 1
+            ? savedVisitorPrice
+            : (liveStorePrice > 1
+                ? liveStorePrice
+                : (savedStorePrice > 1 ? savedStorePrice : (savedVisitorPrice || liveVisitorPrice))));
+
       const lineCalc = computeLine({
         quantity: it.quantity,
         pack,
@@ -83,7 +100,8 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
         discountPercent: 0,
       });
 
-      const existing = aggregatedItemsMap.get(it.product_id);
+      const existingKey = it.product_id || (it.product_name ? it.product_name.trim().toLowerCase() : String(Math.random()));
+      const existing = aggregatedItemsMap.get(existingKey);
       if (existing) {
         existing.totalQuantity = Math.round((existing.totalQuantity + it.quantity) * 1000) / 1000;
         existing.totalAmount += lineCalc.total;
@@ -91,9 +109,9 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
           existing.notes.push([it.customer_label, it.line_note].filter(Boolean).join(' - '));
         }
       } else {
-        aggregatedItemsMap.set(it.product_id, {
-          productId: it.product_id,
-          productName: it.product_name,
+        aggregatedItemsMap.set(existingKey, {
+          productId: it.product_id || existingKey,
+          productName: it.product_name || prod?.name || 'کالای نامشخص',
           pack,
           baseUnit,
           totalQuantity: it.quantity,
@@ -106,8 +124,8 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
   }
 
   const aggregatedList = Array.from(aggregatedItemsMap.values());
-  const officialCost = Number(bill.total_visitor_cost || 0);
-  const grandTotal = officialCost > 0 ? officialCost : aggregatedList.reduce((acc, it) => acc + it.totalAmount, 0);
+  const calculatedGrandTotal = aggregatedList.reduce((acc, it) => acc + it.totalAmount, 0);
+  const grandTotal = calculatedGrandTotal > 0 ? calculatedGrandTotal : Number(bill.total_visitor_cost || 0);
   const totalUnits = Math.round(aggregatedList.reduce((acc, it) => acc + (Number(it.totalQuantity) || 0), 0) * 1000) / 1000;
 
   // Real Financial Ledger Data (Same source of truth as Admin Panel)

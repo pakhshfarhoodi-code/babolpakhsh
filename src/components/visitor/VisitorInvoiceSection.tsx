@@ -251,10 +251,13 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
     fetchOrCreateDraft();
   }, [isOpen, currentVisitor.id, visitorBills.length]);
 
-  // Active products map for details and stock
+  // Active products map for details and stock (indexed by id and lowercase name)
   const productMap = useMemo(() => {
     const map = new Map<string, Product>();
-    products.forEach((p) => map.set(p.id, p));
+    products.forEach((p) => {
+      map.set(p.id, p);
+      if (p.name) map.set(p.name.trim().toLowerCase(), p);
+    });
     return map;
   }, [products]);
 
@@ -404,10 +407,21 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
     (ord: Order) => {
       let orderTotal = 0;
       const items = (ord.items || []).map((it) => {
-        const prod = productMap.get(it.product_id);
+        const prod = productMap.get(it.product_id) || (it.name ? productMap.get(it.name.trim().toLowerCase()) : undefined);
         const pack = getPackSize(it.items_per_package || prod?.items_per_package);
         const baseUnit = getBaseUnit(it.unit || prod?.unit, pack);
-        const visitorPrice = Number(prod?.visitor_price ?? 0);
+
+        const liveVisitorPrice = Number(prod?.visitor_price ?? 0);
+        const liveStorePrice = Number(prod?.price ?? 0);
+        const rawItemPrice = Number(it.price ?? 0);
+
+        // Intelligently resolve visitor price: live visitor price if > 1, else live store price if > 1, else raw price if > 1
+        const visitorPrice = liveVisitorPrice > 1
+          ? liveVisitorPrice
+          : (liveStorePrice > 1
+              ? liveStorePrice
+              : (rawItemPrice > 1 ? rawItemPrice : (liveVisitorPrice || rawItemPrice)));
+
         const lineCalc = computeLine({
           quantity: it.quantity,
           pack,
@@ -452,10 +466,24 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
     >();
 
     for (const it of activeBill.items) {
-      const prod = productMap.get(it.product_id);
+      const prod = productMap.get(it.product_id) || (it.product_name ? productMap.get(it.product_name.trim().toLowerCase()) : undefined);
       const pack = getPackSize(it.items_per_package || prod?.items_per_package);
       const baseUnit = getBaseUnit(it.unit || prod?.unit, pack);
-      const vPrice = Number(prod?.visitor_price ?? (it.visitor_price ?? 0));
+
+      const liveVisitorPrice = Number(prod?.visitor_price ?? 0);
+      const liveStorePrice = Number(prod?.price ?? 0);
+      const savedVisitorPrice = Number(it.visitor_price ?? 0);
+      const savedStorePrice = Number(it.store_price ?? 0);
+
+      // Prioritize live catalog price if valid (> 1), especially if saved price was a dummy placeholder (<= 1)
+      const vPrice = liveVisitorPrice > 1
+        ? liveVisitorPrice
+        : (savedVisitorPrice > 1
+            ? savedVisitorPrice
+            : (liveStorePrice > 1
+                ? liveStorePrice
+                : (savedStorePrice > 1 ? savedStorePrice : (savedVisitorPrice || liveVisitorPrice))));
+
       const lineCalc = computeLine({
         quantity: it.quantity,
         pack,
@@ -463,7 +491,8 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
         discountPercent: 0,
       });
 
-      const existing = map.get(it.product_id);
+      const existingKey = it.product_id || (it.product_name ? it.product_name.trim().toLowerCase() : String(Math.random()));
+      const existing = map.get(existingKey);
       if (existing) {
         existing.totalQuantity = Math.round((existing.totalQuantity + it.quantity) * 1000) / 1000;
         existing.totalAmount += lineCalc.total;
@@ -473,9 +502,9 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
           existing.orderLinesCount += 1;
         }
       } else {
-        map.set(it.product_id, {
-          productId: it.product_id,
-          productName: it.product_name,
+        map.set(existingKey, {
+          productId: it.product_id || existingKey,
+          productName: it.product_name || prod?.name || 'کالای نامشخص',
           pack,
           baseUnit,
           unit: getUnitColumnText(pack, baseUnit),
@@ -573,11 +602,16 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
   }, [activeBill?.items]);
 
   const totalSurplusAmountInBill = useMemo(() => {
-    return currentManualLines.reduce(
-      (sum, it) => sum + it.quantity * (it.visitor_price || 0),
-      0
-    );
-  }, [currentManualLines]);
+    return currentManualLines.reduce((sum, it) => {
+      const prod = productMap.get(it.product_id) || (it.product_name ? productMap.get(it.product_name.trim().toLowerCase()) : undefined);
+      const effectivePrice = (prod?.visitor_price && prod.visitor_price > 1)
+        ? prod.visitor_price
+        : ((it.visitor_price && it.visitor_price > 1)
+            ? it.visitor_price
+            : (prod?.price && prod.price > 1 ? prod.price : (it.visitor_price || 0)));
+      return sum + it.quantity * effectivePrice;
+    }, 0);
+  }, [currentManualLines, productMap]);
 
   // Handle direct addition of surplus item (from inline form or quick cards)
   const handleAddInlineSurplus = async (productIdToAdd?: string, qtyToAdd?: number) => {
@@ -600,8 +634,9 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
     }
 
     const prod = productMap.get(prodId) || products.find((p) => p.id === prodId);
-    if (!prod?.visitor_price || prod.visitor_price <= 0) {
-      showToast(`قیمت خرید ویزیتور برای کالای «${prod?.name || 'انتخاب شده'}» تعریف نشده است.`, 'error');
+    const effectivePrice = (prod?.visitor_price && prod.visitor_price > 1) ? prod.visitor_price : (prod?.price || 0);
+    if (effectivePrice <= 0) {
+      showToast(`قیمت خرید برای کالای «${prod?.name || 'انتخاب شده'}» تعریف نشده است.`, 'error');
       return;
     }
 
@@ -647,13 +682,13 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
   // Open print modal with validation
   const handleOpenPrintModal = (billToPrint: LoadingBill) => {
     const invalidItem = (billToPrint.items || []).find((it) => {
-      const prod = productMap.get(it.product_id) || products.find((p) => p.id === it.product_id);
-      const vp = Number(prod?.visitor_price ?? (it.visitor_price ?? 0));
+      const prod = productMap.get(it.product_id) || products.find((p) => p.id === it.product_id || p.name === it.product_name);
+      const vp = Number(prod?.visitor_price ?? (it.visitor_price ?? (prod?.price ?? 0)));
       return vp <= 0;
     });
 
     if (invalidItem) {
-      showToast(`قیمت خرید ویزیتور برای کالای «${invalidItem.product_name}» تعریف نشده است.`, 'error');
+      showToast(`قیمت خرید برای کالای «${invalidItem.product_name}» تعریف نشده است.`, 'error');
       return;
     }
     setSelectedBillForPrint(billToPrint);
@@ -665,11 +700,12 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
 
     const entries = Object.entries(surplusCart).filter(([_, qty]) => Number(qty) > 0);
 
-    // Validate that all surplus items have visitor_price > 0
+    // Validate that all surplus items have a valid price (> 0)
     for (const [productId] of entries) {
       const prod = productMap.get(productId) || products.find((p) => p.id === productId);
-      if (!prod?.visitor_price || prod.visitor_price <= 0) {
-        showToast(`قیمت خرید ویزیتور برای کالای «${prod?.name || 'انتخاب شده'}» تعریف نشده است.`, 'error');
+      const effectivePrice = (prod?.visitor_price && prod.visitor_price > 1) ? prod.visitor_price : (prod?.price || 0);
+      if (effectivePrice <= 0) {
+        showToast(`قیمت خرید برای کالای «${prod?.name || 'انتخاب شده'}» تعریف نشده است.`, 'error');
         return;
       }
     }
@@ -800,15 +836,15 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
       return;
     }
 
-    // Validate all items have visitor_price > 0
+    // Validate all items have a valid price (> 0)
     const invalidItem = (activeBill.items || []).find((it) => {
-      const prod = productMap.get(it.product_id) || products.find((p) => p.id === it.product_id);
-      const vp = Number(prod?.visitor_price ?? (it.visitor_price ?? 0));
+      const prod = productMap.get(it.product_id) || products.find((p) => p.id === it.product_id || p.name === it.product_name);
+      const vp = Number(prod?.visitor_price ?? (it.visitor_price ?? (prod?.price ?? 0)));
       return vp <= 0;
     });
 
     if (invalidItem) {
-      showToast(`قیمت خرید ویزیتور برای کالای «${invalidItem.product_name}» تعریف نشده است.`, 'error');
+      showToast(`قیمت خرید برای کالای «${invalidItem.product_name}» تعریف نشده است.`, 'error');
       return;
     }
 
@@ -1145,12 +1181,12 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
                                     {ml.quantity} {item.unit}
                                   </td>
                                   <td className="py-1.5 px-4 text-left font-mono text-slate-400">
-                                    {formatPrice(ml.visitor_price || item.visitorPrice)}
+                                    {formatPrice((ml.visitor_price && ml.visitor_price > 1) ? ml.visitor_price : item.visitorPrice)}
                                   </td>
                                   <td className="py-1.5 px-4 text-left font-mono">
                                     <div className="flex items-center justify-between">
                                       <span className="text-purple-300">
-                                        {formatPrice(ml.quantity * (ml.visitor_price || item.visitorPrice))}
+                                        {formatPrice(ml.quantity * ((ml.visitor_price && ml.visitor_price > 1) ? ml.visitor_price : item.visitorPrice))}
                                       </span>
 
                                       {/* Edit & Delete actions for manual lines (only when draft) */}
@@ -1586,15 +1622,27 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
                           </div>
 
                           <div className="flex items-center gap-3">
-                            <span className="font-mono text-purple-300 font-bold">
-                              {ml.quantity} واحد
-                            </span>
-                            <span className="font-mono text-slate-400">
-                              فی: {formatPrice(ml.visitor_price || 0)}
-                            </span>
-                            <span className="font-mono font-bold text-emerald-400">
-                              {formatPrice(ml.quantity * (ml.visitor_price || 0))} ت
-                            </span>
+                            {(() => {
+                              const prod = productMap.get(ml.product_id) || (ml.product_name ? productMap.get(ml.product_name.trim().toLowerCase()) : undefined);
+                              const effectivePrice = (prod?.visitor_price && prod.visitor_price > 1)
+                                ? prod.visitor_price
+                                : ((ml.visitor_price && ml.visitor_price > 1)
+                                    ? ml.visitor_price
+                                    : (prod?.price && prod.price > 1 ? prod.price : (ml.visitor_price || 0)));
+                              return (
+                                <>
+                                  <span className="font-mono text-purple-300 font-bold">
+                                    {ml.quantity} واحد
+                                  </span>
+                                  <span className="font-mono text-slate-400">
+                                    فی: {formatPrice(effectivePrice)}
+                                  </span>
+                                  <span className="font-mono font-bold text-emerald-400">
+                                    {formatPrice(ml.quantity * effectivePrice)} ت
+                                  </span>
+                                </>
+                              );
+                            })()}
 
                             {!isReadOnly && (
                               <div className="flex items-center gap-1 border-r border-slate-800 pr-2 mr-1">

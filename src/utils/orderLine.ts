@@ -84,6 +84,27 @@ export function getUnitColumnText(pack: number | PackInput, baseUnit: string): s
 }
 
 /**
+ * Helper to match a product from product list by id or product name
+ */
+export function findProductMatch<T extends { id?: string; name?: string }>(
+  item: { product_id?: string | null; productId?: string | null; name?: string | null; product_name?: string | null },
+  products: T[]
+): T | null {
+  if (!products || products.length === 0) return null;
+  const pId = item.product_id || item.productId;
+  if (pId) {
+    const foundById = products.find((p) => p.id === pId);
+    if (foundById) return foundById;
+  }
+  const rawName = (item.name || item.product_name || '').trim().toLowerCase();
+  if (rawName) {
+    const foundByName = products.find((p) => (p.name || '').trim().toLowerCase() === rawName);
+    if (foundByName) return foundByName;
+  }
+  return null;
+}
+
+/**
  * Calculates unit price from order item accounting for carton vs single unit pricing.
  */
 export function getUnitPriceFromOrderItem(
@@ -97,31 +118,46 @@ export function getUnitPriceFromOrderItem(
   const pack = getPackSize(item.items_per_package || product?.items_per_package);
   const rawPrice = Number(item.price || 0);
 
-  if (pack <= 1) return rawPrice;
-
   // Reference base price from catalog product
   const pVisitorPrice = Number(product?.visitor_price ?? 0);
   const pStorePrice = Number(product?.price ?? 0);
 
+  // If rawPrice is dummy placeholder (<= 1) and catalog has real price, ignore rawPrice
+  const hasRealRaw = rawPrice > 1;
+
+  if (pack <= 1) {
+    if (isVisitorOrder) {
+      if (pVisitorPrice > 1) return pVisitorPrice;
+      if (pStorePrice > 1) return pStorePrice;
+      return hasRealRaw ? rawPrice : (pVisitorPrice || pStorePrice || rawPrice);
+    } else {
+      if (pStorePrice > 1) return pStorePrice;
+      if (hasRealRaw) return rawPrice;
+      return pVisitorPrice > 1 ? pVisitorPrice : rawPrice;
+    }
+  }
+
   if (isVisitorOrder) {
-    if (pVisitorPrice > 0) return pVisitorPrice;
-    if (rawPrice > 0) {
+    if (pVisitorPrice > 1) return pVisitorPrice;
+    if (pStorePrice > 1) return pStorePrice;
+    if (hasRealRaw) {
       if (pStorePrice > 0 && Math.abs(rawPrice - pStorePrice * pack) < Math.abs(rawPrice - pStorePrice)) {
         return Math.round(rawPrice / pack);
       }
       return rawPrice;
     }
+    return pVisitorPrice || pStorePrice || rawPrice;
   }
 
-  if (!isVisitorOrder && pStorePrice > 0) {
-    if (Math.abs(rawPrice - pStorePrice * pack) < Math.abs(rawPrice - pStorePrice)) {
+  if (!isVisitorOrder && pStorePrice > 1) {
+    if (hasRealRaw && Math.abs(rawPrice - pStorePrice * pack) < Math.abs(rawPrice - pStorePrice)) {
       // rawPrice is carton price
       return Math.round(rawPrice / pack);
     }
     return pStorePrice;
   }
 
-  return rawPrice;
+  return hasRealRaw ? rawPrice : (pStorePrice || pVisitorPrice || rawPrice);
 }
 
 export interface ItemPricingDetails {
@@ -140,6 +176,9 @@ export function getItemUnitPriceAndTotal(
     quantity: number;
     items_per_package?: number | string | null;
     product_id?: string;
+    productId?: string;
+    name?: string;
+    product_name?: string;
   },
   product?: { price?: number; visitor_price?: number; items_per_package?: number } | null,
   isVisitorOrder: boolean = false
@@ -150,27 +189,36 @@ export function getItemUnitPriceAndTotal(
 
   const pVisitorPrice = Number(product?.visitor_price ?? 0);
   const pStorePrice = Number(product?.price ?? 0);
+  const hasRealRaw = rawPrice > 1;
 
   let unitPrice = 0;
 
   if (isVisitorOrder) {
-    if (pVisitorPrice > 0) {
+    if (pVisitorPrice > 1) {
       unitPrice = pVisitorPrice;
-    } else if (rawPrice > 0) {
+    } else if (pStorePrice > 1) {
+      unitPrice = pStorePrice;
+    } else if (hasRealRaw) {
       if (pStorePrice > 0 && Math.abs(rawPrice - pStorePrice * pack) < Math.abs(rawPrice - pStorePrice)) {
         unitPrice = Math.round(rawPrice / pack);
       } else {
         unitPrice = rawPrice;
       }
+    } else {
+      unitPrice = pVisitorPrice > 0 ? pVisitorPrice : (pStorePrice > 0 ? pStorePrice : rawPrice);
     }
   } else {
-    if (pStorePrice > 0) {
-      if (rawPrice > 0 && Math.abs(rawPrice - pStorePrice * pack) < Math.abs(rawPrice - pStorePrice)) {
+    if (pStorePrice > 1) {
+      if (hasRealRaw && Math.abs(rawPrice - pStorePrice * pack) < Math.abs(rawPrice - pStorePrice)) {
         unitPrice = Math.round(rawPrice / pack);
       } else {
         unitPrice = pStorePrice;
       }
-    } else if (rawPrice > 0) {
+    } else if (hasRealRaw) {
+      unitPrice = rawPrice;
+    } else if (pVisitorPrice > 1) {
+      unitPrice = pVisitorPrice;
+    } else {
       unitPrice = rawPrice;
     }
   }

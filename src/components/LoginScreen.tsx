@@ -81,6 +81,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     }
 
     setIsSubmitting(true);
+    onLoginStart?.();
     try {
       const result = await loginWithCredentials(
         usernameInput,
@@ -91,14 +92,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       if (!result.success) {
         setErrorMessage(result.message || 'شماره یا رمز عبور نادرست است.');
         setIsSubmitting(false);
+        onLoginComplete?.();
       } else {
-        onLoginStart?.();
         setIsLoggingIn(true);
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'خطا در برقراری ارتباط با سامانه.';
       setErrorMessage(message);
       setIsSubmitting(false);
+      onLoginComplete?.();
     }
   };
 

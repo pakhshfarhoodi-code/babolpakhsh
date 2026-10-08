@@ -57,22 +57,17 @@ async function reconcileEitaaSession(): Promise<void> {
         .eq('id', session.user.id)
         .maybeSingle();
       const role = profRow?.role;
-      if (role === 'admin' || role === 'visitor') {
-        const { data: cRes, error: cErr } = await supabase.functions.invoke('eitaa-contact', {
-          body: { initData, mode: 'verify' },
-        });
-        // خطای شبکه یا سرور: نشست را حفظ کن
-        if (cErr) return;
-        if (cRes?.success) return; // حساب ایتا با همین کاربر کادر تطبیق دارد
-        if (cRes?.error === 'mismatch') {
-          // این حساب ایتا متعلق به کاربر دیگری است
-          await supabase.auth.signOut({ scope: 'local' });
-          return;
-        }
+      if (role === 'admin' || role === 'visitor' || role === 'warehouse') {
+        // نشست کادر حفظ میشود و شناسهی ایتا برای اعلانها ثبت میشود
+        supabase.functions
+          .invoke('eitaa-contact', { body: { initData } })
+          .catch((e) => console.warn('Eitaa contact failed:', e));
         return;
       }
-      // نشست متعلق به حساب دیگری است
-      await supabase.auth.signOut({ scope: 'local' });
+      // تنها در صورتی که نقش قطعاً فروشگاه باشد، نشست حساب دیگر بسته میشود
+      if (role === 'supermarket') {
+        await supabase.auth.signOut({ scope: 'local' });
+      }
     }
   } catch (e) {
     console.warn('Eitaa session reconcile failed:', e);

@@ -1341,11 +1341,6 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
                           </td>
                           <td className="py-3 px-3 text-center text-slate-400">
                             <span>{item.unit}</span>
-                            {item.pack > 1 && (
-                              <span className="text-[10px] text-indigo-400 font-bold bg-indigo-950/60 px-1.5 py-0.5 rounded border border-indigo-800/40 mr-1 inline-block">
-                                ({item.pack} عددی)
-                              </span>
-                            )}
                           </td>
                           <td className="py-3 px-3 text-center font-black text-sm text-slate-100 font-mono">
                             {item.totalQuantity}

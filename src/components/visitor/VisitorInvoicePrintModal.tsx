@@ -35,8 +35,8 @@ export const VisitorInvoicePrintModal: React.FC<VisitorInvoicePrintModalProps> =
   const { orders: contextOrders, showToast } = useApp();
   const allOrders = propOrders || contextOrders || [];
 
-  // Toggle for optional Page 2: Customer breakdown (بدون قیمت)
-  const [showCustomerBreakdown, setShowCustomerBreakdown] = useState<boolean>(true);
+  // Toggle for optional Page 2: Customer breakdown (بدون قیمت) - پیش‌فرض خاموش
+  const [showCustomerBreakdown, setShowCustomerBreakdown] = useState<boolean>(false);
 
   if (!isOpen || !bill) return null;
 

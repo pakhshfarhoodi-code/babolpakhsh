@@ -19,6 +19,14 @@ interface UseAuthProps {
   setSupermarkets: React.Dispatch<React.SetStateAction<Supermarket[]>>;
 }
 
+const getEitaaInitData = (): string => {
+  try {
+    return (window as any).Eitaa?.WebApp?.initData || '';
+  } catch {
+    return '';
+  }
+};
+
 export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }: UseAuthProps) {
   // Auth readiness state (true after getSession & profile fetch or immediately if offline/mock)
   const [authReady, setAuthReady] = useState<boolean>(!isSupabaseConfigured);
@@ -218,6 +226,26 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
           localStorage.removeItem(STORAGE_KEYS.AUTH_VISITOR_ID);
           localStorage.removeItem(STORAGE_KEYS.AUTH_SUPERMARKET_ID);
           localStorage.removeItem('alborz_auth_profile');
+
+          const eitaaInitData = getEitaaInitData();
+          if (eitaaInitData) {
+            try {
+              const { data: eitaaRes, error: eitaaErr } = await supabase.functions.invoke('eitaa-login', {
+                body: { initData: eitaaInitData },
+              });
+              if (!eitaaErr && eitaaRes?.success && eitaaRes?.token_hash) {
+                const { data: otpData, error: otpError } = await supabase.auth.verifyOtp({
+                  token_hash: eitaaRes.token_hash,
+                  type: 'magiclink',
+                });
+                if (!otpError && otpData?.user) {
+                  await syncUserProfile(otpData.user.id, ['supermarket']);
+                }
+              }
+            } catch (e) {
+              console.warn('Eitaa auto-login failed:', e);
+            }
+          }
         } else if (session?.user) {
           if (lastProfileFetchedUserIdRef.current !== session.user.id) {
             await syncUserProfile(session.user.id);
@@ -428,6 +456,13 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
           };
         }
 
+        const eitaaInitDataForLink = getEitaaInitData();
+        if (eitaaInitDataForLink && supabase) {
+          supabase.functions
+            .invoke('eitaa-link', { body: { initData: eitaaInitDataForLink } })
+            .catch((e) => console.warn('Eitaa link failed:', e));
+        }
+
         return { success: true };
       } catch (err: unknown) {
         console.warn('Login request error:', err);
@@ -460,7 +495,18 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
     }
 
     // Heavy async signOut deferred to next frame so LoginScreen renders immediately
-    setTimeout(() => {
+    setTimeout(async () => {
+      const eitaaInitDataForUnlink = getEitaaInitData();
+      if (eitaaInitDataForUnlink && supabase) {
+        try {
+          await supabase.functions.invoke('eitaa-link', {
+            body: { initData: eitaaInitDataForUnlink, action: 'unlink' },
+          });
+        } catch (e) {
+          console.warn('Eitaa unlink failed:', e);
+        }
+      }
+
       if (isSupabaseConfigured && supabase) {
         supabase.auth.signOut().catch((e) => console.warn('Supabase signOut error:', e));
       }

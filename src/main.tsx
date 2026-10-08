@@ -24,8 +24,6 @@ const eitaaApp = (window as any).Eitaa?.WebApp;
 if (eitaaApp) {
   eitaaApp.ready();
   eitaaApp.expand();
-  // TEMP: remove after testing
-  alert('ایتا شناسایی شد ✅');
 }
 
 const rootElement = document.getElementById('root');

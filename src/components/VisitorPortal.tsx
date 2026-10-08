@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext';
 import { NewOrderModal } from './NewOrderModal';
 import { SupermarketRegisterModal } from './SupermarketRegisterModal';
 import { TodayTab } from './visitor/TodayTab';
+import { MyLoadTab } from './visitor/MyLoadTab';
 import { CustomersTab } from './visitor/CustomersTab';
 import { ReportsTab } from './visitor/ReportsTab';
 import { UndeliveredModal } from './visitor/UndeliveredModal';
@@ -14,6 +15,7 @@ import {
   BarChart3,
   Plus,
   ShoppingBag,
+  PackagePlus,
 } from 'lucide-react';
 
 export const VisitorPortal: React.FC = () => {
@@ -23,6 +25,7 @@ export const VisitorPortal: React.FC = () => {
     visitors,
     supermarkets,
     orders,
+    loadingBills,
     reassignmentRequests,
     updateOrderStatus,
     requestReassignment,
@@ -51,8 +54,8 @@ export const VisitorPortal: React.FC = () => {
 
   const visitorId = currentVisitor.id;
 
-  // Tab State: 'today' (default) | 'customers' | 'reports'
-  const [activeTab, setActiveTab] = useState<'today' | 'customers' | 'reports'>('today');
+  // Tab State: 'today' (default) | 'load' | 'customers' | 'reports'
+  const [activeTab, setActiveTab] = useState<'today' | 'load' | 'customers' | 'reports'>('today');
 
   // Modals state
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
@@ -100,6 +103,35 @@ export const VisitorPortal: React.FC = () => {
     [myOrders]
   );
 
+  // Active loading bill for current visitor (last bill with status draft, pending, or approved)
+  const currentVisitorActiveBill = useMemo(() => {
+    const candidateBills = loadingBills.filter(
+      (b) =>
+        b.visitor_id === visitorId &&
+        (b.status === 'draft' || b.status === 'pending' || b.status === 'approved')
+    );
+    if (candidateBills.length === 0) return null;
+    return [...candidateBills].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )[0];
+  }, [loadingBills, visitorId]);
+
+  const billStatusDotColor = useMemo(() => {
+    if (!currentVisitorActiveBill) return null;
+    if (currentVisitorActiveBill.status === 'draft') return 'bg-amber-500';
+    if (currentVisitorActiveBill.status === 'pending') return 'bg-blue-500';
+    if (currentVisitorActiveBill.status === 'approved') return 'bg-emerald-500';
+    return null;
+  }, [currentVisitorActiveBill]);
+
+  const billStatusTitle = useMemo(() => {
+    if (!currentVisitorActiveBill) return '';
+    if (currentVisitorActiveBill.status === 'draft') return 'فاکتور پیش‌نویس';
+    if (currentVisitorActiveBill.status === 'pending') return 'فاکتور در انتظار تأیید ادمین';
+    if (currentVisitorActiveBill.status === 'approved') return 'فاکتور تأیید شده';
+    return '';
+  }, [currentVisitorActiveBill]);
+
   // Handlers
   const handleOpenNewOrder = (supermarketId?: string) => {
     setSelectedSupermarketForOrder(supermarketId);
@@ -142,6 +174,27 @@ export const VisitorPortal: React.FC = () => {
                 {pendingDeliveryOrders.length}
               </span>
             )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('load')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs transition cursor-pointer relative ${
+              activeTab === 'load'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <div className="relative flex items-center justify-center">
+              <PackagePlus className="w-4 h-4" />
+              {billStatusDotColor && (
+                <span
+                  title={billStatusTitle}
+                  className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ring-2 ring-slate-900 ${billStatusDotColor}`}
+                />
+              )}
+            </div>
+            <span>بار من</span>
           </button>
 
           <button
@@ -198,7 +251,15 @@ export const VisitorPortal: React.FC = () => {
           onOpenUndeliveredModal={(order) => setSelectedOrderForUndelivered(order)}
           onOpenDelegateModal={(order) => setSelectedOrderForDelegate(order)}
           onRespondHandover={respondToReassignment}
+          onOpenNewOrder={() => handleOpenNewOrder()}
           onCreateLoadingBill={createLoadingBill}
+        />
+      )}
+
+      {activeTab === 'load' && (
+        <MyLoadTab
+          currentVisitor={currentVisitor}
+          orders={myOrders}
         />
       )}
 
@@ -221,14 +282,14 @@ export const VisitorPortal: React.FC = () => {
         />
       )}
 
-      {/* 3. Mobile Bottom Navigation Bar & Central Floating Action Button */}
+      {/* 3. Mobile Bottom Navigation Bar */}
       <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-lg border-t border-slate-800 px-3 py-1.5 shadow-2xl safe-area-bottom">
-        <div className="flex items-center justify-around relative">
+        <div className="flex items-center justify-around">
           {/* Tab 1: Today */}
           <button
             type="button"
             onClick={() => setActiveTab('today')}
-            className={`flex flex-col items-center py-1 px-3 rounded-xl transition cursor-pointer relative ${
+            className={`flex flex-col items-center py-1 px-2.5 rounded-xl transition cursor-pointer relative ${
               activeTab === 'today' ? 'text-blue-400 font-bold' : 'text-slate-400'
             }`}
           >
@@ -243,23 +304,31 @@ export const VisitorPortal: React.FC = () => {
             <span className="text-xs mt-0.5">امروز</span>
           </button>
 
-          {/* Center Floating Action Button: + New Order */}
-          <div className="relative -top-3">
-            <button
-              type="button"
-              onClick={() => handleOpenNewOrder()}
-              className="w-12 h-12 rounded-full bg-gradient-to-tr from-blue-600 to-cyan-500 text-white shadow-lg shadow-blue-600/40 flex items-center justify-center active:scale-95 transition cursor-pointer border-2 border-slate-900"
-              title="ثبت سفارش جدید"
-            >
-              <Plus className="w-6 h-6" />
-            </button>
-          </div>
+          {/* Tab 2: Load */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('load')}
+            className={`flex flex-col items-center py-1 px-2.5 rounded-xl transition cursor-pointer relative ${
+              activeTab === 'load' ? 'text-blue-400 font-bold' : 'text-slate-400'
+            }`}
+          >
+            <div className="relative">
+              <PackagePlus className="w-5 h-5" />
+              {billStatusDotColor && (
+                <span
+                  title={billStatusTitle}
+                  className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ring-2 ring-slate-900 ${billStatusDotColor}`}
+                />
+              )}
+            </div>
+            <span className="text-xs mt-0.5">بار من</span>
+          </button>
 
-          {/* Tab 2: Customers */}
+          {/* Tab 3: Customers */}
           <button
             type="button"
             onClick={() => setActiveTab('customers')}
-            className={`flex flex-col items-center py-1 px-3 rounded-xl transition cursor-pointer ${
+            className={`flex flex-col items-center py-1 px-2.5 rounded-xl transition cursor-pointer ${
               activeTab === 'customers' ? 'text-blue-400 font-bold' : 'text-slate-400'
             }`}
           >
@@ -267,11 +336,11 @@ export const VisitorPortal: React.FC = () => {
             <span className="text-xs mt-0.5">مشتریان</span>
           </button>
 
-          {/* Tab 3: Reports */}
+          {/* Tab 4: Reports */}
           <button
             type="button"
             onClick={() => setActiveTab('reports')}
-            className={`flex flex-col items-center py-1 px-3 rounded-xl transition cursor-pointer ${
+            className={`flex flex-col items-center py-1 px-2.5 rounded-xl transition cursor-pointer ${
               activeTab === 'reports' ? 'text-blue-400 font-bold' : 'text-slate-400'
             }`}
           >

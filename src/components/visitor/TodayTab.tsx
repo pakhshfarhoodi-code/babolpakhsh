@@ -359,7 +359,9 @@ export const TodayTab: React.FC<TodayTabProps> = ({
                         </span>
                       ) : orderCustomerLabel ? (
                         <span className="text-purple-300 truncate">
-                          اقلام مازاد: {orderCustomerLabel}
+                          {orderCustomerLabel.includes('همراه ویزیتور') || orderCustomerLabel.includes('مازاد خودرو') || orderCustomerLabel === 'مازاد خودرو / مستقیم'
+                            ? 'اقلام مازاد'
+                            : `اقلام مازاد: ${orderCustomerLabel}`}
                         </span>
                       ) : (
                         <span className="text-slate-500 truncate">آدرس ثبت نشده</span>

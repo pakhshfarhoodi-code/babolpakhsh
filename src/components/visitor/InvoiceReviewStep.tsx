@@ -25,6 +25,25 @@ interface InvoiceReviewStepProps {
   onRemoveManualLine: (id: string) => void;
 }
 
+export const normalizeSurplusLabel = (label?: string | null): string => {
+  if (!label) return 'اقلام مازاد';
+  const trimmed = label.trim();
+  if (
+    trimmed === 'موجودی همراه ویزیتور' ||
+    trimmed === 'مازاد خودرو / مستقیم' ||
+    trimmed === 'مازاد خودرو' ||
+    trimmed === 'مازاد / مستقیم' ||
+    trimmed === 'خودرو / مستقیم' ||
+    trimmed === 'موجودی ویزیتور' ||
+    trimmed === 'اقلام مازاد ویزیتور' ||
+    trimmed.includes('همراه ویزیتور') ||
+    trimmed.includes('مازاد خودرو')
+  ) {
+    return 'اقلام مازاد';
+  }
+  return trimmed;
+};
+
 export const InvoiceReviewStep: React.FC<InvoiceReviewStepProps> = ({
   aggregatedItems,
   totalQuantity,
@@ -118,7 +137,7 @@ export const InvoiceReviewStep: React.FC<InvoiceReviewStepProps> = ({
                         <td className="py-1.5 px-3.5 text-purple-200" colSpan={1}>
                           <div className="flex items-center gap-2">
                             <span className="px-2 py-0.5 rounded-md bg-purple-900/40 text-purple-300 font-bold border border-purple-700/50">
-                              {ml.customer_label || 'اقلام مازاد'}
+                              {normalizeSurplusLabel(ml.customer_label)}
                             </span>
                             {ml.line_note && (
                               <span className="text-slate-400">توضیح: {ml.line_note}</span>

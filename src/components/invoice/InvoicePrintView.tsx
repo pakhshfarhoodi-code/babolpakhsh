@@ -102,11 +102,15 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
 
       const existingKey = it.product_id || (it.product_name ? it.product_name.trim().toLowerCase() : String(Math.random()));
       const existing = aggregatedItemsMap.get(existingKey);
+      const cleanCustomerLabel = it.customer_label
+        ? (it.customer_label.includes('همراه ویزیتور') || it.customer_label.includes('مازاد خودرو') || it.customer_label === 'مازاد خودرو / مستقیم' ? 'اقلام مازاد' : it.customer_label)
+        : null;
+
       if (existing) {
         existing.totalQuantity = Math.round((existing.totalQuantity + it.quantity) * 1000) / 1000;
         existing.totalAmount += lineCalc.total;
-        if (it.customer_label || it.line_note) {
-          existing.notes.push([it.customer_label, it.line_note].filter(Boolean).join(' - '));
+        if (cleanCustomerLabel || it.line_note) {
+          existing.notes.push([cleanCustomerLabel, it.line_note].filter(Boolean).join(' - '));
         }
       } else {
         aggregatedItemsMap.set(existingKey, {
@@ -117,7 +121,7 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
           totalQuantity: it.quantity,
           visitorPrice: vPrice,
           totalAmount: lineCalc.total,
-          notes: it.customer_label || it.line_note ? [[it.customer_label, it.line_note].filter(Boolean).join(' - ')] : [],
+          notes: cleanCustomerLabel || it.line_note ? [[cleanCustomerLabel, it.line_note].filter(Boolean).join(' - ')] : [],
         });
       }
     }
@@ -157,11 +161,14 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
         const relatedOrder = orderMap.get(it.order_id);
         customerName = relatedOrder?.supermarket_name || it.customer_label || `سفارش سامانه ${it.order_id}`;
       } else if (it.customer_label) {
-        groupKey = `manual-${it.customer_label}`;
-        customerName = it.customer_label;
+        const cleanLabel = (it.customer_label.includes('همراه ویزیتور') || it.customer_label.includes('مازاد خودرو') || it.customer_label === 'مازاد خودرو / مستقیم')
+          ? 'اقلام مازاد'
+          : it.customer_label;
+        groupKey = `manual-${cleanLabel}`;
+        customerName = cleanLabel;
       } else {
         groupKey = `manual-general-${src}`;
-        customerName = src === 'admin_manual' ? 'توافق تلفنی / حضوری ادمین' : 'اقلام مازاد ویزیتور';
+        customerName = src === 'admin_manual' ? 'توافق تلفنی / حضوری ادمین' : 'اقلام مازاد';
       }
 
       const existing = customerGroupsMap.get(groupKey);

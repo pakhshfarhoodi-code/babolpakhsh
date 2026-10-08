@@ -664,7 +664,7 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
     }
 
     setIsSubmittingSurplus(true);
-    const finalLabel = surplusCustomerLabel.trim() || 'موجودی همراه ویزیتور';
+    const finalLabel = surplusCustomerLabel.trim() || 'اقلام مازاد';
 
     let successCount = 0;
 
@@ -1158,7 +1158,7 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
                 </label>
                 <input
                   type="text"
-                  placeholder="در صورت خالی بودن، «موجودی همراه ویزیتور» ثبت می‌شود"
+                  placeholder="در صورت خالی بودن، «اقلام مازاد» ثبت می‌شود"
                   value={surplusCustomerLabel}
                   onChange={(e) => setSurplusCustomerLabel(e.target.value)}
                   className="flex-1 h-9 px-3 rounded-xl bg-slate-950 border border-slate-700 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-purple-500"

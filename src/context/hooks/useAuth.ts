@@ -556,6 +556,8 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
       assigned_visitor_id?: string;
       username?: string;
       password: string;
+      latitude?: number;
+      longitude?: number;
     }): Promise<{ success: boolean; message: string; supermarket?: Supermarket }> => {
       const trimmedName = data.name.trim();
       const trimmedOwner = (data.owner || '').trim();
@@ -563,6 +565,7 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
       const trimmedAddress = (data.address || '').trim();
       const assignedVisitorId = data.assigned_visitor_id || 'direct';
       const cleanPassword = normalizeDigits(data.password.trim());
+      const { latitude, longitude } = data;
 
       if (!trimmedName) {
         return { success: false, message: 'لطفاً نام فروشگاه را وارد نمایید.' };
@@ -600,6 +603,8 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
             is_active: true,
             username: cleanPhone,
             created_at: new Date().toISOString(),
+            latitude: typeof latitude === 'number' ? latitude : null,
+            longitude: typeof longitude === 'number' ? longitude : null,
           };
           setSupermarkets((prev) => [offlineSm, ...prev]);
           return { success: true, message: 'فروشگاه با موفقیت ثبت شد.', supermarket: offlineSm };
@@ -629,17 +634,38 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
             };
           }
 
-          const newSm: Supermarket = edgeData.supermarket || {
-            id: edgeData.userId,
-            name: trimmedName,
-            owner: trimmedOwner,
-            phone: cleanPhone,
-            address: trimmedAddress,
-            assigned_visitor_id: assignedVisitorId,
-            is_active: true,
-            username: cleanPhone,
-            created_at: new Date().toISOString(),
-          };
+          const storeId = edgeData.supermarket?.id || edgeData.userId;
+          if (typeof latitude === 'number' && typeof longitude === 'number' && storeId) {
+            try {
+              await supabase.rpc('set_store_location', {
+                p_store_id: storeId,
+                p_lat: latitude,
+                p_lng: longitude,
+              });
+            } catch (locErr) {
+              console.warn('[registerSupermarket] Failed to set store location (Path A):', locErr);
+            }
+          }
+
+          const newSm: Supermarket = edgeData.supermarket
+            ? {
+                ...edgeData.supermarket,
+                latitude: typeof latitude === 'number' ? latitude : (edgeData.supermarket.latitude ?? null),
+                longitude: typeof longitude === 'number' ? longitude : (edgeData.supermarket.longitude ?? null),
+              }
+            : {
+                id: edgeData.userId,
+                name: trimmedName,
+                owner: trimmedOwner,
+                phone: cleanPhone,
+                address: trimmedAddress,
+                assigned_visitor_id: assignedVisitorId,
+                is_active: true,
+                username: cleanPhone,
+                created_at: new Date().toISOString(),
+                latitude: typeof latitude === 'number' ? latitude : null,
+                longitude: typeof longitude === 'number' ? longitude : null,
+              };
 
           setSupermarkets((prev) => [newSm, ...prev]);
 
@@ -666,6 +692,8 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
           is_active: true,
           username: cleanPhone,
           created_at: new Date().toISOString(),
+          latitude: typeof latitude === 'number' ? latitude : null,
+          longitude: typeof longitude === 'number' ? longitude : null,
         };
         setSupermarkets((prev) => [offlineSm, ...prev]);
         return {
@@ -731,8 +759,21 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
           };
         }
 
+        const storeId = rpcData?.id || signUpData.user?.id;
+        if (typeof latitude === 'number' && typeof longitude === 'number' && storeId) {
+          try {
+            await supabase.rpc('set_store_location', {
+              p_store_id: storeId,
+              p_lat: latitude,
+              p_lng: longitude,
+            });
+          } catch (locErr) {
+            console.warn('[registerSupermarket] Failed to set store location (Path B):', locErr);
+          }
+        }
+
         const newSupermarket: Supermarket = {
-          id: rpcData?.id || signUpData.user?.id || generateUniqueId('sm'),
+          id: storeId || generateUniqueId('sm'),
           name: trimmedName,
           owner: trimmedOwner,
           phone: cleanPhone,
@@ -743,6 +784,8 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
           approval_status: 'pending',
           registration_source: 'self_register',
           created_at: new Date().toISOString(),
+          latitude: typeof latitude === 'number' ? latitude : null,
+          longitude: typeof longitude === 'number' ? longitude : null,
         };
 
         setSupermarkets((prev) => [newSupermarket, ...prev]);

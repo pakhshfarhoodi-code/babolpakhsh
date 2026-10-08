@@ -404,7 +404,7 @@ export function useSupabaseSync({
       withTimeout(
         supabase
           .from('supermarkets')
-          .select('id, name, owner, phone, address, assigned_visitor_id, is_active, username, created_at, founder_discount_enabled, founder_discount_percent, approval_status, registration_source, approved_at, approved_by, approval_note'),
+          .select('id, name, owner, phone, address, assigned_visitor_id, is_active, username, created_at, founder_discount_enabled, founder_discount_percent, approval_status, registration_source, approved_at, approved_by, approval_note, latitude, longitude'),
         15000,
         'مهلت زمانی دریافت اطلاعات فروشگاه‌ها به پایان رسید'
       ),
@@ -440,6 +440,8 @@ export function useSupabaseSync({
         approved_at: sm.approved_at || null,
         approved_by: sm.approved_by || null,
         approval_note: sm.approval_note || null,
+        latitude: sm.latitude ?? null,
+        longitude: sm.longitude ?? null,
       };
     });
 

@@ -15,6 +15,8 @@ import {
   Clock,
   XCircle,
   FileText,
+  Navigation,
+  ExternalLink,
 } from 'lucide-react';
 import { formatPrice, formatOrderDate } from './helpers';
 import { OrderInvoiceModal } from '../invoice/OrderInvoiceModal';
@@ -100,6 +102,33 @@ export const CustomerDetailSheet: React.FC<CustomerDetailSheetProps> = ({
               <MapPin className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
               <span>{customer.address}</span>
             </div>
+
+            {/* Registered GPS Location */}
+            {typeof customer.latitude === 'number' && typeof customer.longitude === 'number' ? (
+              <div className="pt-2 border-t border-slate-900 flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-medium">
+                  <Navigation className="w-3.5 h-3.5 shrink-0" />
+                  <span>موقعیت مکانی:</span>
+                  <span className="font-mono text-slate-300 text-[11px] dir-ltr mr-1">
+                    {customer.latitude.toFixed(6)}, {customer.longitude.toFixed(6)}
+                  </span>
+                </div>
+                <a
+                  href={`https://www.google.com/maps?q=${customer.latitude},${customer.longitude}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold transition shadow-xs"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  <span>مسیریابی / نقشه</span>
+                </a>
+              </div>
+            ) : (
+              <div className="pt-2 border-t border-slate-900 flex items-center gap-1.5 text-[11px] text-slate-500">
+                <Navigation className="w-3.5 h-3.5 shrink-0" />
+                <span>موقعیت نقشه برای این فروشگاه ثبت نشده است</span>
+              </div>
+            )}
           </div>
 
           {/* Quick Metrics */}

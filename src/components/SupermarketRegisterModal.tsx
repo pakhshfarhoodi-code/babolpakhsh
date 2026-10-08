@@ -16,6 +16,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { normalizePhone, isValidMobile, MIN_PASSWORD_LENGTH } from '../context/utils';
+import { LocationPickerModal } from './LocationPickerModal';
 
 interface SupermarketRegisterModalProps {
   isOpen: boolean;
@@ -38,6 +39,8 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [address, setAddress] = useState('');
+  const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [assignedVisitorId, setAssignedVisitorId] = useState(defaultVisitorId || 'direct');
   const [showMoreInfo, setShowMoreInfo] = useState(false);
   const [error, setError] = useState('');
@@ -95,6 +98,12 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
         address: cleanAddress,
         assigned_visitor_id: isRegisteredByVisitor ? defaultVisitorId : assignedVisitorId,
         password: cleanPassword,
+        ...(location
+          ? {
+              latitude: location.lat,
+              longitude: location.lng,
+            }
+          : {}),
       });
 
       if (result.success) {
@@ -277,6 +286,64 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
             </div>
           </div>
 
+          {/* 4.5. Optional Map Location */}
+          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                  <MapPin className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <span className="block text-xs font-semibold text-slate-200">
+                    ثبت موقعیت فروشگاه روی نقشه (اختیاری)
+                  </span>
+                  {location && (
+                    <span className="text-[11px] text-emerald-400 font-medium">
+                      ✓ موقعیت ثبت شد
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {location ? (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsLocationModalOpen(true)}
+                    className="text-xs text-amber-400 hover:text-amber-300 px-2.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition cursor-pointer"
+                  >
+                    تغییر
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLocation(null)}
+                    className="text-xs text-rose-400 hover:text-rose-300 px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 transition cursor-pointer"
+                  >
+                    حذف
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsLocationModalOpen(true)}
+                  className="text-xs text-amber-400 hover:text-amber-300 font-medium px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <MapPin className="w-3.5 h-3.5" />
+                  انتخاب روی نقشه
+                </button>
+              )}
+            </div>
+
+            {location && (
+              <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+                <span>مختصات ثبت‌شده:</span>
+                <span className="font-mono text-slate-300 dir-ltr">
+                  {location.lat.toFixed(6)}, {location.lng.toFixed(6)}
+                </span>
+              </div>
+            )}
+          </div>
+
           {/* 5. Collapsed "اطلاعات بیشتر" section (Manager name + visitor) */}
           <div className="pt-1">
             <button
@@ -357,6 +424,13 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
           </div>
         </form>
       </div>
+
+      <LocationPickerModal
+        isOpen={isLocationModalOpen}
+        initial={location}
+        onConfirm={(lat, lng) => setLocation({ lat, lng })}
+        onClose={() => setIsLocationModalOpen(false)}
+      />
     </div>
   );
 };

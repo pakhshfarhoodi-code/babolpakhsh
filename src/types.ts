@@ -93,6 +93,8 @@ export interface Supermarket {
   approved_at?: string | null;
   approved_by?: string | null;
   approval_note?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export type OrderStatus = 'assigned' | 'loading' | 'delegated' | 'delivered' | 'undelivered';
@@ -255,6 +257,8 @@ export interface UpdateSupermarketPayload {
   assigned_visitor_id?: string | null;
   username?: string;
   is_active?: boolean;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface UpdateVisitorPayload {

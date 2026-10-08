@@ -138,10 +138,17 @@ export const CustomersTab: React.FC<CustomersTabProps> = ({
                   </span>
                 </div>
 
-                {/* Address Line */}
-                <div className="flex items-start gap-1.5 text-xs text-slate-400 mt-2.5 min-w-0">
-                  <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                  <span className="truncate">{shop.address}</span>
+                {/* Address Line & Location Badge */}
+                <div className="flex items-center justify-between gap-2 mt-2.5 text-xs text-slate-400 min-w-0 flex-wrap">
+                  <div className="flex items-start gap-1.5 min-w-0 flex-1">
+                    <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                    <span className="truncate">{shop.address}</span>
+                  </div>
+                  {typeof shop.latitude === 'number' && typeof shop.longitude === 'number' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shrink-0">
+                      <span>📍 ثبت لوکیشن</span>
+                    </span>
+                  )}
                 </div>
               </div>
 

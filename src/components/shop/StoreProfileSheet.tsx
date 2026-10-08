@@ -1,8 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Supermarket, Visitor } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { MIN_PASSWORD_LENGTH, normalizePhone } from '../../context/utils';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { LocationPickerModal } from '../LocationPickerModal';
 import {
   X,
   Store,
@@ -16,6 +17,9 @@ import {
   AlertCircle,
   Loader2,
   AtSign,
+  Save,
+  Navigation,
+  ExternalLink,
 } from 'lucide-react';
 
 interface StoreProfileSheetProps {
@@ -33,6 +37,28 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
 }) => {
   const { visitors, updateSupermarket, resetSupermarketPassword } = useApp();
 
+  // Address and Location State
+  const [addressInput, setAddressInput] = useState(store?.address || '');
+  const [location, setLocation] = useState<{ lat: number; lng: number } | null>(
+    store?.latitude && store?.longitude ? { lat: store.latitude, lng: store.longitude } : null
+  );
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+  const [isSavingAddress, setIsSavingAddress] = useState(false);
+  const [addressSaveSuccess, setAddressSaveSuccess] = useState<string | null>(null);
+  const [addressSaveError, setAddressSaveError] = useState<string | null>(null);
+
+  // Sync state whenever store changes
+  useEffect(() => {
+    if (store) {
+      setAddressInput(store.address || '');
+      if (typeof store.latitude === 'number' && typeof store.longitude === 'number') {
+        setLocation({ lat: store.latitude, lng: store.longitude });
+      } else {
+        setLocation(null);
+      }
+    }
+  }, [store, isOpen]);
+
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -47,6 +73,34 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
   );
 
   if (!isOpen) return null;
+
+  const handleSaveAddressAndLocation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!store?.id) return;
+
+    setAddressSaveError(null);
+    setAddressSaveSuccess(null);
+    setIsSavingAddress(true);
+
+    try {
+      const res = await updateSupermarket(store.id, {
+        address: addressInput.trim(),
+        latitude: location ? location.lat : null,
+        longitude: location ? location.lng : null,
+      });
+
+      if (res.success) {
+        setAddressSaveSuccess('آدرس و موقعیت مکانی با موفقیت بروزرسانی شد.');
+        setTimeout(() => setAddressSaveSuccess(null), 3000);
+      } else {
+        setAddressSaveError(res.message || 'خطا در ذخیره مشخصات آدرس');
+      }
+    } catch {
+      setAddressSaveError('خطا در برقراری ارتباط با سرور.');
+    } finally {
+      setIsSavingAddress(false);
+    }
+  };
 
   const handleChangePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -169,15 +223,135 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
             </div>
           )}
 
-          {store?.address && (
-            <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1">
-              <div className="flex items-center gap-2 text-slate-400">
+          {/* Address and Map Location Section */}
+          <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800/90 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-slate-300 font-semibold text-xs">
                 <MapPin className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>آدرس فروشگاه:</span>
+                <span>آدرس و موقعیت دقیق فروشگاه:</span>
               </div>
-              <p className="text-slate-200 text-xs leading-relaxed pr-6">{store.address}</p>
             </div>
-          )}
+
+            {/* Detailed Text Address */}
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                آدرس متنی فروشگاه
+              </label>
+              <textarea
+                rows={2}
+                value={addressInput}
+                onChange={(e) => setAddressInput(e.target.value)}
+                placeholder="خیابان، کوچه، پلاک، نام مجتمع..."
+                disabled={isSavingAddress}
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 transition resize-none"
+              />
+            </div>
+
+            {/* Map Location Box */}
+            <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800/80 space-y-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0">
+                    <Navigation className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-bold text-slate-200 block">
+                      موقعیت مکانی روی نقشه
+                    </span>
+                    {location ? (
+                      <span className="text-[10px] text-emerald-400 font-medium">
+                        ✓ موقعیت ثبت شده است
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400">
+                        موقعیت ثبت نشده است (اختیاری)
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {location ? (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setIsLocationModalOpen(true)}
+                      className="px-2 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-medium transition cursor-pointer"
+                    >
+                      تغییر
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLocation(null)}
+                      className="px-2 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[11px] font-medium transition cursor-pointer"
+                    >
+                      حذف
+                    </button>
+                    <a
+                      href={`https://www.google.com/maps?q=${location.lat},${location.lng}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-blue-400 text-[11px] transition flex items-center gap-1"
+                      title="مشاهده در گوگل مپ"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsLocationModalOpen(true)}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] transition shadow-xs cursor-pointer"
+                  >
+                    <MapPin className="w-3.5 h-3.5" />
+                    <span>انتخاب روی نقشه</span>
+                  </button>
+                )}
+              </div>
+
+              {location && (
+                <div className="pt-1.5 border-t border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
+                  <span>مختصات جغرافیایی:</span>
+                  <span className="font-mono text-slate-300 dir-ltr">
+                    {location.lat.toFixed(6)}, {location.lng.toFixed(6)}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Notification messages */}
+            {addressSaveSuccess && (
+              <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-2 text-emerald-400 text-xs animate-in fade-in">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                <span>{addressSaveSuccess}</span>
+              </div>
+            )}
+            {addressSaveError && (
+              <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center gap-2 text-rose-400 text-xs animate-in fade-in">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>{addressSaveError}</span>
+              </div>
+            )}
+
+            {/* Save Address Button */}
+            <button
+              type="button"
+              onClick={handleSaveAddressAndLocation}
+              disabled={isSavingAddress}
+              className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-98 text-white font-bold text-xs transition shadow-sm cursor-pointer disabled:opacity-50"
+            >
+              {isSavingAddress ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>در حال ذخیره آدرس و موقعیت...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-3.5 h-3.5" />
+                  <span>ذخیره تغییرات آدرس و موقعیت</span>
+                </>
+              )}
+            </button>
+          </div>
 
           {/* Visitor assignment display section */}
           <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800/90 space-y-2.5">
@@ -342,6 +516,13 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
           بستن
         </button>
       </div>
+
+      <LocationPickerModal
+        isOpen={isLocationModalOpen}
+        initial={location}
+        onConfirm={(lat, lng) => setLocation({ lat, lng })}
+        onClose={() => setIsLocationModalOpen(false)}
+      />
     </div>
   );
 };

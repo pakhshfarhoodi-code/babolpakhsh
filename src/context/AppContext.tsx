@@ -170,6 +170,8 @@ interface AppContextType {
     assigned_visitor_id?: string;
     username?: string;
     password: string;
+    latitude?: number;
+    longitude?: number;
   }) => Promise<{ success: boolean; message: string; supermarket?: Supermarket }>;
   updateSupermarket: (id: string, payload: UpdateSupermarketPayload) => Promise<{ success: boolean; message: string }>;
   deleteSupermarket: (id: string) => Promise<{ success: boolean; message: string }>;
@@ -435,6 +437,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (normalizedPhone !== undefined) updateData.phone = normalizedPhone;
         if (payload.address !== undefined) updateData.address = payload.address.trim();
         if (payload.is_active !== undefined) updateData.is_active = payload.is_active;
+        if (payload.latitude !== undefined) updateData.latitude = payload.latitude;
+        if (payload.longitude !== undefined) updateData.longitude = payload.longitude;
         // NOTE: As per requirement 6, do NOT update username column on phone change!
 
         // Only touch assigned_visitor_id if explicitly supplied in payload
@@ -466,8 +470,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (rpcErr) {
             return { success: false, message: `خطا در ویرایش اطلاعات فروشگاه: ${rpcErr.message}` };
           }
+
+          if (typeof payload.latitude === 'number' && typeof payload.longitude === 'number') {
+            try {
+              await supabase.rpc('set_store_location', {
+                p_store_id: id,
+                p_lat: payload.latitude,
+                p_lng: payload.longitude,
+              });
+            } catch (locErr) {
+              console.warn('Failed to call set_store_location:', locErr);
+            }
+          } else if (payload.latitude === null || payload.longitude === null) {
+            try {
+              await supabase.from('supermarkets').update({ latitude: null, longitude: null }).eq('id', id);
+            } catch (clearErr) {
+              console.warn('Failed to clear location:', clearErr);
+            }
+          }
         } else {
           // Admin or authorized staff direct update
+          if (typeof payload.latitude === 'number' && typeof payload.longitude === 'number') {
+            try {
+              await supabase.rpc('set_store_location', {
+                p_store_id: id,
+                p_lat: payload.latitude,
+                p_lng: payload.longitude,
+              });
+            } catch (locErr) {
+              console.warn('Failed to call set_store_location (admin):', locErr);
+            }
+          }
           if (Object.keys(updateData).length > 0) {
             const { data: updatedRows, error: smError } = await supabase
               .from('supermarkets')
@@ -508,6 +541,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (normalizedPhone !== undefined) next.phone = normalizedPhone;
           if (payload.address !== undefined) next.address = payload.address;
           if (payload.is_active !== undefined) next.is_active = payload.is_active;
+          if (payload.latitude !== undefined) next.latitude = payload.latitude;
+          if (payload.longitude !== undefined) next.longitude = payload.longitude;
           if (payload.assigned_visitor_id !== undefined) {
             next.assigned_visitor_id = payload.assigned_visitor_id || 'direct';
           }

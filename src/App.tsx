@@ -54,29 +54,25 @@ export const App: React.FC = () => {
   const [currentPath, setCurrentPath] = useState<string>(getNormalizedPath);
   const [justLoggedIn, setJustLoggedIn] = useState(false);
 
-  const [adminActiveTab, setAdminActiveTab] = useState<AdminTabKey>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('pakhsh_admin_active_tab');
-      if (saved) return saved as AdminTabKey;
-    }
-    return 'overview';
-  });
+  const [adminActiveTab, setAdminActiveTab] = useState<AdminTabKey>('overview');
 
-  const [warehouseActiveTab, setWarehouseActiveTab] = useState<'pending' | 'history'>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('pakhsh_warehouse_active_tab');
-      if (saved) return saved as any;
-    }
-    return 'pending';
-  });
+  const [warehouseActiveTab, setWarehouseActiveTab] = useState<'pending' | 'history'>('pending');
 
+  // Clear any legacy cached active tabs so default tabs always take effect
   useEffect(() => {
-    localStorage.setItem('pakhsh_admin_active_tab', adminActiveTab);
-  }, [adminActiveTab]);
+    try {
+      localStorage.removeItem('pakhsh_admin_active_tab');
+      localStorage.removeItem('pakhsh_supermarket_active_tab');
+      localStorage.removeItem('pakhsh_visitor_active_tab');
+    } catch {}
+  }, []);
 
+  // Whenever admin logs in or route is entered, ensure default tab is 'overview' (نیازمند بررسی)
   useEffect(() => {
-    localStorage.setItem('pakhsh_warehouse_active_tab', warehouseActiveTab);
-  }, [warehouseActiveTab]);
+    if (isLoggedIn && role === 'admin') {
+      setAdminActiveTab('overview');
+    }
+  }, [isLoggedIn, role]);
 
   // Synchronize route changes via replaceState without redundant history entries
   const navigateTo = useCallback((targetPath: string) => {

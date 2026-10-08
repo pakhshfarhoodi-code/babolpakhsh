@@ -58,10 +58,17 @@ async function reconcileEitaaSession(): Promise<void> {
         .maybeSingle();
       const role = profRow?.role;
       if (role === 'admin' || role === 'visitor') {
-        // نشست کادر حفظ میشود و شناسهی ایتا برای اعلانها ثبت میشود
-        supabase.functions
-          .invoke('eitaa-contact', { body: { initData } })
-          .catch((e) => console.warn('Eitaa contact failed:', e));
+        const { data: cRes, error: cErr } = await supabase.functions.invoke('eitaa-contact', {
+          body: { initData, mode: 'verify' },
+        });
+        // خطای شبکه یا سرور: نشست را حفظ کن
+        if (cErr) return;
+        if (cRes?.success) return; // حساب ایتا با همین کاربر کادر تطبیق دارد
+        if (cRes?.error === 'mismatch') {
+          // این حساب ایتا متعلق به کاربر دیگری است
+          await supabase.auth.signOut({ scope: 'local' });
+          return;
+        }
         return;
       }
       // نشست متعلق به حساب دیگری است

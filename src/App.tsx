@@ -58,6 +58,10 @@ export const App: React.FC = () => {
 
   const [warehouseActiveTab, setWarehouseActiveTab] = useState<'pending' | 'history'>('pending');
 
+  const [showStaffLogin, setShowStaffLogin] = useState<boolean>(
+    () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('staff') === '1'
+  );
+
   // Clear any legacy cached active tabs so default tabs always take effect
   useEffect(() => {
     try {
@@ -139,15 +143,27 @@ export const App: React.FC = () => {
       ? ['admin', 'warehouse']
       : (effectivePath === '/visitor'
           ? ['visitor']
-          : (isInsideEitaa ? ['supermarket', 'visitor', 'admin', 'warehouse'] : ['supermarket']));
+          : (isInsideEitaa && showStaffLogin ? ['supermarket', 'visitor', 'admin', 'warehouse'] : ['supermarket']));
 
     return (
-      <LoginScreen
-        initialRole={initialRole as UserRole}
-        allowedRoles={allowedRoles as UserRole[]}
-        onLoginStart={() => setJustLoggedIn(true)}
-        onLoginComplete={() => setJustLoggedIn(false)}
-      />
+      <>
+        <LoginScreen
+          key={showStaffLogin ? 'staff' : 'store'}
+          initialRole={initialRole as UserRole}
+          allowedRoles={allowedRoles as UserRole[]}
+          onLoginStart={() => setJustLoggedIn(true)}
+          onLoginComplete={() => setJustLoggedIn(false)}
+        />
+        {isInsideEitaa && effectivePath === '/' && (
+          <button
+            type="button"
+            onClick={() => setShowStaffLogin((v) => !v)}
+            className="fixed bottom-3 left-1/2 -translate-x-1/2 z-50 text-[11px] text-slate-500 underline"
+          >
+            {showStaffLogin ? 'بازگشت به ورود فروشگاه' : 'ورود ادمین / ویزیتور'}
+          </button>
+        )}
+      </>
     );
   }
 

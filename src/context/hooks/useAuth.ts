@@ -27,6 +27,39 @@ const getEitaaInitData = (): string => {
   }
 };
 
+async function reconcileEitaaSession(): Promise<void> {
+  if (!supabase) return;
+  const initData = getEitaaInitData();
+  if (!initData) return;
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data: res, error } = await supabase.functions.invoke('eitaa-login', {
+      body: { initData },
+    });
+    // خطای شبکه یا سرور: وضعیت فعلی را تغییر نده
+    if (error) return;
+
+    if (res?.success && res.token_hash && res.profile_id) {
+      // همین فروشگاه از قبل وارد شده است
+      if (session?.user?.id === res.profile_id) return;
+      // نشست خالی یا متعلق به حساب دیگر: با هویت ایتای فعلی وارد شو
+      const { error: otpError } = await supabase.auth.verifyOtp({
+        token_hash: res.token_hash,
+        type: 'magiclink',
+      });
+      if (otpError) console.warn('Eitaa verifyOtp failed:', otpError.message);
+      return;
+    }
+
+    // این حساب ایتا به هیچ فروشگاهی متصل نیست: نشست حساب دیگر نباید باقی بماند
+    if (session?.user) {
+      await supabase.auth.signOut({ scope: 'local' });
+    }
+  } catch (e) {
+    console.warn('Eitaa session reconcile failed:', e);
+  }
+}
+
 export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }: UseAuthProps) {
   // Auth readiness state (true after getSession & profile fetch or immediately if offline/mock)
   const [authReady, setAuthReady] = useState<boolean>(!isSupabaseConfigured);
@@ -216,6 +249,7 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
     // 1. Initial session check on mount (restoreSession)
     (async () => {
       try {
+        await reconcileEitaaSession();
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         if (sessionError || !session?.user) {
           lastProfileFetchedUserIdRef.current = null;
@@ -226,26 +260,6 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
           localStorage.removeItem(STORAGE_KEYS.AUTH_VISITOR_ID);
           localStorage.removeItem(STORAGE_KEYS.AUTH_SUPERMARKET_ID);
           localStorage.removeItem('alborz_auth_profile');
-
-          const eitaaInitData = getEitaaInitData();
-          if (eitaaInitData) {
-            try {
-              const { data: eitaaRes, error: eitaaErr } = await supabase.functions.invoke('eitaa-login', {
-                body: { initData: eitaaInitData },
-              });
-              if (!eitaaErr && eitaaRes?.success && eitaaRes?.token_hash) {
-                const { data: otpData, error: otpError } = await supabase.auth.verifyOtp({
-                  token_hash: eitaaRes.token_hash,
-                  type: 'magiclink',
-                });
-                if (!otpError && otpData?.user) {
-                  await syncUserProfile(otpData.user.id, ['supermarket']);
-                }
-              }
-            } catch (e) {
-              console.warn('Eitaa auto-login failed:', e);
-            }
-          }
         } else if (session?.user) {
           if (lastProfileFetchedUserIdRef.current !== session.user.id) {
             await syncUserProfile(session.user.id);

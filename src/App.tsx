@@ -133,8 +133,13 @@ export const App: React.FC = () => {
 
   // 2. Unauthenticated or in the middle of fresh login from LoginScreen (Point 3)
   if (!isLoggedIn || justLoggedIn) {
+    const isInsideEitaa = typeof window !== 'undefined' && Boolean((window as any).Eitaa?.WebApp?.initData);
     const initialRole = effectivePath === '/admin' ? 'admin' : (effectivePath === '/visitor' ? 'visitor' : 'supermarket');
-    const allowedRoles = effectivePath === '/admin' ? ['admin', 'warehouse'] : (effectivePath === '/visitor' ? ['visitor'] : ['supermarket']);
+    const allowedRoles = effectivePath === '/admin'
+      ? ['admin', 'warehouse']
+      : (effectivePath === '/visitor'
+          ? ['visitor']
+          : (isInsideEitaa ? ['supermarket', 'visitor', 'admin', 'warehouse'] : ['supermarket']));
 
     return (
       <LoginScreen

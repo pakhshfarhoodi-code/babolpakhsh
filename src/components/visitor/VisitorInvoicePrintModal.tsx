@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { LoadingBill, Visitor, Product, Order } from '../../types';
 import { printInvoiceDocument } from '../../utils/pdfExport';
+import { formatUnifiedBillNumber } from '../../utils/numberToPersianWords';
 import { InvoicePrintView } from '../invoice/InvoicePrintView';
 import { useApp } from '../../context/AppContext';
 import {
@@ -59,7 +60,8 @@ export const VisitorInvoicePrintModal: React.FC<VisitorInvoicePrintModalProps> =
       return;
     }
 
-    printInvoiceDocument(printRef.current);
+    const docNo = formatUnifiedBillNumber(bill.id, bill.invoice_no, bill.visitor_id || visitor?.id);
+    printInvoiceDocument(printRef.current, docNo, 'A4');
   };
 
   return (

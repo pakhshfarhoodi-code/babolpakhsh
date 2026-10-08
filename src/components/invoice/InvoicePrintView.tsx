@@ -1,6 +1,6 @@
 import React from 'react';
 import { LoadingBill, LoadingBillItem, Visitor, Product, Order, InvoiceSettings, DEFAULT_INVOICE_SETTINGS } from '../../types';
-import { formatPriceToWords, numberToPersianWords } from '../../utils/numberToPersianWords';
+import { formatPriceToWords, numberToPersianWords, formatUnifiedBillNumber } from '../../utils/numberToPersianWords';
 import { formatPrice } from '../visitor/helpers';
 import { toPersianDigits } from '../shop/shopUtils';
 import farhoodiLogo from '../../assets/images/farhoodi_b2b_logo.webp';
@@ -243,7 +243,7 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
               <div className="flex items-center justify-between gap-2 text-xs">
                 <span className="text-slate-500 font-semibold">شماره سند:</span>
                 <span className="font-mono font-black text-slate-900 text-sm">
-                  {bill.invoice_no || bill.id}
+                  {formatUnifiedBillNumber(bill.id, bill.invoice_no, bill.visitor_id || visitor?.id)}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-2 text-xs">
@@ -491,7 +491,7 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
                   ریز اقلام تحویلی به تفکیک فروشگاه‌ها و مشتریان
                 </h2>
                 <p className="text-xs text-slate-600 mt-0.5 font-semibold">
-                  پیوست فاکتور بارگیری شماره: <span className="font-mono text-slate-900 font-bold">{bill.invoice_no || bill.id}</span> | ویزیتور: {visitor.name}
+                  پیوست فاکتور بارگیری شماره: <span className="font-mono text-slate-900 font-bold">{formatUnifiedBillNumber(bill.id, bill.invoice_no, bill.visitor_id || visitor?.id)}</span> | ویزیتور: {visitor.name}
                 </p>
               </div>
 

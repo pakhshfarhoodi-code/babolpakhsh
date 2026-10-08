@@ -668,8 +668,9 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
         }
 
         const res = data as { message?: string; invoice_no?: string };
+        const finalNo = formatUnifiedBillNumber(activeBill.id, res.invoice_no || activeBill.invoice_no, activeBill.visitor_id);
         showToast(
-          res.message || `فاکتور تایید شد و شماره ${res.invoice_no || activeBill.id} تثبیت گردید.`,
+          res.message || `فاکتور تایید شد و شماره ${finalNo} تثبیت گردید.`,
           'success'
         );
         setIsApproveModalOpen(false);
@@ -817,7 +818,7 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
           <div className="space-y-0.5">
             <p className="font-semibold text-emerald-300">تایید قیمت‌ها و تثبیت فاکتور بارگیری</p>
             {Boolean(details.invoice_no) && (
-              <p className="font-mono text-blue-300 font-bold">شماره سند: {formatUnifiedBillNumber(activeBill?.id, String(details.invoice_no))}</p>
+              <p className="font-mono text-blue-300 font-bold">شماره سند: {formatUnifiedBillNumber(activeBill?.id, String(details.invoice_no), activeBill?.visitor_id)}</p>
             )}
           </div>
         );
@@ -1010,7 +1011,7 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
                             {bill.visitor_name}
                           </span>
                           <span className="px-2 py-0.5 rounded-md bg-slate-950 font-mono text-xs font-bold text-blue-300 border border-slate-800">
-                            {formatUnifiedBillNumber(bill.id, bill.invoice_no)}
+                            {formatUnifiedBillNumber(bill.id, bill.invoice_no, bill.visitor_id)}
                           </span>
                         </div>
                         <p className="text-[11px] text-slate-400 mt-1">
@@ -1064,7 +1065,7 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
                     فاکتور بارگیری {activeBill.visitor_name}
                   </h3>
                   <span className="px-2.5 py-0.5 rounded-lg bg-blue-950 text-blue-300 border border-blue-600/40 font-mono font-bold text-xs">
-                    {formatUnifiedBillNumber(activeBill.id, activeBill.invoice_no)}
+                    {formatUnifiedBillNumber(activeBill.id, activeBill.invoice_no, activeBill.visitor_id)}
                   </span>
                   {renderStatusBadge(activeBill.status)}
                 </div>

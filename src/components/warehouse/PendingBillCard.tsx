@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { LoadingBill, Product } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { formatNumber } from './helpers';
+import { formatUnifiedBillNumber } from '../../utils/numberToPersianWords';
 import {
   CheckCircle2,
   AlertTriangle,
@@ -144,7 +145,7 @@ export const PendingBillCard: React.FC<PendingBillCardProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
         <div className="flex items-center gap-2.5 flex-wrap">
           <span className="font-mono font-black text-sm text-indigo-300 bg-indigo-950/80 px-2.5 py-1 rounded-lg border border-indigo-700/60">
-            {bill.invoice_no || bill.id}
+            {formatUnifiedBillNumber(bill.id, bill.invoice_no, bill.visitor_id)}
           </span>
           <div className="flex items-center gap-1.5 text-xs text-slate-200">
             <User className="w-4 h-4 text-indigo-400 shrink-0" />
@@ -394,7 +395,7 @@ export const PendingBillCard: React.FC<PendingBillCardProps> = ({
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2 text-rose-400 font-bold text-sm">
                 <Ban className="w-4 h-4" />
-                <span>لغو فاکتور بارگیری {bill.invoice_no || bill.id}</span>
+                <span>لغو فاکتور بارگیری {formatUnifiedBillNumber(bill.id, bill.invoice_no, bill.visitor_id)}</span>
               </div>
               <button
                 type="button"

@@ -8,6 +8,7 @@ import {
 } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { formatPrice } from './helpers';
+import { formatUnifiedBillNumber } from '../../utils/numberToPersianWords';
 import {
   X,
   CreditCard,
@@ -124,7 +125,7 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
         } else {
           setSelectedAllocations({});
         }
-        setPaymentDescription(`تسویه فاکتور ${targetBill.invoice_no || targetBill.id}`);
+        setPaymentDescription(`تسویه فاکتور ${formatUnifiedBillNumber(targetBill.id, targetBill.invoice_no, targetBill.visitor_id)}`);
         return;
       }
     }
@@ -134,7 +135,7 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
     if (firstDueBill) {
       setPaymentAmount(firstDueBill.settlement.remainingDue);
       setSelectedAllocations({ [firstDueBill.id]: firstDueBill.settlement.remainingDue });
-      setPaymentDescription(`تسویه فاکتور ${firstDueBill.invoice_no || firstDueBill.id}`);
+      setPaymentDescription(`تسویه فاکتور ${formatUnifiedBillNumber(firstDueBill.id, firstDueBill.invoice_no, firstDueBill.visitor_id)}`);
     } else {
       setPaymentAmount('');
       setSelectedAllocations({});
@@ -223,7 +224,7 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
       }
       if (alloc.amount > b.settlement.remainingDue) {
         showToast(
-          `مبلغ تخصیص فاکتور ${b.invoice_no || b.id} نمی‌تواند از معوق آن (${formatPrice(b.settlement.remainingDue)} تومان) بیشتر باشد.`,
+          `مبلغ تخصیص فاکتور ${formatUnifiedBillNumber(b.id, b.invoice_no, b.visitor_id)} نمی‌تواند از معوق آن (${formatPrice(b.settlement.remainingDue)} تومان) بیشتر باشد.`,
           'error'
         );
         return;
@@ -552,7 +553,7 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
                       <div className="min-w-0 flex-1 space-y-0.5">
                         <div className="flex items-center gap-2">
                           <span className="font-mono font-bold text-slate-100">
-                            {bill.invoice_no || bill.id}
+                            {formatUnifiedBillNumber(bill.id, bill.invoice_no, bill.visitor_id)}
                           </span>
                           {bill.id === defaultInvoiceId && (
                             <span className="px-1.5 py-0.2 rounded text-[10px] bg-blue-500/20 text-blue-300 font-bold">

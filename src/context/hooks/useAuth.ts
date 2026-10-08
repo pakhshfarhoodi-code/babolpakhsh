@@ -40,9 +40,7 @@ async function reconcileEitaaSession(): Promise<void> {
     if (error) return;
 
     if (res?.success && res.token_hash && res.profile_id) {
-      // همین فروشگاه از قبل وارد شده است
       if (session?.user?.id === res.profile_id) return;
-      // نشست خالی یا متعلق به حساب دیگر: با هویت ایتای فعلی وارد شو
       const { error: otpError } = await supabase.auth.verifyOtp({
         token_hash: res.token_hash,
         type: 'magiclink',
@@ -51,8 +49,22 @@ async function reconcileEitaaSession(): Promise<void> {
       return;
     }
 
-    // این حساب ایتا به هیچ فروشگاهی متصل نیست: نشست حساب دیگر نباید باقی بماند
+    // این حساب ایتا به هیچ فروشگاهی متصل نیست
     if (session?.user) {
+      const { data: profRow } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .maybeSingle();
+      const role = profRow?.role;
+      if (role === 'admin' || role === 'visitor') {
+        // نشست کادر حفظ میشود و شناسهی ایتا برای اعلانها ثبت میشود
+        supabase.functions
+          .invoke('eitaa-contact', { body: { initData } })
+          .catch((e) => console.warn('Eitaa contact failed:', e));
+        return;
+      }
+      // نشست متعلق به حساب دیگری است
       await supabase.auth.signOut({ scope: 'local' });
     }
   } catch (e) {
@@ -475,6 +487,9 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
           supabase.functions
             .invoke('eitaa-link', { body: { initData: eitaaInitDataForLink } })
             .catch((e) => console.warn('Eitaa link failed:', e));
+          supabase.functions
+            .invoke('eitaa-contact', { body: { initData: eitaaInitDataForLink } })
+            .catch((e) => console.warn('Eitaa contact failed:', e));
         }
 
         return { success: true };

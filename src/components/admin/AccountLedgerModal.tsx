@@ -12,6 +12,7 @@ import {
 } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { formatPrice } from './helpers';
+import { formatUnifiedBillNumber } from '../../utils/numberToPersianWords';
 import {
   X,
   CreditCard,
@@ -830,7 +831,7 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
                     {unsettledInvoices.map((inv) => (
                       <tr key={inv.id} className="hover:bg-slate-800/30 transition">
                         <td className="p-3 font-bold text-blue-400 font-mono">
-                          {inv.invoice_no || inv.id}
+                          {formatUnifiedBillNumber(inv.id, inv.invoice_no, inv.visitor_id)}
                         </td>
                         <td className="p-3 text-slate-400 font-mono">
                           {new Date(inv.created_at).toLocaleDateString('fa-IR')}
@@ -871,7 +872,7 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
                               onClick={() => {
                                 setPaymentAmount(inv.remainingDue);
                                 setSelectedAllocations({ [inv.id]: inv.remainingDue });
-                                setPaymentDescription(`تسویه فاکتور ${inv.invoice_no || inv.id}`);
+                                setPaymentDescription(`تسویه فاکتور ${formatUnifiedBillNumber(inv.id, inv.invoice_no, inv.visitor_id)}`);
                                 setIsReceiveModalOpen(true);
                               }}
                               className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 transition cursor-pointer"
@@ -1232,7 +1233,7 @@ export const AccountLedgerModal: React.FC<AccountLedgerModalProps> = ({
                             className="flex items-center justify-between gap-2 p-2 rounded-xl bg-slate-900 border border-slate-800/80 text-xs"
                           >
                             <div>
-                              <span className="font-bold text-slate-200">{inv.invoice_no || inv.id}</span>
+                              <span className="font-bold text-slate-200">{formatUnifiedBillNumber(inv.id, inv.invoice_no, inv.visitor_id)}</span>
                               <span className="text-slate-400 text-[11px] mr-2">
                                 (معوق: {formatPrice(inv.remainingDue)} ت)
                               </span>

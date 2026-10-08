@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { ProductCatalog } from '../shop/ProductCatalog';
 import { roundQty, formatPrice, formatOrderDate } from '../shop/shopUtils';
+import { formatUnifiedBillNumber } from '../../utils/numberToPersianWords';
 import { VisitorInvoicePrintModal } from '../visitor/VisitorInvoicePrintModal';
 import { OrderInvoiceModal } from '../invoice/OrderInvoiceModal';
 import {
@@ -578,10 +579,12 @@ export const DirectInvoiceSheet: React.FC<DirectInvoiceSheetProps> = ({
 
       await refreshData();
 
+      const unifiedInvoiceNo = formatUnifiedBillNumber(res.invoice_id, res.invoice_no, selectedVisitorId);
+
       // Find or build loading bill object for print view
       const billObj: LoadingBill = {
         id: res.invoice_id,
-        invoice_no: res.invoice_no || null,
+        invoice_no: unifiedInvoiceNo,
         visitor_id: selectedVisitorId,
         visitor_name: selectedVisitor?.name || 'ویزیتور',
         status: (res.status as any) || (issueImmediate ? 'approved' : 'pending'),
@@ -626,7 +629,7 @@ export const DirectInvoiceSheet: React.FC<DirectInvoiceSheetProps> = ({
 
       setLastCreatedResult({
         invoice_id: res.invoice_id,
-        invoice_no: res.invoice_no,
+        invoice_no: unifiedInvoiceNo,
         status: res.status,
         message: res.message,
         bill: billObj,
@@ -756,7 +759,7 @@ export const DirectInvoiceSheet: React.FC<DirectInvoiceSheetProps> = ({
               <div className="flex justify-between items-center text-slate-400">
                 <span>{isStoreMode ? 'شماره سفارش / فاکتور:' : 'شناسه فاکتور:'}</span>
                 <span className="font-mono font-bold text-emerald-400 text-sm">
-                  {lastCreatedResult.invoice_no || lastCreatedResult.invoice_id}
+                  {formatUnifiedBillNumber(lastCreatedResult.invoice_id, lastCreatedResult.invoice_no, lastCreatedResult.bill?.visitor_id || selectedVisitorId)}
                 </span>
               </div>
 

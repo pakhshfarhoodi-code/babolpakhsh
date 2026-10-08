@@ -3,7 +3,7 @@ import { LoadingBill, LoadingBillItem, InventoryTransaction, Product, Visitor, O
 import { INITIAL_LOADING_BILLS, INITIAL_INVENTORY_TRANSACTIONS } from '../../data/initialData';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { STORAGE_KEYS } from '../utils';
-import { extractCodeFromId, generateStructuredLoadingBillNumber } from '../../utils/numberToPersianWords';
+import { extractCodeFromId, generateStructuredLoadingBillNumber, formatUnifiedBillNumber } from '../../utils/numberToPersianWords';
 
 interface UseWarehouseProps {
   products: Product[];
@@ -23,7 +23,11 @@ export function useWarehouse({
   const [loadingBills, setLoadingBills] = useState<LoadingBill[]>(() => {
     if (isSupabaseConfigured) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.LOADING_BILLS);
-    return saved ? JSON.parse(saved) : INITIAL_LOADING_BILLS;
+    const parsed = saved ? JSON.parse(saved) : INITIAL_LOADING_BILLS;
+    return (parsed || []).map((b: LoadingBill) => ({
+      ...b,
+      invoice_no: formatUnifiedBillNumber(b.id, b.invoice_no, b.visitor_id),
+    }));
   });
 
   const [inventoryTransactions, setInventoryTransactions] = useState<InventoryTransaction[]>(() => {
@@ -412,6 +416,7 @@ export function useWarehouse({
                 status: 'approved' as const,
                 approved_by: approvedBy,
                 approved_at: nowIso,
+                invoice_no: formatUnifiedBillNumber(b.id, b.invoice_no, b.visitor_id),
               }
             : b
         )
@@ -419,7 +424,7 @@ export function useWarehouse({
 
       return {
         success: true,
-        message: `برگه بارگیری ${billId} با موفقیت تایید و خروج از سردخانه انجام شد.`,
+        message: `برگه بارگیری ${formatUnifiedBillNumber(bill.id, bill.invoice_no, bill.visitor_id)} با موفقیت تایید و خروج از سردخانه انجام شد.`,
       };
     },
     [loadingBills, products, setProducts, setOrders]

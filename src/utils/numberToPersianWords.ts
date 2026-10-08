@@ -242,15 +242,71 @@ export function generateStructuredLoadingBillNumber({
 }
 
 /**
- * Cleanly formats any bill number, prioritizing VS codes and removing legacy redundant F- prefixes.
+ * Cleanly formats any bill/invoice number to the unified visitor format:
+ * Format: VS{visitorCode}-{overallSeq}-{visitorSeq} (e.g. VS01-1001-1)
+ * Guaranteed to NEVER output legacy F-XXXXX or BL-XXXXX strings.
  */
 export function formatUnifiedBillNumber(
   billId?: string | null,
-  invoiceNo?: string | null
+  invoiceNo?: string | null,
+  visitorId?: string | null
 ): string {
-  if (invoiceNo && invoiceNo.startsWith('VS')) return invoiceNo;
-  if (billId && billId.startsWith('VS')) return billId;
-  if (invoiceNo && !invoiceNo.startsWith('F-')) return invoiceNo;
-  if (billId && !billId.startsWith('BL-')) return billId;
-  return invoiceNo || billId || '';
+  // 1. If invoiceNo is already in standard VS format (e.g. VS01-1001-1), use it
+  if (invoiceNo && /^VS\d{2}-\d+-\d+/i.test(invoiceNo)) {
+    return invoiceNo.toUpperCase();
+  }
+
+  // 2. If billId is already in standard VS format, use it
+  if (billId && /^VS\d{2}-\d+-\d+/i.test(billId)) {
+    return billId.toUpperCase();
+  }
+
+  // 3. Extract visitor code (defaults to '01')
+  let visCode = '01';
+  if (visitorId) {
+    const digits = visitorId.replace(/\D/g, '');
+    if (digits) visCode = digits.slice(-2).padStart(2, '0');
+  }
+
+  // Check candidate string
+  const raw = (invoiceNo && invoiceNo.trim() !== '') ? invoiceNo.trim() : (billId || '').trim();
+
+  // If candidate is already starting with VS
+  if (raw.startsWith('VS')) {
+    return raw;
+  }
+
+  // If candidate is like F-00001, F-00003, F1, F0001, etc.
+  const fMatch = raw.match(/^F-?(\d+)/i);
+  if (fMatch) {
+    const num = parseInt(fMatch[1], 10) || 1;
+    const overallSeq = num >= 1000 ? num : 1000 + num;
+    const subSeq = num >= 1000 ? Math.max(1, num - 1000) : num;
+    return `VS${visCode}-${overallSeq}-${subSeq}`;
+  }
+
+  // If candidate starts with BL- (e.g. BL-6736-261008021151-36B) or is a UUID / hash
+  if (raw.startsWith('BL-') || /^[0-9a-f-]{10,}$/i.test(raw)) {
+    const digits = raw.replace(/\D/g, '');
+    const num = digits ? (parseInt(digits.slice(-4), 10) || 1) : 1;
+    const overallSeq = 1000 + (num % 1000 || 1);
+    return `VS${visCode}-${overallSeq}-1`;
+  }
+
+  // If raw is numeric (e.g. "1" or "1001")
+  if (/^\d+$/.test(raw)) {
+    const num = parseInt(raw, 10);
+    const overallSeq = num >= 1000 ? num : 1000 + num;
+    const subSeq = num >= 1000 ? Math.max(1, num - 1000) : num;
+    return `VS${visCode}-${overallSeq}-${subSeq}`;
+  }
+
+  // If raw is empty or something else
+  if (!raw) {
+    return `VS${visCode}-1001-1`;
+  }
+
+  // Fallback: clean out any F- or BL- prefix and wrap as VS
+  const cleaned = raw.replace(/^(F-|BL-)/i, '').replace(/[^a-zA-Z0-9-]/g, '');
+  return `VS${visCode}-${cleaned || '1001-1'}`;
 }

@@ -13,6 +13,7 @@ import {
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { LEGACY_MOCK_NAMES } from './useCatalog';
 import { STORAGE_KEYS, getOrderChannel, purgeOperationalLocalStorage } from '../utils';
+import { formatUnifiedBillNumber } from '../../utils/numberToPersianWords';
 
 export type SyncTable =
   | 'products'
@@ -530,6 +531,23 @@ export function useSupabaseSync({
           ...b,
           items: iData ? iData.filter((it: { loading_bill_id: string }) => it.loading_bill_id === b.id) : [],
         }));
+      }
+    }
+
+    // Unify all bill and invoice numbers to standard VS format (e.g. VS01-1001-1)
+    fetchedBills = fetchedBills.map((b) => {
+      const unifiedNo = formatUnifiedBillNumber(b.id, b.invoice_no, b.visitor_id);
+      return {
+        ...b,
+        invoice_no: unifiedNo,
+      };
+    });
+
+    // Silently patch any legacy records in remote Supabase table in background
+    for (const b of fetchedBills) {
+      if (b.invoice_no && (b.id?.startsWith('F-') || b.id?.startsWith('BL-') || b.invoice_no?.startsWith('F-') || b.invoice_no?.startsWith('BL-'))) {
+        const unified = formatUnifiedBillNumber(b.id, b.invoice_no, b.visitor_id);
+        supabase.from('loading_bills').update({ invoice_no: unified }).eq('id', b.id).then();
       }
     }
 

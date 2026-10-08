@@ -14,6 +14,7 @@ import {
 } from '../../types';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { STORAGE_KEYS, generateUniqueId } from '../utils';
+import { formatUnifiedBillNumber } from '../../utils/numberToPersianWords';
 
 interface UseFinancialAccountsProps {
   visitors: Visitor[];
@@ -143,7 +144,7 @@ export function useFinancialAccounts({
             transaction_date: nowIso,
             reference_invoice_id: bill.id,
             reference_id: bill.id,
-            description: `بدهی فاکتور ${bill.invoice_no || bill.id}`,
+            description: `بدهی فاکتور ${formatUnifiedBillNumber(bill.id, bill.invoice_no, bill.visitor_id)}`,
             created_by_name: bill.finalized_by || bill.approved_by || 'سیستم فاکتور',
             created_at: nowIso,
           };
@@ -164,7 +165,7 @@ export function useFinancialAccounts({
               transaction_date: nowIso,
               reference_invoice_id: bill.id,
               reference_id: bill.id,
-              description: `تعدیل افزایش مبلغ فاکتور ${bill.invoice_no || bill.id}`,
+              description: `تعدیل افزایش مبلغ فاکتور ${formatUnifiedBillNumber(bill.id, bill.invoice_no, bill.visitor_id)}`,
               created_by_name: bill.finalized_by || bill.approved_by || 'سیستم فاکتور',
               created_at: nowIso,
             };
@@ -182,7 +183,7 @@ export function useFinancialAccounts({
               transaction_date: nowIso,
               reference_invoice_id: bill.id,
               reference_id: bill.id,
-              description: `تعدیل کاهش مبلغ فاکتور ${bill.invoice_no || bill.id}`,
+              description: `تعدیل کاهش مبلغ فاکتور ${formatUnifiedBillNumber(bill.id, bill.invoice_no, bill.visitor_id)}`,
               created_by_name: bill.finalized_by || bill.approved_by || 'سیستم فاکتور',
               created_at: nowIso,
             };
@@ -204,7 +205,7 @@ export function useFinancialAccounts({
             transaction_date: nowIso,
             reference_invoice_id: bill.id,
             reference_id: bill.id,
-            description: `برگشت اثر مالی ناشی از لغو فاکتور ${bill.invoice_no || bill.id}`,
+            description: `برگشت اثر مالی ناشی از لغو فاکتور ${formatUnifiedBillNumber(bill.id, bill.invoice_no, bill.visitor_id)}`,
             created_by_name: bill.cancelled_by || 'سیستم فاکتور',
             created_at: nowIso,
           };
@@ -368,7 +369,7 @@ export function useFinancialAccounts({
                 transaction_date: txIso,
                 reference_invoice_id: b.id,
                 reference_id: b.id,
-                description: `بدهی فاکتور ${b.invoice_no || b.id}`,
+                description: `بدهی فاکتور ${formatUnifiedBillNumber(b.id, b.invoice_no, b.visitor_id)}`,
                 created_by_name: b.finalized_by || b.approved_by || currentUser?.name || 'مدیر سامانه',
                 created_at: nowIso,
               });

@@ -960,24 +960,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                       }`}
                     >
                       <td className="py-3 px-4 whitespace-nowrap">
-                        <div className="flex flex-col items-start gap-1">
-                          <span className="font-bold text-blue-400 font-mono text-xs">{order.id}</span>
-                          {order.loading_bill_id && (() => {
-                            const linkedBill = loadingBills.find((b) => b.id === order.loading_bill_id);
-                            const displayBillNo = linkedBill?.invoice_no || linkedBill?.id || order.loading_bill_id;
-                            return (
-                              <button
-                                type="button"
-                                onClick={() => onOpenBill?.(order.loading_bill_id!)}
-                                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/35 hover:border-indigo-400/60 transition cursor-pointer"
-                                title={`مشاهده فاکتور بارگیری ${displayBillNo}`}
-                              >
-                                <FileText className="w-3 h-3 text-indigo-400 shrink-0" />
-                                <span>فاکتور بارگیری: {displayBillNo}</span>
-                              </button>
-                            );
-                          })()}
-                        </div>
+                        <span className="font-bold text-blue-400 font-mono text-xs">{order.id}</span>
                       </td>
                       <td className="py-3 px-4 font-medium text-slate-200 whitespace-nowrap">
                         {order.supermarket_name}

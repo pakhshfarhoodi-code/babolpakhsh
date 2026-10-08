@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { LoadingBill, Product } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { formatNumber } from './helpers';
+import { formatUnifiedBillNumber } from '../../utils/numberToPersianWords';
 import {
   FileText,
   ChevronDown,
@@ -97,7 +98,7 @@ export const BillHistoryList: React.FC<BillHistoryListProps> = ({
             >
               <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
                 <span className="font-mono font-bold text-xs px-2.5 py-1 rounded-lg border shrink-0 bg-slate-900 text-slate-200 border-slate-700">
-                  {bill.invoice_no || bill.id}
+                  {formatUnifiedBillNumber(bill.id, bill.invoice_no, bill.visitor_id)}
                 </span>
 
                 <div className="flex items-center gap-1.5 text-xs text-slate-200 truncate">

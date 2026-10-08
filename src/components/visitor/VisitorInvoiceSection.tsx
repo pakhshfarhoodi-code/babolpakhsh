@@ -3,6 +3,7 @@ import { LoadingBill, LoadingBillItem, Order, Visitor, Product } from '../../typ
 import { useApp } from '../../context/AppContext';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { formatOrderDate, formatPrice } from './helpers';
+import { formatUnifiedBillNumber } from '../../utils/numberToPersianWords';
 import { VisitorInvoicePrintModal } from './VisitorInvoicePrintModal';
 import {
   getPackSize,
@@ -1044,7 +1045,7 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-sm text-slate-100">
-                        {b.invoice_no || `#${b.id.slice(0, 8)}`}
+                        {formatUnifiedBillNumber(b.id, b.invoice_no, b.visitor_id || currentVisitor?.id)}
                       </span>
                       {b.status === 'draft' && (
                         <span className="px-2 py-0.5 rounded-full text-[11px] bg-slate-800 text-blue-300 border border-blue-500/30">

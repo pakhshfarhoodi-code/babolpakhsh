@@ -299,14 +299,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       {activeTab === 'orders' && (
         <div className="space-y-4">
           {/* Segmented Control for Orders vs Loading Bills */}
-          <div className="flex items-center gap-2 p-1.5 bg-slate-900 border border-slate-800 rounded-2xl w-fit flex-wrap">
+          <div className="flex items-center gap-1.5 p-1 bg-slate-900 border border-slate-800 rounded-2xl w-fit">
             <button
               type="button"
               onClick={() => {
                 setOrdersViewMode('orders');
                 setHighlightedBillId(null);
               }}
-              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 cursor-pointer ${
                 ordersViewMode === 'orders'
                   ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
                   : 'text-slate-400 hover:text-slate-200'
@@ -315,7 +315,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <FileText className="w-4 h-4" />
               <span>سفارش‌های فروشگاه‌ها</span>
               <span
-                className={`px-1.5 py-0.5 rounded-full text-xs font-mono ${
+                className={`px-1.5 py-0.2 rounded-full text-xs font-mono ${
                   ordersViewMode === 'orders' ? 'bg-white/20 text-white font-bold' : 'bg-slate-800 text-slate-400'
                 }`}
               >
@@ -330,23 +330,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 setHighlightedBillId(null);
                 setBillsStatusFilterHint('pending');
               }}
-              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 cursor-pointer ${
                 ordersViewMode === 'bills'
                   ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <FileText className="w-4 h-4" />
+              <Truck className="w-4 h-4" />
               <span>فاکتورهای ویزیتورها</span>
               <span
-                className={`px-1.5 py-0.5 rounded-full text-xs font-mono ${
+                className={`px-1.5 py-0.2 rounded-full text-xs font-mono ${
                   ordersViewMode === 'bills' ? 'bg-white/20 text-white font-bold' : 'bg-slate-800 text-slate-400'
                 }`}
               >
                 {loadingBills.length}
               </span>
               {pendingBillsCount > 0 && (
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-400 text-slate-950 font-mono shadow-sm animate-pulse flex items-center gap-1">
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-400 text-slate-950 font-mono shadow-xs animate-pulse flex items-center gap-1">
                   <span>{pendingBillsCount}</span>
                   <span className="text-[10px] hidden xs:inline">در انتظار</span>
                 </span>

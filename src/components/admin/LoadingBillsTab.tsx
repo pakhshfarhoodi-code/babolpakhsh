@@ -13,6 +13,7 @@ import {
   getBaseUnit,
   getUnitColumnText,
 } from '../../utils/orderLine';
+import { formatUnifiedBillNumber } from '../../utils/numberToPersianWords';
 import {
   Search,
   Truck,
@@ -668,7 +669,7 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
 
         const res = data as { message?: string; invoice_no?: string };
         showToast(
-          res.message || `فاکتور تایید شد و شماره رسمی ${res.invoice_no || ''} صادر گردید.`,
+          res.message || `فاکتور تایید شد و شماره ${res.invoice_no || activeBill.id} تثبیت گردید.`,
           'success'
         );
         setIsApproveModalOpen(false);
@@ -814,9 +815,9 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
       case 'approve_loading_bill_transaction':
         return (
           <div className="space-y-0.5">
-            <p className="font-semibold text-emerald-300">تایید قیمت‌ها و صدور شماره فاکتور</p>
+            <p className="font-semibold text-emerald-300">تایید قیمت‌ها و تثبیت فاکتور بارگیری</p>
             {Boolean(details.invoice_no) && (
-              <p className="font-mono text-blue-300 font-bold">شماره فاکتور رسمی: {String(details.invoice_no)}</p>
+              <p className="font-mono text-blue-300 font-bold">شماره سند: {formatUnifiedBillNumber(activeBill?.id, String(details.invoice_no))}</p>
             )}
           </div>
         );
@@ -1008,13 +1009,9 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
                           <span className="font-bold text-sm text-slate-100">
                             {bill.visitor_name}
                           </span>
-                          {bill.invoice_no ? (
-                            <span className="px-2 py-0.5 rounded-md bg-slate-950 font-mono text-xs font-bold text-blue-300 border border-slate-800">
-                              {bill.invoice_no}
-                            </span>
-                          ) : (
-                            <span className="text-[11px] font-mono text-slate-500">{bill.id}</span>
-                          )}
+                          <span className="px-2 py-0.5 rounded-md bg-slate-950 font-mono text-xs font-bold text-blue-300 border border-slate-800">
+                            {formatUnifiedBillNumber(bill.id, bill.invoice_no)}
+                          </span>
                         </div>
                         <p className="text-[11px] text-slate-400 mt-1">
                           تاریخ: {formatBillDateTime(bill.submitted_at || bill.created_at)}
@@ -1066,15 +1063,9 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
                   <h3 className="text-base sm:text-lg font-black text-slate-100">
                     فاکتور بارگیری {activeBill.visitor_name}
                   </h3>
-                  {activeBill.invoice_no ? (
-                    <span className="px-2.5 py-0.5 rounded-lg bg-blue-950 text-blue-300 border border-blue-600/40 font-mono font-bold text-xs">
-                      {activeBill.invoice_no}
-                    </span>
-                  ) : (
-                    <span className="px-2 py-0.5 rounded-lg bg-slate-950 text-slate-400 font-mono text-xs border border-slate-800">
-                      {activeBill.id}
-                    </span>
-                  )}
+                  <span className="px-2.5 py-0.5 rounded-lg bg-blue-950 text-blue-300 border border-blue-600/40 font-mono font-bold text-xs">
+                    {formatUnifiedBillNumber(activeBill.id, activeBill.invoice_no)}
+                  </span>
                   {renderStatusBadge(activeBill.status)}
                 </div>
 

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Order, OrderStatus, Visitor, OrderChannel } from '../../types';
 import {
   Search,
@@ -26,6 +26,7 @@ import {
   ArrowDown,
   Plus,
   ChevronDown,
+  RotateCcw,
 } from 'lucide-react';
 import { isToday, isWithinDays, formatPrice, formatOrderDate } from './helpers';
 import { getTehranDateParts } from '../../utils/dateUtils';
@@ -71,7 +72,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
   onDeleteOrder,
   onOpenBill,
 }) => {
-  const { refreshData, products = [] } = useApp();
+  const { refreshData, products = [], loadingBills = [] } = useApp();
 
   const getCalculatedOrderTotal = useCallback(
     (order: Order): number => {
@@ -207,26 +208,32 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
     }
   };
 
-  // Status Chip config (with 'loading' added between assigned and delegated)
+  // Status Options with semantic dot colors
   const statusChips = [
-    { id: 'all', label: 'همه سفارش‌ها' },
-    { id: 'assigned', label: 'آماده ارسال' },
-    { id: 'loading', label: 'در فاکتور بارگیری' },
-    { id: 'delegated', label: 'در حال واگذاری' },
-    { id: 'delivered', label: 'تحویل شده' },
-    { id: 'undelivered', label: 'عدم تحویل' },
+    { id: 'all', label: 'همه وضعیت‌ها', dotColor: 'bg-slate-400' },
+    { id: 'assigned', label: 'آماده ارسال', dotColor: 'bg-blue-400' },
+    { id: 'loading', label: 'در فاکتور بارگیری', dotColor: 'bg-indigo-400' },
+    { id: 'delegated', label: 'در حال واگذاری', dotColor: 'bg-amber-400' },
+    { id: 'delivered', label: 'تحویل شده', dotColor: 'bg-emerald-400' },
+    { id: 'undelivered', label: 'عدم تحویل', dotColor: 'bg-rose-400' },
   ];
 
-  // Channel Chip config based on getOrderChannel
+  // Channel Options config based on getOrderChannel
   const channelChips: {
     id: ChannelFilterType;
     label: string;
     icon: React.ComponentType<{ className?: string }>;
   }[] = [
-    { id: 'all', label: 'همه', icon: Filter },
-    { id: 'visitor_field', label: 'ویزیتور در محل', icon: Truck },
+    { id: 'all', label: 'همه کانال‌ها', icon: Filter },
     { id: 'store_self', label: 'ثبت توسط فروشگاه', icon: Store },
+    { id: 'visitor_field', label: 'ویزیتور در محل', icon: Truck },
     { id: 'store_direct', label: 'خرید مستقیم', icon: Building2 },
+  ];
+
+  const timeOptions: { id: 'all' | 'today' | 'week'; label: string }[] = [
+    { id: 'all', label: 'همه سوابق' },
+    { id: 'today', label: 'امروز' },
+    { id: 'week', label: '۷ روز اخیر' },
   ];
 
   // Channel metrics based on getOrderChannel
@@ -249,6 +256,54 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
       store_direct: storeDirect,
     };
   }, [orders]);
+
+  // Status metrics
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      all: orders.length,
+      assigned: 0,
+      loading: 0,
+      delegated: 0,
+      delivered: 0,
+      undelivered: 0,
+    };
+    orders.forEach((o) => {
+      if (counts[o.status] !== undefined) {
+        counts[o.status]++;
+      }
+    });
+    return counts;
+  }, [orders]);
+
+  // Dropdown menu state
+  const [openDropdown, setOpenDropdown] = useState<'status' | 'channel' | 'time' | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.filter-dropdown-container')) {
+        setOpenDropdown(null);
+      }
+    };
+    if (openDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [openDropdown]);
+
+  const hasActiveFilters =
+    channelFilter !== 'all' ||
+    statusFilter !== 'all' ||
+    timeFilter !== 'all' ||
+    searchTerm.trim() !== '';
+
+  const clearAllFilters = () => {
+    setChannelFilter('all');
+    setStatusFilter('all');
+    setTimeFilter('all');
+    setSearchTerm('');
+    setOpenDropdown(null);
+  };
 
   // Filtered orders
   const filteredOrders = useMemo(() => {
@@ -496,47 +551,38 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
         </div>
       )}
 
-      {/* Top Filter Bar */}
-      <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-3.5 shadow-sm">
-        {/* Sales Channel Tabs based on getOrderChannel */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-800/80">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs text-slate-400 font-medium ml-1">کانال ثبت:</span>
-            {channelChips.map((chip) => {
-              const Icon = chip.icon;
-              const count = channelCounts[chip.id];
-              const isActive = channelFilter === chip.id;
-              return (
-                <button
-                  key={chip.id}
-                  type="button"
-                  onClick={() => setChannelFilter(chip.id)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
-                    isActive
-                      ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30 font-bold'
-                      : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span>{chip.label}</span>
-                  <span
-                    className={`px-1.5 py-0.5 rounded-full text-[11px] font-mono ${
-                      isActive ? 'bg-white/20 text-white font-bold' : 'bg-slate-800 text-slate-300'
-                    }`}
-                  >
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
+      {/* Redesigned Clean Compact Toolbar */}
+      <div className="p-3 rounded-2xl bg-slate-900 border border-slate-800 shadow-sm space-y-2.5">
+        {/* Row 1: Search Input & Direct Invoice Action */}
+        <div className="flex items-center justify-between gap-2.5 flex-wrap">
+          {/* Search Box */}
+          <div className="relative flex-1 min-w-[240px]">
+            <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-500 pointer-events-none" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="جستجوی فروشگاه، ویزیتور یا کد سفارش..."
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-8 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="absolute left-2.5 top-2.5 text-slate-500 hover:text-slate-300 transition cursor-pointer"
+                title="پاک کردن جستجو"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
           {/* Direct Invoice Dropdown Menu */}
-          <div className="relative">
+          <div className="relative shrink-0">
             <button
               type="button"
               onClick={() => setIsDirectInvoiceMenuOpen((prev) => !prev)}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold transition shadow-md shadow-emerald-600/30 cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold transition shadow-md shadow-emerald-600/30 cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>+ صدور فاکتور مستقیم</span>
@@ -591,74 +637,213 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
           </div>
         </div>
 
-        {/* Status Chips */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs text-slate-400 font-medium ml-1">وضعیت:</span>
-          {statusChips.map((chip) => (
-            <button
-              key={chip.id}
-              type="button"
-              onClick={() => setStatusFilter(chip.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
-                statusFilter === chip.id
-                  ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/30'
-                  : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
-              }`}
-            >
-              {chip.label}
-            </button>
-          ))}
-        </div>
+        {/* Row 2: Compact Filters (Channel, Status, Time) + Reset + Count */}
+        <div className="flex items-center justify-between gap-2 flex-wrap pt-2 border-t border-slate-800/80 filter-dropdown-container">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* 1. Channel Filter Dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setOpenDropdown((prev) => (prev === 'channel' ? null : 'channel'))}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                  channelFilter !== 'all'
+                    ? 'bg-blue-600/15 text-blue-300 border border-blue-500/40 font-bold'
+                    : 'bg-slate-950 text-slate-300 border border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <Filter className="w-3.5 h-3.5 text-slate-400" />
+                <span>
+                  {channelFilter === 'all'
+                    ? 'همه کانال‌ها'
+                    : channelChips.find((c) => c.id === channelFilter)?.label}
+                </span>
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-slate-800 text-slate-300">
+                  {channelCounts[channelFilter]}
+                </span>
+                <ChevronDown className="w-3 h-3 text-slate-500 mr-0.5" />
+              </button>
 
-        {/* Time Chips & Search Box */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800/80">
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-slate-400 font-medium ml-1">بازه زمانی:</span>
-            <button
-              type="button"
-              onClick={() => setTimeFilter('all')}
-              className={`px-3 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${
-                timeFilter === 'all'
-                  ? 'bg-slate-800 text-slate-100 border border-slate-700'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              همه سوابق
-            </button>
-            <button
-              type="button"
-              onClick={() => setTimeFilter('today')}
-              className={`px-3 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${
-                timeFilter === 'today'
-                  ? 'bg-blue-950/80 text-blue-300 border border-blue-800/60 font-bold'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              امروز
-            </button>
-            <button
-              type="button"
-              onClick={() => setTimeFilter('week')}
-              className={`px-3 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${
-                timeFilter === 'week'
-                  ? 'bg-blue-950/80 text-blue-300 border border-blue-800/60 font-bold'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              ۷ روز اخیر
-            </button>
+              {openDropdown === 'channel' && (
+                <div className="absolute top-full right-0 mt-1.5 w-56 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl py-1.5 z-40 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
+                  <div className="px-3 py-1 text-[10px] text-slate-500 font-bold border-b border-slate-800/60 mb-1">
+                    فیلتر بر اساس کانال ثبت:
+                  </div>
+                  {channelChips.map((opt) => {
+                    const isSel = channelFilter === opt.id;
+                    const OptIcon = opt.icon;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => {
+                          setChannelFilter(opt.id);
+                          setOpenDropdown(null);
+                        }}
+                        className={`w-full px-3 py-2 text-right text-xs font-medium flex items-center justify-between transition cursor-pointer ${
+                          isSel
+                            ? 'bg-blue-600/20 text-blue-200 font-bold'
+                            : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <OptIcon className={`w-3.5 h-3.5 ${isSel ? 'text-blue-400' : 'text-slate-400'}`} />
+                          <span>{opt.label}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`px-1.5 py-0.2 rounded-full font-mono text-[11px] ${
+                              isSel ? 'bg-blue-500/30 text-blue-200 font-bold' : 'bg-slate-950 text-slate-400'
+                            }`}
+                          >
+                            {channelCounts[opt.id] ?? 0}
+                          </span>
+                          {isSel && <Check className="w-3.5 h-3.5 text-blue-400" />}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* 2. Status Filter Dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setOpenDropdown((prev) => (prev === 'status' ? null : 'status'))}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                  statusFilter !== 'all'
+                    ? 'bg-blue-600/15 text-blue-300 border border-blue-500/40 font-bold'
+                    : 'bg-slate-950 text-slate-300 border border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    statusFilter === 'all'
+                      ? 'bg-slate-400'
+                      : statusChips.find((s) => s.id === statusFilter)?.dotColor || 'bg-blue-400'
+                  }`}
+                />
+                <span>
+                  {statusFilter === 'all'
+                    ? 'همه وضعیت‌ها'
+                    : statusChips.find((s) => s.id === statusFilter)?.label}
+                </span>
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-slate-800 text-slate-300">
+                  {statusCounts[statusFilter] || 0}
+                </span>
+                <ChevronDown className="w-3 h-3 text-slate-500 mr-0.5" />
+              </button>
+
+              {openDropdown === 'status' && (
+                <div className="absolute top-full right-0 mt-1.5 w-56 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl py-1.5 z-40 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
+                  <div className="px-3 py-1 text-[10px] text-slate-500 font-bold border-b border-slate-800/60 mb-1">
+                    فیلتر بر اساس وضعیت سفارش:
+                  </div>
+                  {statusChips.map((opt) => {
+                    const isSel = statusFilter === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => {
+                          setStatusFilter(opt.id);
+                          setOpenDropdown(null);
+                        }}
+                        className={`w-full px-3 py-2 text-right text-xs font-medium flex items-center justify-between transition cursor-pointer ${
+                          isSel
+                            ? 'bg-blue-600/20 text-blue-200 font-bold'
+                            : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full ${opt.dotColor}`} />
+                          <span>{opt.label}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`px-1.5 py-0.2 rounded-full font-mono text-[11px] ${
+                              isSel ? 'bg-blue-500/30 text-blue-200 font-bold' : 'bg-slate-950 text-slate-400'
+                            }`}
+                          >
+                            {statusCounts[opt.id] ?? 0}
+                          </span>
+                          {isSel && <Check className="w-3.5 h-3.5 text-blue-400" />}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* 3. Time Filter Dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setOpenDropdown((prev) => (prev === 'time' ? null : 'time'))}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                  timeFilter !== 'all'
+                    ? 'bg-blue-600/15 text-blue-300 border border-blue-500/40 font-bold'
+                    : 'bg-slate-950 text-slate-300 border border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                <span>
+                  {timeFilter === 'all'
+                    ? 'همه سوابق'
+                    : timeOptions.find((t) => t.id === timeFilter)?.label}
+                </span>
+                <ChevronDown className="w-3 h-3 text-slate-500 mr-0.5" />
+              </button>
+
+              {openDropdown === 'time' && (
+                <div className="absolute top-full right-0 mt-1.5 w-44 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl py-1.5 z-40 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
+                  <div className="px-3 py-1 text-[10px] text-slate-500 font-bold border-b border-slate-800/60 mb-1">
+                    بازه زمانی ثبت:
+                  </div>
+                  {timeOptions.map((opt) => {
+                    const isSel = timeFilter === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => {
+                          setTimeFilter(opt.id);
+                          setOpenDropdown(null);
+                        }}
+                        className={`w-full px-3 py-2 text-right text-xs font-medium flex items-center justify-between transition cursor-pointer ${
+                          isSel
+                            ? 'bg-blue-600/20 text-blue-200 font-bold'
+                            : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                        }`}
+                      >
+                        <span>{opt.label}</span>
+                        {isSel && <Check className="w-3.5 h-3.5 text-blue-400" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Clear All Filters Button */}
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                className="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-rose-300 hover:text-white bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 transition flex items-center gap-1 cursor-pointer"
+                title="پاکسازی فیلترها و جستجو"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>حذف فیلترها</span>
+              </button>
+            )}
           </div>
 
-          {/* Search Box */}
-          <div className="relative w-full sm:w-72">
-            <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-500 pointer-events-none" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="جستجوی فروشگاه، ویزیتور یا کد سفارش..."
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
-            />
+          {/* Result Count */}
+          <div className="text-xs text-slate-400 font-medium">
+            <span>{sortedOrders.length} سفارش یافت شد</span>
           </div>
         </div>
       </div>
@@ -777,17 +962,21 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                       <td className="py-3 px-4 whitespace-nowrap">
                         <div className="flex flex-col items-start gap-1">
                           <span className="font-bold text-blue-400 font-mono text-xs">{order.id}</span>
-                          {order.loading_bill_id && (
-                            <button
-                              type="button"
-                              onClick={() => onOpenBill?.(order.loading_bill_id!)}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/35 hover:border-indigo-400/60 transition cursor-pointer"
-                              title={`مشاهده برگه بارگیری ${order.loading_bill_id}`}
-                            >
-                              <FileText className="w-3 h-3 text-indigo-400 shrink-0" />
-                              <span>برگه: {order.loading_bill_id}</span>
-                            </button>
-                          )}
+                          {order.loading_bill_id && (() => {
+                            const linkedBill = loadingBills.find((b) => b.id === order.loading_bill_id);
+                            const displayBillNo = linkedBill?.invoice_no || linkedBill?.id || order.loading_bill_id;
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => onOpenBill?.(order.loading_bill_id!)}
+                                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/35 hover:border-indigo-400/60 transition cursor-pointer"
+                                title={`مشاهده فاکتور بارگیری ${displayBillNo}`}
+                              >
+                                <FileText className="w-3 h-3 text-indigo-400 shrink-0" />
+                                <span>فاکتور بارگیری: {displayBillNo}</span>
+                              </button>
+                            );
+                          })()}
                         </div>
                       </td>
                       <td className="py-3 px-4 font-medium text-slate-200 whitespace-nowrap">

@@ -87,7 +87,7 @@ export const OrderOverrideModal: React.FC<OrderOverrideModalProps> = ({
                   <span>هشدار تاییدیه: این سفارش در برگه بارگیری است</span>
                 </div>
                 <p className="text-amber-200/90 text-[11px] leading-relaxed pr-5">
-                  این سفارش در حال حاضر به برگه بارگیری شماره <strong className="font-mono text-amber-300">{order.loading_bill_id || 'فعال'}</strong> متصل است. تغییر وضعیت دستی ممکن است با کسر موجودی انبار ناسازگار شود.
+                  این سفارش در حال حاضر به فاکتور بارگیری شماره <strong className="font-mono text-amber-300">{order.loading_bill_id || 'فعال'}</strong> متصل است. تغییر وضعیت دستی ممکن است با کسر موجودی انبار ناسازگار شود.
                 </p>
               </div>
             )}

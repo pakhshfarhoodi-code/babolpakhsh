@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { LoadingBill, LoadingBillItem, InventoryTransaction, Product, Visitor, Order } from '../../types';
 import { INITIAL_LOADING_BILLS, INITIAL_INVENTORY_TRANSACTIONS } from '../../data/initialData';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
-import { STORAGE_KEYS, generateUniqueId } from '../utils';
-import { extractCodeFromId } from '../../utils/numberToPersianWords';
+import { STORAGE_KEYS } from '../utils';
+import { extractCodeFromId, generateStructuredLoadingBillNumber } from '../../utils/numberToPersianWords';
 
 interface UseWarehouseProps {
   products: Product[];
@@ -85,15 +85,19 @@ export function useWarehouse({
         };
       }
 
-      // Generate readable bill ID: BL-{visitorCode2Digits}-{seq3Digits}
-      const visitorCode = extractCodeFromId(visitorId, 2, visitors);
-      const visitorBills = loadingBills.filter((b) => b.visitor_id === visitorId);
-      let seq = visitorBills.length + 1;
-      let billId = `BL-${visitorCode}-${String(seq).padStart(3, '0')}`;
+      // Generate unified structured bill ID: VS{visitorCode}-{overallSeq}-{visitorSeq}
+      let billId = generateStructuredLoadingBillNumber({
+        visitorId,
+        visitors,
+        existingBills: loadingBills,
+      });
       const existingIds = new Set(loadingBills.map((b) => b.id));
+      let bump = 0;
       while (existingIds.has(billId)) {
-        seq++;
-        billId = `BL-${visitorCode}-${String(seq).padStart(3, '0')}`;
+        bump++;
+        const visitorCode = extractCodeFromId(visitorId, 2, visitors);
+        const overallSeq = 1000 + loadingBills.length + 1 + bump;
+        billId = `VS${visitorCode}-${overallSeq}-${loadingBills.length + 1 + bump}`;
       }
 
       const nowIso = new Date().toISOString();
@@ -142,6 +146,7 @@ export function useWarehouse({
 
       const bill: LoadingBill = {
         id: billId,
+        invoice_no: billId,
         visitor_id: visitorId,
         visitor_name: visitor.name,
         status: 'pending',

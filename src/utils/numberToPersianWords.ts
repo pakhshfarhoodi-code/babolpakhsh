@@ -201,3 +201,56 @@ export function generateStructuredInvoiceNumber({
     return `SP${storeCode}-${overallSeq}-${storeSeq}`;
   }
 }
+
+export interface LoadingBillNumberParams {
+  visitorId: string;
+  visitors?: Array<{ id: string; username?: string; created_at?: string }>;
+  existingBills?: Array<{
+    id: string;
+    invoice_no?: string | null;
+    visitor_id?: string;
+  }>;
+}
+
+/**
+ * Generates custom structured Loading Bill / Visitor Invoice number:
+ * Format: VS{visitorCode}-{overallSeq}-{visitorSeq} (e.g. VS01-1025-1)
+ * Unifies Loading Bill and Visitor Invoice so they share the exact same number,
+ * eliminating duplicate secondary numbering (like F-0000 and random BL hashes).
+ */
+export function generateStructuredLoadingBillNumber({
+  visitorId,
+  visitors = [],
+  existingBills = [],
+}: LoadingBillNumberParams): string {
+  const BASE_OFFSET = 1000;
+  const visitorCode = extractCodeFromId(visitorId || 'vis-1', 2, visitors);
+
+  // 1. Count overall visitor bills + 1
+  const overallSeq = BASE_OFFSET + existingBills.length + 1;
+
+  // 2. Count specific visitor's bills + 1
+  const specificVisitorBills = existingBills.filter(
+    (b) =>
+      b.visitor_id === visitorId ||
+      (b.id && b.id.startsWith(`VS${visitorCode}`)) ||
+      (b.invoice_no && b.invoice_no.startsWith(`VS${visitorCode}`))
+  );
+  const visitorSeq = specificVisitorBills.length + 1;
+
+  return `VS${visitorCode}-${overallSeq}-${visitorSeq}`;
+}
+
+/**
+ * Cleanly formats any bill number, prioritizing VS codes and removing legacy redundant F- prefixes.
+ */
+export function formatUnifiedBillNumber(
+  billId?: string | null,
+  invoiceNo?: string | null
+): string {
+  if (invoiceNo && invoiceNo.startsWith('VS')) return invoiceNo;
+  if (billId && billId.startsWith('VS')) return billId;
+  if (invoiceNo && !invoiceNo.startsWith('F-')) return invoiceNo;
+  if (billId && !billId.startsWith('BL-')) return billId;
+  return invoiceNo || billId || '';
+}

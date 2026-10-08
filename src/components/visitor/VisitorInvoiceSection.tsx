@@ -596,7 +596,7 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
     }
 
     setIsSubmittingInlineSurplus(true);
-    const finalLabel = inlineSurplusCustomerLabel.trim() || 'مازاد خودرو / مستقیم';
+    const finalLabel = inlineSurplusCustomerLabel.trim() || 'اقلام مازاد';
 
     try {
       if (isSupabaseConfigured && supabase) {
@@ -942,7 +942,7 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
             </div>
           )}
 
-          {/* STEP 1: Customers & Eligible Orders */}
+          {/* SECTION 1: Customers & Eligible Orders */}
           <EligibleOrdersStep
             eligibleOrders={eligibleOrders}
             selectedOrderIds={selectedOrderIds}
@@ -952,7 +952,20 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
             getOrderVisitorDetails={getOrderVisitorDetails}
           />
 
-          {/* STEP 2: Surplus Items */}
+          {/* SECTION 2: My Aggregated Invoice (فاکتور تجمیعی من) */}
+          <InvoiceReviewStep
+            aggregatedItems={aggregatedItems}
+            totalQuantity={totalQuantity}
+            totalAmount={totalAmount}
+            isReadOnly={isReadOnly}
+            onEditManualLine={(item) => {
+              setEditingItem(item);
+              setEditQty(item.quantity);
+            }}
+            onRemoveManualLine={handleRemoveLine}
+          />
+
+          {/* SECTION 3: Surplus Items (افزودن اقلام مازاد) */}
           <SurplusItemsStep
             availableSurplusProducts={availableSurplusProducts}
             inlineSurplusCustomerLabel={inlineSurplusCustomerLabel}
@@ -965,19 +978,6 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
               setSurplusCustomerLabel('');
               setIsSurplusModalOpen(true);
             }}
-          />
-
-          {/* STEP 3: Review & Aggregated Table */}
-          <InvoiceReviewStep
-            aggregatedItems={aggregatedItems}
-            totalQuantity={totalQuantity}
-            totalAmount={totalAmount}
-            isReadOnly={isReadOnly}
-            onEditManualLine={(item) => {
-              setEditingItem(item);
-              setEditQty(item.quantity);
-            }}
-            onRemoveManualLine={handleRemoveLine}
           />
 
           {/* Sticky Bottom Action Bar (Requirement 3: Single submission bar, above mobile bottom nav) */}

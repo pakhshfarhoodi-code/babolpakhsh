@@ -31,7 +31,10 @@ export const EligibleOrdersStep: React.FC<EligibleOrdersStepProps> = ({
   onToggleAllOrders,
   getOrderVisitorDetails,
 }) => {
-  // Collapsed order items (empty set = all open by default)
+  // Collapsible step list (closed by default as requested)
+  const [isListOpen, setIsListOpen] = useState(false);
+
+  // Collapsed order items inside list
   const [collapsedOrderIds, setCollapsedOrderIds] = useState<Set<string>>(new Set());
 
   const toggleOrderCollapse = (orderId: string) => {
@@ -62,59 +65,91 @@ export const EligibleOrdersStep: React.FC<EligibleOrdersStepProps> = ({
 
   return (
     <div className="rounded-3xl bg-slate-900 border border-slate-800 p-4 sm:p-5 shadow-sm space-y-3.5">
-      {/* Step Header */}
-      <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-slate-800">
+      {/* Step Header: Clickable toggle for dropdown list */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setIsListOpen((prev) => !prev)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setIsListOpen((prev) => !prev);
+          }
+        }}
+        className="flex items-center justify-between flex-wrap gap-2 cursor-pointer select-none group"
+      >
         <div className="flex items-center gap-2.5">
           <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-black text-xs flex items-center justify-center num-fa">
             ۱
           </span>
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4 text-blue-400" />
-            <h3 className="text-xs sm:text-sm font-bold text-slate-100">
+            <h3 className="text-xs sm:text-sm font-bold text-slate-100 group-hover:text-blue-300 transition">
               مشتریان و سفارش‌های قابل بارگیری
             </h3>
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap text-xs">
-          <span className="text-slate-400 text-[11px] sm:text-xs">
+        <div className="flex items-center gap-2 flex-wrap text-xs">
+          <span className="text-slate-400 text-[11px] sm:text-xs bg-slate-950/80 px-2.5 py-1 rounded-xl border border-slate-800">
             <strong className="num-fa text-slate-200">{selectedOrderIds.size.toLocaleString('fa-IR')}</strong> از{' '}
-            <strong className="num-fa text-slate-200">{eligibleOrders.length.toLocaleString('fa-IR')}</strong> انتخاب شده
+            <strong className="num-fa text-slate-200">{eligibleOrders.length.toLocaleString('fa-IR')}</strong> مشتری انتخاب شده
           </span>
 
-          {eligibleOrders.length > 0 && (
-            <button
-              type="button"
-              onClick={handleToggleCollapseAll}
-              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-medium transition cursor-pointer flex items-center gap-1"
-            >
-              {areAllCollapsed ? (
-                <>
-                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-                  <span>بازکردن همه اقلام</span>
-                </>
-              ) : (
-                <>
-                  <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
-                  <span>جمع‌کردن همه اقلام</span>
-                </>
-              )}
-            </button>
-          )}
-
-          {!isReadOnly && eligibleOrders.length > 0 && (
-            <button
-              type="button"
-              onClick={onToggleAllOrders}
-              className="text-[11px] text-blue-400 hover:text-blue-300 font-semibold cursor-pointer underline underline-offset-4"
-            >
-              {selectedOrderIds.size === eligibleOrders.length
-                ? 'لغو انتخاب همه'
-                : 'انتخاب همه'}
-            </button>
-          )}
+          <div className="px-2.5 py-1 rounded-xl bg-slate-800/90 text-slate-300 group-hover:bg-slate-700 transition flex items-center gap-1.5 text-[11px] font-medium border border-slate-700/50">
+            <span>{isListOpen ? 'بستن لیست' : 'مشاهده و ویرایش لیست'}</span>
+            {isListOpen ? (
+              <ChevronUp className="w-3.5 h-3.5 text-blue-400" />
+            ) : (
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Dropdown Content (Closed by default) */}
+      {isListOpen && (
+        <div className="pt-3 border-t border-slate-800 space-y-3 animate-in fade-in duration-150">
+          {/* Action Row & Subtitle */}
+          <div className="flex items-center justify-between flex-wrap gap-2 text-xs">
+            <p className="text-[11px] text-slate-400">
+              با کلیک روی تیک هر مشتری، می‌توانید آن را از برگه سفارش بار خود حذف یا اضافه نمایید:
+            </p>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {eligibleOrders.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleToggleCollapseAll}
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-medium transition cursor-pointer flex items-center gap-1"
+                >
+                  {areAllCollapsed ? (
+                    <>
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                      <span>بازکردن همه اقلام</span>
+                    </>
+                  ) : (
+                    <>
+                      <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                      <span>جمع‌کردن همه اقلام</span>
+                    </>
+                  )}
+                </button>
+              )}
+
+              {!isReadOnly && eligibleOrders.length > 0 && (
+                <button
+                  type="button"
+                  onClick={onToggleAllOrders}
+                  className="text-[11px] text-blue-400 hover:text-blue-300 font-semibold cursor-pointer underline underline-offset-4"
+                >
+                  {selectedOrderIds.size === eligibleOrders.length
+                    ? 'لغو انتخاب همه'
+                    : 'انتخاب همه'}
+                </button>
+              )}
+            </div>
+          </div>
 
       {/* Orders Grid */}
       {eligibleOrders.length === 0 ? (
@@ -223,6 +258,8 @@ export const EligibleOrdersStep: React.FC<EligibleOrdersStepProps> = ({
               </div>
             );
           })}
+        </div>
+      )}
         </div>
       )}
     </div>

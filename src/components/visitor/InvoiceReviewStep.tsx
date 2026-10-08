@@ -39,12 +39,12 @@ export const InvoiceReviewStep: React.FC<InvoiceReviewStepProps> = ({
       <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-slate-800">
         <div className="flex items-center gap-2.5">
           <span className="w-6 h-6 rounded-full bg-emerald-600 text-white font-black text-xs flex items-center justify-center num-fa">
-            ۳
+            ۲
           </span>
           <div className="flex items-center gap-2">
             <ShoppingBag className="w-4 h-4 text-emerald-400" />
             <h3 className="text-xs sm:text-sm font-bold text-slate-100">
-              بازبینی و فاکتور تجمیعی من
+              فاکتور تجمیعی من
             </h3>
           </div>
         </div>
@@ -59,7 +59,7 @@ export const InvoiceReviewStep: React.FC<InvoiceReviewStepProps> = ({
         <div className="p-8 text-center rounded-2xl bg-slate-950/60 border border-slate-800 text-slate-400 text-xs space-y-2">
           <p className="font-semibold text-slate-300">هنوز قلمی در فاکتور بار اضافه نشده است.</p>
           <p className="text-slate-500">
-            از گام ۱ سفارش‌های مشتریان را انتخاب کنید یا در گام ۲ اقلام مازاد بیفزایید.
+            از بخش مشتریان سفارش‌ها را انتخاب کنید یا از بخش اقلام مازاد کالا بیفزایید.
           </p>
         </div>
       ) : (

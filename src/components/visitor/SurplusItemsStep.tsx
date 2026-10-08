@@ -99,12 +99,12 @@ export const SurplusItemsStep: React.FC<SurplusItemsStepProps> = ({
       <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-slate-800">
         <div className="flex items-center gap-2.5">
           <span className="w-6 h-6 rounded-full bg-purple-600 text-white font-black text-xs flex items-center justify-center num-fa">
-            ۲
+            ۳
           </span>
           <div className="flex items-center gap-2">
             <Package className="w-4 h-4 text-purple-400" />
             <h3 className="text-xs sm:text-sm font-bold text-slate-100">
-              افزودن اقلام مازاد و کالای آزاد
+              افزودن اقلام مازاد
             </h3>
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
               قیمت خرید ویزیتور
@@ -192,7 +192,7 @@ export const SurplusItemsStep: React.FC<SurplusItemsStepProps> = ({
                 </label>
                 <input
                   type="text"
-                  placeholder="پیش‌فرض: مازاد خودرو / مستقیم"
+                  placeholder="پیش‌فرض: اقلام مازاد"
                   value={inlineSurplusCustomerLabel}
                   onChange={(e) => onChangeCustomerLabel(e.target.value)}
                   className="flex-1 h-8 px-2.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-purple-500"

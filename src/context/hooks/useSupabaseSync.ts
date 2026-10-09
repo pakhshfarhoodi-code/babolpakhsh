@@ -57,6 +57,30 @@ export const OPTIONAL_TABLES: Set<SyncTable> = new Set([
 ]);
 
 /**
+ * Helper to safely format error objects into strings instead of raw object logs
+ */
+export function formatSyncError(err: unknown): string {
+  if (!err) return 'Unknown error';
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'string') return err;
+  if (typeof err === 'object') {
+    const maybeObj = err as Record<string, unknown>;
+    if (typeof maybeObj.message === 'string' && maybeObj.message) {
+      return maybeObj.message;
+    }
+    if (typeof maybeObj.error_description === 'string' && maybeObj.error_description) {
+      return maybeObj.error_description;
+    }
+    try {
+      return JSON.stringify(err);
+    } catch {
+      return String(err);
+    }
+  }
+  return String(err);
+}
+
+/**
  * Promise wrapper enforcing a strict 15-second timeout on any network/database request.
  */
 function withTimeout<T>(
@@ -385,7 +409,7 @@ export function useSupabaseSync({
           });
         }
       } catch (err) {
-        console.warn('Failed to load catalog_brand_order in sync:', err);
+        console.warn('Failed to load catalog_brand_order in sync:', formatSyncError(err));
       }
 
       const jsonStr = JSON.stringify(ordered);
@@ -426,7 +450,7 @@ export function useSupabaseSync({
       withTimeout(
         supabase
           .from('supermarkets')
-          .select('id, name, owner, phone, address, assigned_visitor_id, is_active, username, created_at, founder_discount_enabled, founder_discount_percent, approval_status, verification_type, verified_at, verified_by, verification_note, registration_source, approved_at, approved_by, approval_note, latitude, longitude'),
+          .select('id, name, owner, phone, address, assigned_visitor_id, is_active, username, created_at, founder_discount_enabled, founder_discount_percent, verification_type, verified_at, verified_by, verification_note, latitude, longitude'),
         15000,
         'مهلت زمانی دریافت اطلاعات فروشگاه‌ها به پایان رسید'
       ),
@@ -457,15 +481,10 @@ export function useSupabaseSync({
         created_at: sm.created_at,
         founder_discount_enabled: Boolean(sm.founder_discount_enabled),
         founder_discount_percent: typeof sm.founder_discount_percent === 'number' ? sm.founder_discount_percent : 5,
-        approval_status: (sm.approval_status as any) || 'approved',
         verification_type: (sm.verification_type as any) || 'none',
         verified_at: sm.verified_at || null,
         verified_by: sm.verified_by || null,
         verification_note: sm.verification_note || null,
-        registration_source: sm.registration_source || undefined,
-        approved_at: sm.approved_at || null,
-        approved_by: sm.approved_by || null,
-        approval_note: sm.approval_note || null,
         latitude: sm.latitude ?? null,
         longitude: sm.longitude ?? null,
       };
@@ -597,7 +616,7 @@ export function useSupabaseSync({
     const { data: txData, error: txErr } = await withTimeout(
       supabase
         .from('inventory_transactions')
-        .select('id, product_id, product_name, transaction_type, quantity, reference_id, reason, created_at')
+        .select('id, product_id, product_name, transaction_type, quantity, reference_id, created_at')
         .order('created_at', { ascending: false })
         .limit(500),
       15000,
@@ -639,7 +658,7 @@ export function useSupabaseSync({
         }
       }
     } catch (err) {
-      console.warn('Optional product_likes sync notice:', err);
+      console.warn('Optional product_likes sync notice:', formatSyncError(err));
     }
   }, [setProductLikes]);
 
@@ -704,12 +723,13 @@ export function useSupabaseSync({
         try {
           await run();
         } catch (err: unknown) {
-          const tableError = err instanceof Error ? err : new Error(String(err));
+          const errMessage = formatSyncError(err);
+          const tableError = err instanceof Error ? err : new Error(errMessage);
           if (CRITICAL_TABLES.has(table)) {
             criticalErrors.push({ table, error: tableError });
           } else {
             // Optional tables: warn only, do NOT trigger error banner
-            console.warn(`Optional table (${table}) sync notice:`, tableError.message);
+            console.warn(`Optional table (${table}) sync notice: ${errMessage}`);
           }
         }
       })
@@ -730,7 +750,8 @@ export function useSupabaseSync({
       }
     } else {
       // Critical table(s) failed!
-      console.warn('Critical tables sync failure:', criticalErrors);
+      const criticalFormatted = criticalErrors.map((c) => `${c.table}: ${formatSyncError(c.error)}`).join(' | ');
+      console.warn('Critical tables sync failure:', criticalFormatted);
 
       // Requirement 3: Automatic Retry Mechanism for initial load (up to 3 retries: 1s, 2s, 4s)
       if (!isInitialFetchDoneRef.current) {
@@ -752,13 +773,13 @@ export function useSupabaseSync({
           }, delay);
         } else {
           // All 3 automatic retries failed. Now show the real error banner.
-          const firstErr = criticalErrors[0]?.error?.message || 'خطا در برقراری ارتباط با پایگاه داده';
+          const firstErr = criticalErrors[0]?.error ? formatSyncError(criticalErrors[0].error) : 'خطا در برقراری ارتباط با پایگاه داده';
           setFetchError?.(firstErr);
           setIsDataReady?.(false);
         }
       } else {
         // Subsequent background polling/realtime failure after initial load succeeded
-        console.warn('Background sync encountered critical error without breaking UI view:', criticalErrors);
+        console.warn('Background sync encountered critical error without breaking UI view:', criticalFormatted);
       }
     }
 

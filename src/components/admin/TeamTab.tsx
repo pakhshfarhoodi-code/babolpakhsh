@@ -719,11 +719,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
           const { error: smErr } = await supabase
             .from('supermarkets')
             .update({
-              approval_status: status,
               is_active: status === 'approved',
-              approved_at: status === 'approved' ? new Date().toISOString() : null,
-              approved_by: status === 'approved' ? (currentUser?.name || 'مدیر سیستم') : null,
-              approval_note: status === 'rejected' ? (note ? note.trim() : null) : null,
             })
             .eq('id', shop.id);
 

@@ -75,21 +75,21 @@ const StoreDiscountSwitchesBox: React.FC = () => {
   }
 
   return (
-    <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 space-y-2.5 shadow-sm">
-      <div className="flex items-center justify-between text-xs font-bold text-slate-200 flex-wrap gap-1.5">
+    <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-2.5 space-y-2 shadow-sm text-[0.9em]">
+      <div className="flex items-center justify-between text-[11px] font-bold text-slate-200 flex-wrap gap-1">
         <span className="flex items-center gap-1.5 text-emerald-400">
-          <Percent className="w-4 h-4 text-emerald-400 shrink-0" />
+          <Percent className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
           <span>تخفیف‌های ویژه تحویل و عضویت فروشگاه:</span>
         </span>
       </div>
 
       {/* Grid of active discount options */}
-      <div className={`grid grid-cols-1 ${isPickupGloballyEnabled && founderStatus.isFounderActive ? 'md:grid-cols-2' : ''} gap-2 text-xs`}>
+      <div className={`grid grid-cols-1 ${isPickupGloballyEnabled && founderStatus.isFounderActive ? 'md:grid-cols-2' : ''} gap-2 text-[11px]`}>
         {/* Switch A: Pickup Discount (Shown only when admin enabled) */}
         {isPickupGloballyEnabled && (
           <div
             onClick={handleTogglePickup}
-            className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition select-none ${
+            className={`p-2 rounded-lg border flex items-center justify-between cursor-pointer transition select-none ${
               pickupEnabled
                 ? 'bg-emerald-950/50 border-emerald-500/60 text-emerald-100 hover:border-emerald-400 shadow-sm'
                 : 'bg-rose-950/40 border-rose-500/50 text-rose-200 hover:border-rose-400 shadow-sm'
@@ -97,25 +97,25 @@ const StoreDiscountSwitchesBox: React.FC = () => {
           >
             <div className="flex items-center gap-2">
               <div
-                className={`w-9 h-5 rounded-full p-0.5 transition-colors duration-200 ease-in-out shrink-0 ${
+                className={`w-8 h-4.5 rounded-full p-0.5 transition-colors duration-200 ease-in-out shrink-0 ${
                   pickupEnabled ? 'bg-emerald-500' : 'bg-rose-600'
                 }`}
               >
                 <div
-                  className={`w-4 h-4 rounded-full bg-white shadow-md transition-transform duration-200 ease-in-out ${
-                    pickupEnabled ? 'translate-x-[-16px]' : 'translate-x-0'
+                  className={`w-3.5 h-3.5 rounded-full bg-white shadow-md transition-transform duration-200 ease-in-out ${
+                    pickupEnabled ? 'translate-x-[-14px]' : 'translate-x-0'
                   }`}
                 />
               </div>
-              <span className="font-bold text-xs">
+              <span className="font-bold text-[11px]">
                 {pickupPercent}٪ تخفیف تحویل سفارش درب انبار
               </span>
             </div>
             <span
-              className={`text-[10px] px-2.5 py-1 rounded-lg font-bold border ${
+              className={`text-[9.5px] px-2 py-0.5 rounded-md font-bold border ${
                 pickupEnabled
-                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                  : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                  ? 'bg-emerald-500/20 text-emerald-200 border-emerald-500/50'
+                  : 'bg-rose-500/20 text-rose-200 border-rose-500/50'
               }`}
             >
               {pickupEnabled ? 'روشن (فعال)' : 'خاموش (غیرفعال)'}
@@ -127,21 +127,16 @@ const StoreDiscountSwitchesBox: React.FC = () => {
         {founderStatus.isFounderActive && (
           <div
             onClick={() => setShowFounderInfo((prev) => !prev)}
-            className="p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition select-none bg-gradient-to-r from-purple-950/70 via-slate-900 to-amber-950/60 border-purple-500/50 text-purple-100 hover:border-purple-400 shadow-sm"
+            className="p-2 rounded-lg border flex items-center justify-between cursor-pointer transition select-none bg-gradient-to-r from-purple-950/70 via-slate-900 to-amber-950/60 border-purple-500/50 text-purple-100 hover:border-purple-400 shadow-sm"
             title="جهت مشاهده جزئیات تخفیف کلیک کنید"
           >
-            <div className="flex items-center gap-2 min-w-0">
-              <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="font-bold text-xs text-white">
-                  کد تخفیف ۵٪ ویژه ۱۰۰ فروشگاه اول
-                </span>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 hidden sm:inline-block">
-                  سفارش {founderStatus.usedOrdersCount + 1} از ۳
-                </span>
-              </div>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="font-bold text-[11px] text-white truncate">
+                کد تخفیف ۵٪ ویژه ۱۰۰ فروشگاه اول
+              </span>
             </div>
-            <span className="text-[10px] px-2.5 py-1 rounded-lg font-bold border bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-mono shrink-0">
+            <span className="text-[9.5px] px-2.5 py-0.5 rounded-md font-black border bg-emerald-500 text-slate-950 border-emerald-400 shadow-md font-mono shrink-0">
               فعال ({founderStatus.remainingOrdersCount} سفارش مانده)
             </span>
           </div>
@@ -150,14 +145,14 @@ const StoreDiscountSwitchesBox: React.FC = () => {
 
       {/* Info notice when clicking Founder switch */}
       {showFounderInfo && founderStatus.isFounderActive && (
-        <div className="p-3 rounded-xl bg-purple-950/90 border border-purple-500/40 text-purple-200 text-xs flex items-center justify-between gap-2 animate-in fade-in shadow-sm">
-          <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            <Info className="w-4 h-4 text-purple-400 shrink-0" />
+        <div className="p-2.5 rounded-lg bg-purple-950/90 border border-purple-500/40 text-purple-200 text-[11px] flex items-center justify-between gap-2 animate-in fade-in shadow-sm">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <Info className="w-3.5 h-3.5 text-purple-400 shrink-0" />
             <div className="space-y-0.5 min-w-0 flex-1">
-              <p className="font-bold text-white text-xs">
+              <p className="font-bold text-white text-[11px]">
                 طرح تخفیف ویژه ۵ درصدی ۱۰۰ فروشگاه اول:
               </p>
-              <p className="text-[11.5px] sm:text-xs text-purple-100 font-medium tracking-tight whitespace-normal leading-normal">
+              <p className="text-[10.5px] text-purple-100 font-medium tracking-tight whitespace-normal leading-normal">
                 تبریک! شما به عنوان ۱۰۰ فروشگاه اول در سامانه ثبت‌نام شده‌اید. تخفیف ۵ درصدی برای ۳ سفارش اول شما فعال است (تاکنون {founderStatus.usedOrdersCount} بار استفاده شده و برای {founderStatus.remainingOrdersCount} سفارش دیگر فعال خواهد بود).
               </p>
             </div>
@@ -168,7 +163,7 @@ const StoreDiscountSwitchesBox: React.FC = () => {
             className="text-purple-400 hover:text-white p-1 cursor-pointer shrink-0"
             title="بستن"
           >
-            <X className="w-4 h-4" />
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
       )}

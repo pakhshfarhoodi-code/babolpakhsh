@@ -11,7 +11,12 @@ import {
   ToggleRight,
   Info,
   Loader2,
+  Image as ImageIcon,
+  Upload,
+  Trash2,
+  CheckCircle2,
 } from 'lucide-react';
+import appLogo from '../../assets/images/farhoodi_b2b_logo.webp';
 
 interface AdminSettingsModalProps {
   isOpen: boolean;
@@ -176,6 +181,99 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
       showToast(msg, 'error');
     } finally {
       setIsSavingDiscount(false);
+    }
+  };
+
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showToast('لطفاً یک فایل تصویری معتبر (WebP, PNG, JPG) انتخاب کنید.', 'error');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('حجم فایل تصویر نباید بیشتر از ۵ مگابایت باشد.', 'error');
+      return;
+    }
+
+    setIsUploadingLogo(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const rawDataUri = event.target?.result as string;
+        if (!rawDataUri) {
+          setIsUploadingLogo(false);
+          return;
+        }
+
+        // Compress / resize to max 512x512 for optimal storage and crisp display
+        const img = new Image();
+        img.onload = async () => {
+          const maxDim = 512;
+          let width = img.width;
+          let height = img.height;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const optimizedDataUri = canvas.toDataURL('image/webp', 0.92);
+            const res = await updateInvoiceSettings({
+              ...invoiceSettings,
+              logo_url: optimizedDataUri,
+            });
+            if (res.success) {
+              showToast('لوگوی سراسری سامانه با موفقیت ذخیره و در تمام بخش‌ها (ورود، هدر، فاکتور و تب مرورگر) اعمال شد.', 'success');
+            } else {
+              showToast(res.message || 'خطا در ذخیره لوگو در تنظیمات.', 'error');
+            }
+          }
+          setIsUploadingLogo(false);
+        };
+        img.onerror = () => {
+          showToast('بارگذاری فایل تصویر با خطا مواجه شد.', 'error');
+          setIsUploadingLogo(false);
+        };
+        img.src = rawDataUri;
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Error uploading logo:', err);
+      showToast('خطا در پردازش تصویر لوگو.', 'error');
+      setIsUploadingLogo(false);
+    }
+  };
+
+  const handleResetLogo = async () => {
+    if (!window.confirm('آیا از بازنشانی لوگو به حالت پیش‌فرض اولیه اطمینان دارید؟')) return;
+    setIsUploadingLogo(true);
+    try {
+      const res = await updateInvoiceSettings({
+        ...invoiceSettings,
+        logo_url: '',
+      });
+      if (res.success) {
+        showToast('لوگو به حالت پیش‌فرض اولیه بازنشانی شد.', 'success');
+      }
+    } catch (err) {
+      showToast('خطا در بازنشانی لوگو.', 'error');
+    } finally {
+      setIsUploadingLogo(false);
     }
   };
 
@@ -352,6 +450,94 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
                 با تایید فاکتور توسط ادمین، کسر موجودی انبار به‌صورت خودکار و مستقیم انجام می‌پذیرد.
               </p>
             )}
+          </div>
+        </div>
+
+        {/* 3. System Brand Logo Card */}
+        <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <ImageIcon className="w-4 h-4 text-amber-400" />
+                <h4 className="font-bold text-sm text-slate-100">
+                  نشان و لوگوی رسمی سامانه (سراسری)
+                </h4>
+              </div>
+              <p className="text-slate-400 leading-relaxed text-xs">
+                تعویض یکدست تصویر لوگو در صفحه ورود، هدر تمام نقش‌ها (فروشگاه، ویزیتور، ادمین)، فاکتورها و آیکون تب مرورگر.
+              </p>
+            </div>
+            {invoiceSettings?.logo_url && (
+              <span className="text-[11px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/50 px-2 py-0.5 rounded-md font-semibold shrink-0">
+                لوگوی اختصاصی فعال
+              </span>
+            )}
+          </div>
+
+          <div className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-4">
+            {/* Current Logo Preview */}
+            <div className="flex items-center gap-3">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-amber-500 p-0.5 shadow-lg shadow-blue-500/20 shrink-0 overflow-hidden flex items-center justify-center bg-slate-950">
+                <img
+                  src={invoiceSettings?.logo_url || appLogo}
+                  alt="لوگوی فعال سامانه"
+                  className="w-full h-full object-contain rounded-[14px]"
+                />
+              </div>
+              <div>
+                <span className="text-xs font-bold text-slate-200 block">
+                  {invoiceSettings?.logo_url ? 'لوگوی بارگذاری‌شده توسط مدیریت' : 'لوگوی پیش‌فرض سیستم'}
+                </span>
+                <span className="text-[11px] text-slate-400 block mt-0.5">
+                  پشتیبانی از فرمت‌های WebP, PNG, JPG (حداکثر ۵ مگابایت)
+                </span>
+              </div>
+            </div>
+
+            {/* Actions: Upload or Reset */}
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <label
+                htmlFor="admin-modal-logo-upload"
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold cursor-pointer transition select-none ${
+                  isUploadingLogo
+                    ? 'bg-slate-800 text-slate-400 cursor-not-allowed'
+                    : 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-black shadow-md shadow-amber-500/20'
+                }`}
+              >
+                {isUploadingLogo ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>در حال بارگذاری...</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4" />
+                    <span>انتخاب و تعویض لوگو</span>
+                  </>
+                )}
+                <input
+                  id="admin-modal-logo-upload"
+                  type="file"
+                  accept="image/webp,image/png,image/jpeg,image/jpg"
+                  className="hidden"
+                  disabled={isUploadingLogo}
+                  onChange={handleLogoUpload}
+                />
+              </label>
+
+              {invoiceSettings?.logo_url && (
+                <button
+                  type="button"
+                  disabled={isUploadingLogo}
+                  onClick={handleResetLogo}
+                  className="flex items-center gap-1 px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-rose-950/60 text-slate-300 hover:text-rose-300 border border-slate-700/60 hover:border-rose-800/60 text-xs font-semibold transition cursor-pointer"
+                  title="بازنشانی به لوگوی اولیه"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">بازنشانی</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
 

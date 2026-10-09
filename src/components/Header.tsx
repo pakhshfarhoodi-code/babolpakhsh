@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   ThermometerSnowflake,
@@ -37,7 +37,19 @@ export const Header: React.FC<HeaderProps> = () => {
     toggleTheme,
     logout,
     adminProfile,
+    invoiceSettings,
   } = useApp();
+
+  const currentLogo = invoiceSettings?.logo_url || appLogo;
+
+  useEffect(() => {
+    if (invoiceSettings?.logo_url) {
+      const link = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
+      if (link) {
+        link.href = invoiceSettings.logo_url;
+      }
+    }
+  }, [invoiceSettings?.logo_url]);
 
   const defaultStore = useMemo(() => ({
     id: 'sm-default',
@@ -91,8 +103,8 @@ export const Header: React.FC<HeaderProps> = () => {
             <div className="flex items-center justify-between gap-2.5 min-w-0">
               {/* Right Side: Logo Badge + "بارفروش | پخش فرهودی" Button to view Admin Profile */}
               <div className="flex items-center gap-2 shrink-0">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-amber-500 p-0.5 shadow-md shadow-blue-500/20 shrink-0 overflow-hidden">
-                  <img src={appLogo} alt="لوگوی پخش فرهودی" className="w-full h-full object-cover rounded-[10px]" />
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-amber-500 p-0.5 shadow-md shadow-blue-500/20 shrink-0 overflow-hidden flex items-center justify-center bg-slate-900">
+                  <img src={currentLogo} alt="لوگوی پخش فرهودی" className="w-full h-full object-contain rounded-[10px]" />
                 </div>
                 <button
                   type="button"
@@ -180,8 +192,8 @@ export const Header: React.FC<HeaderProps> = () => {
           <div className="max-w-7xl mx-auto px-3 sm:px-5 py-2">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-amber-500 p-0.5 shadow-md shadow-blue-500/20 shrink-0 overflow-hidden">
-                  <img src={appLogo} alt="لوگوی پخش فرهودی" className="w-full h-full object-cover rounded-[10px]" />
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-amber-500 p-0.5 shadow-md shadow-blue-500/20 shrink-0 overflow-hidden flex items-center justify-center bg-slate-900">
+                  <img src={currentLogo} alt="لوگوی پخش فرهودی" className="w-full h-full object-contain rounded-[10px]" />
                 </div>
 
                 <button
@@ -245,8 +257,8 @@ export const Header: React.FC<HeaderProps> = () => {
           
           {/* Right Section: Identity Icon + Name + Role Switcher Pill */}
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-amber-500 p-0.5 shadow-md shadow-blue-500/20 shrink-0 overflow-hidden">
-              <img src={appLogo} alt="لوگوی پخش فرهودی" className="w-full h-full object-cover rounded-[10px]" />
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-amber-500 p-0.5 shadow-md shadow-blue-500/20 shrink-0 overflow-hidden flex items-center justify-center bg-slate-900">
+              <img src={currentLogo} alt="لوگوی پخش فرهودی" className="w-full h-full object-contain rounded-[10px]" />
             </div>
 
             <div className="flex items-center gap-1.5 min-w-0">

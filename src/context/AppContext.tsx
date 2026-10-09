@@ -1178,25 +1178,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [catalog]
   );
 
-  // Update invoice settings (admin action via SECURITY DEFINER RPC)
+  // Update invoice settings (admin action via SECURITY DEFINER RPC with direct upsert fallback)
   const updateInvoiceSettings = useCallback(
     async (newSettings: InvoiceSettings): Promise<{ success: boolean; message: string }> => {
       try {
         if (isSupabaseConfigured && supabase) {
-          const { error } = await supabase.rpc('set_invoice_settings', {
+          // 1. Try SECURITY DEFINER RPC
+          const { error: rpcErr } = await supabase.rpc('set_invoice_settings', {
             p_value: newSettings,
           });
 
-          if (error) {
-            console.error('Error saving invoice settings via Supabase RPC:', error);
-            return {
-              success: false,
-              message: error.message || 'خطا در ذخیره‌سازی تنظیمات فاکتور در سرور',
-            };
+          if (rpcErr) {
+            console.warn('RPC set_invoice_settings failed, falling back to direct upsert:', rpcErr);
+            // 2. Fallback to direct app_settings upsert (using only key & value)
+            const { error: upsertErr } = await supabase
+              .from('app_settings')
+              .upsert({ key: 'invoice_settings', value: newSettings }, { onConflict: 'key' });
+
+            if (upsertErr) {
+              console.error('Error saving invoice settings to app_settings:', upsertErr);
+              return {
+                success: false,
+                message: rpcErr.message || upsertErr.message || 'خطا در ذخیره‌سازی تنظیمات فاکتور در سرور',
+              };
+            }
           }
         }
 
-        // Only update local state and localStorage if RPC succeeded (or if supabase not configured)
+        // Update local state and localStorage
         setInvoiceSettings(newSettings);
         if (typeof window !== 'undefined') {
           localStorage.setItem('app_setting_invoice_settings', JSON.stringify(newSettings));

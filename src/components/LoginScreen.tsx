@@ -34,7 +34,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   onLoginStart,
   onLoginComplete,
 }) => {
-  const { loginWithCredentials, isLoggedIn, isDataReady, theme, toggleTheme } = useApp();
+  const { loginWithCredentials, isLoggedIn, isDataReady, theme, toggleTheme, invoiceSettings } = useApp();
+  const currentLogo = invoiceSettings?.logo_url || appLogo;
+
+  useEffect(() => {
+    if (invoiceSettings?.logo_url) {
+      const link = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
+      if (link) {
+        link.href = invoiceSettings.logo_url;
+      }
+    }
+  }, [invoiceSettings?.logo_url]);
   const [activeTab, setActiveTab] = useState<UserRole>(() => {
     if (initialRole) return initialRole;
     if (allowedRoles && allowedRoles.length > 0) return allowedRoles[0];
@@ -190,11 +200,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
         {/* App Header */}
         <div className="flex flex-col items-center text-center mb-6 pt-1">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-amber-500 p-0.5 shadow-xl shadow-blue-500/25 mb-3.5 overflow-hidden">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-amber-500 p-0.5 shadow-xl shadow-blue-500/25 mb-3.5 overflow-hidden flex items-center justify-center bg-slate-900">
             <img
-              src={appLogo}
+              src={currentLogo}
               alt="لوگوی شبکه پخش عمده فرهودی"
-              className="w-full h-full object-cover rounded-[14px]"
+              className="w-full h-full object-contain rounded-[14px]"
             />
           </div>
           <h1

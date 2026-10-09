@@ -49,7 +49,10 @@ export const App: React.FC = () => {
     fetchError,
     retryFetch,
     theme,
+    invoiceSettings,
   } = useApp();
+
+  const currentLogo = invoiceSettings?.logo_url || appLogo;
 
   const [currentPath, setCurrentPath] = useState<string>(getNormalizedPath);
   const [justLoggedIn, setJustLoggedIn] = useState(false);
@@ -124,7 +127,7 @@ export const App: React.FC = () => {
       }`}>
         <div className="flex flex-col items-center gap-4 animate-in fade-in duration-300">
           <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden shadow-xl border border-slate-700/40 bg-slate-900 flex items-center justify-center p-2">
-            <img src={appLogo} alt="بارفروش" className="w-full h-full object-contain" />
+            <img src={currentLogo} alt="بارفروش" className="w-full h-full object-contain" />
           </div>
           <div className="flex items-center gap-2">
             <Loader2 className={`w-5 h-5 animate-spin ${theme === 'light' ? 'text-blue-600' : 'text-blue-400'}`} />

@@ -366,10 +366,32 @@ export function useSupabaseSync({
 
     if (brs && brs.length > 0) {
       const dbBrandNames = Array.from(new Set(brs.map((b: { name: string }) => b.name).filter(Boolean)));
-      const jsonStr = JSON.stringify(dbBrandNames);
+      let ordered = dbBrandNames;
+      try {
+        const { data: orderRow } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'catalog_brand_order')
+          .maybeSingle();
+        if (orderRow && Array.isArray(orderRow.value) && orderRow.value.length > 0) {
+          const savedOrder: string[] = orderRow.value;
+          ordered = [...dbBrandNames].sort((a, b) => {
+            const idxA = savedOrder.indexOf(a);
+            const idxB = savedOrder.indexOf(b);
+            if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+            if (idxA !== -1) return -1;
+            if (idxB !== -1) return 1;
+            return a.localeCompare(b, 'fa');
+          });
+        }
+      } catch (err) {
+        console.warn('Failed to load catalog_brand_order in sync:', err);
+      }
+
+      const jsonStr = JSON.stringify(ordered);
       if (lastStateJsonRef.current.brands !== jsonStr) {
         lastStateJsonRef.current.brands = jsonStr;
-        setBrands(dbBrandNames);
+        setBrands(ordered);
       }
     }
   }, [setBrands]);
@@ -434,7 +456,7 @@ export function useSupabaseSync({
         username: profUsername || sm.username || sm.phone || '',
         created_at: sm.created_at,
         founder_discount_enabled: Boolean(sm.founder_discount_enabled),
-        founder_discount_percent: typeof sm.founder_discount_percent === 'number' ? sm.founder_discount_percent : 3,
+        founder_discount_percent: typeof sm.founder_discount_percent === 'number' ? sm.founder_discount_percent : 5,
         approval_status: (sm.approval_status as any) || 'approved',
         registration_source: sm.registration_source || undefined,
         approved_at: sm.approved_at || null,

@@ -5,6 +5,46 @@
  * Discounted Unit Price = Math.round(original_unit_price * (100 - total_discount_percent) / 100)
  */
 
+export const DEFAULT_FOUNDER_DISCOUNT_PERCENT = 5;
+export const FOUNDER_INITIAL_CAPACITY = 80;
+export const FOUNDER_QUALIFYING_LIMIT = 100;
+
+export interface StoreRankInfo {
+  rank: number;
+  totalStores: number;
+  isFounderEligible: boolean;
+  remainingCapacity: number;
+}
+
+export function getStoreRegistrationRank(
+  supermarkets: Array<{ id: string; created_at?: string }>,
+  storeId?: string | null
+): StoreRankInfo {
+  if (!supermarkets || supermarkets.length === 0) {
+    return {
+      rank: 1,
+      totalStores: 0,
+      isFounderEligible: true,
+      remainingCapacity: FOUNDER_INITIAL_CAPACITY,
+    };
+  }
+
+  // Sort chronologically ascending by created_at
+  const sorted = [...supermarkets].sort((a, b) => {
+    const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return timeA - timeB;
+  });
+
+  const idx = storeId ? sorted.findIndex((s) => s.id === storeId) : -1;
+  const rank = idx >= 0 ? idx + 1 : sorted.length + 1;
+  const totalStores = sorted.length;
+  const isFounderEligible = rank <= FOUNDER_QUALIFYING_LIMIT;
+  const remainingCapacity = Math.max(0, FOUNDER_INITIAL_CAPACITY - totalStores);
+
+  return { rank, totalStores, isFounderEligible, remainingCapacity };
+}
+
 export function calculateTotalDiscountPercent(
   pickupPercent: number = 0,
   founderPercent: number = 0,

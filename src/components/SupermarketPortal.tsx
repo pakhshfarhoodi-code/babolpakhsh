@@ -11,7 +11,7 @@ import {
   buildCartFromOrder,
   clampQuantity,
 } from './shop/shopUtils';
-import { getStorePickupDiscountEnabled } from '../utils/storeDiscount';
+import { getStorePickupDiscountEnabled, getStoreRegistrationRank } from '../utils/storeDiscount';
 import {
   Search,
   X,
@@ -299,14 +299,22 @@ export const SupermarketPortal: React.FC = () => {
     setOrderError(null);
 
     try {
-      const isPickupEnabled = getStorePickupDiscountEnabled(currentStore?.id || '');
+      const isPickupGloballyEnabled = invoiceSettings?.pickup_discount_enabled !== false;
+      const isPickupEnabled = isPickupGloballyEnabled && getStorePickupDiscountEnabled(currentStore?.id || '');
       const pickupPercent = invoiceSettings?.pickup_discount_percent || 3;
+
+      const { rank: storeRank } = getStoreRegistrationRank(supermarkets, currentStore?.id || '');
+      const isFounderEligible = storeRank <= 100;
+      const founderPercent = (isFounderEligible || currentStore?.founder_discount_enabled)
+        ? Math.max(5, Number(currentStore?.founder_discount_percent) || 5)
+        : 0;
 
       const res = await createOrder({
         supermarketId: currentStore?.id || '',
         visitorId: assignedVisitor?.id || 'direct',
         orderSource: 'supermarket',
         pickupDiscountPercent: isPickupEnabled ? pickupPercent : 0,
+        founderDiscountPercent: founderPercent,
         items,
       });
 
@@ -343,11 +351,11 @@ export const SupermarketPortal: React.FC = () => {
     <div className="space-y-3 pb-20 lg:pb-8 max-w-[1600px] mx-auto">
       {/* 1. Approval Status Banners */}
       {approvalStatus === 'pending' && (
-        <div className="p-3.5 rounded-2xl bg-amber-950/80 border border-amber-500/50 text-amber-100 text-xs sm:text-sm font-semibold flex items-center gap-3 shadow-lg shadow-amber-950/30 backdrop-blur-sm animate-in fade-in">
-          <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0">
-            <Clock className="w-4.5 h-4.5 text-amber-300" />
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-blue-950 via-[#0e213f] to-blue-950 border border-blue-500/50 text-blue-100 text-xs sm:text-sm font-semibold flex items-center gap-3 shadow-xl shadow-blue-950/50 backdrop-blur-md animate-in fade-in">
+          <div className="w-9 h-9 rounded-xl bg-blue-500/25 border border-blue-400/40 flex items-center justify-center shrink-0 text-blue-300 shadow-inner">
+            <Clock className="w-5 h-5 text-blue-300" />
           </div>
-          <p className="leading-relaxed flex-1 text-amber-100">
+          <p className="leading-relaxed flex-1 text-blue-100 font-medium">
             برای ثبت اولین سفارش، حساب کاربری شما نیازمند احراز و تایید توسط ادمین است. پس از تایید حساب کاربری شما، به شماره ثبت‌شده در سیستم اطلاع‌رسانی خواهد شد.
           </p>
         </div>

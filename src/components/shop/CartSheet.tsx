@@ -18,6 +18,7 @@ import {
   getStorePickupDiscountEnabled,
   calculateTotalDiscountPercent,
   calculateDiscountedPrice,
+  getStoreRegistrationRank,
 } from '../../utils/storeDiscount';
 
 interface CartSheetProps {
@@ -62,10 +63,14 @@ export const CartSheet: React.FC<CartSheetProps> = ({
     (s) => s.id === selectedSupermarketId || (currentUser?.id && s.id === currentUser.id)
   );
   const storeId = currentShop?.id || currentUser?.id || '';
+  const isPickupGloballyEnabled = invoiceSettings?.pickup_discount_enabled !== false;
   const pickupPercent = invoiceSettings?.pickup_discount_percent || 3;
-  const pickupEnabled = getStorePickupDiscountEnabled(storeId);
-  const founderEnabled = Boolean(currentShop?.founder_discount_enabled);
-  const founderPercent = currentShop?.founder_discount_percent || 3;
+  const pickupEnabled = isPickupGloballyEnabled && getStorePickupDiscountEnabled(storeId);
+
+  const { rank: storeRank } = getStoreRegistrationRank(supermarkets, storeId);
+  const isFounderEligible = storeRank <= 100;
+  const founderEnabled = isFounderEligible || Boolean(currentShop?.founder_discount_enabled);
+  const founderPercent = Math.max(5, Number(currentShop?.founder_discount_percent) || 5);
 
   const totalDiscountPercent = calculateTotalDiscountPercent(
     pickupEnabled ? pickupPercent : 0,

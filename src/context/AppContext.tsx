@@ -28,6 +28,8 @@ import {
   ChequeStatus,
   ChequeDetailsInput,
   PaymentAllocationInput,
+  AdminProfile,
+  DEFAULT_ADMIN_PROFILE,
 } from '../types';
 import {
   INITIAL_CATEGORIES,
@@ -159,6 +161,7 @@ interface AppContextType {
   addBrand: (name: string) => { success: boolean; message: string };
   updateBrand: (oldBrandName: string, newBrandName: string) => { success: boolean; message: string };
   deleteBrand: (brandName: string) => { success: boolean; message: string };
+  updateBrandOrder: (orderedBrands: string[]) => Promise<{ success: boolean; message: string }>;
   addUnit: (name: string) => { success: boolean; message: string };
   updateUnit: (oldUnitName: string, newUnitName: string) => { success: boolean; message: string };
   deleteUnit: (unitName: string) => { success: boolean; message: string };
@@ -191,6 +194,8 @@ interface AppContextType {
   toggleTheme: () => void;
   invoiceSettings: InvoiceSettings;
   updateInvoiceSettings: (settings: InvoiceSettings) => Promise<{ success: boolean; message: string }>;
+  adminProfile: AdminProfile;
+  updateAdminProfile: (profile: AdminProfile) => Promise<{ success: boolean; message: string }>;
   financialAccounts: FinancialAccount[];
   accountTransactions: AccountTransaction[];
   cheques: Cheque[];
@@ -1044,7 +1049,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return DEFAULT_INVOICE_SETTINGS;
   });
 
-  // Load invoice_settings from Supabase app_settings on startup & on data refresh
+  // Admin & Central Distributor Profile state with localStorage fallback
+  const [adminProfile, setAdminProfile] = useState<AdminProfile>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('barfroosh_admin_profile');
+      if (saved) {
+        try {
+          return { ...DEFAULT_ADMIN_PROFILE, ...JSON.parse(saved) };
+        } catch {
+          // ignore
+        }
+      }
+    }
+    return DEFAULT_ADMIN_PROFILE;
+  });
+
+  // Load invoice_settings & admin_profile from Supabase app_settings on startup & on data refresh
   useEffect(() => {
     let isMounted = true;
     const fetchInvoiceSettings = async () => {
@@ -1063,6 +1083,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               localStorage.setItem('app_setting_invoice_settings', JSON.stringify(parsed));
             }
           }
+
+          // Fetch admin_profile
+          const { data: adminProfData } = await supabase
+            .from('app_settings')
+            .select('value')
+            .eq('key', 'admin_profile')
+            .maybeSingle();
+
+          if (adminProfData && adminProfData.value && isMounted) {
+            const parsed = { ...DEFAULT_ADMIN_PROFILE, ...(adminProfData.value as object) };
+            setAdminProfile(parsed);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('barfroosh_admin_profile', JSON.stringify(parsed));
+            }
+          }
+
+          // Fetch catalog_brand_order
+          const { data: brandOrderData } = await supabase
+            .from('app_settings')
+            .select('value')
+            .eq('key', 'catalog_brand_order')
+            .maybeSingle();
+
+          if (brandOrderData && Array.isArray(brandOrderData.value) && isMounted) {
+            const savedOrder = brandOrderData.value as string[];
+            catalog.setBrands((prev) => {
+              const sorted = [...prev].sort((a, b) => {
+                const idxA = savedOrder.indexOf(a);
+                const idxB = savedOrder.indexOf(b);
+                if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                if (idxA !== -1) return -1;
+                if (idxB !== -1) return 1;
+                return a.localeCompare(b, 'fa');
+              });
+              return sorted;
+            });
+          }
         } catch (err) {
           console.warn('Error fetching invoice_settings from app_settings:', err);
         }
@@ -1074,6 +1131,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isMounted = false;
     };
   }, [reloadCounter]);
+
+  // Update catalog brand order (admin action)
+  const updateBrandOrder = useCallback(
+    async (orderedBrands: string[]): Promise<{ success: boolean; message: string }> => {
+      try {
+        catalog.setBrands(orderedBrands);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('alborz_brands_v2', JSON.stringify(orderedBrands));
+        }
+
+        if (isSupabaseConfigured && supabase) {
+          // 1. Try SECURITY DEFINER RPC first if provisioned
+          const { error: rpcErr } = await supabase.rpc('set_catalog_brand_order', {
+            p_brands: orderedBrands,
+          });
+
+          if (rpcErr) {
+            // 2. Fallback to direct app_settings upsert
+            const { error: upsertErr } = await supabase
+              .from('app_settings')
+              .upsert({ key: 'catalog_brand_order', value: orderedBrands }, { onConflict: 'key' });
+            if (upsertErr) {
+              console.error('Error saving brand order to app_settings:', upsertErr);
+              return { success: false, message: 'خطا در ذخیره ترتیب برندها در سرور' };
+            }
+          }
+        }
+        return { success: true, message: 'ترتیب نمایش برندها در کاتالوگ با موفقیت ذخیره شد.' };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در ذخیره ترتیب برندها';
+        return { success: false, message: msg };
+      }
+    },
+    [catalog]
+  );
 
   // Update invoice settings (admin action via SECURITY DEFINER RPC)
   const updateInvoiceSettings = useCallback(
@@ -1110,6 +1202,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           success: false,
           message: msg,
         };
+      }
+    },
+    []
+  );
+
+  // Update admin & distributor profile (admin action)
+  const updateAdminProfile = useCallback(
+    async (newProfile: AdminProfile): Promise<{ success: boolean; message: string }> => {
+      try {
+        setAdminProfile(newProfile);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('barfroosh_admin_profile', JSON.stringify(newProfile));
+        }
+
+        if (isSupabaseConfigured && supabase) {
+          // 1. Try SECURITY DEFINER RPC first if provisioned
+          const { error: rpcErr } = await supabase.rpc('set_admin_profile', {
+            p_value: newProfile,
+          });
+
+          if (rpcErr) {
+            // 2. Fallback to direct app_settings upsert
+            const { error: upsertErr } = await supabase
+              .from('app_settings')
+              .upsert({ key: 'admin_profile', value: newProfile }, { onConflict: 'key' });
+            if (upsertErr) {
+              console.error('Error saving admin profile to app_settings:', upsertErr);
+              return { success: false, message: 'خطا در ذخیره مشخصات مدیر در سرور' };
+            }
+          }
+        }
+
+        return {
+          success: true,
+          message: 'مشخصات مدیریت و مرکز پخش با موفقیت ذخیره شد.',
+        };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'خطای غیرمنتظره در ذخیره مشخصات مدیر';
+        return { success: false, message: msg };
       }
     },
     []
@@ -1169,6 +1300,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addBrand: catalog.addBrand,
     updateBrand: catalog.updateBrand,
     deleteBrand: catalog.deleteBrand,
+    updateBrandOrder,
     addUnit: catalog.addUnit,
     updateUnit: catalog.updateUnit,
     deleteUnit: catalog.deleteUnit,
@@ -1190,6 +1322,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     theme,
     toggleTheme,
     showToast,
+    adminProfile,
+    updateAdminProfile,
     financialAccounts: financial.accounts,
     accountTransactions: financial.transactions,
     cheques: financial.cheques,
@@ -1245,6 +1379,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     catalog.addBrand,
     catalog.updateBrand,
     catalog.deleteBrand,
+    updateBrandOrder,
     catalog.addUnit,
     catalog.updateUnit,
     catalog.deleteUnit,
@@ -1273,6 +1408,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast,
     invoiceSettings,
     updateInvoiceSettings,
+    adminProfile,
+    updateAdminProfile,
     financial.accounts,
     financial.transactions,
     financial.cheques,

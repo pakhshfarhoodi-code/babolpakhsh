@@ -21,6 +21,7 @@ import {
   MapPin,
   Package,
   Plus,
+  Navigation,
 } from 'lucide-react';
 import { isToday, formatPrice } from './helpers';
 import { OrderInvoiceModal } from '../invoice/OrderInvoiceModal';
@@ -353,10 +354,24 @@ export const TodayTab: React.FC<TodayTabProps> = ({
                           <span className="truncate">فروشگاه حذف شده است</span>
                         </span>
                       ) : shop?.address ? (
-                        <span className="text-slate-400 flex items-center gap-1 min-w-0" title={shop.address}>
-                          <MapPin className="w-3 h-3 text-emerald-400 shrink-0" />
-                          <span className="truncate">{shop.address}</span>
-                        </span>
+                        <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                          <span className="text-slate-400 flex items-center gap-1 min-w-0" title={shop.address}>
+                            <MapPin className="w-3 h-3 text-emerald-400 shrink-0" />
+                            <span className="truncate">{shop.address}</span>
+                          </span>
+                          {typeof shop.latitude === 'number' && typeof shop.longitude === 'number' && (
+                            <a
+                              href={`https://www.google.com/maps?q=${shop.latitude},${shop.longitude}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold transition shrink-0"
+                              title="مسیریابی روی نقشه"
+                            >
+                              <Navigation className="w-2.5 h-2.5" />
+                              <span>نقشه</span>
+                            </a>
+                          )}
+                        </div>
                       ) : orderCustomerLabel ? (
                         <span className="text-purple-300 truncate">
                           {orderCustomerLabel.includes('همراه ویزیتور') || orderCustomerLabel.includes('مازاد خودرو') || orderCustomerLabel === 'مازاد خودرو / مستقیم'

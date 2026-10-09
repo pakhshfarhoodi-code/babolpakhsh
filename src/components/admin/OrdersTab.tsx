@@ -27,6 +27,7 @@ import {
   Plus,
   ChevronDown,
   RotateCcw,
+  Navigation,
 } from 'lucide-react';
 import { isToday, isWithinDays, formatPrice, formatOrderDate } from './helpers';
 import { getTehranDateParts } from '../../utils/dateUtils';
@@ -72,7 +73,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
   onDeleteOrder,
   onOpenBill,
 }) => {
-  const { refreshData, products = [], loadingBills = [] } = useApp();
+  const { refreshData, products = [], loadingBills = [], supermarkets = [] } = useApp();
 
   const getCalculatedOrderTotal = useCallback(
     (order: Order): number => {
@@ -963,7 +964,27 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                         <span className="font-bold text-blue-400 font-mono text-xs">{order.id}</span>
                       </td>
                       <td className="py-3 px-4 font-medium text-slate-200 whitespace-nowrap">
-                        {order.supermarket_name}
+                        <div className="flex flex-col items-start gap-0.5">
+                          <span>{order.supermarket_name}</span>
+                          {(() => {
+                            const sm = supermarkets.find((s) => s.id === order.supermarket_id);
+                            if (sm && typeof sm.latitude === 'number' && typeof sm.longitude === 'number') {
+                              return (
+                                <a
+                                  href={`https://www.google.com/maps?q=${sm.latitude},${sm.longitude}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-[10px] text-emerald-400 hover:text-emerald-300 transition"
+                                  title="مشاهده موقعیت ثبت‌شده فروشگاه روی نقشه"
+                                >
+                                  <Navigation className="w-2.5 h-2.5" />
+                                  <span>موقعیت نقشه</span>
+                                </a>
+                              );
+                            }
+                            return null;
+                          })()}
+                        </div>
                       </td>
                       <td className="py-3 px-4 whitespace-nowrap">
                         <div className="flex flex-col items-start gap-1">

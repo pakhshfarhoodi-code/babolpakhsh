@@ -7,6 +7,7 @@ import { filterCatalogProducts, sortCatalogProducts } from './shopUtils';
 import {
   getStorePickupDiscountEnabled,
   setStorePickupDiscountEnabled,
+  getStoreRegistrationRank,
 } from '../../utils/storeDiscount';
 import {
   Search,
@@ -20,25 +21,39 @@ import {
   Info,
   Lock,
   Percent,
+  Sparkles,
+  Users,
 } from 'lucide-react';
 
 const StoreDiscountSwitchesBox: React.FC = () => {
   const { invoiceSettings, currentUser, selectedSupermarketId, supermarkets } = useApp();
   const currentShop = supermarkets.find(
-    (s) => s.id === selectedSupermarketId || (currentUser?.id && s.id === currentUser.id)
+    (s) =>
+      s.id === selectedSupermarketId ||
+      (currentUser?.id && s.id === currentUser.id) ||
+      (currentUser?.username && s.username && s.username.toLowerCase() === currentUser.username.toLowerCase()) ||
+      (currentUser?.phone && s.phone === currentUser.phone)
   );
   const storeId = currentShop?.id || currentUser?.id || 'store_default';
+
+  // Warehouse pickup discount enabled status (admin global control)
+  const isPickupGloballyEnabled = invoiceSettings?.pickup_discount_enabled !== false;
   const pickupPercent = invoiceSettings?.pickup_discount_percent || 3;
 
   const [pickupEnabled, setPickupEnabled] = useState<boolean>(() => {
-    return getStorePickupDiscountEnabled(storeId);
+    return isPickupGloballyEnabled && getStorePickupDiscountEnabled(storeId);
   });
 
   useEffect(() => {
+    if (!isPickupGloballyEnabled) {
+      setPickupEnabled(false);
+      return;
+    }
     setPickupEnabled(getStorePickupDiscountEnabled(storeId));
-  }, [storeId]);
+  }, [storeId, isPickupGloballyEnabled]);
 
   const handleTogglePickup = () => {
+    if (!isPickupGloballyEnabled) return;
     const nextVal = !pickupEnabled;
     setPickupEnabled(nextVal);
     setStorePickupDiscountEnabled(storeId, nextVal);
@@ -46,97 +61,124 @@ const StoreDiscountSwitchesBox: React.FC = () => {
     window.dispatchEvent(new Event('store-discount-changed'));
   };
 
-  const founderEnabled = Boolean(currentShop?.founder_discount_enabled);
-  const founderPercent = currentShop?.founder_discount_percent || 3;
+  // 5% Founder Discount for the first 100 people & Rank calculation
+  const { rank: storeRank, isFounderEligible, remainingCapacity } = useMemo(() => {
+    return getStoreRegistrationRank(supermarkets, currentShop?.id || storeId);
+  }, [supermarkets, currentShop?.id, storeId]);
+
+  const founderEnabled = isFounderEligible || Boolean(currentShop?.founder_discount_enabled);
+  const founderPercent = Math.max(5, Number(currentShop?.founder_discount_percent) || 5);
   const [showFounderInfo, setShowFounderInfo] = useState(false);
 
   return (
     <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 space-y-2.5 shadow-sm">
-      <div className="flex items-center justify-between text-xs font-bold text-slate-200">
+      <div className="flex items-center justify-between text-xs font-bold text-slate-200 flex-wrap gap-1.5">
         <span className="flex items-center gap-1.5 text-emerald-400">
           <Percent className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>تخفیف‌های ویژه تحویل و عضویت فروشگاه:</span>
         </span>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-        {/* Switch A: Pickup Discount */}
-        <div
-          onClick={handleTogglePickup}
-          className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition select-none ${
-            pickupEnabled
-              ? 'bg-blue-950/60 border-blue-500/60 text-blue-200'
-              : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <div
-              className={`w-8 h-4.5 rounded-full p-0.5 transition-colors duration-200 ease-in-out shrink-0 ${
-                pickupEnabled ? 'bg-blue-500' : 'bg-slate-700'
-              }`}
-            >
-              <div
-                className={`w-3.5 h-3.5 rounded-full bg-white transition-transform duration-200 ease-in-out ${
-                  pickupEnabled ? 'translate-x-[-14px]' : 'translate-x-0'
-                }`}
-              />
-            </div>
-            <span className="font-bold">
-              {pickupPercent}٪ تخفیف تحویل سفارش درب انبار فرهودی
-            </span>
-          </div>
-          <span
-            className={`text-[10px] px-2 py-0.5 rounded-md font-bold ${
-              pickupEnabled ? 'bg-blue-500/20 text-blue-300' : 'bg-slate-800 text-slate-500'
+      {/* Prominent Counter Banner for remaining founder spots */}
+      <div className="p-2.5 rounded-xl bg-gradient-to-r from-amber-950/80 via-purple-950/80 to-slate-900 border border-amber-500/40 text-amber-200 text-xs flex items-center justify-between gap-2 shadow-sm">
+        <div className="flex items-center gap-2 flex-1">
+          <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+          <p className="leading-relaxed text-xs">
+            <span>فقط </span>
+            <span className="font-mono font-black text-sm text-white bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-500/40">{remainingCapacity}</span>
+            <span> نفر دیگر امکان استفاده از این تخفیف را دارند. تا فرصت از دست نرفته دوستان خود را دعوت کنید</span>
+          </p>
+        </div>
+      </div>
+
+      <div className={`grid grid-cols-1 ${isPickupGloballyEnabled ? 'md:grid-cols-2' : ''} gap-2 text-xs`}>
+        {/* Switch A: Pickup Discount (Shown only when admin enabled) */}
+        {isPickupGloballyEnabled && (
+          <div
+            onClick={handleTogglePickup}
+            className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition select-none ${
+              pickupEnabled
+                ? 'bg-emerald-950/50 border-emerald-500/60 text-emerald-100 hover:border-emerald-400 shadow-sm'
+                : 'bg-rose-950/40 border-rose-500/50 text-rose-200 hover:border-rose-400 shadow-sm'
             }`}
           >
-            {pickupEnabled ? 'فعال' : 'غیرفعال'}
-          </span>
-        </div>
+            <div className="flex items-center gap-2">
+              <div
+                className={`w-9 h-5 rounded-full p-0.5 transition-colors duration-200 ease-in-out shrink-0 ${
+                  pickupEnabled ? 'bg-emerald-500' : 'bg-rose-600'
+                }`}
+              >
+                <div
+                  className={`w-4 h-4 rounded-full bg-white shadow-md transition-transform duration-200 ease-in-out ${
+                    pickupEnabled ? 'translate-x-[-16px]' : 'translate-x-0'
+                  }`}
+                />
+              </div>
+              <span className="font-bold text-xs">
+                {pickupPercent}٪ تخفیف تحویل سفارش درب انبار
+              </span>
+            </div>
+            <span
+              className={`text-[10px] px-2.5 py-1 rounded-lg font-bold border ${
+                pickupEnabled
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                  : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+              }`}
+            >
+              {pickupEnabled ? 'روشن (فعال)' : 'خاموش (غیرفعال)'}
+            </span>
+          </div>
+        )}
 
-        {/* Switch B: Founder Discount (Read-only / Locked) */}
+        {/* Switch B: 5% Founder Discount for First 100 people (Auto-active if rank <= 100) */}
         <div
           onClick={() => setShowFounderInfo(true)}
           className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition select-none ${
             founderEnabled
-              ? 'bg-purple-950/60 border-purple-500/60 text-purple-200'
+              ? 'bg-purple-950/60 border-purple-500/60 text-purple-100 hover:border-purple-400 shadow-sm'
               : 'bg-slate-950/60 border-slate-800/80 text-slate-400 hover:border-slate-700'
           }`}
-          title="جهت مشاهده راهنما کلیک کنید"
+          title="جهت مشاهده جزئیات تخفیف کلیک کنید"
         >
           <div className="flex items-center gap-2">
-            <Lock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-            <span className="font-bold">
-              {founderPercent}٪ تخفیف ۱۰۰ نفر اول ثبت‌نام‌شده در سامانه
+            <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="font-bold text-xs">
+              {founderPercent}٪ تخفیف برای ۱۰۰ نفر اول
             </span>
           </div>
           <span
-            className={`text-[10px] px-2 py-0.5 rounded-md font-bold ${
+            className={`text-[10px] px-2.5 py-1 rounded-lg font-bold border ${
               founderEnabled
-                ? 'bg-purple-500/20 text-purple-300'
-                : 'bg-slate-800 text-slate-500'
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                : 'bg-slate-800 text-slate-500 border-slate-700'
             }`}
           >
-            {founderEnabled ? 'فعال' : 'غیرفعال'}
+            {founderEnabled ? `فعال (${founderPercent}٪)` : 'غیرفعال'}
           </span>
         </div>
       </div>
 
       {/* Info notice when clicking Founder switch */}
       {showFounderInfo && (
-        <div className="p-2.5 rounded-xl bg-purple-950/80 border border-purple-500/40 text-purple-200 text-xs flex items-start justify-between gap-2 animate-in fade-in">
-          <div className="flex items-start gap-2">
-            <Info className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
-            <span>
-              اگر جزء ۱۰۰ نفر اول باشید این گزینه خود به خود برای شما فعال خواهد بود.
-            </span>
+        <div className="p-3 rounded-xl bg-purple-950/90 border border-purple-500/40 text-purple-200 text-xs flex items-center justify-between gap-2 animate-in fade-in shadow-sm">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <Info className="w-4 h-4 text-purple-400 shrink-0" />
+            <div className="space-y-0.5 min-w-0 flex-1">
+              <p className="font-bold text-white text-xs">
+                طرح تخفیف ویژه ۵ درصدی ۱۰۰ فروشگاه اول:
+              </p>
+              <p className="text-[11.5px] sm:text-xs text-purple-100 font-medium tracking-tight whitespace-normal sm:whitespace-nowrap leading-normal">
+                تبریک! شما به عنوان 100 فروشگاه اول در سامانه ثبت‌نام شده‌اید و تخفیف ۵ درصدی به صورت خودکار روی تمامی سفارشات شما اعمال شد.
+              </p>
+            </div>
           </div>
           <button
             type="button"
             onClick={() => setShowFounderInfo(false)}
-            className="text-purple-400 hover:text-white p-0.5 cursor-pointer shrink-0"
+            className="text-purple-400 hover:text-white p-1 cursor-pointer shrink-0"
+            title="بستن"
           >
-            <X className="w-3.5 h-3.5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
       )}
@@ -161,7 +203,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
   priceMode = 'store',
   defaultInStockOnly = false,
 }) => {
-  const { categories, orders } = useApp();
+  const { categories, orders, brands } = useApp();
 
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState('');
@@ -169,11 +211,12 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
   const [inStockOnly, setInStockOnly] = useState<boolean>(defaultInStockOnly);
 
-  // 3 New Display & Sort filters
-  // Popular is active by default as requested: "بطور پیش فرض همیشه باید همین فیبتر فعال باشد"
-  const [isPopularActive, setIsPopularActive] = useState<boolean>(true);
-  const [sortByName, setSortByName] = useState<boolean>(false);
-  const [sortByPrice, setSortByPrice] = useState<boolean>(false);
+  // 3 Display & Sort filters (mutually exclusive; default is null for brand colonies view)
+  const [activeSort, setActiveSort] = useState<'popular' | 'name' | 'price' | null>(null);
+
+  const isPopularActive = activeSort === 'popular';
+  const sortByName = activeSort === 'name';
+  const sortByPrice = activeSort === 'price';
 
   // Calculate sales volume for each product across past valid orders
   const productSalesMap = useMemo(() => {
@@ -189,26 +232,47 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
     return map;
   }, [orders]);
 
-  // Available brands in currently selected category (only active products)
+  // Check if a brand has at least one active & available product in the system
+  const isBrandAvailable = useCallback(
+    (brandName: string) => {
+      const bClean = (brandName || 'متفرقه').trim().toLowerCase();
+      const allBrandItems = products.filter(
+        (p) => (p.brand || 'متفرقه').trim().toLowerCase() === bClean
+      );
+      return allBrandItems.some((p) => {
+        if (p.is_active === false) return false;
+        const avail = Math.max(0, (p.stock || 0) - (p.reserved_stock || 0));
+        return avail > 0 || (Boolean(p.is_market_test) && !inStockOnly);
+      });
+    },
+    [products, inStockOnly]
+  );
+
+  // Available brands in currently selected category (only active & in-stock products)
   const availableBrandsInCategory = useMemo(() => {
     const brandsSet = new Set<string>();
     products.forEach((p) => {
       if (!p.is_active) return;
+      const avail = Math.max(0, (p.stock || 0) - (p.reserved_stock || 0));
+      const hasStock = avail > 0 || (Boolean(p.is_market_test) && !inStockOnly);
+      if (!hasStock) return;
       if (selectedCategoryId !== 'all' && p.category_id !== selectedCategoryId) return;
       if (p.brand && p.brand.trim()) {
         brandsSet.add(p.brand.trim());
       }
     });
     return Array.from(brandsSet).sort((a, b) => a.localeCompare(b, 'fa'));
-  }, [products, selectedCategoryId]);
+  }, [products, selectedCategoryId, inStockOnly]);
 
-  // Count active products for each brand
+  // Count active and in-stock products for each brand
   const brandProductCountMap = useMemo(() => {
     const countMap: Record<string, number> = {};
     products.forEach((p) => {
       if (!p.is_active) return;
+      const avail = Math.max(0, (p.stock || 0) - (p.reserved_stock || 0));
+      const hasStock = avail > 0 || (Boolean(p.is_market_test) && !inStockOnly);
+      if (!hasStock) return;
       if (selectedCategoryId !== 'all' && p.category_id !== selectedCategoryId) return;
-      if (inStockOnly && p.is_market_test) return;
       const b = (p.brand || '').trim();
       if (b) {
         countMap[b] = (countMap[b] || 0) + 1;
@@ -236,8 +300,11 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
       inStockOnly,
     });
 
-    // Apply sorting logic (Popular / Name / Price / Name + Price)
-    return sortCatalogProducts(matched, {
+    // Omit any brand whose products are ALL out of stock or inactive from the catalog
+    const availableBrandProducts = matched.filter((p) => isBrandAvailable(p.brand || 'متفرقه'));
+
+    // Apply mutually exclusive sorting logic (Popular / Name / Price)
+    return sortCatalogProducts(availableBrandProducts, {
       popular: isPopularActive,
       byName: sortByName,
       byPrice: sortByPrice,
@@ -253,42 +320,21 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
     sortByName,
     sortByPrice,
     productSalesMap,
+    isBrandAvailable,
   ]);
 
-  // Toggle handlers for the 3 display/sort filters
+  // Mutually exclusive toggle handlers for sort filters (clicking active sort toggles it off back to brand colonies)
   const handleTogglePopular = useCallback(() => {
-    setIsPopularActive(true);
-    setSortByName(false);
-    setSortByPrice(false);
+    setActiveSort((prev) => (prev === 'popular' ? null : 'popular'));
   }, []);
 
   const handleToggleByName = useCallback(() => {
-    if (sortByName) {
-      setSortByName(false);
-      // If price is not active either, fallback to default popular
-      if (!sortByPrice) {
-        setIsPopularActive(true);
-      }
-    } else {
-      setSortByName(true);
-      setIsPopularActive(false);
-      // sortByPrice remains active if already toggled! Both can be active at the same time
-    }
-  }, [sortByName, sortByPrice]);
+    setActiveSort((prev) => (prev === 'name' ? null : 'name'));
+  }, []);
 
   const handleToggleByPrice = useCallback(() => {
-    if (sortByPrice) {
-      setSortByPrice(false);
-      // If name is not active either, fallback to default popular
-      if (!sortByName) {
-        setIsPopularActive(true);
-      }
-    } else {
-      setSortByPrice(true);
-      setIsPopularActive(false);
-      // sortByName remains active if already toggled! Both can be active at the same time
-    }
-  }, [sortByPrice, sortByName]);
+    setActiveSort((prev) => (prev === 'price' ? null : 'price'));
+  }, []);
 
   // Remove a single brand tag
   const handleRemoveBrand = useCallback((brandToRemove: string) => {
@@ -301,21 +347,63 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
     setSelectedCategoryId('all');
     setSelectedBrands([]);
     setInStockOnly(defaultInStockOnly);
-    setIsPopularActive(true);
-    setSortByName(false);
-    setSortByPrice(false);
+    setActiveSort(null);
   }, [defaultInStockOnly]);
-
-  const isBothNameAndPrice = sortByName && sortByPrice;
 
   const isAnyFilterActive =
     searchTerm.trim() !== '' ||
     selectedCategoryId !== 'all' ||
     selectedBrands.length > 0 ||
     inStockOnly !== defaultInStockOnly ||
-    !isPopularActive ||
-    sortByName ||
-    sortByPrice;
+    activeSort !== null;
+
+  // Compute Brand Colonies for default view (when activeSort === null)
+  // Rule: Follow Admin priority order. If all products of a brand are out-of-stock or inactive, omit from catalog!
+  const brandColonies = useMemo(() => {
+    if (activeSort !== null) return [];
+
+    const orderedBrandNames: string[] = [];
+    const seen = new Set<string>();
+
+    (brands || []).forEach((b) => {
+      const clean = (b || '').trim();
+      if (clean && !seen.has(clean.toLowerCase())) {
+        seen.add(clean.toLowerCase());
+        orderedBrandNames.push(clean);
+      }
+    });
+
+    products.forEach((p) => {
+      const clean = (p.brand || 'متفرقه').trim();
+      if (clean && !seen.has(clean.toLowerCase())) {
+        seen.add(clean.toLowerCase());
+        orderedBrandNames.push(clean);
+      }
+    });
+
+    const colonies: Array<{ brandName: string; products: Product[] }> = [];
+
+    for (const bName of orderedBrandNames) {
+      // 1. Rule: If all products of this brand are out-of-stock or inactive, omit brand colony entirely!
+      if (!isBrandAvailable(bName)) {
+        continue;
+      }
+
+      // 2. Gather products for this brand matching current user filters
+      const matchingItems = filteredProducts.filter(
+        (p) => (p.brand || 'متفرقه').trim().toLowerCase() === bName.toLowerCase()
+      );
+
+      if (matchingItems.length > 0) {
+        colonies.push({
+          brandName: bName,
+          products: matchingItems,
+        });
+      }
+    }
+
+    return colonies;
+  }, [activeSort, brands, products, filteredProducts, isBrandAvailable]);
 
   return (
     <div className="space-y-2.5">
@@ -446,16 +534,6 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
           ))}
         </div>
 
-        {/* Helpful Banner when both Name and Price are selected */}
-        {isBothNameAndPrice && (
-          <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-xl p-2 px-2.5 flex items-center gap-2 text-[11px] text-emerald-300">
-            <Info className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span>
-              فیلتر ترکیبی <strong>نام + قیمت</strong> فعال است: اقلام هم‌نوع در کنار هم و از کمترین به بیشترین قیمت مرتب شده‌اند.
-            </span>
-          </div>
-        )}
-
         {/* Clear filters and active tags summary (Only visible when a non-default filter is active) */}
         {isAnyFilterActive && (
           <div className="pt-1.5 flex items-center justify-between text-xs text-slate-400 border-t border-slate-800/60 flex-wrap gap-1.5">
@@ -487,9 +565,23 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
                 </span>
               )}
 
-              {!isPopularActive && (
-                <span className="bg-slate-800/90 text-slate-300 border border-slate-700/60 px-2 py-0.5 rounded-md text-[11px]">
-                  {isBothNameAndPrice ? 'الفبایی + ارزان‌ترین' : sortByName ? 'الفبای نام کالا' : 'کمترین به بیشترین قیمت'}
+              {activeSort !== null && (
+                <span className="bg-slate-800/90 text-emerald-300 border border-slate-700/60 px-2 py-0.5 rounded-md text-[11px] flex items-center gap-1">
+                  <span>
+                    {activeSort === 'popular'
+                      ? 'مرتب‌سازی: محبوب‌ترین‌ها'
+                      : activeSort === 'name'
+                      ? 'مرتب‌سازی: الفبای نام کالا'
+                      : 'مرتب‌سازی: کمترین به بیشترین قیمت'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setActiveSort(null)}
+                    className="hover:text-rose-400 p-0.5 cursor-pointer"
+                    title="حذف مرتب‌سازی و بازگشت به نمایش کلونی برندها"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
                 </span>
               )}
             </div>
@@ -508,7 +600,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
       {/* Store Discount Options Box (Top of Catalog) */}
       <StoreDiscountSwitchesBox />
 
-      {/* 2. Products Grid */}
+      {/* 2. Products Grid / Brand Colonies */}
       {filteredProducts.length === 0 ? (
         <div className="py-12 text-center text-slate-400 space-y-2.5 bg-slate-900/40 border border-slate-800/60 rounded-2xl p-5">
           <Package className="w-10 h-10 mx-auto text-slate-600" />
@@ -523,17 +615,78 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
             </button>
           )}
         </div>
+      ) : activeSort !== null ? (
+        /* Flat sorted grid when an explicit sort filter (alphabet, price, popular) is toggled */
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs text-slate-400 px-1 pb-1 border-b border-slate-800">
+            <span>
+              نمایش مرتب‌شده بر اساس{' '}
+              <strong className="text-emerald-400">
+                {activeSort === 'popular' ? 'محبوب‌ترین‌ها' : activeSort === 'name' ? 'الفبا' : 'ارزان‌ترین قیمت'}
+              </strong>
+            </span>
+            <button
+              type="button"
+              onClick={() => setActiveSort(null)}
+              className="text-[11px] text-blue-400 hover:underline cursor-pointer"
+            >
+              بازگشت به نمایش دسته‌ای برندها
+            </button>
+          </div>
+          <div className="grid grid-cols-1 min-[420px]:grid-cols-[repeat(auto-fill,minmax(400px,1fr))] gap-2">
+            {filteredProducts.map((product) => (
+              <ProductRow
+                key={product.id}
+                product={product}
+                quantity={cart[product.id] || 0}
+                onChangeQuantity={(qty) => onChangeQuantity(product.id, qty)}
+                onExceedLimit={onExceedLimit}
+                priceMode={priceMode}
+              />
+            ))}
+          </div>
+        </div>
+      ) : brandColonies.length === 0 ? (
+        <div className="py-12 text-center text-slate-400 space-y-2.5 bg-slate-900/40 border border-slate-800/60 rounded-2xl p-5">
+          <Package className="w-10 h-10 mx-auto text-slate-600" />
+          <p className="text-xs font-bold text-slate-300">تمام کالاهای برندهای این بخش در حال حاضر ناموجود هستند.</p>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 min-[420px]:grid-cols-[repeat(auto-fill,minmax(400px,1fr))] gap-2">
-          {filteredProducts.map((product) => (
-            <ProductRow
-              key={product.id}
-              product={product}
-              quantity={cart[product.id] || 0}
-              onChangeQuantity={(qty) => onChangeQuantity(product.id, qty)}
-              onExceedLimit={onExceedLimit}
-              priceMode={priceMode}
-            />
+        /* Sequential Brand Colonies (Default View) */
+        <div className="space-y-5">
+          {brandColonies.map((colony) => (
+            <div
+              key={colony.brandName}
+              className="p-3 sm:p-3.5 rounded-2xl bg-slate-900/40 border border-slate-800/80 space-y-3 shadow-xs"
+            >
+              {/* Colony Header */}
+              <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm" />
+                  <h3 className="font-bold text-sm text-slate-100 flex items-center gap-1.5">
+                    <span className="text-slate-400 font-normal text-xs">برند:</span>
+                    <span>{colony.brandName}</span>
+                  </h3>
+                  <span className="text-[11px] font-bold text-slate-400 bg-slate-950 border border-slate-800 px-2 py-0.5 rounded-full num-fa">
+                    {colony.products.length.toLocaleString('fa-IR')} کالا
+                  </span>
+                </div>
+              </div>
+
+              {/* Products in this Colony */}
+              <div className="grid grid-cols-1 min-[420px]:grid-cols-[repeat(auto-fill,minmax(400px,1fr))] gap-2">
+                {colony.products.map((product) => (
+                  <ProductRow
+                    key={product.id}
+                    product={product}
+                    quantity={cart[product.id] || 0}
+                    onChangeQuantity={(qty) => onChangeQuantity(product.id, qty)}
+                    onExceedLimit={onExceedLimit}
+                    priceMode={priceMode}
+                  />
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       )}

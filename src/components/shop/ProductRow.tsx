@@ -10,6 +10,7 @@ import {
   getStorePickupDiscountEnabled,
   calculateTotalDiscountPercent,
   calculateDiscountedPrice,
+  getStoreRegistrationRank,
 } from '../../utils/storeDiscount';
 import {
   getPackSize,
@@ -67,10 +68,14 @@ export const ProductRow: React.FC<ProductRowProps> = ({
     phone: currentShop?.phone || currentUser.phone || '',
   };
 
+  const isPickupGloballyEnabled = invoiceSettings?.pickup_discount_enabled !== false;
   const pickupPercent = invoiceSettings?.pickup_discount_percent || 3;
-  const pickupEnabled = priceMode === 'store' && getStorePickupDiscountEnabled(shopInfo.id);
-  const founderEnabled = priceMode === 'store' && Boolean(currentShop?.founder_discount_enabled);
-  const founderPercent = currentShop?.founder_discount_percent || 3;
+  const pickupEnabled = isPickupGloballyEnabled && priceMode === 'store' && getStorePickupDiscountEnabled(shopInfo.id);
+
+  const { rank: storeRank } = getStoreRegistrationRank(supermarkets, shopInfo.id);
+  const isFounderEligible = storeRank <= 100;
+  const founderEnabled = priceMode === 'store' && (isFounderEligible || Boolean(currentShop?.founder_discount_enabled));
+  const founderPercent = Math.max(5, Number(currentShop?.founder_discount_percent) || 5);
 
   const totalDiscountPercent = calculateTotalDiscountPercent(
     pickupEnabled ? pickupPercent : 0,
@@ -194,7 +199,7 @@ export const ProductRow: React.FC<ProductRowProps> = ({
                     bold
                     className="truncate text-[13px] sm:text-[14px]"
                   />
-                  <span className="text-[10px] font-bold text-emerald-300 bg-emerald-950/80 px-1 py-0.2 rounded border border-emerald-800/60 shrink-0">
+                  <span className="text-[10px] font-bold text-white bg-emerald-600 px-1.5 py-0.5 rounded-md border border-emerald-500 shadow-xs shrink-0">
                     ({totalDiscountPercent}٪ تخفیف)
                   </span>
                 </>

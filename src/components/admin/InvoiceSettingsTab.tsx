@@ -1306,20 +1306,45 @@ export const InvoiceSettingsTab: React.FC = () => {
                         />
                       </div>
 
-                      <div className="space-y-1 col-span-full pt-1 border-t border-slate-800">
-                        <label className="text-slate-300 font-bold text-xs block">درصد تخفیف تحویل سفارش درب انبار (پیش‌فرض فروشگاه‌ها):</label>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            min={0}
-                            max={100}
-                            step={0.5}
-                            value={form.pickup_discount_percent ?? 3}
-                            onChange={(e) => handleFieldChange('pickup_discount_percent', Number(e.target.value) || 0)}
-                            className="w-24 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-xs font-bold num-fa text-center"
-                          />
-                          <span className="text-xs text-slate-400 font-medium">درصد (٪) — فروشگاه هنگام ثبت سفارش تحویل انبار این تخفیف را دریافت می‌کند.</span>
+                      <div className="p-3 bg-slate-950/70 rounded-xl border border-slate-800 space-y-2.5 col-span-full">
+                        <div className="flex items-center justify-between">
+                          <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-200">
+                            <input
+                              type="checkbox"
+                              checked={form.pickup_discount_enabled !== false}
+                              onChange={(e) => handleFieldChange('pickup_discount_enabled', e.target.checked)}
+                              className="w-4 h-4 rounded text-blue-600 bg-slate-800 border-slate-700"
+                            />
+                            <span>امکان تخفیف تحویل سفارش درب انبار در سامانه</span>
+                          </label>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                              form.pickup_discount_enabled !== false
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                                : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                            }`}
+                          >
+                            {form.pickup_discount_enabled !== false ? 'فعال در سامانه' : 'غیرفعال (مخفی در فروشگاه)'}
+                          </span>
                         </div>
+                        {form.pickup_discount_enabled !== false && (
+                          <div className="pt-2 border-t border-slate-800 flex items-center gap-2 flex-wrap">
+                            <label className="text-slate-400 font-medium text-xs">درصد تخفیف تحویل سفارش درب انبار:</label>
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={0.5}
+                              value={form.pickup_discount_percent ?? 3}
+                              onChange={(e) => handleFieldChange('pickup_discount_percent', Number(e.target.value) || 0)}
+                              className="w-20 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-xs font-bold num-fa text-center"
+                            />
+                            <span className="text-xs text-slate-400">درصد (٪)</span>
+                          </div>
+                        )}
+                        <p className="text-[11px] text-slate-500">
+                          در صورت غیرفعال‌سازی، دکمه و امکان دریافت تخفیف تحویل درب انبار کلاً از پنل فروشگاه برداشته می‌شود.
+                        </p>
                       </div>
                     </div>
                   </div>

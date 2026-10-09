@@ -1510,14 +1510,14 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                             <input
                               type="checkbox"
                               checked={Boolean(shop.founder_discount_enabled)}
-                              onChange={(e) => handleUpdateFounderDiscount(shop, e.target.checked, shop.founder_discount_percent || 3)}
+                              onChange={(e) => handleUpdateFounderDiscount(shop, e.target.checked, shop.founder_discount_percent || 5)}
                               className="w-3.5 h-3.5 accent-purple-500 rounded cursor-pointer shrink-0"
                               title="فعال/غیرفعال‌سازی تخفیف ۱۰۰ نفر اول"
                             />
                             <span className="text-xs text-slate-300 font-medium whitespace-nowrap">تخفیف ۱۰۰ نفر اول</span>
                             <input
                               type="number"
-                              defaultValue={shop.founder_discount_percent ?? 3}
+                              defaultValue={shop.founder_discount_percent ?? 5}
                               step="0.5"
                               min="0"
                               max="100"

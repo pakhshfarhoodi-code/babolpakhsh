@@ -12,6 +12,7 @@ import {
   ShoppingBag,
   UserPlus,
   Clock,
+  Navigation,
 } from 'lucide-react';
 import { CustomerDetailSheet } from './CustomerDetailSheet';
 
@@ -144,10 +145,20 @@ export const CustomersTab: React.FC<CustomersTabProps> = ({
                     <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
                     <span className="truncate">{shop.address}</span>
                   </div>
-                  {typeof shop.latitude === 'number' && typeof shop.longitude === 'number' && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shrink-0">
-                      <span>📍 ثبت لوکیشن</span>
-                    </span>
+                  {typeof shop.latitude === 'number' && typeof shop.longitude === 'number' ? (
+                    <a
+                      href={`https://www.google.com/maps?q=${shop.latitude},${shop.longitude}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 shrink-0 transition"
+                      title="مسیریابی روی نقشه"
+                    >
+                      <Navigation className="w-3 h-3" />
+                      <span>مسیریابی روی نقشه</span>
+                    </a>
+                  ) : (
+                    <span className="text-[10px] text-slate-500 shrink-0">بدون لوکیشن نقشه</span>
                   )}
                 </div>
               </div>

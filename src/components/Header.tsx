@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { StoreProfileSheet } from './shop/StoreProfileSheet';
 import { VisitorProfileSheet } from './visitor/VisitorProfileSheet';
+import { AdminProfileModal } from './AdminProfileModal';
 import appLogo from '../assets/images/farhoodi_b2b_logo.webp';
 
 interface HeaderProps {
@@ -35,6 +36,7 @@ export const Header: React.FC<HeaderProps> = () => {
     theme,
     toggleTheme,
     logout,
+    adminProfile,
   } = useApp();
 
   const defaultStore = useMemo(() => ({
@@ -73,6 +75,7 @@ export const Header: React.FC<HeaderProps> = () => {
 
   const [isStoreProfileOpen, setIsStoreProfileOpen] = useState(false);
   const [isVisitorProfileOpen, setIsVisitorProfileOpen] = useState(false);
+  const [isAdminProfileOpen, setIsAdminProfileOpen] = useState(false);
 
   // Counter metrics
   const pendingReassignments = orders.filter((o) => o.status === 'delegated').length;
@@ -86,33 +89,41 @@ export const Header: React.FC<HeaderProps> = () => {
         <header className="border-b border-slate-800/80 bg-slate-900/90 sticky top-0 z-40 backdrop-blur-xl shadow-lg shadow-black/20">
           <div className="max-w-7xl mx-auto px-3 sm:px-5 py-2">
             <div className="flex items-center justify-between gap-2.5 min-w-0">
-              {/* Top-Right Official Logo Badge */}
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-amber-500 p-0.5 shadow-md shadow-blue-500/20 shrink-0 overflow-hidden">
-                <img src={appLogo} alt="لوگوی پخش فرهودی" className="w-full h-full object-cover rounded-[10px]" />
+              {/* Right Side: Logo Badge + "بارفروش | پخش فرهودی" Button to view Admin Profile */}
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-amber-500 p-0.5 shadow-md shadow-blue-500/20 shrink-0 overflow-hidden">
+                  <img src={appLogo} alt="لوگوی پخش فرهودی" className="w-full h-full object-cover rounded-[10px]" />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsAdminProfileOpen(true)}
+                  className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/15 to-blue-500/15 hover:from-amber-500/25 hover:to-blue-500/25 text-amber-300 hover:text-amber-200 border border-amber-500/30 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs select-none"
+                  title="مشاهده اطلاعات و مشخصات مدیریت پخش فرهودی"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="hidden xs:inline">{adminProfile.business_title || 'بارفروش | پخش فرهودی'}</span>
+                  <span className="xs:hidden">{adminProfile.business_title || 'پخش فرهودی'}</span>
+                </button>
               </div>
 
+              {/* Center: Store Emoji & Name (Clickable to open Store Profile Sheet) */}
               <button
                 type="button"
                 onClick={() => setIsStoreProfileOpen(true)}
-                className="flex items-center gap-2 min-w-0 hover:opacity-85 transition cursor-pointer text-right group"
-                title="مشاهده پروفایل فروشگاه و ویزیتور"
+                className="flex items-center gap-2 min-w-0 hover:opacity-85 transition cursor-pointer text-right group p-1 sm:p-1.5 rounded-xl hover:bg-slate-800/50"
+                title="مشاهده و ویرایش مشخصات فروشگاه"
               >
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600/30 to-teal-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0 shadow-inner">
-                  <Store className="w-4 h-4" />
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600/30 to-teal-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0 shadow-inner text-base">
+                  🏪
                 </div>
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-sm font-bold text-slate-100 truncate max-w-[140px] sm:max-w-[220px]">
+                  <span className="text-sm font-bold text-slate-100 truncate max-w-[140px] sm:max-w-[220px] group-hover:text-emerald-300 transition">
                     {currentStore?.name || 'فروشگاه طرف قرارداد'}
-                  </span>
-                  <span className="text-[11px] text-amber-400/90 bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-800/40 shrink-0 hidden sm:inline-block font-medium">
-                    بارفروش | پخش فرهودی
-                  </span>
-                  <span className="text-xs text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-800/40 shrink-0">
-                    پروفایل
                   </span>
                 </div>
               </button>
 
+              {/* Left Side: Call Visitor + Theme + Logout */}
               <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                 {assignedVisitor?.phone && (
                   <a
@@ -151,6 +162,11 @@ export const Header: React.FC<HeaderProps> = () => {
           onClose={() => setIsStoreProfileOpen(false)}
           store={currentStore}
           visitor={assignedVisitor}
+        />
+
+        <AdminProfileModal
+          isOpen={isAdminProfileOpen}
+          onClose={() => setIsAdminProfileOpen(false)}
         />
       </>
     );
@@ -222,7 +238,8 @@ export const Header: React.FC<HeaderProps> = () => {
 
   // 3. Exactly identical slim single-line layout for Admin and Warehouse
   return (
-    <header className="border-b border-slate-800/80 bg-slate-900/90 sticky top-0 z-40 backdrop-blur-xl shadow-lg shadow-black/20">
+    <>
+      <header className="border-b border-slate-800/80 bg-slate-900/90 sticky top-0 z-40 backdrop-blur-xl shadow-lg shadow-black/20">
       <div className="max-w-7xl mx-auto px-3 sm:px-5 py-2">
         <div className="flex items-center justify-between gap-2">
           
@@ -236,9 +253,14 @@ export const Header: React.FC<HeaderProps> = () => {
               <span className="text-sm font-bold text-slate-100 truncate max-w-[130px] sm:max-w-[180px]">
                 {currentUser.name}
               </span>
-              <span className="text-[11px] text-amber-400/90 bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-800/40 shrink-0 hidden md:inline-block font-medium">
-                بارفروش | پخش فرهودی
-              </span>
+              <button
+                type="button"
+                onClick={() => setIsAdminProfileOpen(true)}
+                className="text-[11px] text-amber-400/90 bg-amber-950/40 hover:bg-amber-900/60 hover:text-amber-300 px-2.5 py-0.5 rounded-full border border-amber-800/40 shrink-0 hidden md:inline-block font-medium cursor-pointer transition select-none"
+                title="ویرایش و مشاهده مشخصات مدیریت و مرکز پخش"
+              >
+                {adminProfile.business_title || 'بارفروش | پخش فرهودی'}
+              </button>
 
               {/* Role Toggle Pill right beside user name */}
               <div className="flex items-center p-0.5 rounded-lg bg-slate-950 border border-slate-800 shrink-0">
@@ -318,5 +340,11 @@ export const Header: React.FC<HeaderProps> = () => {
         </div>
       </div>
     </header>
-  );
+
+    <AdminProfileModal
+      isOpen={isAdminProfileOpen}
+      onClose={() => setIsAdminProfileOpen(false)}
+    />
+  </>
+);
 };

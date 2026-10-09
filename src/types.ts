@@ -464,6 +464,7 @@ export interface InvoiceSettings {
   vat_percent: number;
   has_overall_discount?: boolean;
   discount_percent?: number;
+  pickup_discount_enabled?: boolean; // فعال/غیرفعال بودن تخفیف تحویل درب انبار در کل سامانه
   pickup_discount_percent: number; // پیش‌فرض درصد تخفیف تحویل درب انبار (پیش‌فرض ۳)
   max_visitor_discount_percent: number; // حداکثر درصد تخفیف مجاز ویزیتور (پیش‌فرض ۱۰)
   bank_account_holder: string;
@@ -663,6 +664,7 @@ export const DEFAULT_INVOICE_SETTINGS: InvoiceSettings = {
   vat_percent: 10,
   has_overall_discount: false,
   discount_percent: 0,
+  pickup_discount_enabled: true,
   pickup_discount_percent: 3,
   max_visitor_discount_percent: 10,
   bank_account_holder: 'صنایع غذایی فرهودی',
@@ -791,6 +793,7 @@ export function getInvoiceSettings(raw?: unknown): InvoiceSettings {
     ...DEFAULT_INVOICE_SETTINGS,
     ...r,
     currency_label: r.currency_label || 'تومان',
+    pickup_discount_enabled: r.pickup_discount_enabled !== false,
     pickup_discount_percent:
       typeof r.pickup_discount_percent === 'number' && r.pickup_discount_percent >= 0
         ? r.pickup_discount_percent
@@ -937,6 +940,32 @@ export interface ManualFinancialEntryInput {
   referenceId?: string;
   entryType?: 'debit' | 'credit';
 }
+
+export interface AdminProfile {
+  manager_name: string;
+  business_title: string;
+  tagline?: string;
+  mobile: string;
+  phone: string;
+  address: string;
+  latitude?: number;
+  longitude?: number;
+  working_hours?: string;
+  description?: string;
+}
+
+export const DEFAULT_ADMIN_PROFILE: AdminProfile = {
+  manager_name: '',
+  business_title: 'بارفروش | پخش فرهودی',
+  tagline: '',
+  mobile: '',
+  phone: '',
+  address: '',
+  latitude: undefined,
+  longitude: undefined,
+  working_hours: '',
+  description: '',
+};
 
 
 

@@ -274,9 +274,8 @@ export interface SortCatalogOptions {
 }
 
 /**
- * Sorts catalog products based on popularity (most sold), alphabetical name, and price (low to high).
- * Supports combined name + price sorting where same family/base items (e.g. all pizza cheese varieties)
- * appear together, ordered from lowest price to highest price.
+ * Sorts catalog products based on popularity (most sold), alphabetical name, or price (low to high).
+ * Mutually exclusive sorting filters.
  */
 export function sortCatalogProducts(
   products: Product[],
@@ -286,36 +285,13 @@ export function sortCatalogProducts(
 
   const sorted = [...products];
 
-  // Case 1: Both Name and Price are selected
-  // Items of the same family/name group appear together, ordered by price from lowest to highest
-  if (byName && byPrice) {
-    sorted.sort((a, b) => {
-      const familyA = getProductFamilyKey(a.name);
-      const familyB = getProductFamilyKey(b.name);
-
-      const familyComp = familyA.localeCompare(familyB, 'fa');
-      if (familyComp !== 0) {
-        return familyComp;
-      }
-
-      // Inside same family: sort by price ascending (lowest price first)
-      if (a.price !== b.price) {
-        return a.price - b.price;
-      }
-
-      // Tiebreaker: full name
-      return a.name.localeCompare(b.name, 'fa');
-    });
-    return sorted;
-  }
-
-  // Case 2: Only Name is selected (alphabetical)
+  // 1. Sort by Alphabetical Name
   if (byName) {
     sorted.sort((a, b) => a.name.localeCompare(b.name, 'fa'));
     return sorted;
   }
 
-  // Case 3: Only Price is selected (lowest price to highest price)
+  // 2. Sort by Price (Lowest price to highest price)
   if (byPrice) {
     sorted.sort((a, b) => {
       if (a.price !== b.price) {
@@ -326,7 +302,7 @@ export function sortCatalogProducts(
     return sorted;
   }
 
-  // Case 4: Popular (Default - highest sales count first)
+  // 3. Sort by Popularity (Highest sales volume first, with likes/name as tiebreaker)
   if (popular) {
     sorted.sort((a, b) => {
       const salesA = productSalesMap[a.id] || 0;

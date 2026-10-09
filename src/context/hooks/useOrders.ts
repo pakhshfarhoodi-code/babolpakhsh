@@ -22,6 +22,7 @@ export interface CreateOrderPayload {
   visitorId: string;
   orderSource?: 'visitor' | 'supermarket';
   pickupDiscountPercent?: number;
+  founderDiscountPercent?: number;
   items: {
     productId: string;
     name: string;
@@ -255,6 +256,8 @@ export function useOrders({
         order_source: orderSource,
         order_channel: orderChannel,
         order_date: orderIsoDate,
+        pickup_discount_percent: orderSource === 'visitor' ? 0 : (payload.pickupDiscountPercent || 0),
+        founder_discount_percent: payload.founderDiscountPercent || 0,
         items: payload.items.map((i, idx) => {
           const prod = products.find((p) => p.id === i.productId);
           return {
@@ -358,8 +361,16 @@ export function useOrders({
 
         // Store-self orders pickup discount application (Visitors orders NEVER get pickup discount)
         const finalPickupDiscountPercent = orderSource === 'visitor' ? 0 : (payload.pickupDiscountPercent || 0);
-        if (finalPickupDiscountPercent > 0) {
-          await supabase.from('orders').update({ pickup_discount_percent: finalPickupDiscountPercent }).eq('id', newOrder.id);
+        const finalFounderDiscountPercent = payload.founderDiscountPercent || 0;
+
+        newOrder.pickup_discount_percent = finalPickupDiscountPercent;
+        newOrder.founder_discount_percent = finalFounderDiscountPercent;
+
+        if (finalPickupDiscountPercent > 0 || finalFounderDiscountPercent > 0) {
+          const updatePayload: Record<string, number> = {};
+          if (finalPickupDiscountPercent > 0) updatePayload.pickup_discount_percent = finalPickupDiscountPercent;
+          if (finalFounderDiscountPercent > 0) updatePayload.founder_discount_percent = finalFounderDiscountPercent;
+          await supabase.from('orders').update(updatePayload).eq('id', newOrder.id);
         }
 
         // Read back server-side calculated discounts
@@ -371,7 +382,7 @@ export function useOrders({
 
         if (serverOrderData) {
           newOrder.pickup_discount_percent = serverOrderData.pickup_discount_percent;
-          newOrder.founder_discount_percent = serverOrderData.founder_discount_percent;
+          newOrder.founder_discount_percent = serverOrderData.founder_discount_percent ?? finalFounderDiscountPercent;
           newOrder.discount_percent = serverOrderData.discount_percent;
           newOrder.discount_status = serverOrderData.discount_status;
         }

@@ -10,6 +10,7 @@ import { InvoiceSettingsTab } from './admin/InvoiceSettingsTab';
 import { FinancialAccountsTab } from './admin/FinancialAccountsTab';
 import { LOW_STOCK_THRESHOLD, isStoreInactiveFor30Days } from './admin/helpers';
 import {
+  Building2,
   AlertTriangle,
   ShoppingBag,
   Tag,
@@ -23,6 +24,7 @@ import {
   FileSpreadsheet,
   Wallet,
 } from 'lucide-react';
+import { AdminProfileModal } from './AdminProfileModal';
 
 export type AdminTabKey =
   | 'overview'
@@ -88,6 +90,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [editingBrandModal, setEditingBrandModal] = useState<string | null>(null);
   const [newBrandNameInput, setNewBrandNameInput] = useState('');
   const [catBrandFeedback, setCatBrandFeedback] = useState<string | null>(null);
+  const [isAdminProfileModalOpen, setIsAdminProfileModalOpen] = useState(false);
 
   // Badge count for Overview Tab & Pending approvals
   const pendingApprovalsCount = useMemo(() => {
@@ -279,6 +282,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </button>
           );
         })}
+
+        <button
+          type="button"
+          onClick={() => setIsAdminProfileModalOpen(true)}
+          className="mr-auto px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition flex items-center gap-1.5 cursor-pointer shrink-0 shadow-xs"
+          title="مشاهده و ویرایش مشخصات مدیریت و مرکز پخش"
+        >
+          <Building2 className="w-4 h-4 text-amber-400" />
+          <span>پروفایل مدیریت</span>
+        </button>
       </div>
 
       {/* Tab 1: Overview */}
@@ -592,6 +605,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Admin Profile Modal */}
+      {isAdminProfileModalOpen && (
+        <AdminProfileModal
+          isOpen={isAdminProfileModalOpen}
+          onClose={() => setIsAdminProfileModalOpen(false)}
+          initialEditMode={true}
+        />
       )}
     </div>
   );

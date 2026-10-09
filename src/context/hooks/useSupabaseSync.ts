@@ -270,7 +270,28 @@ export function useSupabaseSync({
         lastStateJsonRef.current.products = jsonStr;
         setProducts(validProds);
         try {
-          localStorage.setItem(STORAGE_KEYS.PRODUCTS, jsonStr);
+          if (!isStoreRole) {
+            localStorage.setItem(STORAGE_KEYS.PRODUCTS, jsonStr);
+          } else {
+            // For supermarket role, merge with existing staff cache in localStorage so visitor_price is never destroyed
+            const existingCache = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
+            if (existingCache) {
+              const parsedExisting: Product[] = JSON.parse(existingCache);
+              if (Array.isArray(parsedExisting)) {
+                const vpMap = new Map<string, number>();
+                parsedExisting.forEach((ep) => {
+                  if (ep.visitor_price !== undefined && ep.visitor_price !== null && Number(ep.visitor_price) > 0) {
+                    vpMap.set(ep.id, Number(ep.visitor_price));
+                  }
+                });
+                const mergedCache = validProds.map((vp) => ({
+                  ...vp,
+                  visitor_price: vpMap.get(vp.id),
+                }));
+                localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(mergedCache));
+              }
+            }
+          }
         } catch {}
       }
     } else {
@@ -838,6 +859,18 @@ export function useSupabaseSync({
   useEffect(() => {
     scheduleReloadRef.current = scheduleReload;
   }, [scheduleReload]);
+
+  // Immediate products fetch when role switches to staff (admin, warehouse, visitor)
+  const lastObservedRoleRef = useRef<string | undefined>(role);
+  useEffect(() => {
+    if (lastObservedRoleRef.current !== role) {
+      const prev = lastObservedRoleRef.current;
+      lastObservedRoleRef.current = role;
+      if (role && role !== 'supermarket' && prev !== role) {
+        scheduleReload(['products'], true);
+      }
+    }
+  }, [role, scheduleReload]);
 
   // 6. User Login/Logout Lifecycle Listener (Requirement 1)
   useEffect(() => {

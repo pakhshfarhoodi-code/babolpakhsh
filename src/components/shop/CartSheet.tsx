@@ -18,7 +18,7 @@ import {
   getStorePickupDiscountEnabled,
   calculateTotalDiscountPercent,
   calculateDiscountedPrice,
-  getStoreRegistrationRank,
+  getStoreFounderDiscountStatus,
 } from '../../utils/storeDiscount';
 
 interface CartSheetProps {
@@ -48,7 +48,7 @@ export const CartSheet: React.FC<CartSheetProps> = ({
   errorMessage,
   onExceedLimit,
 }) => {
-  const { invoiceSettings, currentUser, selectedSupermarketId, supermarkets } = useApp();
+  const { invoiceSettings, currentUser, selectedSupermarketId, supermarkets, orders } = useApp();
   const [isConfirmingClear, setIsConfirmingClear] = useState(false);
 
   // Re-evaluation listener for store discount
@@ -67,14 +67,13 @@ export const CartSheet: React.FC<CartSheetProps> = ({
   const pickupPercent = invoiceSettings?.pickup_discount_percent || 3;
   const pickupEnabled = isPickupGloballyEnabled && getStorePickupDiscountEnabled(storeId);
 
-  const { rank: storeRank } = getStoreRegistrationRank(supermarkets, storeId);
-  const isFounderEligible = storeRank <= 100;
-  const founderEnabled = isFounderEligible || Boolean(currentShop?.founder_discount_enabled);
-  const founderPercent = Math.max(5, Number(currentShop?.founder_discount_percent) || 5);
+  const founderStatus = getStoreFounderDiscountStatus(supermarkets, orders, storeId);
+  const founderEnabled = founderStatus.isFounderActive;
+  const founderPercent = founderEnabled ? founderStatus.founderPercent : 0;
 
   const totalDiscountPercent = calculateTotalDiscountPercent(
     pickupEnabled ? pickupPercent : 0,
-    founderEnabled ? founderPercent : 0,
+    founderPercent,
     0
   );
 

@@ -11,7 +11,10 @@ import {
   buildCartFromOrder,
   clampQuantity,
 } from './shop/shopUtils';
-import { getStorePickupDiscountEnabled, getStoreRegistrationRank } from '../utils/storeDiscount';
+import {
+  getStorePickupDiscountEnabled,
+  getStoreFounderDiscountStatus,
+} from '../utils/storeDiscount';
 import {
   Search,
   X,
@@ -273,11 +276,8 @@ export const SupermarketPortal: React.FC = () => {
       const isPickupEnabled = isPickupGloballyEnabled && getStorePickupDiscountEnabled(currentStore?.id || '');
       const pickupPercent = invoiceSettings?.pickup_discount_percent || 3;
 
-      const { rank: storeRank } = getStoreRegistrationRank(supermarkets, currentStore?.id || '');
-      const isFounderEligible = storeRank <= 100;
-      const founderPercent = (isFounderEligible || currentStore?.founder_discount_enabled)
-        ? Math.max(5, Number(currentStore?.founder_discount_percent) || 5)
-        : 0;
+      const founderStatus = getStoreFounderDiscountStatus(supermarkets, orders, currentStore?.id || '');
+      const founderPercent = founderStatus.isFounderActive ? 5 : 0;
 
       const res = await createOrder({
         supermarketId: currentStore?.id || '',

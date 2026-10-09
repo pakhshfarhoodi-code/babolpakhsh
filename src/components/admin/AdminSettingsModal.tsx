@@ -4,13 +4,13 @@ import { useApp } from '../../context/AppContext';
 import {
   Settings,
   Warehouse,
-  CheckCircle2,
+  Percent,
   X,
-  AlertCircle,
   ShieldCheck,
   ToggleLeft,
   ToggleRight,
   Info,
+  Loader2,
 } from 'lucide-react';
 
 interface AdminSettingsModalProps {
@@ -22,12 +22,23 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { currentUser, showToast, refreshData } = useApp();
+  const {
+    currentUser,
+    showToast,
+    refreshData,
+    invoiceSettings,
+    updateInvoiceSettings,
+  } = useApp();
+
   const [requireWarehouseStep, setRequireWarehouseStep] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isSavingDiscount, setIsSavingDiscount] = useState<boolean>(false);
 
-  // Fetch current setting on open
+  const isPickupGloballyEnabled = invoiceSettings?.pickup_discount_enabled !== false;
+  const pickupPercent = invoiceSettings?.pickup_discount_percent ?? 3;
+
+  // Fetch warehouse step setting on open
   useEffect(() => {
     if (!isOpen) return;
 
@@ -75,7 +86,7 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
     };
   }, [isOpen]);
 
-  const handleToggle = async (newVal: boolean) => {
+  const handleToggleWarehouse = async (newVal: boolean) => {
     setIsSaving(true);
     try {
       if (isSupabaseConfigured && supabase) {
@@ -120,6 +131,54 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
     }
   };
 
+  const handleTogglePickupDiscount = async (newVal: boolean) => {
+    setIsSavingDiscount(true);
+    try {
+      const updated = {
+        ...invoiceSettings,
+        pickup_discount_enabled: newVal,
+      };
+      const res = await updateInvoiceSettings(updated);
+      if (res.success) {
+        showToast(
+          newVal
+            ? `تخفیف تحویل درب انبار (${pickupPercent}٪) برای کل سامانه فعال شد.`
+            : 'تخفیف تحویل درب انبار برای کل سامانه غیرفعال گردید.',
+          'success'
+        );
+      } else {
+        showToast(res.message || 'خطا در ذخیره تنظیمات تخفیف', 'error');
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'خطا در به‌روزرسانی تخفیف';
+      showToast(msg, 'error');
+    } finally {
+      setIsSavingDiscount(false);
+    }
+  };
+
+  const handleUpdatePickupPercent = async (newPercent: number) => {
+    if (newPercent < 0 || newPercent > 100) return;
+    setIsSavingDiscount(true);
+    try {
+      const updated = {
+        ...invoiceSettings,
+        pickup_discount_percent: newPercent,
+      };
+      const res = await updateInvoiceSettings(updated);
+      if (res.success) {
+        showToast(`درصد تخفیف تحویل انبار به ${newPercent}٪ تغییر یافت.`, 'success');
+      } else {
+        showToast(res.message || 'خطا در به‌روزرسانی درصد تخفیف', 'error');
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'خطا در به‌روزرسانی درصد تخفیف';
+      showToast(msg, 'error');
+    } finally {
+      setIsSavingDiscount(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -129,7 +188,7 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
       dir="rtl"
     >
       <div
-        className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl text-xs space-y-5"
+        className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl text-xs space-y-5 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -140,10 +199,10 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
             </div>
             <div>
               <h3 className="font-bold text-sm sm:text-base text-slate-100">
-                تنظیمات فرآیند انبار و فاکتورها
+                تنظیمات کلی سامانه
               </h3>
               <p className="text-slate-400 text-[11px] mt-0.5">
-                مدیریت جریان کاری و مراحل صدور تا خروج کالا
+                تخفیف‌های سراسری، فرآیند انبار و مراحل صدور فاکتور
               </p>
             </div>
           </div>
@@ -156,7 +215,94 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
           </button>
         </div>
 
-        {/* Setting Card */}
+        {/* 1. Global Store 3% Pickup Discount Setting */}
+        <div className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Percent className="w-4 h-4 text-amber-400" />
+                <h4 className="font-bold text-sm text-slate-100">
+                  تخفیف تحویل سفارش درب انبار (سراسری)
+                </h4>
+              </div>
+              <p className="text-slate-400 leading-relaxed text-xs">
+                امکان فعال‌سازی یا غیرفعال‌سازی قابلیت تخفیف تحویل درب انبار برای تمام فروشگاه‌ها در کل سیستم.
+              </p>
+            </div>
+
+            {/* Interactive Switch */}
+            <button
+              type="button"
+              disabled={isSavingDiscount}
+              onClick={() => handleTogglePickupDiscount(!isPickupGloballyEnabled)}
+              className={`p-1 rounded-full transition-colors cursor-pointer shrink-0 disabled:opacity-50 ${
+                isPickupGloballyEnabled ? 'text-emerald-400' : 'text-slate-600'
+              }`}
+              title={isPickupGloballyEnabled ? 'کلیک جهت غیرفعال‌سازی در کل سامانه' : 'کلیک جهت فعال‌سازی در کل سامانه'}
+            >
+              {isSavingDiscount ? (
+                <Loader2 className="w-8 h-8 animate-spin text-amber-400" />
+              ) : isPickupGloballyEnabled ? (
+                <ToggleRight className="w-10 h-10" />
+              ) : (
+                <ToggleLeft className="w-10 h-10" />
+              )}
+            </button>
+          </div>
+
+          {/* Discount Percentage Config */}
+          {isPickupGloballyEnabled && (
+            <div className="pt-2 border-t border-slate-850 flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <label className="text-slate-300 font-bold text-xs">
+                  درصد تخفیف پیش‌فرض:
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.5}
+                    defaultValue={pickupPercent}
+                    onBlur={(e) => {
+                      const val = parseFloat(e.target.value);
+                      if (!isNaN(val) && val >= 0 && val <= 100 && val !== pickupPercent) {
+                        handleUpdatePickupPercent(val);
+                      }
+                    }}
+                    className="w-16 px-2 py-1 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-xs font-bold text-center font-mono focus:border-amber-500 focus:outline-none"
+                    title="برای ذخیره پس از تغییر مقدار، خارج از کادر کلیک نمایید"
+                  />
+                  <span className="text-xs text-amber-300 font-mono font-bold">٪</span>
+                </div>
+              </div>
+              <span className="text-[11px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/50 px-2 py-0.5 rounded-md font-semibold">
+                فعال در پنل فروشگاه‌ها ({pickupPercent}٪)
+              </span>
+            </div>
+          )}
+
+          {/* Explanation Banner */}
+          <div className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 text-xs space-y-2">
+            <div className="flex items-center gap-1.5 text-slate-300 font-semibold">
+              <Info className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+              <span>نحوه عملکرد در سامانه:</span>
+            </div>
+            {isPickupGloballyEnabled ? (
+              <p className="text-slate-300 leading-relaxed text-[11px]">
+                <strong className="text-emerald-400">وضعیت روشن: </strong>
+                سوپرمارکت‌ها در هنگام ثبت سفارش می‌توانند کلید دریافت تخفیف درب انبار ({pickupPercent}٪) را انتخاب کنند و تخفیف به‌طور خودکار در فاکتور نهایی اعمال خواهد شد.
+              </p>
+            ) : (
+              <p className="text-slate-300 leading-relaxed text-[11px]">
+                <strong className="text-rose-400">وضعیت خاموش: </strong>
+                این گزینه به‌طور کلی از پنل تمام سوپرمارکت‌ها مخفی شده و هیچ فروشگاهی امکان اعمال این تخفیف را نخواهد داشت.
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* 2. Warehouse Step Setting Card */}
         <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-4">
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">
@@ -175,7 +321,7 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
             <button
               type="button"
               disabled={isLoading || isSaving}
-              onClick={() => handleToggle(!requireWarehouseStep)}
+              onClick={() => handleToggleWarehouse(!requireWarehouseStep)}
               className={`p-1 rounded-full transition-colors cursor-pointer shrink-0 disabled:opacity-50 ${
                 requireWarehouseStep ? 'text-indigo-400' : 'text-slate-600'
               }`}
@@ -198,12 +344,12 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
             {requireWarehouseStep ? (
               <p className="text-slate-300 leading-relaxed text-[11px]">
                 <strong className="text-indigo-300">وضعیت فعال: </strong>
-                وقتی ادمین فاکتور را تایید می‌کند، وضعیت آن به <span className="font-mono text-blue-400">approved</span> (تایید شده) تغییر یافته و قیمت‌ها قفل می‌شوند. سپس این فاکتور در پنل انباردار و همچنین صفحه ادمین قرار گرفته و کسر قطعی موجودی کالا تنها پس از کلیک روی «تایید خروج بار» انجام خواهد شد.
+                وقتی ادمین فاکتور را تایید می‌کند، وضعیت آن به <span className="font-mono text-blue-400">approved</span> تغییر یافته و کسر قطعی موجودی تنها پس از تایید خروج انبار انجام می‌شود.
               </p>
             ) : (
               <p className="text-slate-300 leading-relaxed text-[11px]">
                 <strong className="text-amber-300">وضعیت غیرفعال: </strong>
-                با تایید فاکتور توسط ادمین، فاکتور بلافاصله به وضعیت <span className="font-mono text-emerald-400">loaded</span> (خارج‌شده) درآمده و کسر موجودی انبار به‌صورت خودکار انجام می‌پذیرد. در این حالت پنل انبار نیازی به تایید مجدد نداشته و تنها تاریخچه ترخیص‌ها را مشاهده می‌کند.
+                با تایید فاکتور توسط ادمین، کسر موجودی انبار به‌صورت خودکار و مستقیم انجام می‌پذیرد.
               </p>
             )}
           </div>
@@ -213,7 +359,7 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
         <div className="flex items-center justify-between pt-2 border-t border-slate-800">
           <div className="flex items-center gap-1.5 text-slate-500 text-[11px]">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-            <span>تغییرات به همراه نام ادمین در لاگ سوابق ثبت می‌گردد.</span>
+            <span>تنظیمات بلافاصله در کل سامانه و پایگاه داده اعمال می‌گردند.</span>
           </div>
 
           <button

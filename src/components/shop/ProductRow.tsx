@@ -10,7 +10,7 @@ import {
   getStorePickupDiscountEnabled,
   calculateTotalDiscountPercent,
   calculateDiscountedPrice,
-  getStoreRegistrationRank,
+  getStoreFounderDiscountStatus,
 } from '../../utils/storeDiscount';
 import {
   getPackSize,
@@ -34,7 +34,7 @@ export const ProductRow: React.FC<ProductRowProps> = ({
   onExceedLimit,
   priceMode = 'store',
 }) => {
-  const { invoiceSettings, productLikes, toggleProductLike, currentUser, selectedSupermarketId, supermarkets } = useApp();
+  const { invoiceSettings, productLikes, toggleProductLike, currentUser, selectedSupermarketId, supermarkets, orders } = useApp();
   const [imageError, setImageError] = useState(false);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [isLiking, setIsLiking] = useState(false);
@@ -72,14 +72,13 @@ export const ProductRow: React.FC<ProductRowProps> = ({
   const pickupPercent = invoiceSettings?.pickup_discount_percent || 3;
   const pickupEnabled = isPickupGloballyEnabled && priceMode === 'store' && getStorePickupDiscountEnabled(shopInfo.id);
 
-  const { rank: storeRank } = getStoreRegistrationRank(supermarkets, shopInfo.id);
-  const isFounderEligible = storeRank <= 100;
-  const founderEnabled = priceMode === 'store' && (isFounderEligible || Boolean(currentShop?.founder_discount_enabled));
-  const founderPercent = Math.max(5, Number(currentShop?.founder_discount_percent) || 5);
+  const founderStatus = getStoreFounderDiscountStatus(supermarkets, orders, shopInfo.id);
+  const founderEnabled = priceMode === 'store' && founderStatus.isFounderActive;
+  const founderPercent = founderEnabled ? founderStatus.founderPercent : 0;
 
   const totalDiscountPercent = calculateTotalDiscountPercent(
     pickupEnabled ? pickupPercent : 0,
-    founderEnabled ? founderPercent : 0,
+    founderPercent,
     0
   );
 

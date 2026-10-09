@@ -63,6 +63,10 @@ export function useCatalog() {
         .filter((p) => !LEGACY_MOCK_NAMES.has(p.name?.trim()))
         .map((p) => ({
           ...p,
+          visitor_price:
+            p.visitor_price !== undefined && p.visitor_price !== null && !isNaN(Number(p.visitor_price))
+              ? Number(p.visitor_price)
+              : undefined,
           is_market_test:
             p.is_market_test !== undefined
               ? Boolean(p.is_market_test)
@@ -151,8 +155,13 @@ export function useCatalog() {
   }, [products]);
 
   useEffect(() => {
-    if (isSupabaseConfigured) return;
-    localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+    // Keep local cache synced with products.
+    // Notice: if products have visitor_price, cache them directly.
+    if (products.length > 0) {
+      try {
+        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+      } catch {}
+    }
   }, [products]);
 
   useEffect(() => {

@@ -8,12 +8,22 @@
 export const DEFAULT_FOUNDER_DISCOUNT_PERCENT = 5;
 export const FOUNDER_INITIAL_CAPACITY = 80;
 export const FOUNDER_QUALIFYING_LIMIT = 100;
+export const FOUNDER_MAX_ORDERS_PER_STORE = 3;
 
 export interface StoreRankInfo {
   rank: number;
   totalStores: number;
   isFounderEligible: boolean;
   remainingCapacity: number;
+}
+
+export interface FounderDiscountStatus {
+  isFounderEligible: boolean;
+  usedOrdersCount: number;
+  remainingOrdersCount: number;
+  isFounderActive: boolean;
+  founderPercent: number;
+  rank: number;
 }
 
 export function getStoreRegistrationRank(
@@ -43,6 +53,57 @@ export function getStoreRegistrationRank(
   const remainingCapacity = Math.max(0, FOUNDER_INITIAL_CAPACITY - totalStores);
 
   return { rank, totalStores, isFounderEligible, remainingCapacity };
+}
+
+/**
+ * Calculates whether the 5% founder discount for the first 100 stores is active,
+ * ensuring it applies strictly to the first 3 orders of each store.
+ */
+export function getStoreFounderDiscountStatus(
+  supermarkets: Array<{ id: string; created_at?: string }>,
+  orders: Array<{ supermarket_id: string; status?: string; founder_discount_percent?: number }>,
+  storeId?: string | null
+): FounderDiscountStatus {
+  if (!storeId) {
+    return {
+      isFounderEligible: false,
+      usedOrdersCount: 0,
+      remainingOrdersCount: 0,
+      isFounderActive: false,
+      founderPercent: 0,
+      rank: 999,
+    };
+  }
+
+  const { rank, isFounderEligible } = getStoreRegistrationRank(supermarkets, storeId);
+
+  // Count non-cancelled orders belonging to this store
+  const storeOrders = (orders || []).filter(
+    (o) => o.supermarket_id === storeId && o.status !== 'cancelled'
+  );
+
+  const explicitFounderOrders = storeOrders.filter(
+    (o) => (o.founder_discount_percent ?? 0) > 0
+  );
+
+  // If store is eligible, every placed non-cancelled order counts towards the 3 orders quota
+  const usedOrdersCount = Math.min(
+    FOUNDER_MAX_ORDERS_PER_STORE,
+    Math.max(explicitFounderOrders.length, storeOrders.length)
+  );
+
+  const remainingOrdersCount = Math.max(0, FOUNDER_MAX_ORDERS_PER_STORE - usedOrdersCount);
+  const isFounderActive = isFounderEligible && remainingOrdersCount > 0;
+  const founderPercent = isFounderActive ? DEFAULT_FOUNDER_DISCOUNT_PERCENT : 0;
+
+  return {
+    isFounderEligible,
+    usedOrdersCount,
+    remainingOrdersCount,
+    isFounderActive,
+    founderPercent,
+    rank,
+  };
 }
 
 export function calculateTotalDiscountPercent(

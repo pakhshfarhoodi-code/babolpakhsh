@@ -23,8 +23,10 @@ import {
   Truck,
   FileSpreadsheet,
   Wallet,
+  Settings,
 } from 'lucide-react';
 import { AdminProfileModal } from './AdminProfileModal';
+import { AdminSettingsModal } from './admin/AdminSettingsModal';
 
 export type AdminTabKey =
   | 'overview'
@@ -91,6 +93,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [newBrandNameInput, setNewBrandNameInput] = useState('');
   const [catBrandFeedback, setCatBrandFeedback] = useState<string | null>(null);
   const [isAdminProfileModalOpen, setIsAdminProfileModalOpen] = useState(false);
+  const [isAdminSettingsModalOpen, setIsAdminSettingsModalOpen] = useState(false);
 
   // Badge count for Overview Tab & Pending approvals
   const pendingApprovalsCount = useMemo(() => {
@@ -283,15 +286,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           );
         })}
 
-        <button
-          type="button"
-          onClick={() => setIsAdminProfileModalOpen(true)}
-          className="mr-auto px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition flex items-center gap-1.5 cursor-pointer shrink-0 shadow-xs"
-          title="مشاهده و ویرایش مشخصات مدیریت و مرکز پخش"
-        >
-          <Building2 className="w-4 h-4 text-amber-400" />
-          <span>پروفایل مدیریت</span>
-        </button>
+        <div className="mr-auto flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsAdminSettingsModalOpen(true)}
+            className="px-3 py-2 rounded-xl text-xs sm:text-sm font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 cursor-pointer shrink-0 shadow-xs"
+            title="تنظیمات کلی سامانه (تخفیف ۳ درصدی، تایید انبار و...)"
+          >
+            <Settings className="w-4 h-4 text-blue-400" />
+            <span>تنظیمات سامانه</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsAdminProfileModalOpen(true)}
+            className="px-3 py-2 rounded-xl text-xs sm:text-sm font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition flex items-center gap-1.5 cursor-pointer shrink-0 shadow-xs"
+            title="مشاهده و ویرایش مشخصات مدیریت و مرکز پخش"
+          >
+            <Building2 className="w-4 h-4 text-amber-400" />
+            <span>پروفایل مدیریت</span>
+          </button>
+        </div>
       </div>
 
       {/* Tab 1: Overview */}
@@ -615,6 +630,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           initialEditMode={true}
         />
       )}
+
+      {/* Admin Global Settings Modal (تخفیف ۳ درصدی، تایید انبار و...) */}
+      <AdminSettingsModal
+        isOpen={isAdminSettingsModalOpen}
+        onClose={() => setIsAdminSettingsModalOpen(false)}
+      />
     </div>
   );
 };

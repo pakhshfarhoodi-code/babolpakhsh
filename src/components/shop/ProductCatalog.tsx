@@ -8,6 +8,7 @@ import {
   getStorePickupDiscountEnabled,
   setStorePickupDiscountEnabled,
   getStoreRegistrationRank,
+  getStoreFounderDiscountStatus,
 } from '../../utils/storeDiscount';
 import {
   Search,
@@ -26,7 +27,7 @@ import {
 } from 'lucide-react';
 
 const StoreDiscountSwitchesBox: React.FC = () => {
-  const { invoiceSettings, currentUser, selectedSupermarketId, supermarkets } = useApp();
+  const { invoiceSettings, currentUser, selectedSupermarketId, supermarkets, orders } = useApp();
   const currentShop = supermarkets.find(
     (s) =>
       s.id === selectedSupermarketId ||
@@ -61,14 +62,17 @@ const StoreDiscountSwitchesBox: React.FC = () => {
     window.dispatchEvent(new Event('store-discount-changed'));
   };
 
-  // 5% Founder Discount for the first 100 people & Rank calculation
-  const { rank: storeRank, isFounderEligible, remainingCapacity } = useMemo(() => {
-    return getStoreRegistrationRank(supermarkets, currentShop?.id || storeId);
-  }, [supermarkets, currentShop?.id, storeId]);
+  // 5% Founder Discount for the first 100 people (strictly active for first 3 orders)
+  const founderStatus = useMemo(() => {
+    return getStoreFounderDiscountStatus(supermarkets, orders, storeId);
+  }, [supermarkets, orders, storeId]);
 
-  const founderEnabled = isFounderEligible || Boolean(currentShop?.founder_discount_enabled);
-  const founderPercent = Math.max(5, Number(currentShop?.founder_discount_percent) || 5);
   const [showFounderInfo, setShowFounderInfo] = useState(false);
+
+  // If pickup discount is globally disabled and founder discount is exhausted/inactive, hide the whole component
+  if (!isPickupGloballyEnabled && !founderStatus.isFounderActive) {
+    return null;
+  }
 
   return (
     <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 space-y-2.5 shadow-sm">
@@ -79,19 +83,26 @@ const StoreDiscountSwitchesBox: React.FC = () => {
         </span>
       </div>
 
-      {/* Prominent Counter Banner for remaining founder spots */}
-      <div className="p-2.5 rounded-xl bg-gradient-to-r from-amber-950/80 via-purple-950/80 to-slate-900 border border-amber-500/40 text-amber-200 text-xs flex items-center justify-between gap-2 shadow-sm">
-        <div className="flex items-center gap-2 flex-1">
-          <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-          <p className="leading-relaxed text-xs">
-            <span>فقط </span>
-            <span className="font-mono font-black text-sm text-white bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-500/40">{remainingCapacity}</span>
-            <span> نفر دیگر امکان استفاده از این تخفیف را دارند. تا فرصت از دست نرفته دوستان خود را دعوت کنید</span>
-          </p>
+      {/* Prominent Counter Banner for remaining founder discount orders (shown only if active) */}
+      {founderStatus.isFounderActive && (
+        <div className="p-2.5 rounded-xl bg-gradient-to-r from-amber-950/80 via-purple-950/80 to-slate-900 border border-amber-500/40 text-amber-200 text-xs flex items-center justify-between gap-2 shadow-sm animate-in fade-in">
+          <div className="flex items-center gap-2 flex-1">
+            <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+            <p className="leading-relaxed text-xs">
+              <span>برای </span>
+              <span className="font-mono font-black text-sm text-white bg-amber-500/30 px-2 py-0.5 rounded-lg border border-amber-400/50">
+                {founderStatus.remainingOrdersCount}
+              </span>
+              <span> سفارش دیگر شما کد تخفیف ۵ درصدی فعال خواهد بود</span>
+            </p>
+          </div>
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/30 shrink-0 hidden sm:inline-block font-mono">
+            سفارش {founderStatus.usedOrdersCount + 1} از ۳
+          </span>
         </div>
-      </div>
+      )}
 
-      <div className={`grid grid-cols-1 ${isPickupGloballyEnabled ? 'md:grid-cols-2' : ''} gap-2 text-xs`}>
+      <div className={`grid grid-cols-1 ${isPickupGloballyEnabled && founderStatus.isFounderActive ? 'md:grid-cols-2' : ''} gap-2 text-xs`}>
         {/* Switch A: Pickup Discount (Shown only when admin enabled) */}
         {isPickupGloballyEnabled && (
           <div
@@ -130,36 +141,28 @@ const StoreDiscountSwitchesBox: React.FC = () => {
           </div>
         )}
 
-        {/* Switch B: 5% Founder Discount for First 100 people (Auto-active if rank <= 100) */}
-        <div
-          onClick={() => setShowFounderInfo(true)}
-          className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition select-none ${
-            founderEnabled
-              ? 'bg-purple-950/60 border-purple-500/60 text-purple-100 hover:border-purple-400 shadow-sm'
-              : 'bg-slate-950/60 border-slate-800/80 text-slate-400 hover:border-slate-700'
-          }`}
-          title="جهت مشاهده جزئیات تخفیف کلیک کنید"
-        >
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-            <span className="font-bold text-xs">
-              {founderPercent}٪ تخفیف برای ۱۰۰ نفر اول
+        {/* Switch B: 5% Founder Discount for First 100 people (Auto-active only for first 3 orders) */}
+        {founderStatus.isFounderActive && (
+          <div
+            onClick={() => setShowFounderInfo(true)}
+            className="p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition select-none bg-purple-950/60 border-purple-500/60 text-purple-100 hover:border-purple-400 shadow-sm"
+            title="جهت مشاهده جزئیات تخفیف کلیک کنید"
+          >
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+              <span className="font-bold text-xs">
+                ۵٪ تخفیف برای ۱۰۰ نفر اول
+              </span>
+            </div>
+            <span className="text-[10px] px-2.5 py-1 rounded-lg font-bold border bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-mono">
+              فعال ({founderStatus.remainingOrdersCount} سفارش مانده)
             </span>
           </div>
-          <span
-            className={`text-[10px] px-2.5 py-1 rounded-lg font-bold border ${
-              founderEnabled
-                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                : 'bg-slate-800 text-slate-500 border-slate-700'
-            }`}
-          >
-            {founderEnabled ? `فعال (${founderPercent}٪)` : 'غیرفعال'}
-          </span>
-        </div>
+        )}
       </div>
 
       {/* Info notice when clicking Founder switch */}
-      {showFounderInfo && (
+      {showFounderInfo && founderStatus.isFounderActive && (
         <div className="p-3 rounded-xl bg-purple-950/90 border border-purple-500/40 text-purple-200 text-xs flex items-center justify-between gap-2 animate-in fade-in shadow-sm">
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <Info className="w-4 h-4 text-purple-400 shrink-0" />
@@ -167,8 +170,8 @@ const StoreDiscountSwitchesBox: React.FC = () => {
               <p className="font-bold text-white text-xs">
                 طرح تخفیف ویژه ۵ درصدی ۱۰۰ فروشگاه اول:
               </p>
-              <p className="text-[11.5px] sm:text-xs text-purple-100 font-medium tracking-tight whitespace-normal sm:whitespace-nowrap leading-normal">
-                تبریک! شما به عنوان 100 فروشگاه اول در سامانه ثبت‌نام شده‌اید و تخفیف ۵ درصدی به صورت خودکار روی تمامی سفارشات شما اعمال شد.
+              <p className="text-[11.5px] sm:text-xs text-purple-100 font-medium tracking-tight whitespace-normal leading-normal">
+                تبریک! شما به عنوان ۱۰۰ فروشگاه اول در سامانه ثبت‌نام شده‌اید. تخفیف ۵ درصدی برای ۳ سفارش اول شما فعال است (تاکنون {founderStatus.usedOrdersCount} بار استفاده شده و برای {founderStatus.remainingOrdersCount} سفارش دیگر فعال خواهد بود).
               </p>
             </div>
           </div>

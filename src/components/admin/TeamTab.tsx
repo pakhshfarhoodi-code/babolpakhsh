@@ -35,7 +35,9 @@ import {
   Navigation,
   BadgeCheck,
   Building2,
+  Sparkles,
 } from 'lucide-react';
+import { getStoreFounderDiscountStatus } from '../../utils/storeDiscount';
 import { LocationPickerModal } from '../LocationPickerModal';
 import { SupermarketRegisterModal } from '../SupermarketRegisterModal';
 import { AccountLedgerModal } from './AccountLedgerModal';
@@ -908,6 +910,23 @@ export const TeamTab: React.FC<TeamTabProps> = ({
     });
   }, [supermarkets, selectedVisitorFilter, storeStatusFilter, storeSearchTerm]);
 
+  // شماره‌گذاری ترتیبی و پویا برای تمام فروشگاه‌های ثبت‌نامی (مشتریان)
+  // ۱. بر اساس تاریخ ثبت نام مرتب می‌شوند (قدیمی‌ترین = مشتری شماره ۱، موارد بعدی یکی‌یکی اضافه می‌شوند)
+  // ۲. در صورت حذف هر مشتری، شماره بقیه به صورت خودکار و پیوسته به‌روزرسانی می‌شود (بدون پرش عددی)
+  const storeIndexMap = useMemo(() => {
+    const sorted = [...supermarkets].sort((a, b) => {
+      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      if (timeA !== timeB) return timeA - timeB;
+      return a.id.localeCompare(b.id);
+    });
+    const map = new Map<string, number>();
+    sorted.forEach((s, idx) => {
+      map.set(s.id, idx + 1);
+    });
+    return map;
+  }, [supermarkets]);
+
   const pendingApprovalsCount = useMemo(() => {
     return supermarkets.filter((s) => s.is_active === false).length;
   }, [supermarkets]);
@@ -1046,8 +1065,9 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-sm text-slate-100">{visitor.name}</span>
-                        <span className="text-xs px-2 py-0.5 rounded-md bg-blue-900/50 text-blue-300 border border-blue-800/50">
-                          {visitor.region}
+                        <span className="text-xs px-2.5 py-0.5 rounded-md bg-slate-800 text-sky-200 border border-sky-500/50 font-bold inline-flex items-center gap-1 shadow-xs">
+                          <MapPin className="w-3 h-3 text-sky-400 shrink-0" />
+                          <span>منطقه فعالیت: {visitor.region}</span>
                         </span>
                         {visitor.is_active === false ? (
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-400 border border-rose-500/20">
@@ -1248,9 +1268,14 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-slate-100">فهرست سوپرمارکت‌های طرف قرارداد</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    {filteredSupermarkets.length} از {supermarkets.length} فروشگاه
-                  </p>
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    <span className="text-xs font-bold text-amber-300 bg-amber-950/70 border border-amber-800/60 px-2.5 py-0.5 rounded-lg shadow-xs">
+                      مجموع مشتریان: {supermarkets.length} فروشگاه
+                    </span>
+                    <span className="text-xs text-slate-400">
+                      (نمایش {filteredSupermarkets.length} از {supermarkets.length})
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -1340,7 +1365,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
               <div className="mt-3 p-2.5 rounded-xl bg-blue-950/60 border border-blue-800/60 text-xs flex items-center justify-between">
                 <span className="text-blue-200">
                   در حال نمایش فروشگاه‌های ویزیتور:{' '}
-                  <strong>{activeFilteredVisitor.name}</strong> ({activeFilteredVisitor.region})
+                  <strong>{activeFilteredVisitor.name}</strong> (منطقه فعالیت: {activeFilteredVisitor.region})
                 </span>
                 <button
                   type="button"
@@ -1405,6 +1430,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                   const isTogglingThis = togglingStoreId === shop.id;
                   const shopAcc = financialAccounts.find((a) => a.profile_id === shop.id);
                   const isShopAccActive = Boolean(shopAcc && shopAcc.is_active);
+                  const storeIndex = storeIndexMap.get(shop.id) ?? 1;
 
                   return (
                     <div
@@ -1443,6 +1469,12 @@ export const TeamTab: React.FC<TeamTabProps> = ({
 
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
+                              <span
+                                className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-black bg-amber-500/15 text-amber-300 border border-amber-500/30 font-mono shrink-0 shadow-xs"
+                                title={`مشتری شماره ${storeIndex} از کل ${supermarkets.length} مشتری ثبت‌شده`}
+                              >
+                                #{storeIndex}
+                              </span>
                               <p className="font-bold text-sm text-slate-100 truncate">{shop.name}</p>
                               {shop.approval_status === 'pending' ? (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
@@ -1617,33 +1649,35 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                         </div>
 
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          {/* Founder Discount Toggle & Percentage Input */}
-                          <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1">
-                            <input
-                              type="checkbox"
-                              checked={Boolean(shop.founder_discount_enabled)}
-                              onChange={(e) => handleUpdateFounderDiscount(shop, e.target.checked, shop.founder_discount_percent || 5)}
-                              className="w-3.5 h-3.5 accent-purple-500 rounded cursor-pointer shrink-0"
-                              title="فعال/غیرفعال‌سازی تخفیف ۱۰۰ نفر اول"
-                            />
-                            <span className="text-xs text-slate-300 font-medium whitespace-nowrap">تخفیف ۱۰۰ نفر اول</span>
-                            <input
-                              type="number"
-                              defaultValue={shop.founder_discount_percent ?? 5}
-                              step="0.5"
-                              min="0"
-                              max="100"
-                              onBlur={(e) => {
-                                const val = parseFloat(e.target.value);
-                                if (!isNaN(val) && val >= 0 && val <= 100) {
-                                  handleUpdateFounderDiscount(shop, Boolean(shop.founder_discount_enabled), val);
-                                }
-                              }}
-                              className="w-12 h-6 bg-slate-900 border border-slate-700 rounded text-center text-xs text-purple-300 focus:outline-none focus:border-purple-500 font-mono font-bold"
-                              title="درصد تخفیف (ذخیره با کلیک در خارج از کادر)"
-                            />
-                            <span className="text-[10px] text-slate-500 font-mono">%</span>
-                          </div>
+                          {/* Founder Discount 3-Orders Usage Status Badge */}
+                          {(() => {
+                            const shopFounderStatus = getStoreFounderDiscountStatus(supermarkets, orders, shop.id);
+                            return (
+                              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-xs font-semibold bg-slate-950 border-slate-800">
+                                <Sparkles className={`w-3.5 h-3.5 ${shopFounderStatus.isFounderActive ? 'text-amber-400' : 'text-slate-500'}`} />
+                                <span className="text-slate-300">تخفیف ۱۰۰ نفر اول:</span>
+                                {shopFounderStatus.isFounderEligible ? (
+                                  <span
+                                    className={`px-2 py-0.5 rounded-md font-bold text-[11px] font-mono border ${
+                                      shopFounderStatus.remainingOrdersCount === 0
+                                        ? 'bg-slate-800 text-slate-400 border-slate-700'
+                                        : 'bg-purple-950/80 text-purple-300 border-purple-800/60'
+                                    }`}
+                                    title={
+                                      shopFounderStatus.remainingOrdersCount === 0
+                                        ? 'هر ۳ بار استفاده شده و تخفیف به پایان رسیده است'
+                                        : `${shopFounderStatus.usedOrdersCount} از ۳ سفارش استفاده شده، ${shopFounderStatus.remainingOrdersCount} سفارش باقی‌مانده`
+                                    }
+                                  >
+                                    {shopFounderStatus.usedOrdersCount} از ۳ سفارش استفاده شده
+                                    {shopFounderStatus.remainingOrdersCount === 0 ? ' (پایان‌یافته)' : ` (${shopFounderStatus.remainingOrdersCount} مانده)`}
+                                  </span>
+                                ) : (
+                                  <span className="text-[11px] text-slate-500">غیرمشمول</span>
+                                )}
+                              </div>
+                            );
+                          })()}
 
                           {/* Ledger Account Button (only if active) */}
                           {isShopAccActive && (

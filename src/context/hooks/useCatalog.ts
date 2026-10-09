@@ -600,7 +600,7 @@ export function useCatalog() {
     [products]
   );
 
-  // Bulk Upsert Products from Excel import
+  // Bulk Upsert Products from Excel import or Batch Edit
   const bulkUpsertProducts = useCallback(async (items: Array<{
     id?: string;
     name: string;
@@ -615,6 +615,7 @@ export function useCatalog() {
     items_per_package?: number;
     image_url?: string;
     is_active?: boolean;
+    is_market_test?: boolean;
   }>): Promise<{ success: boolean; createdCount: number; updatedCount: number; message: string }> => {
     if (!items || items.length === 0) {
       return { success: false, createdCount: 0, updatedCount: 0, message: 'هیچ داده‌ای برای ثبت یافت نشد.' };
@@ -700,6 +701,7 @@ export function useCatalog() {
           items_per_package: parsedPackQty !== undefined ? parsedPackQty : current.items_per_package,
           image_url: imageUrlStr || current.image_url,
           is_active: item.is_active !== undefined ? item.is_active : current.is_active,
+          is_market_test: item.is_market_test !== undefined ? Boolean(item.is_market_test) : (current.is_market_test ?? false),
         };
         updatedProducts[matchIndex] = updatedProd;
         itemsToUpsertToSupabase.push(updatedProd);
@@ -722,6 +724,7 @@ export function useCatalog() {
           items_per_package: parsedPackQty,
           image_url: imageUrlStr || 'https://images.unsplash.com/photo-1551024601-bec78aea704b?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer',
           is_active: item.is_active !== undefined ? item.is_active : true,
+          is_market_test: Boolean(item.is_market_test),
           created_at: new Date().toISOString(),
         };
         updatedProducts.push(newProd);
@@ -826,6 +829,7 @@ export function useCatalog() {
             items_per_package: p.items_per_package !== undefined && Number(p.items_per_package) > 0 ? Number(p.items_per_package) : null,
             image_url: p.image_url && p.image_url.trim() ? p.image_url.trim() : 'https://images.unsplash.com/photo-1551024601-bec78aea704b?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer',
             is_active: p.is_active ?? true,
+            is_market_test: Boolean(p.is_market_test),
           });
         });
 

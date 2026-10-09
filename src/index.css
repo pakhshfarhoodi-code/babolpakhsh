@@ -384,6 +384,61 @@ html.theme-light .admin-edit-modal select,
   color: #0f172a !important;
 }
 
+/* Admin Profile Modal Theme Styles */
+.admin-profile-modal {
+  background-color: #0f172a;
+  color: #f8fafc;
+}
+
+html.theme-light .admin-profile-modal,
+.theme-light .admin-profile-modal {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.15) !important;
+}
+
+.admin-profile-close-btn {
+  background-color: #1e293b;
+  color: #f8fafc;
+}
+.admin-profile-close-btn:hover {
+  background-color: #334155;
+}
+
+html.theme-light .admin-profile-close-btn,
+.theme-light .admin-profile-close-btn {
+  background-color: #0f172a !important;
+  color: #ffffff !important;
+}
+html.theme-light .admin-profile-close-btn:hover,
+.theme-light .admin-profile-close-btn:hover {
+  background-color: #1e293b !important;
+  color: #ffffff !important;
+}
+
+.admin-profile-nav-btn {
+  background-color: rgba(30, 41, 59, 0.85);
+  border-color: rgba(51, 65, 85, 0.7);
+  color: #f1f5f9;
+}
+.admin-profile-nav-btn:hover {
+  background-color: rgba(51, 65, 85, 0.95);
+  border-color: rgba(71, 85, 105, 0.9);
+}
+
+html.theme-light .admin-profile-nav-btn,
+.theme-light .admin-profile-nav-btn {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+  color: #1e293b !important;
+}
+html.theme-light .admin-profile-nav-btn:hover,
+.theme-light .admin-profile-nav-btn:hover {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
 html.theme-light .admin-edit-modal label,
 .theme-light .admin-edit-modal label {
   color: #1e293b !important;

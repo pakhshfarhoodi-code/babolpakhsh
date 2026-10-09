@@ -137,10 +137,13 @@ interface AppContextType {
     brand?: string;
     price: number;
     visitor_price?: number;
+    consumer_price?: number;
     stock?: number;
     unit?: string;
     items_per_package?: number;
+    image_url?: string;
     is_active?: boolean;
+    is_market_test?: boolean;
   }>) => { success: boolean; createdCount: number; updatedCount: number; message: string } | Promise<{ success: boolean; createdCount: number; updatedCount: number; message: string }>;
   deleteProduct: (productId: string) => Promise<{ success: boolean; message: string }>;
   bulkDeleteProducts: (productIds: string[]) => Promise<{ success: boolean; message: string; count: number }>;

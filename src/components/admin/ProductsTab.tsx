@@ -37,6 +37,9 @@ import {
   Sparkles,
   Clock,
   Phone,
+  RotateCcw,
+  Save,
+  AlertCircle,
 } from 'lucide-react';
 import { LOW_STOCK_THRESHOLD, formatPrice } from './helpers';
 import { PriceHistoryDrawer } from './PriceHistoryDrawer';
@@ -265,19 +268,151 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
 
   // Bulk selection and actions state
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
-  const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
   const [isBulkProcessing, setIsBulkProcessing] = useState(false);
   const [bulkFeedback, setBulkFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // Bulk Edit Form state
-  const [bulkCatId, setBulkCatId] = useState<string>('');
-  const [bulkBrandName, setBulkBrandName] = useState<string>('');
-  const [bulkUnitName, setBulkUnitName] = useState<string>('');
-  const [bulkPriceChangeType, setBulkPriceChangeType] = useState<'none' | 'percent' | 'fixed'>('none');
-  const [bulkPriceValue, setBulkPriceValue] = useState<number>(0);
-  const [bulkActiveStatus, setBulkActiveStatus] = useState<'keep' | 'active' | 'inactive'>('keep');
-  const [bulkMarketTestStatus, setBulkMarketTestStatus] = useState<'keep' | 'marketTest' | 'normal'>('keep');
+  // Batch In-Place Grid Editing State (ویرایش گروهی تمام فیلدهای تمام کالاها به طور همزمان)
+  const [isBatchEditMode, setIsBatchEditMode] = useState(false);
+  const [batchDrafts, setBatchDrafts] = useState<Record<string, Product>>({});
+  const [isBatchSaving, setIsBatchSaving] = useState(false);
+  const [batchFeedback, setBatchFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [batchFilterModifiedOnly, setBatchFilterModifiedOnly] = useState(false);
+
+  const handleStartBatchEdit = () => {
+    const drafts: Record<string, Product> = {};
+    products.forEach((p) => {
+      drafts[p.id] = { ...p };
+    });
+    setBatchDrafts(drafts);
+    setIsBatchEditMode(true);
+    setBatchFeedback(null);
+    setBatchFilterModifiedOnly(false);
+  };
+
+  const handleCancelBatchEdit = () => {
+    setIsBatchEditMode(false);
+    setBatchDrafts({});
+    setBatchFeedback(null);
+    setBatchFilterModifiedOnly(false);
+  };
+
+  const handleBatchFieldChange = <K extends keyof Product>(
+    productId: string,
+    field: K,
+    value: Product[K]
+  ) => {
+    setBatchDrafts((prev) => {
+      const existing = prev[productId] || products.find((p) => p.id === productId);
+      if (!existing) return prev;
+      return {
+        ...prev,
+        [productId]: {
+          ...existing,
+          [field]: value,
+        },
+      };
+    });
+  };
+
+  const handleResetSingleProduct = (productId: string) => {
+    const orig = products.find((p) => p.id === productId);
+    if (!orig) return;
+    setBatchDrafts((prev) => ({
+      ...prev,
+      [productId]: { ...orig },
+    }));
+  };
+
+  // Detect which products have been modified by the admin
+  const changedProducts = useMemo(() => {
+    if (!isBatchEditMode) return [];
+    return products.filter((p) => {
+      const draft = batchDrafts[p.id];
+      if (!draft) return false;
+      return (
+        draft.name.trim() !== p.name.trim() ||
+        (draft.brand || 'متفرقه').trim() !== (p.brand || 'متفرقه').trim() ||
+        (draft.category_id || '') !== (p.category_id || '') ||
+        Number(draft.price) !== Number(p.price) ||
+        Number(draft.visitor_price ?? 0) !== Number(p.visitor_price ?? 0) ||
+        Number(draft.consumer_price ?? 0) !== Number(p.consumer_price ?? 0) ||
+        Number(draft.stock) !== Number(p.stock) ||
+        (draft.unit || 'عدد') !== (p.unit || 'عدد') ||
+        Number(draft.items_per_package ?? 0) !== Number(p.items_per_package ?? 0) ||
+        draft.is_active !== p.is_active ||
+        Boolean(draft.is_market_test) !== Boolean(p.is_market_test)
+      );
+    });
+  }, [isBatchEditMode, products, batchDrafts]);
+
+  const handleSaveBatchEdit = async () => {
+    if (changedProducts.length === 0) {
+      setIsBatchEditMode(false);
+      return;
+    }
+
+    // Validation
+    for (const p of changedProducts) {
+      const draft = batchDrafts[p.id];
+      if (!draft.name || !draft.name.trim()) {
+        setBatchFeedback({
+          type: 'error',
+          message: `نام کالا نمی‌تواند خالی باشد (شناسه: ${p.id}).`,
+        });
+        return;
+      }
+      if (!draft.price || Number(draft.price) <= 0) {
+        setBatchFeedback({
+          type: 'error',
+          message: `قیمت خرید فروشگاه برای «${draft.name}» باید بیشتر از صفر باشد.`,
+        });
+        return;
+      }
+    }
+
+    setIsBatchSaving(true);
+    setBatchFeedback(null);
+
+    try {
+      const payload = changedProducts.map((p) => {
+        const draft = batchDrafts[p.id];
+        return {
+          id: p.id,
+          name: draft.name.trim(),
+          brand: draft.brand?.trim() || 'متفرقه',
+          category_id: draft.category_id || '',
+          price: Number(draft.price),
+          visitor_price: draft.visitor_price !== undefined ? Number(draft.visitor_price) : 0,
+          consumer_price: draft.consumer_price && Number(draft.consumer_price) > 0 ? Number(draft.consumer_price) : undefined,
+          stock: Math.max(0, Number(draft.stock) || 0),
+          unit: draft.unit || 'عدد',
+          items_per_package: draft.items_per_package && Number(draft.items_per_package) > 0 ? Number(draft.items_per_package) : undefined,
+          is_active: draft.is_active !== false,
+          is_market_test: Boolean(draft.is_market_test),
+          image_url: draft.image_url,
+        };
+      });
+
+      if (onBulkUpsertProducts) {
+        await onBulkUpsertProducts(payload);
+      } else if (onUpdateProduct) {
+        for (const item of payload) {
+          onUpdateProduct(item.id, item);
+        }
+      }
+
+      setExcelFeedback(`تغییرات ${changedProducts.length} کالا با موفقیت ذخیره و اعمال نهایی شد.`);
+      setTimeout(() => setExcelFeedback(null), 5000);
+      setIsBatchEditMode(false);
+      setBatchDrafts({});
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطا در ثبت نهایی تغییرات گروهی کالاها';
+      setBatchFeedback({ type: 'error', message: msg });
+    } finally {
+      setIsBatchSaving(false);
+    }
+  };
 
   const toggleSelectAll = () => {
     if (selectedProductIds.length === filteredProducts.length && filteredProducts.length > 0) {
@@ -328,51 +463,45 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
     }
   };
 
-  const handleExecuteBulkEdit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!onBulkUpdateProducts || selectedProductIds.length === 0) return;
-    setIsBulkProcessing(true);
-    setBulkFeedback(null);
+  // Quick batch adjustment helpers in Batch Edit Mode
+  const handleBatchAdjustPrices = (field: 'price' | 'visitor_price', percent: number) => {
+    const targetIds = selectedProductIds.length > 0 ? selectedProductIds : filteredProducts.map((p) => p.id);
+    if (targetIds.length === 0) return;
 
-    const updates: {
-      category_id?: string;
-      brand?: string;
-      unit?: string;
-      priceAdjustmentPercent?: number;
-      fixedPrice?: number;
-      is_active?: boolean;
-      is_market_test?: boolean;
-    } = {};
+    setBatchDrafts((prev) => {
+      const next = { ...prev };
+      targetIds.forEach((id) => {
+        const current = next[id] || products.find((p) => p.id === id);
+        if (current) {
+          const factor = 1 + percent / 100;
+          if (field === 'price') {
+            const newPrice = Math.max(1000, Math.round((current.price * factor) / 100) * 100);
+            next[id] = { ...current, price: newPrice };
+          } else {
+            const currentV = current.visitor_price ?? 0;
+            const newV = Math.max(0, Math.round((currentV * factor) / 100) * 100);
+            next[id] = { ...current, visitor_price: newV };
+          }
+        }
+      });
+      return next;
+    });
+  };
 
-    if (bulkCatId) updates.category_id = bulkCatId;
-    if (bulkBrandName.trim()) updates.brand = bulkBrandName.trim();
-    if (bulkUnitName) updates.unit = bulkUnitName;
-    if (bulkPriceChangeType === 'percent' && bulkPriceValue !== 0) {
-      updates.priceAdjustmentPercent = bulkPriceValue;
-    } else if (bulkPriceChangeType === 'fixed' && bulkPriceValue > 0) {
-      updates.fixedPrice = bulkPriceValue;
-    }
-    if (bulkActiveStatus === 'active') updates.is_active = true;
-    if (bulkActiveStatus === 'inactive') updates.is_active = false;
-    if (bulkMarketTestStatus === 'marketTest') updates.is_market_test = true;
-    if (bulkMarketTestStatus === 'normal') updates.is_market_test = false;
+  const handleBatchSetActive = (isActive: boolean) => {
+    const targetIds = selectedProductIds.length > 0 ? selectedProductIds : filteredProducts.map((p) => p.id);
+    if (targetIds.length === 0) return;
 
-    try {
-      const res = await onBulkUpdateProducts(selectedProductIds, updates);
-      if (res.success) {
-        setIsBulkEditOpen(false);
-        setSelectedProductIds([]);
-        setExcelFeedback(res.message);
-        setTimeout(() => setExcelFeedback(null), 5000);
-      } else {
-        setBulkFeedback({ type: 'error', message: res.message });
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'خطا در ویرایش گروهی کالاها';
-      setBulkFeedback({ type: 'error', message: msg });
-    } finally {
-      setIsBulkProcessing(false);
-    }
+    setBatchDrafts((prev) => {
+      const next = { ...prev };
+      targetIds.forEach((id) => {
+        const current = next[id] || products.find((p) => p.id === id);
+        if (current) {
+          next[id] = { ...current, is_active: isActive };
+        }
+      });
+      return next;
+    });
   };
 
   // Filtered Products
@@ -416,6 +545,14 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
       return true;
     });
   }, [products, onlyLowStock, onlyInactive, onlyMarketTest, selectedCategoryFilter, selectedBrandFilter, searchTerm]);
+
+  // When in batch edit mode, admin can view all or only modified products
+  const displayedProducts = useMemo(() => {
+    if (isBatchEditMode && batchFilterModifiedOnly) {
+      return filteredProducts.filter((p) => changedProducts.some((cp) => cp.id === p.id));
+    }
+    return filteredProducts;
+  }, [filteredProducts, isBatchEditMode, batchFilterModifiedOnly, changedProducts]);
 
   const handleSavePrice = (productId: string) => {
     if (tempStorePrice > 0) {
@@ -583,8 +720,31 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
             )}
           </div>
 
-          {/* Action Buttons: Brand Order, Excel Import, Excel Export, Add Product */}
+          {/* Action Buttons: Bulk Edit, Brand Order, Excel Import, Excel Export, Add Product */}
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={isBatchEditMode ? handleCancelBatchEdit : handleStartBatchEdit}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black transition cursor-pointer shadow-md ${
+                isBatchEditMode
+                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-500/30'
+                  : 'bg-gradient-to-r from-amber-500/20 to-amber-600/30 hover:from-amber-500/30 hover:to-amber-600/40 text-amber-300 border border-amber-500/40'
+              }`}
+              title="ورود به حالت ویرایش همزمان تمام فیلدهای تمام کالاها در جدول"
+            >
+              {isBatchEditMode ? (
+                <>
+                  <X className="w-3.5 h-3.5" />
+                  <span>خروج از ویرایش گروهی</span>
+                </>
+              ) : (
+                <>
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" />
+                  <span>ویرایش گروهی تمام کالاها</span>
+                </>
+              )}
+            </button>
+
             <button
               type="button"
               onClick={() => setIsBrandOrderModalOpen(true)}
@@ -710,7 +870,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
               type="button"
               onClick={() => {
                 setBulkFeedback(null);
-                setIsBulkEditOpen(true);
+                handleStartBatchEdit();
               }}
               className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
             >
@@ -739,25 +899,194 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
         </div>
       )}
 
+      {/* Brand Options Datalist for fast brand typing */}
+      <datalist id="batch-brand-options">
+        {brands.map((b) => (
+          <option key={b} value={b} />
+        ))}
+      </datalist>
+
+      {/* Batch Edit Mode Banner & Actions */}
+      {isBatchEditMode && (
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-950/70 via-slate-900 to-indigo-950/70 border-2 border-amber-500/60 shadow-xl space-y-3 animate-in fade-in">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shadow-md shadow-amber-500/30 shrink-0">
+                <SlidersHorizontal className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="font-black text-sm text-amber-300">
+                    حالت ویرایش گروهی همزمان تمام کالاها
+                  </h4>
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                    ویرایش مستقیم در جدول
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  تمام مشخصات تمام کالاها (نام، دسته، برند، قیمت‌ها، موجودی، کارتن و وضعیت) در سطرهای جدول مستقیماً فعال و قابل تغییر است.
+                </p>
+              </div>
+            </div>
+
+            {/* Main Save & Cancel Buttons */}
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={handleCancelBatchEdit}
+                disabled={isBatchSaving}
+                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <X className="w-4 h-4 text-slate-400" />
+                <span>انصراف و لغو تغییرات</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSaveBatchEdit}
+                disabled={isBatchSaving || changedProducts.length === 0}
+                className={`px-5 py-2 rounded-xl text-xs font-black transition flex items-center gap-2 shadow-lg cursor-pointer ${
+                  changedProducts.length > 0
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-600/30 active:scale-95 animate-pulse'
+                    : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
+                }`}
+                title={changedProducts.length > 0 ? 'ذخیره دائم تمام تغییرات اعمال شده روی کالاها' : 'هنوز تغییری برای ذخیره ایجاد نشده است'}
+              >
+                {isBatchSaving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <span>در حال ذخیره و اعمال تغییرات...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4 text-white" />
+                    <span>
+                      تایید و اعمال نهایی تغییرات
+                      {changedProducts.length > 0 && ` (${changedProducts.length} کالا)`}
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Batch Quick Adjustments Toolbar */}
+          <div className="pt-2.5 border-t border-amber-500/30 flex flex-wrap items-center justify-between gap-2.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-bold text-amber-200/90 flex items-center gap-1">
+                <Percent className="w-3.5 h-3.5 text-amber-400" />
+                تغییر سریع قیمت کالاها:
+              </span>
+              <button
+                type="button"
+                onClick={() => handleBatchAdjustPrices('price', 10)}
+                className="px-2 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 text-[11px] font-bold cursor-pointer transition"
+                title="افزایش ۱۰ درصد به قیمت خرید فروشگاه تمام کالاهای لیست"
+              >
+                +۱۰٪ فروشگاه
+              </button>
+              <button
+                type="button"
+                onClick={() => handleBatchAdjustPrices('price', 5)}
+                className="px-2 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 text-[11px] font-bold cursor-pointer transition"
+                title="افزایش ۵ درصد به قیمت خرید فروشگاه تمام کالاهای لیست"
+              >
+                +۵٪ فروشگاه
+              </button>
+              <button
+                type="button"
+                onClick={() => handleBatchAdjustPrices('price', -5)}
+                className="px-2 py-1 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 text-[11px] font-bold cursor-pointer transition"
+                title="کاهش ۵ درصد از قیمت خرید فروشگاه تمام کالاهای لیست"
+              >
+                -۵٪ فروشگاه
+              </button>
+              <button
+                type="button"
+                onClick={() => handleBatchAdjustPrices('visitor_price', 10)}
+                className="px-2 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 text-[11px] font-bold cursor-pointer transition"
+                title="افزایش ۱۰ درصد به قیمت ویزیتور تمام کالاهای لیست"
+              >
+                +۱۰٪ ویزیتور
+              </button>
+              <button
+                type="button"
+                onClick={() => handleBatchAdjustPrices('visitor_price', 5)}
+                className="px-2 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 text-[11px] font-bold cursor-pointer transition"
+                title="افزایش ۵ درصد به قیمت ویزیتور تمام کالاهای لیست"
+              >
+                +۵٪ ویزیتور
+              </button>
+            </div>
+
+            {/* Filter by modified */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setBatchFilterModifiedOnly(!batchFilterModifiedOnly)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer flex items-center gap-1.5 ${
+                  batchFilterModifiedOnly
+                    ? 'bg-amber-500 text-slate-950 border-amber-400 font-black'
+                    : 'bg-slate-950/80 text-slate-300 border-slate-700 hover:text-white'
+                }`}
+              >
+                <span>فقط نمایش تغییریافته‌ها</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${batchFilterModifiedOnly ? 'bg-slate-950 text-amber-300' : 'bg-slate-800 text-amber-400'}`}>
+                  {changedProducts.length}
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* Batch Feedback Alert */}
+          {batchFeedback && (
+            <div
+              className={`p-3 rounded-xl border text-xs font-semibold flex items-center gap-2 ${
+                batchFeedback.type === 'error'
+                  ? 'bg-rose-500/15 border-rose-500/40 text-rose-300'
+                  : 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+              }`}
+            >
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{batchFeedback.message}</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Products Table */}
-      <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-sm">
+      <div className={`bg-slate-900 rounded-2xl border overflow-hidden shadow-sm transition ${isBatchEditMode ? 'border-amber-500/50 shadow-amber-500/10' : 'border-slate-800'}`}>
         <div className="p-4 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <h3 className="font-bold text-sm text-slate-100">
-              فهرست کالاها، قیمت مصوب و مدیریت موجودی
+            <h3 className="font-bold text-sm text-slate-100 flex items-center gap-2">
+              {isBatchEditMode ? (
+                <>
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+                  <span>جدول ویرایش همزمان اقلام و فیلدهای کالا</span>
+                </>
+              ) : (
+                <span>فهرست کالاها، قیمت مصوب و مدیریت موجودی</span>
+              )}
             </h3>
+            {isBatchEditMode && changedProducts.length > 0 && (
+              <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[11px] font-black">
+                {changedProducts.length} کالا تغییر یافته
+              </span>
+            )}
             {selectedProductIds.length > 0 && (
               <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 text-[11px] font-bold">
                 {selectedProductIds.length} مورد انتخابی
               </span>
             )}
           </div>
-          <span className="text-xs text-slate-400">{filteredProducts.length} کالا</span>
+          <span className="text-xs text-slate-400">{displayedProducts.length} کالا</span>
         </div>
 
-        {filteredProducts.length === 0 ? (
+        {displayedProducts.length === 0 ? (
           <div className="py-12 text-center text-slate-500 text-xs">
-            کالایی با شرایط فیلتر فعلی یافت نشد.
+            {batchFilterModifiedOnly
+              ? 'هیچ کالایی هنوز تغییر داده نشده است.'
+              : 'کالایی با شرایط فیلتر فعلی یافت نشد.'}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -768,17 +1097,19 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                     <button
                       type="button"
                       onClick={toggleSelectAll}
-                      title={selectedProductIds.length === filteredProducts.length && filteredProducts.length > 0 ? 'لغو انتخاب همه' : 'انتخاب همه کالاهای نمایش داده شده'}
+                      title={selectedProductIds.length === displayedProducts.length && displayedProducts.length > 0 ? 'لغو انتخاب همه' : 'انتخاب همه کالاهای نمایش داده شده'}
                       className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-blue-400 transition cursor-pointer"
                     >
-                      {selectedProductIds.length === filteredProducts.length && filteredProducts.length > 0 ? (
+                      {selectedProductIds.length === displayedProducts.length && displayedProducts.length > 0 ? (
                         <CheckSquare className="w-4 h-4 text-blue-400" />
                       ) : (
                         <Square className="w-4 h-4" />
                       )}
                     </button>
                   </th>
-                  <th className="py-3 px-4 font-semibold">نام و مشخصات کالا</th>
+                  <th className="py-3 px-4 font-semibold">
+                    {isBatchEditMode ? 'نام و عکس کالا (قابل ویرایش)' : 'نام و مشخصات کالا'}
+                  </th>
                   <th className="py-3 px-4 font-semibold">دسته</th>
                   <th className="py-3 px-4 font-semibold">برند</th>
                   <th className="py-3 px-4 font-semibold text-blue-400">قیمت خرید ویزیتور</th>
@@ -787,20 +1118,351 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                   <th className="py-3 px-4 font-semibold">کل سردخانه</th>
                   <th className="py-3 px-4 font-semibold">رزرو سفارشات</th>
                   <th className="py-3 px-4 font-semibold">موجودی آزاد</th>
-                  <th className="py-3 px-4 font-semibold">واحد</th>
+                  <th className="py-3 px-4 font-semibold">واحد / کارتن</th>
                   <th className="py-3 px-4 font-semibold text-center">نمایش در کاتالوگ</th>
-                  <th className="py-3 px-4 font-semibold text-center text-violet-400">تست بازار و لایک‌ها</th>
-                  <th className="py-3 px-4 font-semibold text-center">عملیات</th>
+                  <th className="py-3 px-4 font-semibold text-center text-violet-400">تست بازار</th>
+                  <th className="py-3 px-4 font-semibold text-center">
+                    {isBatchEditMode ? 'وضعیت سطر' : 'عملیات'}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {filteredProducts.map((product) => {
+                {displayedProducts.map((product) => {
+                  const isSelected = selectedProductIds.includes(product.id);
+
+                  // BATCH EDIT MODE: All fields of all products are editable inline simultaneously!
+                  if (isBatchEditMode) {
+                    const draft = batchDrafts[product.id] || product;
+                    const isChanged = changedProducts.some((p) => p.id === product.id);
+                    const freeStock = Math.round((Number(draft.stock) - Number(product.reserved_stock)) * 1000) / 1000;
+                    const isLow = freeStock < LOW_STOCK_THRESHOLD;
+
+                    return (
+                      <tr
+                        key={product.id}
+                        className={`transition border-b border-slate-800/60 ${
+                          isChanged
+                            ? 'bg-amber-950/25 hover:bg-amber-950/35 border-r-4 border-r-amber-400'
+                            : isSelected
+                            ? 'bg-blue-950/30 hover:bg-blue-950/40'
+                            : 'hover:bg-slate-800/35'
+                        }`}
+                      >
+                        {/* Checkbox & Change Indicator */}
+                        <td className="py-2.5 px-3 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => toggleSelectProduct(product.id)}
+                              className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-blue-400 transition cursor-pointer"
+                            >
+                              {isSelected ? (
+                                <CheckSquare className="w-4 h-4 text-blue-400" />
+                              ) : (
+                                <Square className="w-4 h-4" />
+                              )}
+                            </button>
+                            {isChanged && (
+                              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" title="این کالا تغییر یافته است" />
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Product Image & Editable Name */}
+                        <td className="py-2 px-3">
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditProduct(draft)}
+                              className="relative group w-9 h-9 rounded-lg overflow-hidden border border-slate-700 bg-slate-950 shrink-0 cursor-pointer shadow-xs hover:border-amber-400 transition"
+                              title="کلیک برای تغییر عکس یا مشاهده مشخصات کامل"
+                            >
+                              <SafeImage
+                                src={draft.image_url}
+                                alt={draft.name}
+                                categoryId={draft.category_id}
+                                productName={draft.name}
+                                className="w-full h-full object-cover"
+                              />
+                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition text-white">
+                                <Camera className="w-3.5 h-3.5 text-amber-300" />
+                              </div>
+                            </button>
+                            <div className="flex-1 min-w-[170px]">
+                              <input
+                                type="text"
+                                value={draft.name}
+                                onChange={(e) => handleBatchFieldChange(product.id, 'name', e.target.value)}
+                                className={`w-full bg-slate-950 border rounded-lg px-2 py-1.5 text-xs text-slate-100 font-semibold focus:outline-none transition ${
+                                  draft.name.trim() !== product.name.trim()
+                                    ? 'border-amber-400 bg-amber-950/20 text-amber-200'
+                                    : 'border-slate-700/80 focus:border-blue-500'
+                                }`}
+                                placeholder="نام کالا"
+                              />
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Editable Category */}
+                        <td className="py-2 px-3">
+                          <select
+                            value={draft.category_id || ''}
+                            onChange={(e) => handleBatchFieldChange(product.id, 'category_id', e.target.value)}
+                            className={`bg-slate-950 border rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none transition ${
+                              (draft.category_id || '') !== (product.category_id || '')
+                                ? 'border-amber-400 text-amber-300'
+                                : 'border-slate-700/80 focus:border-blue-500'
+                            }`}
+                          >
+                            {categories.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.name}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+
+                        {/* Editable Brand */}
+                        <td className="py-2 px-3">
+                          <input
+                            type="text"
+                            list="batch-brand-options"
+                            value={draft.brand || ''}
+                            onChange={(e) => handleBatchFieldChange(product.id, 'brand', e.target.value)}
+                            className={`w-24 bg-slate-950 border rounded-lg px-2 py-1.5 text-xs text-amber-300 font-medium focus:outline-none transition ${
+                              (draft.brand || 'متفرقه').trim() !== (product.brand || 'متفرقه').trim()
+                                ? 'border-amber-400 bg-amber-950/20'
+                                : 'border-slate-700/80 focus:border-blue-500'
+                            }`}
+                            placeholder="برند"
+                          />
+                        </td>
+
+                        {/* Editable Visitor Purchase Price (قیمت خرید ویزیتور) */}
+                        <td className="py-2 px-3">
+                          <div className="flex flex-col items-start gap-0.5">
+                            <input
+                              type="number"
+                              min="0"
+                              step="500"
+                              value={draft.visitor_price ?? 0}
+                              onChange={(e) =>
+                                handleBatchFieldChange(
+                                  product.id,
+                                  'visitor_price',
+                                  Math.max(0, Number(e.target.value))
+                                )
+                              }
+                              className={`w-28 bg-slate-950 border rounded-lg px-2 py-1.5 text-xs font-mono font-bold text-center focus:outline-none transition ${
+                                Number(draft.visitor_price ?? 0) !== Number(product.visitor_price ?? 0)
+                                  ? 'border-amber-400 text-amber-300 bg-amber-950/30'
+                                  : 'border-blue-500/50 text-blue-300 focus:border-blue-400'
+                              }`}
+                            />
+                            <span className="text-[10px] text-slate-500 font-mono pr-1">
+                              {formatPrice(draft.visitor_price ?? 0)} ت
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Editable Store Purchase Price (قیمت خرید فروشگاه) */}
+                        <td className="py-2 px-3">
+                          <div className="flex flex-col items-start gap-0.5">
+                            <input
+                              type="number"
+                              min="1000"
+                              step="1000"
+                              value={draft.price}
+                              onChange={(e) =>
+                                handleBatchFieldChange(
+                                  product.id,
+                                  'price',
+                                  Math.max(0, Number(e.target.value))
+                                )
+                              }
+                              className={`w-28 bg-slate-950 border rounded-lg px-2 py-1.5 text-xs font-mono font-black text-center focus:outline-none transition ${
+                                Number(draft.price) !== Number(product.price)
+                                  ? 'border-amber-400 text-amber-300 bg-amber-950/30'
+                                  : 'border-emerald-500/60 text-emerald-300 focus:border-emerald-400'
+                              }`}
+                            />
+                            <span className="text-[10px] text-slate-500 font-mono pr-1">
+                              {formatPrice(draft.price)} ت
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Editable Consumer Price (قیمت مصرف کننده) */}
+                        <td className="py-2 px-3">
+                          <div className="flex flex-col items-start gap-0.5">
+                            <input
+                              type="number"
+                              min="0"
+                              step="1000"
+                              value={draft.consumer_price ?? ''}
+                              onChange={(e) =>
+                                handleBatchFieldChange(
+                                  product.id,
+                                  'consumer_price',
+                                  e.target.value === '' ? undefined : Number(e.target.value)
+                                )
+                              }
+                              placeholder="اختیاری"
+                              className={`w-28 bg-slate-950 border rounded-lg px-2 py-1.5 text-xs font-mono text-center focus:outline-none transition ${
+                                Number(draft.consumer_price ?? 0) !== Number(product.consumer_price ?? 0)
+                                  ? 'border-amber-400 text-amber-300 bg-amber-950/30'
+                                  : 'border-amber-500/50 text-amber-300 focus:border-amber-400'
+                              }`}
+                            />
+                            <span className="text-[10px] text-slate-500 font-mono pr-1">
+                              {draft.consumer_price && draft.consumer_price > 0
+                                ? `${formatPrice(draft.consumer_price)} ت`
+                                : '—'}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Editable Cold Warehouse Stock (کل سردخانه) */}
+                        <td className="py-2 px-3">
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={draft.stock}
+                            onChange={(e) =>
+                              handleBatchFieldChange(
+                                product.id,
+                                'stock',
+                                Math.max(0, Number(e.target.value))
+                              )
+                            }
+                            className={`w-20 bg-slate-950 border rounded-lg px-2 py-1.5 text-xs font-mono font-bold text-center focus:outline-none transition ${
+                              Number(draft.stock) !== Number(product.stock)
+                                ? 'border-amber-400 text-amber-300 bg-amber-950/30'
+                                : 'border-slate-700/80 text-slate-100 focus:border-blue-500'
+                            }`}
+                          />
+                        </td>
+
+                        {/* Reserved Stock (Read-only) */}
+                        <td className="py-2 px-3 font-mono font-semibold text-amber-400 text-xs">
+                          {formatPrice(product.reserved_stock)}
+                        </td>
+
+                        {/* Free Stock (Live Calculated) */}
+                        <td className="py-2 px-3">
+                          <span
+                            className={`font-mono font-black ${
+                              isLow ? 'text-rose-400' : 'text-emerald-400'
+                            }`}
+                          >
+                            {formatPrice(freeStock)}
+                          </span>
+                        </td>
+
+                        {/* Unit & Items per Package */}
+                        <td className="py-2 px-3">
+                          <div className="flex flex-col gap-1">
+                            <select
+                              value={draft.unit || 'عدد'}
+                              onChange={(e) => handleBatchFieldChange(product.id, 'unit', e.target.value)}
+                              className="bg-slate-950 border border-slate-700/80 rounded-lg px-2 py-1 text-xs text-slate-300 focus:outline-none"
+                            >
+                              {units.map((u) => (
+                                <option key={u} value={u}>
+                                  {u}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              type="number"
+                              min="0"
+                              value={draft.items_per_package ?? ''}
+                              onChange={(e) =>
+                                handleBatchFieldChange(
+                                  product.id,
+                                  'items_per_package',
+                                  e.target.value === '' ? undefined : Number(e.target.value)
+                                )
+                              }
+                              placeholder="کارتن..."
+                              className="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-1.5 py-0.5 text-[11px] text-indigo-300 font-mono text-center focus:outline-none"
+                              title="تعداد در هر کارتن یا بسته (مثلاً ۲۴ عدد)"
+                            />
+                          </div>
+                        </td>
+
+                        {/* Catalog Active Status Toggle */}
+                        <td className="py-2 px-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleBatchFieldChange(product.id, 'is_active', !draft.is_active)}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                              draft.is_active !== false
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30'
+                                : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'
+                            }`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                draft.is_active !== false ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
+                              }`}
+                            />
+                            <span>{draft.is_active !== false ? 'فعال' : 'مخفی'}</span>
+                          </button>
+                        </td>
+
+                        {/* Market Test Status Toggle */}
+                        <td className="py-2 px-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleBatchFieldChange(product.id, 'is_market_test', !draft.is_market_test)
+                            }
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                              draft.is_market_test
+                                ? 'bg-violet-500/25 text-violet-300 border-violet-500/50 shadow-xs shadow-violet-900/40'
+                                : 'bg-slate-800/80 text-slate-400 border-slate-700/80 hover:bg-slate-700'
+                            }`}
+                          >
+                            <Sparkles
+                              className={`w-3 h-3 ${draft.is_market_test ? 'text-violet-400' : 'text-slate-500'}`}
+                            />
+                            <span>{draft.is_market_test ? 'تست بازار' : 'عادی'}</span>
+                          </button>
+                        </td>
+
+                        {/* Status / Reset Button */}
+                        <td className="py-2 px-3 text-center">
+                          {isChanged ? (
+                            <div className="flex items-center justify-center gap-1.5">
+                              <span className="px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[11px] font-bold">
+                                تغییر یافته
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleResetSingleProduct(product.id)}
+                                className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition cursor-pointer"
+                                title="بازنشانی تغییرات این سطر به حالت اولیه"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-slate-500 font-normal">بدون تغییر</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  // NORMAL READ-ONLY MODE
                   const freeStock = Math.round((product.stock - product.reserved_stock) * 1000) / 1000;
                   const isEditing = editingPriceId === product.id;
                   const categoryObj = categories.find((c) => c.id === product.category_id);
                   const isLow = freeStock < LOW_STOCK_THRESHOLD;
                   const visitorPrice = product.visitor_price ?? 0;
-                  const isSelected = selectedProductIds.includes(product.id);
                   const itemLikes = productLikes.filter((pl) => pl.product_id === product.id);
 
                   return (
@@ -1003,7 +1665,6 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                       {/* Market Test Status & Likes List Trigger */}
                       <td className="py-3 px-4 text-center">
                         <div className="flex flex-col items-center gap-1.5 justify-center">
-                          {/* Market test toggle */}
                           <button
                             type="button"
                             onClick={() => {
@@ -1022,7 +1683,6 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                             <span>{product.is_market_test ? 'تست بازار (فعال)' : 'عادی'}</span>
                           </button>
 
-                          {/* Likes count button -> Opens MarketTestLikesModal */}
                           <button
                             type="button"
                             onClick={() => setSelectedLikesProduct(product)}
@@ -1042,7 +1702,6 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                       {/* Actions */}
                       <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-1.5">
-                          {/* Main Full Edit Button (Opens Modal with Image Upload, Name, Category, Prices, etc.) */}
                           <button
                             type="button"
                             onClick={() => handleOpenEditProduct(product)}
@@ -1053,7 +1712,6 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                             <span>ویرایش کالا</span>
                           </button>
 
-                          {/* Quick Inline Price Change Button */}
                           {!isEditing && (
                             <button
                               type="button"
@@ -1071,7 +1729,6 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                             </button>
                           )}
 
-                          {/* Price History Drawer Trigger */}
                           <button
                             type="button"
                             onClick={() => setHistoryDrawerProduct(product)}
@@ -1081,7 +1738,6 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                             <History className="w-3.5 h-3.5 text-blue-400" />
                           </button>
 
-                          {/* Delete Product */}
                           <button
                             type="button"
                             onClick={() => {
@@ -1103,6 +1759,61 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
           </div>
         )}
       </div>
+
+      {/* Sticky Floating Save Bar in Batch Edit Mode */}
+      {isBatchEditMode && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-xl px-4 animate-in slide-in-from-bottom duration-200">
+          <div className="bg-slate-900/95 backdrop-blur-md border-2 border-amber-500/70 rounded-2xl p-3 shadow-2xl flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="flex h-3 w-3 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+              </span>
+              <div>
+                <span className="font-bold text-slate-100 block">ویرایش گروهی تمام کالاها فعال است</span>
+                <span className="text-[11px] text-amber-300 font-semibold">
+                  {changedProducts.length > 0
+                    ? `${changedProducts.length} کالا تغییر یافته و آماده ثبت نهایی است`
+                    : 'تمام فیلدها در جدول بالا قابل ویرایش همزمان هستند'}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleCancelBatchEdit}
+                disabled={isBatchSaving}
+                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold transition cursor-pointer"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveBatchEdit}
+                disabled={isBatchSaving || changedProducts.length === 0}
+                className={`px-4 py-2 rounded-xl font-black text-xs transition flex items-center gap-1.5 shadow-md cursor-pointer ${
+                  changedProducts.length > 0
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 text-white shadow-emerald-600/30 active:scale-95'
+                    : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
+                }`}
+              >
+                {isBatchSaving ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>در حال ذخیره...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>تایید و اعمال نهایی {changedProducts.length > 0 ? `(${changedProducts.length})` : ''}</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Drawer: Price History */}
       <PriceHistoryDrawer
@@ -1831,303 +2542,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
         </div>
       )}
 
-      {/* Bulk Edit Modal */}
-      {isBulkEditOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-in fade-in overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-5 shadow-2xl space-y-4 my-8">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <SlidersHorizontal className="w-4 h-4 text-blue-400" />
-                <h3 className="font-bold text-sm text-slate-100">
-                  ویرایش گروهی ({selectedProductIds.length} کالا)
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsBulkEditOpen(false)}
-                className="text-slate-400 hover:text-slate-200 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
 
-            {bulkFeedback && (
-              <div
-                className={`p-3 rounded-xl text-xs font-medium ${
-                  bulkFeedback.type === 'error'
-                    ? 'bg-rose-500/15 border border-rose-500/30 text-rose-300'
-                    : 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
-                }`}
-              >
-                {bulkFeedback.message}
-              </div>
-            )}
-
-            <form onSubmit={handleExecuteBulkEdit} className="space-y-4">
-              <p className="text-[11px] text-slate-400 leading-relaxed">
-                فیلدهایی را که مایل به تغییر دسته‌جمعی آنها هستید مشخص نمایید. مواردی که روی «بدون تغییر» باشند به همان شکل قبلی حفظ خواهند شد.
-              </p>
-
-              {/* Category Change */}
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 block">
-                  تغییر دسته‌بندی:
-                </label>
-                <select
-                  value={bulkCatId}
-                  onChange={(e) => setBulkCatId(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
-                >
-                  <option value="">(بدون تغییر در دسته‌بندی کالاها)</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Brand Change */}
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 block">
-                  تغییر برند / کارخانه سازنده:
-                </label>
-                <div className="flex gap-2">
-                  <select
-                    value={brands.includes(bulkBrandName) ? bulkBrandName : bulkBrandName ? 'custom' : ''}
-                    onChange={(e) => {
-                      if (e.target.value !== 'custom') {
-                        setBulkBrandName(e.target.value);
-                      }
-                    }}
-                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
-                  >
-                    <option value="">(بدون تغییر در برند کالاها)</option>
-                    {brands.map((b) => (
-                      <option key={b} value={b}>
-                        {b}
-                      </option>
-                    ))}
-                    <option value="custom">برند دلخواه دیگر...</option>
-                  </select>
-                  <input
-                    type="text"
-                    value={bulkBrandName}
-                    onChange={(e) => setBulkBrandName(e.target.value)}
-                    placeholder="یا وارد کردن نام برند..."
-                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500 placeholder-slate-600"
-                  />
-                </div>
-              </div>
-
-              {/* Unit Change */}
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 block">
-                  تغییر واحد شمارش:
-                </label>
-                <select
-                  value={bulkUnitName}
-                  onChange={(e) => setBulkUnitName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
-                >
-                  <option value="">(بدون تغییر در واحد کالاها)</option>
-                  {units.map((u) => (
-                    <option key={u} value={u}>
-                      {u}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Price adjustment */}
-              <div className="space-y-2 p-3 bg-slate-950/60 border border-slate-800/80 rounded-xl">
-                <label className="text-xs font-semibold text-slate-300 block">
-                  تنظیم قیمت فروشگاه:
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setBulkPriceChangeType('none');
-                      setBulkPriceValue(0);
-                    }}
-                    className={`p-2 rounded-xl border text-xs font-semibold transition cursor-pointer ${
-                      bulkPriceChangeType === 'none'
-                        ? 'bg-blue-600/20 border-blue-500 text-blue-300'
-                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    بدون تغییر
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setBulkPriceChangeType('percent');
-                      setBulkPriceValue(bulkPriceValue || 10);
-                    }}
-                    className={`p-2 rounded-xl border text-xs font-semibold transition cursor-pointer ${
-                      bulkPriceChangeType === 'percent'
-                        ? 'bg-blue-600/20 border-blue-500 text-blue-300'
-                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    تغییر درصدی (±%)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setBulkPriceChangeType('fixed');
-                      setBulkPriceValue(bulkPriceValue || 50000);
-                    }}
-                    className={`p-2 rounded-xl border text-xs font-semibold transition cursor-pointer ${
-                      bulkPriceChangeType === 'fixed'
-                        ? 'bg-blue-600/20 border-blue-500 text-blue-300'
-                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    قیمت ثابت (تومان)
-                  </button>
-                </div>
-
-                {bulkPriceChangeType === 'percent' && (
-                  <div className="pt-2 flex items-center gap-2">
-                    <span className="text-xs text-slate-400">درصد تغییر:</span>
-                    <input
-                      type="number"
-                      step="1"
-                      value={bulkPriceValue}
-                      onChange={(e) => setBulkPriceValue(Number(e.target.value))}
-                      placeholder="مثلاً 10 برای +۱۰٪ یا -5 برای ۵٪ تخفیف"
-                      className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-100 font-mono text-center"
-                    />
-                    <span className="text-xs text-slate-400">%</span>
-                  </div>
-                )}
-
-                {bulkPriceChangeType === 'fixed' && (
-                  <div className="pt-2 flex items-center gap-2">
-                    <span className="text-xs text-slate-400">مبلغ جدید:</span>
-                    <input
-                      type="number"
-                      min="100"
-                      step="500"
-                      value={bulkPriceValue}
-                      onChange={(e) => setBulkPriceValue(Number(e.target.value))}
-                      placeholder="قیمت به تومان"
-                      className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-100 font-mono text-center"
-                    />
-                    <span className="text-xs text-slate-400">تومان</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Status Change */}
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300 block">
-                  وضعیت نمایش در کاتالوگ فروشگاه:
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setBulkActiveStatus('keep')}
-                    className={`p-2 rounded-xl border text-xs font-semibold transition cursor-pointer ${
-                      bulkActiveStatus === 'keep'
-                        ? 'bg-blue-600/20 border-blue-500 text-blue-300'
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    بدون تغییر
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBulkActiveStatus('active')}
-                    className={`p-2 rounded-xl border text-xs font-semibold transition cursor-pointer ${
-                      bulkActiveStatus === 'active'
-                        ? 'bg-emerald-600/20 border-emerald-500 text-emerald-300'
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    فعال در کاتالوگ
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBulkActiveStatus('inactive')}
-                    className={`p-2 rounded-xl border text-xs font-semibold transition cursor-pointer ${
-                      bulkActiveStatus === 'inactive'
-                        ? 'bg-rose-600/20 border-rose-500 text-rose-300'
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    مخفی از کاتالوگ
-                  </button>
-                </div>
-              </div>
-
-              {/* Market Test Bulk Setting */}
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-violet-300 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-violet-400" />
-                  وضعیت تست بازار (به زودی و دریافت لایک):
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setBulkMarketTestStatus('keep')}
-                    className={`p-2 rounded-xl border text-xs font-semibold transition cursor-pointer ${
-                      bulkMarketTestStatus === 'keep'
-                        ? 'bg-blue-600/20 border-blue-500 text-blue-300'
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    بدون تغییر
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBulkMarketTestStatus('marketTest')}
-                    className={`p-2 rounded-xl border text-xs font-semibold transition cursor-pointer ${
-                      bulkMarketTestStatus === 'marketTest'
-                        ? 'bg-violet-600/30 border-violet-500 text-violet-300 shadow-xs'
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    فعال‌سازی تست بازار
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBulkMarketTestStatus('normal')}
-                    className={`p-2 rounded-xl border text-xs font-semibold transition cursor-pointer ${
-                      bulkMarketTestStatus === 'normal'
-                        ? 'bg-slate-800 border-slate-600 text-slate-200'
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    کالای عادی (خروج از تست)
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsBulkEditOpen(false)}
-                  disabled={isBulkProcessing}
-                  className="px-3.5 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-semibold cursor-pointer"
-                >
-                  انصراف
-                </button>
-                <button
-                  type="submit"
-                  disabled={isBulkProcessing}
-                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-md shadow-blue-600/30 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  {isBulkProcessing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  <span>اعمال ویرایش گروهی</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Bulk Delete Confirmation Modal */}
       {isBulkDeleteOpen && (

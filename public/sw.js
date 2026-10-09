@@ -1,14 +1,15 @@
 // Babol Pakhsh Service Worker - Database-First & Fast Deploy
-const CACHE_VERSION = 'farhoodi-b2b-dbfirst-v4';
+const CACHE_VERSION = 'farhoodi-b2b-dbfirst-v5';
 const CACHE_NAME = `babolpakhsh-${CACHE_VERSION}`;
 
 const STATIC_ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './icon-192.png',
-  './icon-512.png',
-  './apple-touch-icon.png',
+  './icon-192-v2.png',
+  './icon-512-v2.png',
+  './apple-touch-icon-v2.png',
+  './favicon-v2.png',
   './fonts/Vazirmatn-Variable.woff2',
   './fonts/Vazirmatn-Regular.woff2',
   './fonts/Vazirmatn-Bold.woff2',

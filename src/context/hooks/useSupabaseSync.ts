@@ -426,7 +426,7 @@ export function useSupabaseSync({
       withTimeout(
         supabase
           .from('supermarkets')
-          .select('id, name, owner, phone, address, assigned_visitor_id, is_active, username, created_at, founder_discount_enabled, founder_discount_percent, approval_status, registration_source, approved_at, approved_by, approval_note, latitude, longitude'),
+          .select('id, name, owner, phone, address, assigned_visitor_id, is_active, username, created_at, founder_discount_enabled, founder_discount_percent, approval_status, verification_type, verified_at, verified_by, verification_note, registration_source, approved_at, approved_by, approval_note, latitude, longitude'),
         15000,
         'مهلت زمانی دریافت اطلاعات فروشگاه‌ها به پایان رسید'
       ),
@@ -458,6 +458,10 @@ export function useSupabaseSync({
         founder_discount_enabled: Boolean(sm.founder_discount_enabled),
         founder_discount_percent: typeof sm.founder_discount_percent === 'number' ? sm.founder_discount_percent : 5,
         approval_status: (sm.approval_status as any) || 'approved',
+        verification_type: (sm.verification_type as any) || 'none',
+        verified_at: sm.verified_at || null,
+        verified_by: sm.verified_by || null,
+        verification_note: sm.verification_note || null,
         registration_source: sm.registration_source || undefined,
         approved_at: sm.approved_at || null,
         approved_by: sm.approved_by || null,

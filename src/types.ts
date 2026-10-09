@@ -89,6 +89,10 @@ export interface Supermarket {
   founder_discount_enabled?: boolean;
   founder_discount_percent?: number;
   approval_status?: 'pending' | 'approved' | 'rejected';
+  verification_type?: 'none' | 'store' | 'bulk_consumer';
+  verified_at?: string | null;
+  verified_by?: string | null;
+  verification_note?: string | null;
   registration_source?: string;
   approved_at?: string | null;
   approved_by?: string | null;
@@ -259,6 +263,10 @@ export interface UpdateSupermarketPayload {
   is_active?: boolean;
   latitude?: number | null;
   longitude?: number | null;
+  verification_type?: 'none' | 'store' | 'bulk_consumer';
+  verified_at?: string | null;
+  verified_by?: string | null;
+  verification_note?: string | null;
 }
 
 export interface UpdateVisitorPayload {

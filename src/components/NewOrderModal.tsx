@@ -287,15 +287,6 @@ export const NewOrderModal: React.FC<Props> = ({
       return;
     }
 
-    if (!isSelfOrder && currentSupermarket?.approval_status === 'pending') {
-      showToast('حساب این مشتری هنوز توسط ادمین تایید نشده است.', 'warning', 5000);
-      return;
-    }
-    if (!isSelfOrder && currentSupermarket?.approval_status === 'rejected') {
-      showToast('حساب این مشتری توسط ادمین تایید نشده است.', 'warning', 5000);
-      return;
-    }
-
     isSubmittingRef.current = true;
     setIsSubmitting(true);
 

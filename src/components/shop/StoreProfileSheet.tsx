@@ -20,6 +20,10 @@ import {
   Save,
   Navigation,
   ExternalLink,
+  ShieldCheck,
+  Building2,
+  BadgeCheck,
+  Shield,
 } from 'lucide-react';
 
 interface StoreProfileSheetProps {
@@ -202,6 +206,68 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Verification Status Card */}
+        {(() => {
+          const vType = store?.verification_type || 'none';
+          if (vType === 'store') {
+            return (
+              <div className="p-3 rounded-2xl bg-emerald-950/40 border border-emerald-500/40 flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                    <BadgeCheck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5 font-bold text-emerald-300">
+                      <span>احراز هویت به عنوان فروشگاه</span>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    </div>
+                    <p className="text-[11px] text-slate-300 mt-0.5">
+                      حساب کاربری شما رسماً به عنوان واحد خرده‌فروشی / سوپرمارکت تایید شده است.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+          if (vType === 'bulk_consumer') {
+            return (
+              <div className="p-3 rounded-2xl bg-indigo-950/40 border border-indigo-500/40 flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center shrink-0">
+                    <Building2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5 font-bold text-indigo-300">
+                      <span>احراز هویت به عنوان مصرف‌کننده عمده</span>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-indigo-400" />
+                    </div>
+                    <p className="text-[11px] text-slate-300 mt-0.5">
+                      حساب کاربری شما به عنوان مصرف‌کننده عمده (ارگانی، رستورانی یا سازمانی) ثبت گردیده است.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+          // Default: 'none'
+          return (
+            <div className="p-3 rounded-2xl bg-slate-800/40 border border-slate-700/60 flex items-center gap-3 text-xs">
+              <div className="w-8 h-8 rounded-xl bg-slate-700/30 text-slate-400 border border-slate-600/40 flex items-center justify-center shrink-0">
+                <Shield className="w-4 h-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 font-bold text-slate-300">
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                  <span>احراز هویت انجام نشده</span>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+                  احراز هویت پس از بررسی کارشناسان تکمیل خواهد شد و مانعی برای سفارش‌گذاری نیست.
+                </p>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Details list */}
         <div className="space-y-2.5 text-xs">

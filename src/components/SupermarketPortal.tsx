@@ -88,10 +88,6 @@ export const SupermarketPortal: React.FC = () => {
   const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState<Order | null>(null);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
 
-  // Store Approval Status: 'pending' | 'approved' | 'rejected' (default 'approved')
-  const approvalStatus: 'pending' | 'approved' | 'rejected' = currentStore?.approval_status || 'approved';
-  const isNotApproved = approvalStatus === 'pending' || approvalStatus === 'rejected';
-
   // Toast / Floating message with customizable duration & type
   const [portalToast, setPortalToast] = useState<{
     message: string;
@@ -111,22 +107,7 @@ export const SupermarketPortal: React.FC = () => {
     }, durationMs);
   }, []);
 
-  const showApprovalPendingToast = useCallback(() => {
-    showToast('لطفا صبر کنید تا احراز هویت شما توسط ادمین ثبت و حساب کاربری شما تایید گردد.', 'amber', 5000);
-  }, [showToast]);
-
-  // Status transition detection: from 'pending' to 'approved'
   const storeId = currentStore?.id || 'sm-default';
-  useEffect(() => {
-    if (!storeId || storeId === 'sm-default') return;
-    const storageKeyStatus = `alborz_store_approval_status_${storeId}`;
-    const lastSeenStatus = localStorage.getItem(storageKeyStatus);
-
-    if (lastSeenStatus === 'pending' && approvalStatus === 'approved') {
-      showToast('حساب شما تایید شد؛ اکنون می‌توانید سفارش ثبت کنید', 'success', 6000);
-    }
-    localStorage.setItem(storageKeyStatus, approvalStatus);
-  }, [storeId, approvalStatus, showToast]);
 
   // Cart state persisted per supermarket: alborz_cart_{storeId}
   const storageKey = `alborz_cart_${storeId}`;
@@ -235,11 +216,6 @@ export const SupermarketPortal: React.FC = () => {
   // Quick reorder handler
   const handleReorder = useCallback(
     (order: Order) => {
-      if (isNotApproved) {
-        showApprovalPendingToast();
-        return;
-      }
-
       const {
         cart: newItems,
         unavailableItems,
@@ -261,18 +237,12 @@ export const SupermarketPortal: React.FC = () => {
       // Auto switch to catalog so user sees their updated cart
       setActiveTab('catalog');
     },
-    [products, showToast, isNotApproved, showApprovalPendingToast]
+    [products, showToast]
   );
 
 
   // Checkout submission
   const handleCheckoutSubmit = async () => {
-    // Intercept if store account is not approved by admin
-    if (isNotApproved) {
-      showApprovalPendingToast();
-      return;
-    }
-
     if (isSubmittingOrderRef.current || isSubmittingOrder) return;
 
     const items = Object.entries(cart)
@@ -349,43 +319,7 @@ export const SupermarketPortal: React.FC = () => {
 
   return (
     <div className="space-y-3 pb-20 lg:pb-8 max-w-[1600px] mx-auto">
-      {/* 1. Approval Status Banners */}
-      {approvalStatus === 'pending' && (
-        <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-blue-950 via-[#0e213f] to-blue-950 border border-blue-500/50 text-blue-100 text-xs sm:text-sm font-semibold flex items-center gap-3 shadow-xl shadow-blue-950/50 backdrop-blur-md animate-in fade-in">
-          <div className="w-9 h-9 rounded-xl bg-blue-500/25 border border-blue-400/40 flex items-center justify-center shrink-0 text-blue-300 shadow-inner">
-            <Clock className="w-5 h-5 text-blue-300" />
-          </div>
-          <p className="leading-relaxed flex-1 text-blue-100 font-medium">
-            برای ثبت اولین سفارش، حساب کاربری شما نیازمند احراز و تایید توسط ادمین است. پس از تایید حساب کاربری شما، به شماره ثبت‌شده در سیستم اطلاع‌رسانی خواهد شد.
-          </p>
-        </div>
-      )}
 
-      {approvalStatus === 'rejected' && (
-        <div className="p-3.5 rounded-2xl bg-rose-950/80 border border-rose-500/50 text-rose-100 text-xs space-y-1.5 shadow-lg shadow-rose-950/30 backdrop-blur-sm animate-in fade-in">
-          <div className="flex items-center gap-2 font-bold text-rose-200">
-            <AlertCircle className="w-4.5 h-4.5 text-rose-400 shrink-0" />
-            <span>درخواست احراز حساب شما تایید نشد.</span>
-          </div>
-          {currentStore?.approval_note && (
-            <p className="text-xs text-rose-200 leading-relaxed pr-6">
-              علت: {currentStore.approval_note}
-            </p>
-          )}
-          {centralDistributorPhone && (
-            <p className="text-xs text-rose-200 leading-relaxed pr-6">
-              برای پیگیری با{' '}
-              <a
-                href={`tel:${centralDistributorPhone}`}
-                className="underline font-mono dir-ltr font-bold text-white hover:text-rose-200"
-              >
-                {centralDistributorPhone}
-              </a>{' '}
-              تماس بگیرید.
-            </p>
-          )}
-        </div>
-      )}
 
       {/* Toast Notification */}
       {portalToast && (

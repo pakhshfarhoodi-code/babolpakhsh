@@ -33,6 +33,8 @@ import {
   BookOpen,
   ExternalLink,
   Navigation,
+  BadgeCheck,
+  Building2,
 } from 'lucide-react';
 import { LocationPickerModal } from '../LocationPickerModal';
 import { SupermarketRegisterModal } from '../SupermarketRegisterModal';
@@ -97,6 +99,13 @@ export const TeamTab: React.FC<TeamTabProps> = ({
   const [approvingStoreModal, setApprovingStoreModal] = useState<Supermarket | null>(null);
   const [rejectingStoreModal, setRejectingStoreModal] = useState<Supermarket | null>(null);
   const [rejectNote, setRejectNote] = useState('');
+
+  // Store Verification Modal State
+  const [verifyingStoreModal, setVerifyingStoreModal] = useState<Supermarket | null>(null);
+  const [verificationTypeChoice, setVerificationTypeChoice] = useState<'none' | 'store' | 'bulk_consumer'>('none');
+  const [verificationNoteInput, setVerificationNoteInput] = useState('');
+  const [isProcessingVerification, setIsProcessingVerification] = useState(false);
+
   const [smsNotificationModal, setSmsNotificationModal] = useState<{
     store: Supermarket;
     phone: string;
@@ -783,6 +792,86 @@ export const TeamTab: React.FC<TeamTabProps> = ({
     }
   };
 
+  // Admin Set Store Verification (none | store | bulk_consumer)
+  const handleAdminSetStoreVerification = async (
+    shop: Supermarket,
+    newType: 'none' | 'store' | 'bulk_consumer',
+    noteText?: string
+  ) => {
+    setIsProcessingVerification(true);
+    try {
+      const typeLabel =
+        newType === 'store'
+          ? 'فروشگاه'
+          : newType === 'bulk_consumer'
+          ? 'مصرف‌کننده عمده'
+          : 'احراز نشده';
+
+      if (isSupabaseConfigured && supabase) {
+        let rpcOk = false;
+        try {
+          const { data, error } = await supabase.rpc('admin_set_store_verification', {
+            p_store_id: shop.id,
+            p_type: newType,
+            p_note: noteText?.trim() || null,
+          });
+
+          if (!error && (data as any)?.success !== false) {
+            rpcOk = true;
+          } else {
+            console.warn('RPC admin_set_store_verification returned error or was not found, falling back to direct update:', error || data);
+          }
+        } catch (rpcErr) {
+          console.warn('RPC admin_set_store_verification call threw, falling back to direct update:', rpcErr);
+        }
+
+        if (!rpcOk) {
+          // Direct fallback update
+          const { error: updErr } = await supabase
+            .from('supermarkets')
+            .update({
+              verification_type: newType,
+              verified_at: newType !== 'none' ? new Date().toISOString() : null,
+              verified_by: newType !== 'none' ? (currentUser?.name || 'مدیر سیستم') : null,
+              verification_note: noteText?.trim() || null,
+            })
+            .eq('id', shop.id);
+
+          if (updErr) {
+            console.error('Direct fallback update for verification failed:', updErr);
+            throw updErr;
+          }
+        }
+      }
+
+      // Also update local store state
+      await updateSupermarket(shop.id, {
+        verification_type: newType,
+        verified_at: newType !== 'none' ? new Date().toISOString() : null,
+        verified_by: newType !== 'none' ? (currentUser?.name || 'مدیر سیستم') : null,
+        verification_note: noteText?.trim() || null,
+      });
+
+      await refreshData();
+
+      setVerifyingStoreModal(null);
+      setVerificationNoteInput('');
+
+      setToastNotification({
+        type: 'success',
+        message: `وضعیت احراز هویت «${shop.name}» با موفقیت به «${typeLabel}» تغییر یافت.`,
+      });
+    } catch (err: any) {
+      setToastNotification({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'خطا در ثبت وضعیت احراز هویت.',
+      });
+    } finally {
+      setIsProcessingVerification(false);
+      setTimeout(() => setToastNotification(null), 4000);
+    }
+  };
+
   const pendingStoresCount = useMemo(() => {
     return supermarkets.filter((s) => s.approval_status === 'pending').length;
   }, [supermarkets]);
@@ -1375,6 +1464,33 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                                   <span>تاییدشده</span>
                                 </span>
                               )}
+                              {/* Verification status indicator badge */}
+                              {(() => {
+                                const vType = shop.verification_type || 'none';
+                                if (vType === 'store') {
+                                  return (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                                      <BadgeCheck className="w-3 h-3 text-emerald-400" />
+                                      <span>فروشگاه</span>
+                                    </span>
+                                  );
+                                }
+                                if (vType === 'bulk_consumer') {
+                                  return (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
+                                      <Building2 className="w-3 h-3 text-indigo-400" />
+                                      <span>مصرف‌کننده عمده</span>
+                                    </span>
+                                  );
+                                }
+                                return (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-800 text-slate-400 border border-slate-700">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+                                    <span>احراز نشده</span>
+                                  </span>
+                                );
+                              })()}
+
                               {!isApproved && (
                                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-950/80 text-rose-300 border border-rose-800/50">
                                   غیرفعال
@@ -1560,6 +1676,36 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                               </div>
                             </div>
                           )}
+
+                          {/* Verification Management Button */}
+                          <div className="relative group/tooltip inline-flex items-center justify-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setVerifyingStoreModal(shop);
+                                setVerificationTypeChoice(shop.verification_type || 'none');
+                                setVerificationNoteInput(shop.verification_note || '');
+                              }}
+                              className={`w-8.5 h-8.5 rounded-xl transition-all duration-150 cursor-pointer flex items-center justify-center shrink-0 border shadow-xs group/btn ${
+                                shop.verification_type === 'store'
+                                  ? 'bg-emerald-500/15 hover:bg-emerald-500 text-emerald-400 hover:text-slate-950 border-emerald-500/30 hover:border-emerald-400 hover:shadow-emerald-500/20'
+                                  : shop.verification_type === 'bulk_consumer'
+                                  ? 'bg-indigo-500/15 hover:bg-indigo-500 text-indigo-400 hover:text-slate-950 border-indigo-500/30 hover:border-indigo-400 hover:shadow-indigo-500/20'
+                                  : 'bg-slate-800/60 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700/80 hover:border-slate-500'
+                              }`}
+                              title="تغییر یا ثبت احراز هویت مشتری"
+                              aria-label="احراز هویت"
+                            >
+                              <ShieldCheck className="w-4.5 h-4.5 shrink-0" />
+                            </button>
+                            <div
+                              role="tooltip"
+                              className="pointer-events-none absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 opacity-0 group-hover/tooltip:opacity-100 transition-all duration-150 transform group-hover/tooltip:-translate-y-0.5 z-40 whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-900/95 text-slate-200 text-[11px] font-medium border border-slate-700 shadow-2xl backdrop-blur-xs flex items-center gap-1"
+                            >
+                              <span>احراز هویت</span>
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-slate-900/95" />
+                            </div>
+                          </div>
 
                           {/* 1. Password Reset Button */}
                           <div className="relative group/tooltip inline-flex items-center justify-center">
@@ -2950,6 +3096,153 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                 className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition shadow-lg shadow-rose-600/30 cursor-pointer disabled:opacity-50"
               >
                 {isDeactivatingAccount ? 'در حال ثبت...' : 'تایید غیرفعال‌سازی'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Verification Management Modal */}
+      {verifyingStoreModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center border border-blue-500/30">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-100">مدیریت احراز هویت مشتری</h3>
+                  <p className="text-xs text-slate-400">{verifyingStoreModal.name} ({verifyingStoreModal.owner})</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setVerifyingStoreModal(null)}
+                className="text-slate-400 hover:text-slate-200 p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-xs text-slate-300 font-semibold block">
+                نوع احراز هویت:
+              </label>
+              
+              <div className="grid grid-cols-1 gap-2">
+                {/* 1. None */}
+                <button
+                  type="button"
+                  onClick={() => setVerificationTypeChoice('none')}
+                  className={`p-3 rounded-xl border text-right transition cursor-pointer flex items-center justify-between ${
+                    verificationTypeChoice === 'none'
+                      ? 'bg-slate-800 border-slate-600 text-slate-100 ring-2 ring-slate-500/30'
+                      : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:bg-slate-850'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-slate-700/40 text-slate-400 flex items-center justify-center">
+                      <span className="w-2 h-2 rounded-full bg-slate-400" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-200">احراز نشده (none)</p>
+                      <p className="text-[11px] text-slate-400">حساب در وضعیت عادی، بدون محدودیت در ثبت سفارش</p>
+                    </div>
+                  </div>
+                  {verificationTypeChoice === 'none' && <Check className="w-4 h-4 text-slate-300" />}
+                </button>
+
+                {/* 2. Store */}
+                <button
+                  type="button"
+                  onClick={() => setVerificationTypeChoice('store')}
+                  className={`p-3 rounded-xl border text-right transition cursor-pointer flex items-center justify-between ${
+                    verificationTypeChoice === 'store'
+                      ? 'bg-emerald-950/40 border-emerald-500/60 text-emerald-100 ring-2 ring-emerald-500/30'
+                      : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:bg-slate-850'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                      <BadgeCheck className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-emerald-300">فروشگاه طرف قرارداد (store)</p>
+                      <p className="text-[11px] text-slate-400">تایید شده به عنوان واحد صنفی سوپرمارکت و خرده‌فروشی</p>
+                    </div>
+                  </div>
+                  {verificationTypeChoice === 'store' && <Check className="w-4 h-4 text-emerald-400" />}
+                </button>
+
+                {/* 3. Bulk Consumer */}
+                <button
+                  type="button"
+                  onClick={() => setVerificationTypeChoice('bulk_consumer')}
+                  className={`p-3 rounded-xl border text-right transition cursor-pointer flex items-center justify-between ${
+                    verificationTypeChoice === 'bulk_consumer'
+                      ? 'bg-indigo-950/40 border-indigo-500/60 text-indigo-100 ring-2 ring-indigo-500/30'
+                      : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:bg-slate-850'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
+                      <Building2 className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-indigo-300">مصرف‌کننده عمده (bulk_consumer)</p>
+                      <p className="text-[11px] text-slate-400">سازمان‌ها، ارگان‌ها، رستوران‌ها و خریداران حجم بالا</p>
+                    </div>
+                  </div>
+                  {verificationTypeChoice === 'bulk_consumer' && <Check className="w-4 h-4 text-indigo-400" />}
+                </button>
+              </div>
+
+              {/* Note input */}
+              <div className="space-y-1.5 pt-2">
+                <label className="text-xs text-slate-400 font-medium">یادداشت احراز هویت (اختیاری):</label>
+                <textarea
+                  rows={2}
+                  value={verificationNoteInput}
+                  onChange={(e) => setVerificationNoteInput(e.target.value)}
+                  placeholder="مثلاً: هماهنگی تلفنی انجام شد / جواز کسب تایید گردید..."
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                disabled={isProcessingVerification}
+                onClick={() => setVerifyingStoreModal(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition cursor-pointer"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                disabled={isProcessingVerification}
+                onClick={() =>
+                  handleAdminSetStoreVerification(
+                    verifyingStoreModal,
+                    verificationTypeChoice,
+                    verificationNoteInput
+                  )
+                }
+                className="flex items-center gap-2 px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-600/30 cursor-pointer disabled:opacity-50"
+              >
+                {isProcessingVerification ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>در حال ذخیره...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>ذخیره وضعیت احراز هویت</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

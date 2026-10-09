@@ -447,6 +447,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (payload.is_active !== undefined) updateData.is_active = payload.is_active;
         if (payload.latitude !== undefined) updateData.latitude = payload.latitude;
         if (payload.longitude !== undefined) updateData.longitude = payload.longitude;
+        if (payload.verification_type !== undefined) updateData.verification_type = payload.verification_type;
+        if (payload.verified_at !== undefined) updateData.verified_at = payload.verified_at;
+        if (payload.verified_by !== undefined) updateData.verified_by = payload.verified_by;
+        if (payload.verification_note !== undefined) updateData.verification_note = payload.verification_note;
         // NOTE: As per requirement 6, do NOT update username column on phone change!
 
         // Only touch assigned_visitor_id if explicitly supplied in payload
@@ -551,6 +555,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (payload.is_active !== undefined) next.is_active = payload.is_active;
           if (payload.latitude !== undefined) next.latitude = payload.latitude;
           if (payload.longitude !== undefined) next.longitude = payload.longitude;
+          if (payload.verification_type !== undefined) next.verification_type = payload.verification_type;
+          if (payload.verified_at !== undefined) next.verified_at = payload.verified_at;
+          if (payload.verified_by !== undefined) next.verified_by = payload.verified_by;
+          if (payload.verification_note !== undefined) next.verification_note = payload.verification_note;
           if (payload.assigned_visitor_id !== undefined) {
             next.assigned_visitor_id = payload.assigned_visitor_id || 'direct';
           }

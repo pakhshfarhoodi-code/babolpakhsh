@@ -83,25 +83,7 @@ const StoreDiscountSwitchesBox: React.FC = () => {
         </span>
       </div>
 
-      {/* Prominent Counter Banner for remaining founder discount orders (shown only if active) */}
-      {founderStatus.isFounderActive && (
-        <div className="p-2.5 rounded-xl bg-gradient-to-r from-amber-950/80 via-purple-950/80 to-slate-900 border border-amber-500/40 text-amber-200 text-xs flex items-center justify-between gap-2 shadow-sm animate-in fade-in">
-          <div className="flex items-center gap-2 flex-1">
-            <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-            <p className="leading-relaxed text-xs">
-              <span>برای </span>
-              <span className="font-mono font-black text-sm text-white bg-amber-500/30 px-2 py-0.5 rounded-lg border border-amber-400/50">
-                {founderStatus.remainingOrdersCount}
-              </span>
-              <span> سفارش دیگر شما کد تخفیف ۵ درصدی فعال خواهد بود</span>
-            </p>
-          </div>
-          <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/30 shrink-0 hidden sm:inline-block font-mono">
-            سفارش {founderStatus.usedOrdersCount + 1} از ۳
-          </span>
-        </div>
-      )}
-
+      {/* Grid of active discount options */}
       <div className={`grid grid-cols-1 ${isPickupGloballyEnabled && founderStatus.isFounderActive ? 'md:grid-cols-2' : ''} gap-2 text-xs`}>
         {/* Switch A: Pickup Discount (Shown only when admin enabled) */}
         {isPickupGloballyEnabled && (
@@ -141,20 +123,25 @@ const StoreDiscountSwitchesBox: React.FC = () => {
           </div>
         )}
 
-        {/* Switch B: 5% Founder Discount for First 100 people (Auto-active only for first 3 orders) */}
+        {/* Unified Card: 5% Founder Discount for First 100 people */}
         {founderStatus.isFounderActive && (
           <div
-            onClick={() => setShowFounderInfo(true)}
-            className="p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition select-none bg-purple-950/60 border-purple-500/60 text-purple-100 hover:border-purple-400 shadow-sm"
+            onClick={() => setShowFounderInfo((prev) => !prev)}
+            className="p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition select-none bg-gradient-to-r from-purple-950/70 via-slate-900 to-amber-950/60 border-purple-500/50 text-purple-100 hover:border-purple-400 shadow-sm"
             title="جهت مشاهده جزئیات تخفیف کلیک کنید"
           >
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-              <span className="font-bold text-xs">
-                ۵٪ تخفیف برای ۱۰۰ نفر اول
-              </span>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-bold text-xs text-white">
+                  کد تخفیف ۵٪ ویژه ۱۰۰ فروشگاه اول
+                </span>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 hidden sm:inline-block">
+                  سفارش {founderStatus.usedOrdersCount + 1} از ۳
+                </span>
+              </div>
             </div>
-            <span className="text-[10px] px-2.5 py-1 rounded-lg font-bold border bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-mono">
+            <span className="text-[10px] px-2.5 py-1 rounded-lg font-bold border bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-mono shrink-0">
               فعال ({founderStatus.remainingOrdersCount} سفارش مانده)
             </span>
           </div>

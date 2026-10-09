@@ -1,5 +1,5 @@
 // Babol Pakhsh Service Worker - Database-First & Fast Deploy
-const CACHE_VERSION = 'farhoodi-b2b-dbfirst-v3';
+const CACHE_VERSION = 'farhoodi-b2b-dbfirst-v4';
 const CACHE_NAME = `babolpakhsh-${CACHE_VERSION}`;
 
 const STATIC_ASSETS = [
@@ -7,6 +7,7 @@ const STATIC_ASSETS = [
   './index.html',
   './manifest.json',
   './icon-192.png',
+  './icon-512.png',
   './apple-touch-icon.png',
   './fonts/Vazirmatn-Variable.woff2',
   './fonts/Vazirmatn-Regular.woff2',

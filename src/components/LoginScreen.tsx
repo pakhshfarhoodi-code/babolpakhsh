@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { UserRole } from '../types';
 import { FOUNDER_INITIAL_CAPACITY } from '../utils/storeDiscount';
+import { supabase } from '../lib/supabase';
 import bgHero from '../assets/images/b2b_frozen_food_showcase.webp';
 import appLogo from '../assets/images/farhoodi_b2b_logo.webp';
 
@@ -42,8 +43,46 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const { loginWithCredentials, isLoggedIn, isDataReady, theme, toggleTheme, invoiceSettings, supermarkets } = useApp();
   const currentLogo = invoiceSettings?.logo_url || appLogo;
 
-  // Remaining capacity for the first stores discount (starts from 90 minus registered stores)
-  const totalRegisteredStores = supermarkets?.length || 0;
+  // Live registered stores counter fetched from server (including past registrations)
+  const [serverStoreCount, setServerStoreCount] = useState<number | null>(null);
+
+  // Fetch real registered stores count on mount or tab switch
+  useEffect(() => {
+    let isMounted = true;
+    const fetchRegisteredCount = async () => {
+      if (!supabase) return;
+      try {
+        // 1. Primary: Fast and secure RPC (migration 28)
+        const { data, error } = await supabase.rpc('get_registered_stores_count');
+        if (!error && typeof data === 'number' && isMounted) {
+          setServerStoreCount(data);
+          return;
+        }
+      } catch {
+        // Fallback
+      }
+
+      try {
+        // 2. Secondary fallback: head count query
+        const { count, error: countErr } = await supabase
+          .from('supermarkets')
+          .select('id', { count: 'exact', head: true });
+        if (!countErr && typeof count === 'number' && isMounted) {
+          setServerStoreCount(count);
+        }
+      } catch {
+        // Keep local count
+      }
+    };
+
+    fetchRegisteredCount();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Remaining capacity for the first stores discount (starts from 90 minus total registered stores)
+  const totalRegisteredStores = Math.max(serverStoreCount ?? 0, supermarkets?.length || 0);
   const remainingFounderSpots = Math.max(0, FOUNDER_INITIAL_CAPACITY - totalRegisteredStores);
   const [activeTab, setActiveTab] = useState<UserRole>(() => {
     if (initialRole) return initialRole;
@@ -514,6 +553,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           <SupermarketRegisterModal
             isOpen={isRegisterModalOpen}
             onClose={() => setIsRegisterModalOpen(false)}
+            onSuccess={() => {
+              setServerStoreCount((prev) => (prev !== null ? prev + 1 : (supermarkets?.length || 0) + 1));
+            }}
           />
         </React.Suspense>
       )}

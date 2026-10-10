@@ -121,6 +121,15 @@ export const TeamTab: React.FC<TeamTabProps> = ({
   const [togglingVisitorId, setTogglingVisitorId] = useState<string | null>(null);
   const [toastNotification, setToastNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  // Auto-dismiss toast notification after 4 seconds
+  useEffect(() => {
+    if (!toastNotification) return;
+    const timer = setTimeout(() => {
+      setToastNotification(null);
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [toastNotification]);
+
   // Password Reset State
   const [resettingPerson, setResettingPerson] = useState<{
     id: string;
@@ -934,7 +943,35 @@ export const TeamTab: React.FC<TeamTabProps> = ({
   const activeFilteredVisitor = visitors.find((v) => v.id === selectedVisitorFilter);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* Toast Notification Banner (High-Contrast & Bright) */}
+      {toastNotification && (
+        <div
+          className={`p-3.5 rounded-2xl text-xs font-bold flex items-center justify-between shadow-xl animate-in fade-in duration-200 border ${
+            toastNotification.type === 'success'
+              ? 'bg-emerald-600 text-white border-emerald-400 shadow-emerald-950/40'
+              : 'bg-rose-600 text-white border-rose-400 shadow-rose-950/40'
+          }`}
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            {toastNotification.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-100 shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-rose-100 shrink-0" />
+            )}
+            <span className="text-white text-xs sm:text-sm font-black leading-relaxed">{toastNotification.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setToastNotification(null)}
+            className="text-white/80 hover:text-white p-1 hover:bg-black/15 rounded-xl transition cursor-pointer shrink-0"
+            title="بستن پیام"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* 2-Column Grid: Left Visitors Team, Right Supermarkets */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Visitors Column */}
@@ -1390,33 +1427,6 @@ export const TeamTab: React.FC<TeamTabProps> = ({
               />
             </div>
 
-            {/* Toast feedback banner */}
-            {toastNotification && (
-              <div
-                className={`mt-3 p-3 rounded-xl text-xs font-semibold flex items-center justify-between animate-in fade-in duration-200 ${
-                  toastNotification.type === 'success'
-                    ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/80'
-                    : 'bg-rose-950/80 text-rose-300 border border-rose-800/80'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  {toastNotification.type === 'success' ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  ) : (
-                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
-                  )}
-                  <span>{toastNotification.message}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setToastNotification(null)}
-                  className="text-slate-400 hover:text-slate-200 p-0.5 cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
-
             {/* Supermarket Cards List */}
             <div className="space-y-3 mt-3 max-h-[500px] overflow-y-auto pr-1">
               {filteredSupermarkets.length === 0 ? (
@@ -1652,28 +1662,30 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                           {/* Founder Discount 3-Orders Usage Status Badge */}
                           {(() => {
                             const shopFounderStatus = getStoreFounderDiscountStatus(supermarkets, orders, shop.id);
+                            const usedFa = shopFounderStatus.usedOrdersCount.toLocaleString('fa-IR');
+                            const remainingFa = shopFounderStatus.remainingOrdersCount.toLocaleString('fa-IR');
+
                             return (
-                              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-xs font-semibold bg-slate-950 border-slate-800">
-                                <Sparkles className={`w-3.5 h-3.5 ${shopFounderStatus.isFounderActive ? 'text-amber-400' : 'text-slate-500'}`} />
-                                <span className="text-slate-300">تخفیف ۱۰۰ نفر اول:</span>
+                              <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg border text-[11px] font-medium bg-slate-950/80 border-slate-800/80">
+                                <Sparkles className={`w-3 h-3 ${shopFounderStatus.isFounderActive ? 'text-amber-400' : 'text-slate-500'}`} />
+                                <span className="text-slate-400 text-[10.5px]">تخفیف ۱۰۰ نفر اول:</span>
                                 {shopFounderStatus.isFounderEligible ? (
                                   <span
-                                    className={`px-2 py-0.5 rounded-md font-bold text-[11px] font-mono border ${
+                                    className={`px-1.5 py-0.5 rounded font-bold text-[10px] border ${
                                       shopFounderStatus.remainingOrdersCount === 0
-                                        ? 'bg-slate-800 text-slate-400 border-slate-700'
-                                        : 'bg-purple-950/80 text-purple-300 border-purple-800/60'
+                                        ? 'bg-slate-800/80 text-slate-400 border-slate-700'
+                                        : 'bg-purple-950/80 text-purple-200 border-purple-800/60'
                                     }`}
                                     title={
                                       shopFounderStatus.remainingOrdersCount === 0
                                         ? 'هر ۳ بار استفاده شده و تخفیف به پایان رسیده است'
-                                        : `${shopFounderStatus.usedOrdersCount} از ۳ سفارش استفاده شده، ${shopFounderStatus.remainingOrdersCount} سفارش باقی‌مانده`
+                                        : `${usedFa} از ۳ سفارش استفاده شده، ${remainingFa} سفارش باقی‌مانده`
                                     }
                                   >
-                                    {shopFounderStatus.usedOrdersCount} از ۳ سفارش استفاده شده
-                                    {shopFounderStatus.remainingOrdersCount === 0 ? ' (پایان‌یافته)' : ` (${shopFounderStatus.remainingOrdersCount} مانده)`}
+                                    {usedFa} از ۳ سفارش ({shopFounderStatus.remainingOrdersCount === 0 ? 'پایان‌یافته' : `${remainingFa} مانده`})
                                   </span>
                                 ) : (
-                                  <span className="text-[11px] text-slate-500">غیرمشمول</span>
+                                  <span className="text-[10px] text-slate-500">غیرمشمول</span>
                                 )}
                               </div>
                             );

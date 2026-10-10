@@ -166,6 +166,8 @@ interface AppContextType {
   updateBrand: (oldBrandName: string, newBrandName: string) => { success: boolean; message: string };
   deleteBrand: (brandName: string) => { success: boolean; message: string };
   updateBrandOrder: (orderedBrands: string[]) => Promise<{ success: boolean; message: string }>;
+  productOrderMap: Record<string, string[]>;
+  updateProductOrder: (brandName: string, orderedProductIds: string[]) => Promise<{ success: boolean; message: string }>;
   addUnit: (name: string) => { success: boolean; message: string };
   updateUnit: (oldUnitName: string, newUnitName: string) => { success: boolean; message: string };
   deleteUnit: (unitName: string) => { success: boolean; message: string };
@@ -1081,6 +1083,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return DEFAULT_ADMIN_PROFILE;
   });
 
+  // Catalog Product Order per Brand with localStorage fallback
+  const [productOrderMap, setProductOrderMap] = useState<Record<string, string[]>>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('barfroosh_product_order');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed && typeof parsed === 'object') {
+            return parsed;
+          }
+        } catch {}
+      }
+    }
+    return {};
+  });
+
   // Load invoice_settings & admin_profile from Supabase app_settings on startup & on data refresh
   useEffect(() => {
     let isMounted = true;
@@ -1137,6 +1155,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               return sorted;
             });
           }
+
+          // Fetch catalog_product_order
+          const { data: prodOrderData } = await supabase
+            .from('app_settings')
+            .select('value')
+            .eq('key', 'catalog_product_order')
+            .maybeSingle();
+
+          if (prodOrderData && prodOrderData.value && typeof prodOrderData.value === 'object' && isMounted) {
+            setProductOrderMap(prodOrderData.value as Record<string, string[]>);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('barfroosh_product_order', JSON.stringify(prodOrderData.value));
+            }
+          }
         } catch (err) {
           console.warn('Error fetching invoice_settings from app_settings:', err);
         }
@@ -1182,6 +1214,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     },
     [catalog]
+  );
+
+  // Update catalog product order within a brand (admin action)
+  const updateProductOrder = useCallback(
+    async (brandName: string, orderedProductIds: string[]): Promise<{ success: boolean; message: string }> => {
+      try {
+        const cleanBrand = (brandName || 'متفرقه').trim();
+        const updated: Record<string, string[]> = {
+          ...productOrderMap,
+          [cleanBrand]: orderedProductIds,
+        };
+
+        setProductOrderMap(updated);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('barfroosh_product_order', JSON.stringify(updated));
+        }
+
+        if (isSupabaseConfigured && supabase) {
+          const { error: upsertErr } = await supabase
+            .from('app_settings')
+            .upsert({ key: 'catalog_product_order', value: updated }, { onConflict: 'key' });
+          if (upsertErr) {
+            console.error('Error saving product order to app_settings:', upsertErr);
+            return { success: false, message: 'خطا در ذخیره ترتیب کالاها در سرور' };
+          }
+        }
+        return { success: true, message: `ترتیب کالاهای برند «${cleanBrand}» با موفقیت ذخیره شد.` };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در ذخیره ترتیب کالاها';
+        return { success: false, message: msg };
+      }
+    },
+    [productOrderMap]
   );
 
   // Update invoice settings (admin action via SECURITY DEFINER RPC with direct upsert fallback)
@@ -1327,6 +1392,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateBrand: catalog.updateBrand,
     deleteBrand: catalog.deleteBrand,
     updateBrandOrder,
+    productOrderMap,
+    updateProductOrder,
     addUnit: catalog.addUnit,
     updateUnit: catalog.updateUnit,
     deleteUnit: catalog.deleteUnit,
@@ -1406,6 +1473,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     catalog.updateBrand,
     catalog.deleteBrand,
     updateBrandOrder,
+    productOrderMap,
+    updateProductOrder,
     catalog.addUnit,
     catalog.updateUnit,
     catalog.deleteUnit,

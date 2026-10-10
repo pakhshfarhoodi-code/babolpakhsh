@@ -274,8 +274,61 @@ export interface SortCatalogOptions {
 }
 
 /**
+ * Calculates product availability tier:
+ * Tier 0: In-stock available product (highest priority)
+ * Tier 1: Market test / coming soon product (middle priority)
+ * Tier 2: Out-of-stock product (lowest priority, placed at the end)
+ */
+export function getProductAvailabilityTier(product: Product): number {
+  const availableStock = Math.max(0, (product.stock || 0) - (product.reserved_stock || 0));
+  if (product.is_market_test) {
+    return 1;
+  }
+  if (availableStock <= 0) {
+    return 2;
+  }
+  return 0;
+}
+
+/**
+ * Sorts products inside a brand colony:
+ * 1. Availability Tier: Available in-stock items (0) -> Test items (1) -> Out-of-stock items (2)
+ * 2. Admin custom order within the tier (if defined in brandOrder)
+ * 3. Persian alphabetical name tiebreaker
+ */
+export function sortBrandColonyProducts(
+  products: Product[],
+  brandOrder?: string[]
+): Product[] {
+  const orderList = Array.isArray(brandOrder) ? brandOrder : [];
+
+  return [...products].sort((a, b) => {
+    // 1. Group by availability tier
+    const tierA = getProductAvailabilityTier(a);
+    const tierB = getProductAvailabilityTier(b);
+    if (tierA !== tierB) {
+      return tierA - tierB;
+    }
+
+    // 2. Custom Admin Priority Order within the same tier
+    if (orderList.length > 0) {
+      const idxA = orderList.indexOf(a.id);
+      const idxB = orderList.indexOf(b.id);
+      if (idxA !== -1 && idxB !== -1) {
+        return idxA - idxB;
+      }
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+    }
+
+    // 3. Persian alphabetical name tiebreaker
+    return a.name.localeCompare(b.name, 'fa');
+  });
+}
+
+/**
  * Sorts catalog products based on popularity (most sold), alphabetical name, or price (low to high).
- * Mutually exclusive sorting filters.
+ * In all views, available in-stock items are prioritized above out-of-stock/test items.
  */
 export function sortCatalogProducts(
   products: Product[],
@@ -285,15 +338,27 @@ export function sortCatalogProducts(
 
   const sorted = [...products];
 
+  const compareTiers = (a: Product, b: Product): number => {
+    const tierA = getProductAvailabilityTier(a);
+    const tierB = getProductAvailabilityTier(b);
+    return tierA - tierB;
+  };
+
   // 1. Sort by Alphabetical Name
   if (byName) {
-    sorted.sort((a, b) => a.name.localeCompare(b.name, 'fa'));
+    sorted.sort((a, b) => {
+      const tierDiff = compareTiers(a, b);
+      if (tierDiff !== 0) return tierDiff;
+      return a.name.localeCompare(b.name, 'fa');
+    });
     return sorted;
   }
 
   // 2. Sort by Price (Lowest price to highest price)
   if (byPrice) {
     sorted.sort((a, b) => {
+      const tierDiff = compareTiers(a, b);
+      if (tierDiff !== 0) return tierDiff;
       if (a.price !== b.price) {
         return a.price - b.price;
       }
@@ -305,12 +370,13 @@ export function sortCatalogProducts(
   // 3. Sort by Popularity (Highest sales volume first, with likes/name as tiebreaker)
   if (popular) {
     sorted.sort((a, b) => {
+      const tierDiff = compareTiers(a, b);
+      if (tierDiff !== 0) return tierDiff;
       const salesA = productSalesMap[a.id] || 0;
       const salesB = productSalesMap[b.id] || 0;
       if (salesB !== salesA) {
         return salesB - salesA;
       }
-      // If sales are equal, sort by likes count (if market test) or alphabetical name
       const likesA = (a as any).likes_count || 0;
       const likesB = (b as any).likes_count || 0;
       if (likesB !== likesA) {
@@ -320,6 +386,13 @@ export function sortCatalogProducts(
     });
     return sorted;
   }
+
+  // Default: Prioritize available products first, then test, then out of stock
+  sorted.sort((a, b) => {
+    const tierDiff = compareTiers(a, b);
+    if (tierDiff !== 0) return tierDiff;
+    return a.name.localeCompare(b.name, 'fa');
+  });
 
   return sorted;
 }

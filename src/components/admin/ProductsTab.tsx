@@ -47,6 +47,7 @@ import { CategorySelectPicker, BrandSelectPicker, UnitSelectPicker } from '../Ca
 import { ExcelImportModal } from './ExcelImportModal';
 import { ExcelExportModal } from './ExcelExportModal';
 import { BrandOrderModal } from './BrandOrderModal';
+import { ProductOrderModal } from './ProductOrderModal';
 import { MarketTestLikesModal } from './MarketTestLikesModal';
 
 interface ProductsTabProps {
@@ -93,7 +94,15 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   onOpenEditCategory,
   onOpenEditBrand,
 }) => {
-  const { units, orders, productLikes, supermarkets, updateBrandOrder } = useApp();
+  const {
+    units,
+    orders,
+    productLikes,
+    supermarkets,
+    updateBrandOrder,
+    productOrderMap,
+    updateProductOrder,
+  } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all');
   const [selectedBrandFilter, setSelectedBrandFilter] = useState('all');
@@ -101,6 +110,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   const [onlyInactive, setOnlyInactive] = useState(false);
   const [onlyMarketTest, setOnlyMarketTest] = useState(false);
   const [isBrandOrderModalOpen, setIsBrandOrderModalOpen] = useState(false);
+  const [isProductOrderModalOpen, setIsProductOrderModalOpen] = useState(false);
 
   // Quick Inline Price Editing (visitor price, store price, consumer price)
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
@@ -753,6 +763,16 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
             >
               <Layers className="w-3.5 h-3.5 text-purple-400" />
               <span>ترتیب برندها</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsProductOrderModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600/15 hover:bg-indigo-600/25 text-indigo-300 border border-indigo-500/30 text-xs font-bold transition cursor-pointer"
+              title="تعیین اولویت و ترتیب نمایش کالاهای داخل هر برند در کاتالوگ فروشگاه"
+            >
+              <Package className="w-3.5 h-3.5 text-indigo-400" />
+              <span>ترتیب کالاها</span>
             </button>
 
             <button
@@ -2626,6 +2646,18 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
           brands={brands}
           products={products}
           onSaveOrder={updateBrandOrder}
+        />
+      )}
+
+      {/* Product Display Order Modal */}
+      {isProductOrderModalOpen && (
+        <ProductOrderModal
+          isOpen={isProductOrderModalOpen}
+          onClose={() => setIsProductOrderModalOpen(false)}
+          brands={brands}
+          products={products}
+          productOrderMap={productOrderMap}
+          onSaveProductOrder={updateProductOrder}
         />
       )}
     </div>

@@ -3,7 +3,7 @@ import { Product } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { ProductRow } from './ProductRow';
 import { BrandDropdown } from './BrandDropdown';
-import { filterCatalogProducts, sortCatalogProducts } from './shopUtils';
+import { filterCatalogProducts, sortCatalogProducts, sortBrandColonyProducts } from './shopUtils';
 import {
   getStorePickupDiscountEnabled,
   setStorePickupDiscountEnabled,
@@ -136,8 +136,8 @@ const StoreDiscountSwitchesBox: React.FC = () => {
                 کد تخفیف ۵٪ ویژه ۱۰۰ فروشگاه اول
               </span>
             </div>
-            <span className="text-[9.5px] px-2.5 py-0.5 rounded-md font-black border bg-emerald-500 text-slate-950 border-emerald-400 shadow-md font-mono shrink-0">
-              فعال ({founderStatus.remainingOrdersCount} سفارش مانده)
+            <span className="text-[10px] px-2.5 py-0.5 rounded-md font-bold border bg-emerald-500 text-slate-950 border-emerald-400 shadow-md shrink-0">
+              فعال ({founderStatus.remainingOrdersCount.toLocaleString('fa-IR')} سفارش مانده)
             </span>
           </div>
         )}
@@ -153,7 +153,7 @@ const StoreDiscountSwitchesBox: React.FC = () => {
                 طرح تخفیف ویژه ۵ درصدی ۱۰۰ فروشگاه اول:
               </p>
               <p className="text-[10.5px] text-purple-100 font-medium tracking-tight whitespace-normal leading-normal">
-                تبریک! شما به عنوان ۱۰۰ فروشگاه اول در سامانه ثبت‌نام شده‌اید. تخفیف ۵ درصدی برای ۳ سفارش اول شما فعال است (تاکنون {founderStatus.usedOrdersCount} بار استفاده شده و برای {founderStatus.remainingOrdersCount} سفارش دیگر فعال خواهد بود).
+                تبریک! شما به عنوان ۱۰۰ فروشگاه اول در سامانه ثبت‌نام شده‌اید. تخفیف ۵ درصدی برای ۳ سفارش اول شما فعال است (تاکنون {founderStatus.usedOrdersCount.toLocaleString('fa-IR')} بار استفاده شده و برای {founderStatus.remainingOrdersCount.toLocaleString('fa-IR')} سفارش دیگر فعال خواهد بود).
               </p>
             </div>
           </div>
@@ -188,7 +188,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
   priceMode = 'store',
   defaultInStockOnly = false,
 }) => {
-  const { categories, orders, brands } = useApp();
+  const { categories, orders, brands, productOrderMap } = useApp();
 
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState('');
@@ -380,15 +380,19 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
       );
 
       if (matchingItems.length > 0) {
+        // Sort products within brand: In-stock first, test middle, out-of-stock last + Admin custom order
+        const customBrandOrder = productOrderMap?.[bName] || productOrderMap?.[bName.trim()] || [];
+        const sortedItems = sortBrandColonyProducts(matchingItems, customBrandOrder);
+
         colonies.push({
           brandName: bName,
-          products: matchingItems,
+          products: sortedItems,
         });
       }
     }
 
     return colonies;
-  }, [activeSort, brands, products, filteredProducts, isBrandAvailable]);
+  }, [activeSort, brands, products, filteredProducts, isBrandAvailable, productOrderMap]);
 
   return (
     <div className="space-y-2.5">

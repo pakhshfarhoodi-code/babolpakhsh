@@ -142,13 +142,15 @@ export const App: React.FC = () => {
 
   // 2. Unauthenticated or in the middle of fresh login from LoginScreen (Point 3)
   if (!isLoggedIn || justLoggedIn) {
-    const isInsideEitaa = typeof window !== 'undefined' && Boolean((window as any).Eitaa?.WebApp?.initData);
+    const isInsideMessenger =
+      typeof window !== 'undefined' &&
+      (Boolean((window as any).Eitaa?.WebApp?.initData) || Boolean((window as any).Telegram?.WebApp?.initData));
     const initialRole = effectivePath === '/admin' ? 'admin' : (effectivePath === '/visitor' ? 'visitor' : 'supermarket');
     const allowedRoles = effectivePath === '/admin'
       ? ['admin', 'warehouse']
       : (effectivePath === '/visitor'
           ? ['visitor']
-          : (isInsideEitaa && showStaffLogin ? ['supermarket', 'visitor', 'admin', 'warehouse'] : ['supermarket']));
+          : (isInsideMessenger && showStaffLogin ? ['supermarket', 'visitor', 'admin', 'warehouse'] : ['supermarket']));
 
     return (
       <>
@@ -159,7 +161,7 @@ export const App: React.FC = () => {
           onLoginStart={() => setJustLoggedIn(true)}
           onLoginComplete={() => setJustLoggedIn(false)}
         />
-        {isInsideEitaa && effectivePath === '/' && (
+        {isInsideMessenger && effectivePath === '/' && (
           <button
             type="button"
             onClick={() => setShowStaffLogin((v) => !v)}

@@ -27,6 +27,14 @@ const getEitaaInitData = (): string => {
   }
 };
 
+const getTelegramInitData = (): string => {
+  try {
+    return (window as any).Telegram?.WebApp?.initData || '';
+  } catch {
+    return '';
+  }
+};
+
 async function reconcileEitaaSession(): Promise<void> {
   if (!supabase) return;
   const initData = getEitaaInitData();
@@ -58,10 +66,14 @@ async function reconcileEitaaSession(): Promise<void> {
         .maybeSingle();
       const role = profRow?.role;
       if (role === 'admin' || role === 'visitor' || role === 'warehouse') {
-        // نشست کادر حفظ میشود و شناسهی ایتا برای اعلانها ثبت میشود
-        supabase.functions
-          .invoke('eitaa-contact', { body: { initData } })
-          .catch((e) => console.warn('Eitaa contact failed:', e));
+        const { data: cRes, error: cErr } = await supabase.functions.invoke('eitaa-contact', {
+          body: { initData, mode: 'verify' },
+        });
+        if (cErr) return;                 // خطای شبکه: کاری نکن
+        if (cRes?.success) return;        // همین حساب ایتا متعلق به همین پروفایل است
+        if (cRes?.error === 'mismatch') { // نشست سایت متعلق به یک حساب ایتای دیگر است
+          await supabase.auth.signOut({ scope: 'local' });
+        }
         return;
       }
       // تنها در صورتی که نقش قطعاً فروشگاه باشد، نشست حساب دیگر بسته میشود
@@ -71,6 +83,58 @@ async function reconcileEitaaSession(): Promise<void> {
     }
   } catch (e) {
     console.warn('Eitaa session reconcile failed:', e);
+  }
+}
+
+async function reconcileTelegramSession(): Promise<void> {
+  if (!supabase) return;
+  const initData = getTelegramInitData();
+  if (!initData) return;
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data: res, error } = await supabase.functions.invoke('telegram-login', {
+      body: { initData },
+    });
+    // خطای شبکه یا سرور: وضعیت فعلی را تغییر نده
+    if (error) return;
+
+    if (res?.success && res.token_hash && res.profile_id) {
+      if (session?.user?.id === res.profile_id) return;
+      const { error: otpError } = await supabase.auth.verifyOtp({
+        token_hash: res.token_hash,
+        type: 'magiclink',
+      });
+      if (otpError) console.warn('Telegram verifyOtp failed:', otpError.message);
+      return;
+    }
+
+    // این حساب تلگرام به هیچ فروشگاهی متصل نیست
+    if (session?.user) {
+      const { data: profRow } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .maybeSingle();
+      const role = profRow?.role;
+      if (role === 'admin' || role === 'visitor' || role === 'warehouse') {
+        // نشست کادر حفظ میشود؛ فقط اگر حساب تلگرام با حساب ثبتشدهی او نمیخواند، خارج میشود
+        const { data: cRes, error: cErr } = await supabase.functions.invoke('telegram-contact', {
+          body: { initData, mode: 'verify' },
+        });
+        if (cErr) return;
+        if (cRes?.success) return;
+        if (cRes?.error === 'mismatch') {
+          await supabase.auth.signOut({ scope: 'local' });
+        }
+        return;
+      }
+      // تنها اگر نقش قطعاً فروشگاه باشد، نشست حساب دیگر بسته میشود
+      if (role === 'supermarket') {
+        await supabase.auth.signOut({ scope: 'local' });
+      }
+    }
+  } catch (e) {
+    console.warn('Telegram session reconcile failed:', e);
   }
 }
 
@@ -88,6 +152,9 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
         }
       }
       if (Boolean((window as any).Eitaa?.WebApp?.initData)) {
+        return true;
+      }
+      if (Boolean((window as any).Telegram?.WebApp?.initData)) {
         return true;
       }
     } catch {}
@@ -283,6 +350,7 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
     (async () => {
       try {
         await reconcileEitaaSession();
+        await reconcileTelegramSession();
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         if (sessionError || !session?.user) {
           lastProfileFetchedUserIdRef.current = null;
@@ -513,6 +581,16 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
             .catch((e) => console.warn('Eitaa contact failed:', e));
         }
 
+        const telegramInitDataForLink = getTelegramInitData();
+        if (telegramInitDataForLink && supabase) {
+          supabase.functions
+            .invoke('telegram-link', { body: { initData: telegramInitDataForLink } })
+            .catch((e) => console.warn('Telegram link failed:', e));
+          supabase.functions
+            .invoke('telegram-contact', { body: { initData: telegramInitDataForLink } })
+            .catch((e) => console.warn('Telegram contact failed:', e));
+        }
+
         return { success: true };
       } catch (err: unknown) {
         console.warn('Login request error:', err);
@@ -554,6 +632,17 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
           });
         } catch (e) {
           console.warn('Eitaa unlink failed:', e);
+        }
+      }
+
+      const telegramInitDataForUnlink = getTelegramInitData();
+      if (telegramInitDataForUnlink && supabase) {
+        try {
+          await supabase.functions.invoke('telegram-link', {
+            body: { initData: telegramInitDataForUnlink, action: 'unlink' },
+          });
+        } catch (e) {
+          console.warn('Telegram unlink failed:', e);
         }
       }
 

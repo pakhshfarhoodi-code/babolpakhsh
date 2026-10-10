@@ -26,6 +26,12 @@ if (eitaaApp) {
   eitaaApp.expand();
 }
 
+const telegramApp = (window as any).Telegram?.WebApp;
+if (telegramApp && telegramApp.initData) {
+  telegramApp.ready();
+  telegramApp.expand();
+}
+
 const rootElement = document.getElementById('root');
 if (rootElement) {
   ReactDOM.createRoot(rootElement).render(

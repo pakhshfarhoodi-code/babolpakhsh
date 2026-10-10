@@ -4,6 +4,7 @@ import { Header } from './components/Header';
 import type { AdminTabKey } from './components/AdminPanel';
 import { LoginScreen } from './components/LoginScreen';
 import { UserRole } from './types';
+import { getMessengerScope } from './lib/messengerScope';
 import appLogo from './assets/images/farhoodi_b2b_logo.webp';
 
 const AdminPanel = lazy(() => import('./components/AdminPanel').then((m) => ({ default: m.AdminPanel })));
@@ -144,7 +145,9 @@ export const App: React.FC = () => {
   if (!isLoggedIn || justLoggedIn) {
     const isInsideMessenger =
       typeof window !== 'undefined' &&
-      (Boolean((window as any).Eitaa?.WebApp?.initData) || Boolean((window as any).Telegram?.WebApp?.initData));
+      (Boolean((window as any).Eitaa?.WebApp?.initData) ||
+        Boolean((window as any).Telegram?.WebApp?.initData) ||
+        Boolean(getMessengerScope()));
     const initialRole = effectivePath === '/admin' ? 'admin' : (effectivePath === '/visitor' ? 'visitor' : 'supermarket');
     const allowedRoles = effectivePath === '/admin'
       ? ['admin', 'warehouse']

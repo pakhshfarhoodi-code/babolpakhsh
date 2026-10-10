@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { getMessengerScope } from './messengerScope';
 
 const metaEnv = (import.meta as unknown as { env?: Record<string, string> }).env || {};
 const supabaseUrl = metaEnv.VITE_SUPABASE_URL || '';
@@ -11,8 +12,14 @@ export const isSupabaseConfigured = Boolean(
   supabaseUrl.startsWith('http')
 );
 
+const scope = getMessengerScope();
+
 export const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabaseAnonKey)
+  ? createClient(
+      supabaseUrl,
+      supabaseAnonKey,
+      scope ? { auth: { storageKey: `sb-barfroosh-auth-${scope}` } } : undefined
+    )
   : null;
 
 export async function getFunctionErrorMessage(error: unknown, fallback: string = 'خطای سرور در پردازش درخواست'): Promise<string> {

@@ -29,10 +29,39 @@ const getEitaaInitData = (): string => {
 
 const getTelegramInitData = (): string => {
   try {
-    return (window as any).Telegram?.WebApp?.initData || '';
-  } catch {
-    return '';
-  }
+    const directInitData = (window as any).Telegram?.WebApp?.initData;
+    if (directInitData && typeof directInitData === 'string') {
+      return directInitData;
+    }
+  } catch {}
+
+  try {
+    if (typeof window !== 'undefined' && window.location?.hash) {
+      const hashStr = window.location.hash.startsWith('#')
+        ? window.location.hash.slice(1)
+        : window.location.hash;
+      const hashParams = new URLSearchParams(hashStr);
+      const tgWebAppData = hashParams.get('tgWebAppData');
+      if (tgWebAppData) {
+        return tgWebAppData;
+      }
+    }
+  } catch {}
+
+  try {
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      const rawInitParams = window.sessionStorage.getItem('__telegram__initParams');
+      if (rawInitParams) {
+        const parsed = JSON.parse(rawInitParams);
+        const tgWebAppData = parsed?.tgWebAppData;
+        if (tgWebAppData && typeof tgWebAppData === 'string') {
+          return tgWebAppData;
+        }
+      }
+    }
+  } catch {}
+
+  return '';
 };
 
 async function reconcileEitaaSession(): Promise<void> {
@@ -154,7 +183,7 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
       if (Boolean((window as any).Eitaa?.WebApp?.initData)) {
         return true;
       }
-      if (Boolean((window as any).Telegram?.WebApp?.initData)) {
+      if (Boolean((window as any).Telegram?.WebApp?.initData) || Boolean(getTelegramInitData())) {
         return true;
       }
     } catch {}

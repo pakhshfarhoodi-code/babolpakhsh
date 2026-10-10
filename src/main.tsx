@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { App } from './App';
 import { AppProvider } from './context/AppContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { getMessengerScope } from './lib/messengerScope';
 import './index.css';
 
 // Unregister service worker in development to prevent stale assets / blank iframe screens
@@ -26,21 +27,43 @@ if (eitaaApp) {
   eitaaApp.expand();
 }
 
-const telegramApp = (window as any).Telegram?.WebApp;
-if (telegramApp && telegramApp.initData) {
-  telegramApp.ready();
-  telegramApp.expand();
+async function bootstrap() {
+  const scope = getMessengerScope();
+  if (scope.startsWith('tg-')) {
+    try {
+      const mod = await import('@twa-dev/sdk');
+      const WebApp = mod.default;
+      try {
+        WebApp.ready();
+        WebApp.expand();
+      } catch (err) {
+        console.warn('Telegram WebApp ready/expand error:', err);
+      }
+    } catch (e) {
+      console.warn('Telegram SDK dynamic import failed:', e);
+    }
+  }
+
+  const telegramApp = (window as any).Telegram?.WebApp;
+  if (telegramApp && telegramApp.initData) {
+    try {
+      telegramApp.ready();
+      telegramApp.expand();
+    } catch {}
+  }
+
+  const rootElement = document.getElementById('root');
+  if (rootElement) {
+    ReactDOM.createRoot(rootElement).render(
+      <React.StrictMode>
+        <ErrorBoundary>
+          <AppProvider>
+            <App />
+          </AppProvider>
+        </ErrorBoundary>
+      </React.StrictMode>
+    );
+  }
 }
 
-const rootElement = document.getElementById('root');
-if (rootElement) {
-  ReactDOM.createRoot(rootElement).render(
-    <React.StrictMode>
-      <ErrorBoundary>
-        <AppProvider>
-          <App />
-        </AppProvider>
-      </ErrorBoundary>
-    </React.StrictMode>
-  );
-}
+bootstrap();

@@ -1,13 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { useApp } from './context/AppContext';
 import { Header } from './components/Header';
-import { AdminPanel, AdminTabKey } from './components/AdminPanel';
-import { VisitorPortal } from './components/VisitorPortal';
-import { SupermarketPortal } from './components/SupermarketPortal';
-import { WarehousePanel } from './components/WarehousePanel';
+import type { AdminTabKey } from './components/AdminPanel';
 import { LoginScreen } from './components/LoginScreen';
 import { UserRole } from './types';
 import appLogo from './assets/images/farhoodi_b2b_logo.webp';
+
+const AdminPanel = lazy(() => import('./components/AdminPanel').then((m) => ({ default: m.AdminPanel })));
+const VisitorPortal = lazy(() => import('./components/VisitorPortal').then((m) => ({ default: m.VisitorPortal })));
+const SupermarketPortal = lazy(() => import('./components/SupermarketPortal').then((m) => ({ default: m.SupermarketPortal })));
+const WarehousePanel = lazy(() => import('./components/WarehousePanel').then((m) => ({ default: m.WarehousePanel })));
 import { AlertTriangle, RefreshCw, Loader2 } from 'lucide-react';
 
 // Helper to detect base path (e.g. '/babolpakhsh' on GitHub Pages or '' for root/ArvanCloud)
@@ -259,23 +261,32 @@ export const App: React.FC = () => {
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
-        {effectivePath === '/admin' ? (
-          role === 'warehouse' ? (
-            <WarehousePanel
-              activeTab={warehouseActiveTab}
-              onTabChange={setWarehouseActiveTab}
-            />
+        <Suspense
+          fallback={
+            <div className="flex flex-col items-center justify-center py-20 gap-3">
+              <Loader2 className={`w-8 h-8 animate-spin ${theme === 'light' ? 'text-blue-600' : 'text-blue-400'}`} />
+              <span className="text-xs font-medium opacity-70">در حال بارگذاری بخش مورد نظر...</span>
+            </div>
+          }
+        >
+          {effectivePath === '/admin' ? (
+            role === 'warehouse' ? (
+              <WarehousePanel
+                activeTab={warehouseActiveTab}
+                onTabChange={setWarehouseActiveTab}
+              />
+            ) : (
+              <AdminPanel
+                activeTab={adminActiveTab}
+                onTabChange={setAdminActiveTab}
+              />
+            )
+          ) : effectivePath === '/visitor' ? (
+            <VisitorPortal />
           ) : (
-            <AdminPanel
-              activeTab={adminActiveTab}
-              onTabChange={setAdminActiveTab}
-            />
-          )
-        ) : effectivePath === '/visitor' ? (
-          <VisitorPortal />
-        ) : (
-          <SupermarketPortal />
-        )}
+            <SupermarketPortal />
+          )}
+        </Suspense>
       </main>
     </div>
   );

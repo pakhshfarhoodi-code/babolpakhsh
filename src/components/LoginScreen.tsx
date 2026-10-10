@@ -17,9 +17,12 @@ import {
   Loader2,
 } from 'lucide-react';
 import { UserRole } from '../types';
-import { SupermarketRegisterModal } from './SupermarketRegisterModal';
 import bgHero from '../assets/images/b2b_frozen_food_showcase.webp';
 import appLogo from '../assets/images/farhoodi_b2b_logo.webp';
+
+const SupermarketRegisterModal = React.lazy(() =>
+  import('./SupermarketRegisterModal').then((m) => ({ default: m.SupermarketRegisterModal }))
+);
 
 interface LoginScreenProps {
   initialRole?: UserRole;
@@ -488,10 +491,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
 
       {/* Supermarket Registration Modal */}
-      <SupermarketRegisterModal
-        isOpen={isRegisterModalOpen}
-        onClose={() => setIsRegisterModalOpen(false)}
-      />
+      {isRegisterModalOpen && (
+        <React.Suspense fallback={null}>
+          <SupermarketRegisterModal
+            isOpen={isRegisterModalOpen}
+            onClose={() => setIsRegisterModalOpen(false)}
+          />
+        </React.Suspense>
+      )}
     </div>
   );
 };

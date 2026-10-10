@@ -39,6 +39,18 @@ export default defineConfig(() => {
     },
     build: {
       outDir: 'dist',
+      chunkSizeWarningLimit: 1200,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-xlsx': ['xlsx'],
+            'vendor-pdf': ['jspdf', 'html2canvas'],
+            'vendor-map': ['leaflet'],
+            'vendor-supabase': ['@supabase/supabase-js'],
+            'vendor-react': ['react', 'react-dom'],
+          },
+        },
+      },
     },
   };
 });

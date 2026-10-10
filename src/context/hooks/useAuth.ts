@@ -75,8 +75,27 @@ async function reconcileEitaaSession(): Promise<void> {
 }
 
 export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }: UseAuthProps) {
-  // Auth readiness state (true after getSession & profile fetch or immediately if offline/mock)
-  const [authReady, setAuthReady] = useState<boolean>(!isSupabaseConfigured);
+  // Check if there is any plausible existing session in localStorage or Eitaa
+  const hasPossibleSession = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const savedLoggedIn = localStorage.getItem(STORAGE_KEYS.AUTH_LOGGED_IN) === 'true';
+      if (savedLoggedIn) return true;
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('sb-') || key.includes('auth-token'))) {
+          return true;
+        }
+      }
+      if (Boolean((window as any).Eitaa?.WebApp?.initData)) {
+        return true;
+      }
+    } catch {}
+    return false;
+  }, []);
+
+  // Auth readiness state: First-time visitors render LoginScreen immediately (zero splash delay)
+  const [authReady, setAuthReady] = useState<boolean>(() => !isSupabaseConfigured || !hasPossibleSession);
 
   // Persisted auth state
   const [isLoggedIn, setIsLoggedInState] = useState<boolean>(() => {

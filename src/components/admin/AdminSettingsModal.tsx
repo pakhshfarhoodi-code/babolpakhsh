@@ -17,6 +17,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import appLogo from '../../assets/images/farhoodi_b2b_logo.webp';
+import { syncPwaIconsAndManifest } from '../../utils/pwaIcons';
 
 interface AdminSettingsModalProps {
   isOpen: boolean;
@@ -238,7 +239,8 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
               logo_url: optimizedDataUri,
             });
             if (res.success) {
-              showToast('لوگوی سراسری سامانه با موفقیت ذخیره و در تمام بخش‌ها (ورود، هدر، فاکتور و تب مرورگر) اعمال شد.', 'success');
+              syncPwaIconsAndManifest(optimizedDataUri);
+              showToast('لوگوی سراسری سامانه با موفقیت ذخیره و در تمام بخش‌ها (ورود، هدر، فاکتور، تب مرورگر و آیکون نصب اپ) اعمال شد.', 'success');
             } else {
               showToast(res.message || 'خطا در ذخیره لوگو در تنظیمات.', 'error');
             }
@@ -268,6 +270,7 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
         logo_url: '',
       });
       if (res.success) {
+        syncPwaIconsAndManifest('');
         showToast('لوگو به حالت پیش‌فرض اولیه بازنشانی شد.', 'success');
       }
     } catch (err) {

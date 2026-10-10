@@ -1,5 +1,5 @@
 // Babol Pakhsh Service Worker - Database-First & Fast Deploy
-const CACHE_VERSION = 'farhoodi-b2b-dbfirst-v5';
+const CACHE_VERSION = 'farhoodi-b2b-v7-newlogo';
 const CACHE_NAME = `babolpakhsh-${CACHE_VERSION}`;
 
 const STATIC_ASSETS = [

@@ -42,15 +42,6 @@ export const Header: React.FC<HeaderProps> = () => {
 
   const currentLogo = invoiceSettings?.logo_url || appLogo;
 
-  useEffect(() => {
-    if (invoiceSettings?.logo_url) {
-      const link = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
-      if (link) {
-        link.href = invoiceSettings.logo_url;
-      }
-    }
-  }, [invoiceSettings?.logo_url]);
-
   const defaultStore = useMemo(() => ({
     id: 'sm-default',
     name: 'فروشگاه طرف قرارداد',

@@ -58,6 +58,7 @@ import { useWarehouse } from './hooks/useWarehouse';
 import { useOrders, CreateOrderPayload } from './hooks/useOrders';
 import { useSupabaseSync } from './hooks/useSupabaseSync';
 import { useFinancialAccounts } from './hooks/useFinancialAccounts';
+import { syncPwaIconsAndManifest } from '../utils/pwaIcons';
 import { CheckCircle2, AlertTriangle, Info, X, Bell, Clock } from 'lucide-react';
 
 // Re-export helpers for backwards compatibility
@@ -1059,6 +1060,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     return DEFAULT_INVOICE_SETTINGS;
   });
+
+  // Keep PWA icons, favicon, Apple Touch Icon, and dynamic Web App Manifest in sync with logo_url
+  useEffect(() => {
+    syncPwaIconsAndManifest(invoiceSettings?.logo_url);
+  }, [invoiceSettings?.logo_url]);
 
   // Admin & Central Distributor Profile state with localStorage fallback
   const [adminProfile, setAdminProfile] = useState<AdminProfile>(() => {

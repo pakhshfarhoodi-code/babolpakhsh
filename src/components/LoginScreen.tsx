@@ -39,15 +39,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 }) => {
   const { loginWithCredentials, isLoggedIn, isDataReady, theme, toggleTheme, invoiceSettings } = useApp();
   const currentLogo = invoiceSettings?.logo_url || appLogo;
-
-  useEffect(() => {
-    if (invoiceSettings?.logo_url) {
-      const link = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
-      if (link) {
-        link.href = invoiceSettings.logo_url;
-      }
-    }
-  }, [invoiceSettings?.logo_url]);
   const [activeTab, setActiveTab] = useState<UserRole>(() => {
     if (initialRole) return initialRole;
     if (allowedRoles && allowedRoles.length > 0) return allowedRoles[0];

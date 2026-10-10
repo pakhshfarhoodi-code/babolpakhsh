@@ -49,6 +49,7 @@ import { ExcelExportModal } from './ExcelExportModal';
 import { BrandOrderModal } from './BrandOrderModal';
 import { ProductOrderModal } from './ProductOrderModal';
 import { MarketTestLikesModal } from './MarketTestLikesModal';
+import { getProductAvailabilityTier } from '../shop/shopUtils';
 
 interface ProductsTabProps {
   products: Product[];
@@ -516,7 +517,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
 
   // Filtered Products
   const filteredProducts = useMemo(() => {
-    return products.filter((product) => {
+    const matched = products.filter((product) => {
       const freeStock = Math.round((product.stock - product.reserved_stock) * 1000) / 1000;
 
       // Low stock filter
@@ -554,7 +555,55 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
 
       return true;
     });
-  }, [products, onlyLowStock, onlyInactive, onlyMarketTest, selectedCategoryFilter, selectedBrandFilter, searchTerm]);
+
+    // Sort products matching Brand Order and Admin's Custom Product Order (productOrderMap)
+    return [...matched].sort((a, b) => {
+      const brandA = (a.brand || 'متفرقه').trim();
+      const brandB = (b.brand || 'متفرقه').trim();
+
+      // 1. Group by Brand Order if brands differ
+      if (brandA.toLowerCase() !== brandB.toLowerCase()) {
+        const brandIdxA = brands.findIndex((b) => (b || '').trim().toLowerCase() === brandA.toLowerCase());
+        const brandIdxB = brands.findIndex((b) => (b || '').trim().toLowerCase() === brandB.toLowerCase());
+
+        const effIdxA = brandIdxA === -1 ? 9999 : brandIdxA;
+        const effIdxB = brandIdxB === -1 ? 9999 : brandIdxB;
+
+        if (effIdxA !== effIdxB) {
+          return effIdxA - effIdxB;
+        }
+        return brandA.localeCompare(brandB, 'fa');
+      }
+
+      // 2. Within the same brand: sort according to admin's custom product order
+      const brandOrder = productOrderMap?.[brandA] || productOrderMap?.[brandB] || [];
+      if (brandOrder.length > 0) {
+        const idxA = brandOrder.indexOf(a.id);
+        const idxB = brandOrder.indexOf(b.id);
+        if (idxA !== -1 && idxB !== -1) {
+          return idxA - idxB;
+        }
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+      }
+
+      // 3. Fallback: availability tier and alphabetical name
+      const tierDiff = getProductAvailabilityTier(a) - getProductAvailabilityTier(b);
+      if (tierDiff !== 0) return tierDiff;
+
+      return a.name.localeCompare(b.name, 'fa');
+    });
+  }, [
+    products,
+    onlyLowStock,
+    onlyInactive,
+    onlyMarketTest,
+    selectedCategoryFilter,
+    selectedBrandFilter,
+    searchTerm,
+    brands,
+    productOrderMap,
+  ]);
 
   // When in batch edit mode, admin can view all or only modified products
   const displayedProducts = useMemo(() => {

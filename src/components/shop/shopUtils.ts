@@ -271,6 +271,8 @@ export interface SortCatalogOptions {
   byName?: boolean;
   byPrice?: boolean;
   productSalesMap?: Record<string, number>;
+  brands?: string[];
+  productOrderMap?: Record<string, string[]>;
 }
 
 /**
@@ -303,14 +305,7 @@ export function sortBrandColonyProducts(
   const orderList = Array.isArray(brandOrder) ? brandOrder : [];
 
   return [...products].sort((a, b) => {
-    // 1. Group by availability tier
-    const tierA = getProductAvailabilityTier(a);
-    const tierB = getProductAvailabilityTier(b);
-    if (tierA !== tierB) {
-      return tierA - tierB;
-    }
-
-    // 2. Custom Admin Priority Order within the same tier
+    // 1. Primary: Exact sequence set by admin with "ترتیب کالاها"
     if (orderList.length > 0) {
       const idxA = orderList.indexOf(a.id);
       const idxB = orderList.indexOf(b.id);
@@ -321,7 +316,14 @@ export function sortBrandColonyProducts(
       if (idxB !== -1) return 1;
     }
 
-    // 3. Persian alphabetical name tiebreaker
+    // 2. Secondary: Availability tier (In-stock available -> Market test -> Out of stock)
+    const tierA = getProductAvailabilityTier(a);
+    const tierB = getProductAvailabilityTier(b);
+    if (tierA !== tierB) {
+      return tierA - tierB;
+    }
+
+    // 3. Tertiary: Persian alphabetical name tiebreaker
     return a.name.localeCompare(b.name, 'fa');
   });
 }
@@ -334,7 +336,14 @@ export function sortCatalogProducts(
   products: Product[],
   options: SortCatalogOptions
 ): Product[] {
-  const { popular = false, byName = false, byPrice = false, productSalesMap = {} } = options;
+  const {
+    popular = false,
+    byName = false,
+    byPrice = false,
+    productSalesMap = {},
+    brands = [],
+    productOrderMap = {},
+  } = options;
 
   const sorted = [...products];
 
@@ -387,8 +396,38 @@ export function sortCatalogProducts(
     return sorted;
   }
 
-  // Default: Prioritize available products first, then test, then out of stock
+  // Default: Respect Admin's Brand Order and Custom Product Order (productOrderMap)
   sorted.sort((a, b) => {
+    const brandA = (a.brand || 'متفرقه').trim();
+    const brandB = (b.brand || 'متفرقه').trim();
+
+    // 1. If brands differ and brands order is configured
+    if (brandA.toLowerCase() !== brandB.toLowerCase() && brands.length > 0) {
+      const brandIdxA = brands.findIndex((b) => (b || '').trim().toLowerCase() === brandA.toLowerCase());
+      const brandIdxB = brands.findIndex((b) => (b || '').trim().toLowerCase() === brandB.toLowerCase());
+
+      const effIdxA = brandIdxA === -1 ? 9999 : brandIdxA;
+      const effIdxB = brandIdxB === -1 ? 9999 : brandIdxB;
+
+      if (effIdxA !== effIdxB) {
+        return effIdxA - effIdxB;
+      }
+      return brandA.localeCompare(brandB, 'fa');
+    }
+
+    // 2. If within same brand, check admin's custom product order
+    const brandOrder = productOrderMap[brandA] || productOrderMap[brandB] || [];
+    if (brandOrder.length > 0) {
+      const idxA = brandOrder.indexOf(a.id);
+      const idxB = brandOrder.indexOf(b.id);
+      if (idxA !== -1 && idxB !== -1) {
+        return idxA - idxB;
+      }
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+    }
+
+    // 3. Fallback: Prioritize available products first, then test, then out of stock
     const tierDiff = compareTiers(a, b);
     if (tierDiff !== 0) return tierDiff;
     return a.name.localeCompare(b.name, 'fa');

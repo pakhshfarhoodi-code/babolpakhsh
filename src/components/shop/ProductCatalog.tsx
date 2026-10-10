@@ -288,12 +288,14 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
     // Omit any brand whose products are ALL out of stock or inactive from the catalog
     const availableBrandProducts = matched.filter((p) => isBrandAvailable(p.brand || 'متفرقه'));
 
-    // Apply mutually exclusive sorting logic (Popular / Name / Price)
+    // Apply mutually exclusive sorting logic (Popular / Name / Price / Admin Order)
     return sortCatalogProducts(availableBrandProducts, {
       popular: isPopularActive,
       byName: sortByName,
       byPrice: sortByPrice,
       productSalesMap,
+      brands,
+      productOrderMap,
     });
   }, [
     products,
@@ -306,6 +308,8 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
     sortByPrice,
     productSalesMap,
     isBrandAvailable,
+    brands,
+    productOrderMap,
   ]);
 
   // Mutually exclusive toggle handlers for sort filters (clicking active sort toggles it off back to brand colonies)

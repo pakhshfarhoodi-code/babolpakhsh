@@ -15,8 +15,10 @@ import {
   Sun,
   Moon,
   Loader2,
+  Sparkles,
 } from 'lucide-react';
 import { UserRole } from '../types';
+import { FOUNDER_INITIAL_CAPACITY } from '../utils/storeDiscount';
 import bgHero from '../assets/images/b2b_frozen_food_showcase.webp';
 import appLogo from '../assets/images/farhoodi_b2b_logo.webp';
 
@@ -37,8 +39,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   onLoginStart,
   onLoginComplete,
 }) => {
-  const { loginWithCredentials, isLoggedIn, isDataReady, theme, toggleTheme, invoiceSettings } = useApp();
+  const { loginWithCredentials, isLoggedIn, isDataReady, theme, toggleTheme, invoiceSettings, supermarkets } = useApp();
   const currentLogo = invoiceSettings?.logo_url || appLogo;
+
+  // Remaining capacity for the first stores discount (starts from 90 minus registered stores)
+  const totalRegisteredStores = supermarkets?.length || 0;
+  const remainingFounderSpots = Math.max(0, FOUNDER_INITIAL_CAPACITY - totalRegisteredStores);
   const [activeTab, setActiveTab] = useState<UserRole>(() => {
     if (initialRole) return initialRole;
     if (allowedRoles && allowedRoles.length > 0) return allowedRoles[0];
@@ -312,6 +318,27 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           {currentTheme.icon}
           <span>{currentTheme.headerTitle}</span>
         </div>
+
+        {/* Special Founder Discount Countdown Banner for Stores */}
+        {activeTab === 'supermarket' && (
+          <div
+            className={`mb-4 px-2.5 py-2 sm:px-3 sm:py-2.5 rounded-xl border text-right shadow-sm animate-in fade-in duration-200 overflow-hidden ${
+              theme === 'light'
+                ? 'bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-emerald-500/10 border-amber-500/30'
+                : 'bg-gradient-to-r from-amber-950/40 via-purple-950/30 to-emerald-950/30 border-amber-500/30 shadow-amber-950/20'
+            }`}
+          >
+            <div className="flex items-center gap-1.5 whitespace-nowrap overflow-hidden">
+              <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0 animate-pulse" />
+              <span className={`text-[10px] sm:text-xs font-black whitespace-nowrap truncate leading-tight ${theme === 'light' ? 'text-amber-950' : 'text-amber-300'}`}>
+                فقط {remainingFounderSpots.toLocaleString('fa-IR')} نفر دیگر شامل تخفیف ثبت نام اولیه خواهند شد.
+              </span>
+            </div>
+            <p className={`text-[9px] sm:text-[11px] font-semibold whitespace-nowrap truncate leading-tight pr-5 mt-0.5 ${theme === 'light' ? 'text-slate-700' : 'text-slate-300'}`}>
+              هرچه سریعتر ثبت نام کنید تا فرصت را از دست ندهید.
+            </p>
+          </div>
+        )}
 
         {/* Login Form */}
         <form onSubmit={handleLoginSubmit} className="space-y-4">

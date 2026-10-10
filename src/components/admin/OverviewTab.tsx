@@ -204,7 +204,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
 
               <h3 className="font-bold text-sm text-slate-100">{pendingApprovalStores.length} فروشگاه در انتظار تایید</h3>
               <p className="text-xs text-slate-400 leading-relaxed">
-                فروشگاه‌های ثبت‌نام شده نیازمند احراز و تایید حساب برای ثبت اولین سفارش هستند.
+                فروشگاه‌های ثبت‌نام‌شده جدید در انتظار بررسی مشخصات و احراز هویت.
               </p>
             </div>
 

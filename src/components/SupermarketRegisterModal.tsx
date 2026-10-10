@@ -142,31 +142,22 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
             <Check className="w-7 h-7 stroke-[3]" />
           </div>
 
-          {isSelfRegistration ? (
-            <div className="space-y-2">
-              <h3 className="text-base font-bold text-slate-100">ثبت‌نام انجام شد</h3>
-              <p className="text-xs text-amber-300 font-medium leading-relaxed bg-amber-500/10 border border-amber-500/25 p-3 rounded-xl">
-                ثبت‌نام انجام شد. برای ثبت اولین سفارش، حساب شما باید توسط ادمین تایید شود.
-              </p>
-              <p className="text-[11px] text-slate-400">
-                حساب فروشگاه <strong className="text-slate-200">«{name}»</strong> ثبت شد. پس از تایید مدیریت، پیامک اطلاع‌رسانی به شماره <span className="font-mono dir-ltr text-slate-300">{registeredPhone}</span> ارسال خواهد شد.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-1.5">
-              <h3 className="text-base font-bold text-slate-100">حساب کاربری با موفقیت ایجاد شد</h3>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                حساب فروشگاه <strong className="text-amber-400">«{name}»</strong> ثبت گردید. با شماره موبایل <strong className="text-amber-300 font-mono dir-ltr">{registeredPhone}</strong> می‌توانید وارد سامانه شوید.
-              </p>
-            </div>
-          )}
+          <div className="space-y-2">
+            <h3 className="text-base font-bold text-slate-100">حساب کاربری با موفقیت ایجاد شد</h3>
+            <p className="text-xs text-emerald-300 font-medium leading-relaxed bg-emerald-500/10 border border-emerald-500/25 p-3 rounded-xl">
+              حساب کاربری فروشگاه <strong className="text-white">«{name}»</strong> با موفقیت فعال گردید. اکنون می‌توانید وارد سامانه شده و سفارش خود را ثبت نمایید.
+            </p>
+            <p className="text-[11px] text-slate-400">
+              شماره همراه ورود شما: <span className="font-mono dir-ltr text-slate-200 font-bold">{registeredPhone}</span>
+            </p>
+          </div>
 
           <button
             type="button"
             onClick={handleCloseAll}
-            className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition cursor-pointer shadow-md shadow-amber-500/20"
+            className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer shadow-md shadow-emerald-500/20"
           >
-            {isSelfRegistration ? 'ورود به برنامه' : 'بستن و ادامه'}
+            {isSelfRegistration ? 'ورود به برنامه و مشاهده کاتالوگ' : 'بستن و ادامه'}
           </button>
         </div>
       </div>

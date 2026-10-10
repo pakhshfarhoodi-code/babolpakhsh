@@ -2838,12 +2838,12 @@ export const TeamTab: React.FC<TeamTabProps> = ({
               </div>
               <div>
                 <h3 className="text-sm font-bold text-slate-100">تایید حساب فروشگاه</h3>
-                <p className="text-xs text-slate-400">احراز هویت و فعال‌سازی ثبت سفارش</p>
+                <p className="text-xs text-slate-400">احراز هویت و بررسی مشخصات فروشگاه</p>
               </div>
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed bg-slate-950 p-3 rounded-xl border border-slate-800">
-              آیا از تایید حساب کاربری فروشگاه <strong className="text-emerald-400">«{approvingStoreModal.name}»</strong> با مدیریت آقای/خانم <strong className="text-slate-100">{approvingStoreModal.owner}</strong> اطمینان دارید؟ با تایید حساب، امکان ثبت سفارش برای این فروشگاه فعال خواهد شد.
+              آیا از تایید حساب کاربری فروشگاه <strong className="text-emerald-400">«{approvingStoreModal.name}»</strong> با مدیریت آقای/خانم <strong className="text-slate-100">{approvingStoreModal.owner}</strong> اطمینان دارید؟
             </p>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">

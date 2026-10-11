@@ -36,12 +36,15 @@ import {
   BadgeCheck,
   Building2,
   Sparkles,
+  FileText,
+  StickyNote,
 } from 'lucide-react';
 import { getStoreFounderDiscountStatus } from '../../utils/storeDiscount';
 import { LocationPickerModal } from '../LocationPickerModal';
 import { SupermarketRegisterModal } from '../SupermarketRegisterModal';
 import { AccountLedgerModal } from './AccountLedgerModal';
 import { formatPrice } from './helpers';
+import { formatPersianDate } from '../../utils/dateUtils';
 import { normalizePhone, isValidMobile, MIN_PASSWORD_LENGTH } from '../../context/utils';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 
@@ -77,6 +80,8 @@ export const TeamTab: React.FC<TeamTabProps> = ({
     deactivateFinancialAccount,
     getAccountSummary,
     showToast,
+    adminNotesMap,
+    updateAdminNote,
   } = useApp();
   const [selectedVisitorFilter, setSelectedVisitorFilter] = useState<string | null>(null);
   const [storeSearchTerm, setStoreSearchTerm] = useState('');
@@ -284,6 +289,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
     is_active: boolean;
     latitude?: number | null;
     longitude?: number | null;
+    admin_note?: string;
   }>({
     name: '',
     owner: '',
@@ -294,7 +300,15 @@ export const TeamTab: React.FC<TeamTabProps> = ({
     is_active: true,
     latitude: null,
     longitude: null,
+    admin_note: '',
   });
+  const [expandedStoreNotes, setExpandedStoreNotes] = useState<Record<string, boolean>>({});
+  const toggleStoreNote = (storeId: string) => {
+    setExpandedStoreNotes((prev) => ({
+      ...prev,
+      [storeId]: !prev[storeId],
+    }));
+  };
   const [isEditLocationModalOpen, setIsEditLocationModalOpen] = useState(false);
   const [isUpdatingSupermarket, setIsUpdatingSupermarket] = useState(false);
   const [editSupermarketError, setEditSupermarketError] = useState<string | null>(null);
@@ -425,6 +439,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
       is_active: shop.is_active ?? true,
       latitude: typeof shop.latitude === 'number' ? shop.latitude : null,
       longitude: typeof shop.longitude === 'number' ? shop.longitude : null,
+      admin_note: adminNotesMap[shop.id] ?? shop.admin_note ?? '',
     });
     setEditSupermarketError(null);
     setEditSupermarketSuccess(null);
@@ -467,6 +482,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
         is_active: editForm.is_active,
         latitude: editForm.latitude,
         longitude: editForm.longitude,
+        admin_note: editForm.admin_note,
       });
 
       if (res.success) {
@@ -885,7 +901,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
 
   // Filtered supermarkets based on visitor click, search term, and approval status
   const filteredSupermarkets = useMemo(() => {
-    return supermarkets.filter((shop) => {
+    const filtered = supermarkets.filter((shop) => {
       if (selectedVisitorFilter) {
         if (selectedVisitorFilter === 'direct') {
           if (shop.assigned_visitor_id && shop.assigned_visitor_id !== 'direct') {
@@ -916,6 +932,14 @@ export const TeamTab: React.FC<TeamTabProps> = ({
         if (!matchName && !matchOwner && !matchAddress && !matchPhone) return false;
       }
       return true;
+    });
+
+    // Sort descending by created_at: newest/last registered at the top (صدر لیست), oldest (#1) at the bottom (انتها و پایین لیست)
+    return filtered.sort((a, b) => {
+      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      if (timeA !== timeB) return timeB - timeA;
+      return b.id.localeCompare(a.id);
     });
   }, [supermarkets, selectedVisitorFilter, storeStatusFilter, storeSearchTerm]);
 
@@ -1441,6 +1465,9 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                   const shopAcc = financialAccounts.find((a) => a.profile_id === shop.id);
                   const isShopAccActive = Boolean(shopAcc && shopAcc.is_active);
                   const storeIndex = storeIndexMap.get(shop.id) ?? 1;
+                  const noteText = (adminNotesMap[shop.id] ?? shop.admin_note ?? '').trim();
+                  const hasNote = Boolean(noteText);
+                  const isNoteExpanded = Boolean(expandedStoreNotes[shop.id]);
 
                   return (
                     <div
@@ -1535,8 +1562,15 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                                 </span>
                               )}
                             </div>
-                            <div className="flex items-center gap-2.5 mt-1.5 text-slate-400 flex-wrap">
+                            <div className="flex items-center gap-3 mt-1.5 text-slate-400 flex-wrap text-xs">
                               <span>مدیریت: <strong className="text-slate-300 font-semibold">{shop.owner}</strong></span>
+                              {shop.created_at && (
+                                <span className="text-slate-400 flex items-center gap-1">
+                                  <Clock className="w-3 h-3 text-emerald-400 shrink-0" />
+                                  <span>ثبت‌نام:</span>
+                                  <strong className="font-mono text-slate-300">{formatPersianDate(shop.created_at)}</strong>
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1853,6 +1887,48 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                             </div>
                           </div>
                         </div>
+                      </div>
+
+                      {/* Very bottom of the card: Expandable Triangular Note Button & Display Box */}
+                      <div className="pt-1.5 border-t border-slate-900/80 flex flex-col items-center">
+                        <button
+                          type="button"
+                          onClick={() => toggleStoreNote(shop.id)}
+                          className={`w-7 h-6 rounded-lg border flex items-center justify-center transition-all cursor-pointer ${
+                            hasNote
+                              ? 'bg-amber-500/15 border-amber-500/40 text-amber-400 hover:bg-amber-500/25 shadow-xs'
+                              : 'bg-slate-900/60 border-slate-800/80 text-slate-500 hover:text-slate-300 hover:bg-slate-800/60'
+                          }`}
+                          title={hasNote ? 'مشاهده یادداشت اختصاصی مشتری' : 'یادداشت مشتری (خالی)'}
+                          aria-label="یادداشت مشتری"
+                        >
+                          <span
+                            className={`inline-block text-[9px] transition-transform duration-200 select-none ${
+                              isNoteExpanded ? 'rotate-180' : ''
+                            }`}
+                          >
+                            ▼
+                          </span>
+                        </button>
+
+                        {/* Display Box (Purely for display, no edit or register buttons) */}
+                        {isNoteExpanded && (
+                          <div className="w-full mt-2 p-2.5 rounded-xl bg-slate-900/95 border border-slate-800 text-xs space-y-1.5 animate-in fade-in duration-150 shadow-inner">
+                            <div className="text-[11px] font-bold text-slate-400 pb-1.5 border-b border-slate-800/80 flex items-center gap-1.5">
+                              <StickyNote className={`w-3.5 h-3.5 ${hasNote ? 'text-amber-400' : 'text-slate-500'}`} />
+                              <span>یادداشت اختصاصی مدیریت (محرمانه):</span>
+                            </div>
+                            {hasNote ? (
+                              <p className="text-xs text-slate-200 whitespace-pre-line leading-relaxed font-normal bg-slate-950/70 p-2.5 rounded-lg border border-slate-800/70 select-text">
+                                {noteText}
+                              </p>
+                            ) : (
+                              <p className="text-[11px] text-slate-500 italic py-1 text-center">
+                                هیچ توضیحی برای این مشتری ثبت نشده است.
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -2251,6 +2327,32 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                     </span>
                   </div>
                 )}
+              </div>
+
+              {/* Admin Private Note (توضیحات اختصاصی مدیریت - محرمانه) */}
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-amber-400" />
+                    <span>توضیحات اختصاصی مدیریت (محرمانه)</span>
+                  </label>
+                  <span className="text-[10px] text-amber-400/90 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20 font-bold">
+                    فقط دید ادمین
+                  </span>
+                </div>
+                <div className="relative">
+                  <textarea
+                    value={editForm.admin_note || ''}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, admin_note: e.target.value }))}
+                    placeholder="نکات اختصاصی، یادداشت‌های پیگیری، هماهنگی‌ها یا توضیحات مدیریتی برای این مشتری..."
+                    rows={3}
+                    disabled={isUpdatingSupermarket}
+                    className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400 resize-none leading-relaxed"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  این توضیحات کاملاً محرمانه بوده و تنها در پنل ادمین نمایش داده می‌شود و مشتری یا ویزیتور به آن دسترسی ندارند.
+                </p>
               </div>
 
               {/* Status Switch */}

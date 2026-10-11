@@ -15,6 +15,7 @@ import {
   Navigation,
 } from 'lucide-react';
 import { CustomerDetailSheet } from './CustomerDetailSheet';
+import { formatPersianDate } from '../../utils/dateUtils';
 
 interface CustomersTabProps {
   customers: Supermarket[];

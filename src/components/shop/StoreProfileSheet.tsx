@@ -24,7 +24,9 @@ import {
   Building2,
   BadgeCheck,
   Shield,
+  Clock,
 } from 'lucide-react';
+import { formatPersianDate } from '../../utils/dateUtils';
 
 interface StoreProfileSheetProps {
   isOpen: boolean;
@@ -286,6 +288,16 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
                 <span>شماره ورود:</span>
               </div>
               <span className="font-mono font-bold text-emerald-300 dir-ltr">{store.username}</span>
+            </div>
+          )}
+
+          {store?.created_at && (
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80">
+              <div className="flex items-center gap-2 text-slate-400">
+                <Clock className="w-4 h-4 text-emerald-400" />
+                <span>تاریخ و ساعت ثبت‌نام:</span>
+              </div>
+              <span className="font-mono font-bold text-slate-200 dir-ltr">{formatPersianDate(store.created_at)}</span>
             </div>
           )}
 

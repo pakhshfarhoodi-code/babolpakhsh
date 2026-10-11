@@ -168,6 +168,8 @@ interface AppContextType {
   updateBrandOrder: (orderedBrands: string[]) => Promise<{ success: boolean; message: string }>;
   productOrderMap: Record<string, string[]>;
   updateProductOrder: (brandName: string, orderedProductIds: string[]) => Promise<{ success: boolean; message: string }>;
+  adminNotesMap: Record<string, string>;
+  updateAdminNote: (storeId: string, note: string) => Promise<{ success: boolean; message: string }>;
   addUnit: (name: string) => { success: boolean; message: string };
   updateUnit: (oldUnitName: string, newUnitName: string) => { success: boolean; message: string };
   deleteUnit: (unitName: string) => { success: boolean; message: string };
@@ -562,12 +564,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (payload.verified_at !== undefined) next.verified_at = payload.verified_at;
           if (payload.verified_by !== undefined) next.verified_by = payload.verified_by;
           if (payload.verification_note !== undefined) next.verification_note = payload.verification_note;
+          if (payload.admin_note !== undefined) {
+            next.admin_note = payload.admin_note ? payload.admin_note.trim() : null;
+          }
           if (payload.assigned_visitor_id !== undefined) {
             next.assigned_visitor_id = payload.assigned_visitor_id || 'direct';
           }
           return next;
         })
       );
+
+      // If admin_note is included in payload, sync to adminNotesMap, localStorage and app_settings
+      if (payload.admin_note !== undefined) {
+        const trimmedNote = (payload.admin_note || '').trim();
+        const updatedNotes = { ...adminNotesMap };
+        if (trimmedNote) {
+          updatedNotes[id] = trimmedNote;
+        } else {
+          delete updatedNotes[id];
+        }
+        setAdminNotesMap(updatedNotes);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('barfroosh_admin_customer_notes', JSON.stringify(updatedNotes));
+        }
+        if (isSupabaseConfigured && supabase) {
+          try {
+            await supabase
+              .from('app_settings')
+              .upsert({ key: 'admin_customer_notes', value: updatedNotes }, { onConflict: 'key' });
+          } catch (err) {
+            console.error('Error saving admin_customer_notes to app_settings:', err);
+          }
+        }
+      }
 
       return { success: true, message: 'مشخصات فروشگاه با موفقیت ویرایش شد.' };
     } catch (err: unknown) {
@@ -1099,6 +1128,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return {};
   });
 
+  // Admin private customer notes per Supermarket with localStorage & app_settings fallback
+  const [adminNotesMap, setAdminNotesMap] = useState<Record<string, string>>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('barfroosh_admin_customer_notes');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed && typeof parsed === 'object') {
+            return parsed;
+          }
+        } catch {}
+      }
+    }
+    return {};
+  });
+
   // Load invoice_settings & admin_profile from Supabase app_settings on startup & on data refresh
   useEffect(() => {
     let isMounted = true;
@@ -1167,6 +1212,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setProductOrderMap(prodOrderData.value as Record<string, string[]>);
             if (typeof window !== 'undefined') {
               localStorage.setItem('barfroosh_product_order', JSON.stringify(prodOrderData.value));
+            }
+          }
+
+          // Fetch admin_customer_notes
+          const { data: adminNotesData } = await supabase
+            .from('app_settings')
+            .select('value')
+            .eq('key', 'admin_customer_notes')
+            .maybeSingle();
+
+          if (adminNotesData && adminNotesData.value && typeof adminNotesData.value === 'object' && isMounted) {
+            const parsedNotes = adminNotesData.value as Record<string, string>;
+            setAdminNotesMap(parsedNotes);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('barfroosh_admin_customer_notes', JSON.stringify(parsedNotes));
             }
           }
         } catch (err) {
@@ -1247,6 +1307,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     },
     [productOrderMap]
+  );
+
+  // Update admin private customer note (admin action, saved to state, localStorage & app_settings)
+  const updateAdminNote = useCallback(
+    async (storeId: string, note: string): Promise<{ success: boolean; message: string }> => {
+      try {
+        const trimmed = (note || '').trim();
+        const updated: Record<string, string> = { ...adminNotesMap };
+        if (trimmed) {
+          updated[storeId] = trimmed;
+        } else {
+          delete updated[storeId];
+        }
+
+        setAdminNotesMap(updated);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('barfroosh_admin_customer_notes', JSON.stringify(updated));
+        }
+
+        // Also update local supermarkets state
+        setSupermarkets((prev) =>
+          prev.map((s) => (s.id === storeId ? { ...s, admin_note: trimmed || null } : s))
+        );
+
+        if (isSupabaseConfigured && supabase) {
+          const { error: upsertErr } = await supabase
+            .from('app_settings')
+            .upsert({ key: 'admin_customer_notes', value: updated }, { onConflict: 'key' });
+          if (upsertErr) {
+            console.error('Error saving admin customer notes to app_settings:', upsertErr);
+            return { success: false, message: 'خطا در ذخیره یادداشت در سرور' };
+          }
+        }
+        return { success: true, message: 'توضیحات مشتری با موفقیت ذخیره شد.' };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در ذخیره توضیحات مشتری';
+        return { success: false, message: msg };
+      }
+    },
+    [adminNotesMap, setSupermarkets]
   );
 
   // Update invoice settings (admin action via SECURITY DEFINER RPC with direct upsert fallback)
@@ -1394,6 +1494,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateBrandOrder,
     productOrderMap,
     updateProductOrder,
+    adminNotesMap,
+    updateAdminNote,
     addUnit: catalog.addUnit,
     updateUnit: catalog.updateUnit,
     deleteUnit: catalog.deleteUnit,
@@ -1475,6 +1577,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateBrandOrder,
     productOrderMap,
     updateProductOrder,
+    adminNotesMap,
+    updateAdminNote,
     catalog.addUnit,
     catalog.updateUnit,
     catalog.deleteUnit,

@@ -15,8 +15,11 @@ import {
   User,
 } from 'lucide-react';
 import { ProductRow } from './shop/ProductRow';
+import { ProductCatalog } from './shop/ProductCatalog';
+import { CartBar } from './shop/CartBar';
+import { CartSheet } from './shop/CartSheet';
 import { FilterSheet } from './shop/FilterSheet';
-import { formatPrice, filterCatalogProducts } from './shop/shopUtils';
+import { formatPrice } from './shop/shopUtils';
 import { Order, Supermarket, Visitor } from '../types';
 import { OrderInvoiceModal } from './invoice/OrderInvoiceModal';
 import { FileText, Printer, Percent } from 'lucide-react';
@@ -53,6 +56,8 @@ export const NewOrderModal: React.FC<Props> = ({
   const [isStoreDropdownOpen, setIsStoreDropdownOpen] = useState(false);
   const [storeSearchTerm, setStoreSearchTerm] = useState('');
   const storeDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
 
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
   const [selectedBrand, setSelectedBrand] = useState<string>('all');
@@ -339,50 +344,64 @@ export const NewOrderModal: React.FC<Props> = ({
     }
   };
 
+  const handleClearCart = useCallback(() => {
+    setCart({});
+    showToast('سبد سفارش خالی شد.');
+  }, [showToast]);
+
   const handleResetForNewOrder = () => {
     setCreatedOrder(null);
     setFeedback(null);
     setCart({});
-    setSearchTerm('');
+    setDiscountPercent(0);
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-3 sm:p-5 overflow-y-auto">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm sm:p-4 overflow-hidden">
+      <div className="bg-slate-900 border border-slate-800 sm:rounded-2xl w-full max-w-6xl h-full sm:h-[92vh] flex flex-col shadow-2xl overflow-hidden relative">
         {/* Modal Header */}
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-blue-600/20 text-blue-400 flex items-center justify-center border border-blue-500/30">
-              <ShoppingCart className="w-4 h-4" />
+        <div className="px-3 py-2.5 sm:px-4 sm:py-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/80 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-600/20 text-blue-400 flex items-center justify-center border border-blue-500/30 shrink-0">
+              <ShoppingCart className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
-            <div>
-              <h2 className="text-sm font-bold text-slate-100">ثبت سفارش جدید</h2>
-              <p className="text-xs text-slate-400">کالاهای انتخابی بلافاصله در سیستم سردخانه رزرو می‌شوند</p>
+            <div className="min-w-0">
+              <h2 className="text-xs sm:text-sm font-bold text-slate-100 truncate">
+                ثبت سفارش برای فروشگاه (پنل ویزیتور)
+              </h2>
+              <p className="text-[10.5px] sm:text-xs text-slate-400 truncate">
+                نمایش کاتالوگ دقیقاً مشابه اپلیکیشن فروشگاه · رزرو فوری در سردخانه
+              </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800">
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer shrink-0"
+            title="بستن"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Order Completed / Success View */}
         {createdOrder ? (
-          <div className="p-6 sm:p-8 flex flex-col items-center justify-center text-center space-y-5 max-w-lg mx-auto">
+          <div className="flex-1 overflow-y-auto p-6 sm:p-8 flex flex-col items-center justify-center text-center space-y-4 max-w-md mx-auto">
             <div className="w-16 h-16 rounded-3xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center shadow-lg shadow-emerald-500/10">
               <Check className="w-8 h-8 stroke-[3]" />
             </div>
 
-            <div className="space-y-1.5">
-              <h3 className="text-lg font-bold text-slate-100">سفارش با موفقیت در سامانه ثبت شد</h3>
+            <div className="space-y-1">
+              <h3 className="text-base sm:text-lg font-bold text-slate-100">سفارش با موفقیت در سامانه ثبت شد</h3>
               <p className="text-xs text-slate-400">
                 شماره فاکتور:{' '}
-                <span className="font-mono font-bold text-emerald-400 dir-ltr text-sm">{createdOrder.id}</span>
+                <span className="font-mono font-bold text-emerald-400 dir-ltr text-xs sm:text-sm">{createdOrder.id}</span>
               </p>
             </div>
 
-            <div className="w-full bg-slate-950/70 border border-slate-800 rounded-2xl p-4 text-xs space-y-2 text-right">
+            <div className="w-full bg-slate-950/70 border border-slate-800 rounded-2xl p-3.5 text-xs space-y-2 text-right">
               <div className="flex items-center justify-between">
                 <span className="text-slate-400">خریدار:</span>
                 <span className="font-bold text-slate-200">{createdOrder.supermarket_name}</span>
@@ -401,12 +420,12 @@ export const NewOrderModal: React.FC<Props> = ({
               </div>
             </div>
 
-            <div className="w-full space-y-2.5 pt-2">
+            <div className="w-full space-y-2 pt-1">
               {/* View / Print / PDF Invoice Button */}
               <button
                 type="button"
                 onClick={() => setIsInvoiceModalOpen(true)}
-                className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 transition cursor-pointer"
+                className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 transition cursor-pointer"
               >
                 <FileText className="w-4 h-4" />
                 <span>مشاهده، چاپ کاغذی و دریافت فایل PDF فاکتور</span>
@@ -416,14 +435,14 @@ export const NewOrderModal: React.FC<Props> = ({
                 <button
                   type="button"
                   onClick={handleResetForNewOrder}
-                  className="py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs transition cursor-pointer"
+                  className="py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs transition cursor-pointer"
                 >
                   ثبت سفارش دیگر
                 </button>
                 <button
                   type="button"
                   onClick={onClose}
-                  className="py-2.5 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-400 hover:text-slate-200 font-medium text-xs transition cursor-pointer"
+                  className="py-2 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-400 hover:text-slate-200 font-medium text-xs transition cursor-pointer"
                 >
                   بستن پنجره
                 </button>
@@ -431,412 +450,256 @@ export const NewOrderModal: React.FC<Props> = ({
             </div>
           </div>
         ) : (
-          <>
-
-        {/* Store & Visitor Selector */}
-        <div className="p-4 bg-slate-950/30 border-b border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-          {/* Custom Searchable Customer Dropdown */}
-          <div className="relative" ref={storeDropdownRef}>
-            <label className="block text-slate-400 mb-1 font-medium">خریدار:</label>
-            
-            {/* Dropdown trigger button */}
-            <button
-              type="button"
-              onClick={() => setIsStoreDropdownOpen((prev) => !prev)}
-              className={`w-full bg-slate-900 border rounded-lg p-2 text-slate-200 flex items-center justify-between transition cursor-pointer text-right shadow-sm ${
-                isStoreDropdownOpen ? 'border-blue-500 ring-1 ring-blue-500' : 'border-slate-700 hover:border-slate-600'
-              }`}
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                {isSelfOrder ? (
-                  <>
-                    <div className="w-5 h-5 rounded bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-400 shrink-0">
-                      <User className="w-3 h-3" />
-                    </div>
-                    <div className="truncate flex items-center gap-1.5 flex-wrap">
-                      <span className="font-bold text-slate-100">خودم ({currentVisitorName})</span>
-                      <span className="text-[11px] text-purple-400 font-semibold bg-purple-950/60 px-1.5 py-0.5 rounded border border-purple-800/40">
-                        قیمت خرید ویزیتور
-                      </span>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="w-5 h-5 rounded bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-                      <Store className="w-3 h-3" />
-                    </div>
-                    {currentSupermarket ? (
-                      <div className="truncate flex items-center gap-1.5 flex-wrap">
-                        <span className="font-bold text-slate-100">{currentSupermarket.name}</span>
-                        <span className="text-slate-400 text-xs mr-1">({currentSupermarket.owner})</span>
-                        {currentSupermarket.approval_status === 'pending' && (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                            <Clock className="w-3 h-3 text-amber-400" />
-                            <span>در انتظار تایید ادمین</span>
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            {/* Store & Visitor Selector + Discount Input (Compact Bar) */}
+            <div className="p-2.5 sm:p-3 bg-slate-950/60 border-b border-slate-800 grid grid-cols-1 sm:grid-cols-12 gap-2 text-xs shrink-0">
+              {/* Custom Searchable Customer Dropdown (sm:col-span-6) */}
+              <div className="relative sm:col-span-6" ref={storeDropdownRef}>
+                <label className="block text-[11px] text-slate-400 mb-0.5 font-medium">خریدار / فروشگاه:</label>
+                
+                {/* Dropdown trigger button */}
+                <button
+                  type="button"
+                  onClick={() => setIsStoreDropdownOpen((prev) => !prev)}
+                  className={`w-full bg-slate-900 border rounded-xl px-2.5 py-1.5 text-slate-200 flex items-center justify-between transition cursor-pointer text-right shadow-xs ${
+                    isStoreDropdownOpen ? 'border-blue-500 ring-1 ring-blue-500' : 'border-slate-700 hover:border-slate-600'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    {isSelfOrder ? (
+                      <>
+                        <div className="w-5 h-5 rounded-md bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-400 shrink-0">
+                          <User className="w-3 h-3" />
+                        </div>
+                        <div className="truncate flex items-center gap-1.5">
+                          <span className="font-bold text-slate-100 text-xs">خودم ({currentVisitorName})</span>
+                          <span className="text-[10px] text-purple-400 font-semibold bg-purple-950/60 px-1 py-0.2 rounded border border-purple-800/40">
+                            قیمت ویزیتور
                           </span>
-                        )}
-                      </div>
+                        </div>
+                      </>
                     ) : (
-                      <span className="text-slate-500">انتخاب خریدار...</span>
-                    )}
-                  </>
-                )}
-              </div>
-              <ChevronDown
-                className={`w-4 h-4 text-slate-400 shrink-0 transition-transform duration-200 ${
-                  isStoreDropdownOpen ? 'rotate-180 text-blue-400' : ''
-                }`}
-              />
-            </button>
-
-            {/* Dropdown Menu */}
-            {isStoreDropdownOpen && (
-              <div className="absolute z-30 top-full mt-1.5 right-0 left-0 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
-                <div className="p-2 border-b border-slate-800 bg-slate-950/80 sticky top-0 z-10">
-                  <div className="relative">
-                    <Search className="w-3.5 h-3.5 absolute right-2.5 top-2.5 text-slate-400" />
-                    <input
-                      type="text"
-                      autoFocus
-                      value={storeSearchTerm}
-                      onChange={(e) => setStoreSearchTerm(e.target.value)}
-                      placeholder="جستجوی نام یا مدیر خریدار..."
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg pr-8 pl-7 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    />
-                    {storeSearchTerm && (
-                      <button
-                        type="button"
-                        onClick={() => setStoreSearchTerm('')}
-                        className="absolute left-2 top-2 text-slate-400 hover:text-slate-200 cursor-pointer p-0.5"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
+                      <>
+                        <div className="w-5 h-5 rounded-md bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                          <Store className="w-3 h-3" />
+                        </div>
+                        {currentSupermarket ? (
+                          <div className="truncate flex items-center gap-1.5">
+                            <span className="font-bold text-slate-100 text-xs truncate">{currentSupermarket.name}</span>
+                            <span className="text-slate-400 text-[11px] truncate">({currentSupermarket.owner})</span>
+                            {currentSupermarket.approval_status === 'pending' && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                <span>در انتظار تایید</span>
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-slate-500 text-xs">انتخاب خریدار...</span>
+                        )}
+                      </>
                     )}
                   </div>
-                </div>
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform duration-200 ${
+                      isStoreDropdownOpen ? 'rotate-180 text-blue-400' : ''
+                    }`}
+                  />
+                </button>
 
-                <div className="max-h-52 overflow-y-auto divide-y divide-slate-800/60 no-scrollbar">
-                  {/* Option: خودم (اسم ویزیتور) */}
-                  {(!storeSearchTerm.trim() ||
-                    'خودم'.includes(storeSearchTerm.trim()) ||
-                    (currentVisitorName && currentVisitorName.toLowerCase().includes(storeSearchTerm.toLowerCase()))) && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedSupermarketId('self');
-                        setIsStoreDropdownOpen(false);
-                        setStoreSearchTerm('');
-                      }}
-                      className={`w-full p-2.5 text-right flex items-center justify-between gap-2 transition cursor-pointer text-xs ${
-                        isSelfOrder
-                          ? 'bg-purple-600/20 text-purple-200'
-                          : 'hover:bg-slate-800/80 text-slate-200'
-                      }`}
-                    >
-                      <div className="min-w-0 flex-1 flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0 border border-purple-500/30">
-                          <User className="w-3.5 h-3.5" />
-                        </div>
-                        <div className="truncate">
-                          <span className="font-bold text-slate-100">خودم ({currentVisitorName})</span>
-                          <span className="text-[11px] text-purple-400 mr-2 font-medium bg-purple-950/40 px-1.5 py-0.5 rounded border border-purple-800/30">
-                            خرید با قیمت ویزیتور
-                          </span>
-                        </div>
+                {/* Dropdown Menu */}
+                {isStoreDropdownOpen && (
+                  <div className="absolute z-50 top-full mt-1 right-0 left-0 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
+                    <div className="p-2 border-b border-slate-800 bg-slate-950/80 sticky top-0 z-10">
+                      <div className="relative">
+                        <Search className="w-3 h-3 absolute right-2.5 top-2.5 text-slate-400" />
+                        <input
+                          type="text"
+                          autoFocus
+                          value={storeSearchTerm}
+                          onChange={(e) => setStoreSearchTerm(e.target.value)}
+                          placeholder="جستجوی نام یا مدیر خریدار..."
+                          className="w-full bg-slate-900 border border-slate-700 rounded-lg pr-7 pl-7 py-1 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                        />
+                        {storeSearchTerm && (
+                          <button
+                            type="button"
+                            onClick={() => setStoreSearchTerm('')}
+                            className="absolute left-2 top-2 text-slate-400 hover:text-slate-200 cursor-pointer p-0.5"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
                       </div>
-                      {isSelfOrder && (
-                        <div className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0 border border-purple-500/40">
-                          <Check className="w-3 h-3" />
-                        </div>
-                      )}
-                    </button>
-                  )}
-
-                  {filteredSupermarkets.length === 0 && storeSearchTerm.trim() && !'خودم'.includes(storeSearchTerm.trim()) ? (
-                    <div className="p-4 text-center text-slate-400 text-xs">
-                      هیچ مشتری یا فروشگاهی با مشخصات «{storeSearchTerm}» یافت نشد.
                     </div>
-                  ) : (
-                    filteredSupermarkets.map((s) => {
-                      const isSelected = s.id === selectedSupermarketId;
-                      return (
+
+                    <div className="max-h-52 overflow-y-auto divide-y divide-slate-800/60 no-scrollbar">
+                      {/* Option: خودم (ویزیتور) */}
+                      {(!storeSearchTerm.trim() ||
+                        'خودم'.includes(storeSearchTerm.trim()) ||
+                        (currentVisitorName && currentVisitorName.toLowerCase().includes(storeSearchTerm.toLowerCase()))) && (
                         <button
-                          key={s.id}
                           type="button"
                           onClick={() => {
-                            setSelectedSupermarketId(s.id);
+                            setSelectedSupermarketId('self');
                             setIsStoreDropdownOpen(false);
                             setStoreSearchTerm('');
                           }}
-                          className={`w-full p-2.5 text-right flex items-center justify-between gap-2 transition cursor-pointer text-xs ${
-                            isSelected
-                              ? 'bg-blue-600/15 text-blue-200'
+                          className={`w-full p-2 text-right flex items-center justify-between gap-2 transition cursor-pointer text-xs ${
+                            isSelfOrder
+                              ? 'bg-purple-600/20 text-purple-200'
                               : 'hover:bg-slate-800/80 text-slate-200'
                           }`}
                         >
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-bold text-slate-100">{s.name}</span>
-                              <span className="text-xs text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700/60">
-                                {s.owner}
-                              </span>
-                              {s.approval_status === 'pending' && (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                                  <Clock className="w-3 h-3 text-amber-400" />
-                                  <span>در انتظار تایید ادمین</span>
-                                </span>
-                              )}
+                          <div className="min-w-0 flex-1 flex items-center gap-2">
+                            <div className="w-5 h-5 rounded-md bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">
+                              <User className="w-3 h-3" />
                             </div>
-                            {s.address && (
-                              <div className="flex items-center gap-1 text-xs text-slate-400 mt-1 truncate">
-                                <MapPin className="w-3 h-3 text-slate-500 shrink-0" />
-                                <span className="truncate">{s.address}</span>
-                              </div>
-                            )}
+                            <span className="font-bold text-slate-100">خودم ({currentVisitorName})</span>
                           </div>
-                          {isSelected && (
-                            <div className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 border border-blue-500/40">
-                              <Check className="w-3 h-3" />
-                            </div>
-                          )}
+                          {isSelfOrder && <Check className="w-3.5 h-3.5 text-purple-400" />}
                         </button>
-                      );
-                    })
+                      )}
+
+                      {filteredSupermarkets.map((s) => {
+                        const isSelected = s.id === selectedSupermarketId;
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedSupermarketId(s.id);
+                              setIsStoreDropdownOpen(false);
+                              setStoreSearchTerm('');
+                            }}
+                            className={`w-full p-2 text-right flex items-center justify-between gap-2 transition cursor-pointer text-xs ${
+                              isSelected
+                                ? 'bg-blue-600/15 text-blue-200'
+                                : 'hover:bg-slate-800/80 text-slate-200'
+                            }`}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <span className="font-bold text-slate-100">{s.name}</span>
+                              <span className="text-[11px] text-slate-400 mr-1.5">({s.owner})</span>
+                            </div>
+                            {isSelected && <Check className="w-3.5 h-3.5 text-blue-400" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Visitor Display (sm:col-span-3) */}
+              <div className="sm:col-span-3">
+                <label className="block text-[11px] text-slate-400 mb-0.5 font-medium">ویزیتور سفارش:</label>
+                <div className="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 font-semibold text-xs flex items-center justify-between h-[34px]">
+                  <span className="truncate">{currentVisitor?.name || 'ویزیتور'}</span>
+                  {currentVisitor?.region && (
+                    <span className="text-[10px] text-blue-400 px-1.5 py-0.2 rounded bg-blue-950 border border-blue-800 shrink-0">
+                      {currentVisitor.region}
+                    </span>
                   )}
                 </div>
               </div>
-            )}
-          </div>
 
-          <div>
-            <label className="block text-slate-400 mb-1 font-medium">ویزیتور تخصیص‌یافته:</label>
-            <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 font-semibold min-h-[38px] flex items-center justify-between">
-              {isSelfOrder ? (
-                <span></span>
-              ) : (
-                <>
-                  <span>{currentVisitor?.name || 'ویزیتور عمومی'}</span>
-                  <span className="text-xs text-blue-400 px-2 py-0.5 rounded bg-blue-950 border border-blue-800">
-                    {currentVisitor?.region}
-                  </span>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Feedback Alert */}
-        {feedback && (
-          <div
-            className={`mx-4 mt-3 p-2.5 rounded-lg text-xs flex items-center gap-2 ${
-              feedback.type === 'error'
-                ? 'bg-rose-500/10 text-rose-300 border border-rose-500/30'
-                : 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30'
-            }`}
-          >
-            {feedback.type === 'error' ? <AlertTriangle className="w-4 h-4 shrink-0" /> : <CheckCircle className="w-4 h-4 shrink-0" />}
-            <span>{feedback.message}</span>
-          </div>
-        )}
-
-        {/* Body Split: Left Products Catalog, Right Cart Summary */}
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 overflow-hidden">
-          {/* Products List (2 cols) */}
-          <div className="lg:col-span-2 p-4 flex flex-col overflow-y-auto border-b lg:border-b-0 lg:border-l border-slate-800 space-y-3">
-            {/* Search & Categories & Brand Filter */}
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative flex-1 min-w-[180px]">
-                <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-500" />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="جستجوی نام یا برند کالا..."
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg pr-9 pl-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              {/* Brand Filter Sheet Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsFilterSheetOpen(true)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
-                  selectedBrand !== 'all'
-                    ? 'bg-amber-600/20 text-amber-300 border-amber-500/50'
-                    : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
-                }`}
-              >
-                <Filter className="w-3.5 h-3.5" />
-                <span>{selectedBrand === 'all' ? 'فیلتر برند' : `برند: ${selectedBrand}`}</span>
-              </button>
-
-              {/* Category Pills & In-Stock Toggle */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full text-xs no-scrollbar">
-                <button
-                  type="button"
-                  onClick={() => setSelectedCategoryId('all')}
-                  className={`px-3 py-1.5 rounded-lg text-xs whitespace-nowrap transition cursor-pointer font-medium ${
-                    selectedCategoryId === 'all'
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  همه دسته‌ها
-                </button>
-
-                {/* "موجود" Toggle Chip */}
-                <button
-                  type="button"
-                  onClick={() => setInStockOnly((prev) => !prev)}
-                  className={`px-3 py-1.5 rounded-lg text-xs whitespace-nowrap font-semibold transition cursor-pointer shrink-0 flex items-center gap-1.5 ${
-                    inStockOnly
-                      ? 'bg-emerald-600 text-white shadow-xs'
-                      : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
-                  }`}
-                  title={inStockOnly ? 'نمایش همه کالاها (شامل به زودی)' : 'مخفی‌سازی کالاهای تست بازار (به زودی)'}
-                >
-                  <span className={`w-1.5 h-1.5 rounded-full ${inStockOnly ? 'bg-white' : 'bg-emerald-400'}`} />
-                  <span>موجود</span>
-                </button>
-
-                {categories.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => setSelectedCategoryId(c.id)}
-                    className={`px-3 py-1.5 rounded-lg text-xs whitespace-nowrap transition cursor-pointer font-medium ${
-                      selectedCategoryId === c.id
-                        ? 'bg-blue-600 text-white shadow-xs'
-                        : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    {c.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Products List rendered via reused ProductRow */}
-            <div className="space-y-2.5 pt-1">
-              {filteredProducts.length === 0 ? (
-                <div className="p-8 text-center text-slate-500 text-xs">
-                  هیچ کالایی مطابق با فیلترهای انتخابی یافت نشد.
-                </div>
-              ) : (
-                filteredProducts.map((prod) => (
-                  <ProductRow
-                    key={prod.id}
-                    product={prod}
-                    quantity={cart[prod.id] || 0}
-                    onChangeQuantity={(newQty) => handleSetQuantity(prod.id, newQty)}
-                    onExceedLimit={handleExceedLimit}
-                    priceMode={isSelfOrder ? 'visitor' : 'store'}
-                  />
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Cart Sidebar (1 col) */}
-          <div className="p-4 bg-slate-950/40 flex flex-col justify-between overflow-y-auto">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-                <span className="text-xs font-bold text-slate-200">پیش‌فاکتور سفارش</span>
-                <span className="text-xs text-blue-400 font-semibold">{totalItemCount} قلم کالا</span>
-              </div>
-
-              {cartItems.length === 0 ? (
-                <div className="py-12 text-center text-slate-500 text-xs">
-                  کالایی به سبد خرید اضافه نشده است.
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                  {cartItems.map((item) => (
-                    <div key={item.productId} className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800/80 text-xs">
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-slate-200 truncate">{item.name}</span>
-                        <span className="font-bold text-slate-300">{formatPrice(item.total)} تومان</span>
-                      </div>
-                      <div className="flex items-center justify-between text-xs text-slate-400 mt-1.5">
-                        <span>
-                          {item.quantity} {item.unit}
-                          {item.multiplier > 1 && ` (${(item.quantity * item.multiplier).toLocaleString('fa-IR')} عدد)`} × {formatPrice(item.price)}
-                        </span>
-                        <button
-                          onClick={() => handleSetQuantity(item.productId, 0)}
-                          className="text-rose-400 hover:text-rose-300 cursor-pointer font-medium"
-                        >
-                          حذف
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="pt-4 border-t border-slate-800 space-y-3">
-              <div className="space-y-1">
-                <label className="text-[11px] text-slate-400 font-medium flex items-center justify-between">
+              {/* Proposed Discount % (sm:col-span-3) - Compact and non-intrusive */}
+              <div className="sm:col-span-3">
+                <label className="block text-[11px] text-slate-400 mb-0.5 font-medium flex items-center justify-between">
                   <span className="flex items-center gap-1">
                     <Percent className="w-3 h-3 text-amber-400" />
-                    <span>درصد تخفیف پیشنهادی:</span>
+                    <span>تخفیف دستی:</span>
                   </span>
-                  <span className="text-[10px] text-amber-400">
-                    {discountPercent > 0 ? '(نیازمند تأیید مدیریت)' : ''}
-                  </span>
+                  {discountPercent > 0 && (
+                    <span className="text-[9.5px] text-amber-400 font-bold">نیاز به تأیید ادمین</span>
+                  )}
                 </label>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
                   <input
                     type="number"
                     min={0}
                     max={100}
                     value={discountPercent}
                     onChange={(e) => setDiscountPercent(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
-                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-xs dir-ltr num-fa font-bold text-center"
+                    className="w-full h-[34px] px-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 text-xs dir-ltr num-fa font-bold text-center focus:border-amber-500 focus:outline-none"
                     placeholder="0"
                   />
-                  <span className="text-xs text-slate-400 font-bold">٪</span>
+                  <span className="text-xs text-slate-400 font-bold shrink-0">٪</span>
                 </div>
               </div>
+            </div>
 
-              <div className="flex items-center justify-between text-xs pt-1">
-                <span className="text-slate-400">جمع کل فاکتور:</span>
-                <span className="text-base font-bold text-emerald-400">
-                  {formatPrice(cartTotalAmount)} تومان
-                </span>
+            {/* Feedback Alert if any */}
+            {feedback && (
+              <div
+                className={`mx-3 sm:mx-4 mt-2 p-2 rounded-xl text-xs flex items-center gap-2 shrink-0 ${
+                  feedback.type === 'error'
+                    ? 'bg-rose-500/10 text-rose-300 border border-rose-500/30'
+                    : 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30'
+                }`}
+              >
+                {feedback.type === 'error' ? <AlertTriangle className="w-4 h-4 shrink-0" /> : <CheckCircle className="w-4 h-4 shrink-0" />}
+                <span className="text-xs">{feedback.message}</span>
+              </div>
+            )}
+
+            {/* Main Catalog & Cart Layout (Matching Supermarket Experience Exactly) */}
+            <div className="flex-1 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_360px] gap-3 p-2 sm:p-4 overflow-hidden items-start">
+              {/* Products Catalog Column (Scrollable) */}
+              <div className="h-full overflow-y-auto pr-0.5 pb-20 lg:pb-4 min-w-0 no-scrollbar">
+                <ProductCatalog
+                  products={products}
+                  cart={cart}
+                  onChangeQuantity={handleSetQuantity}
+                  onExceedLimit={handleExceedLimit}
+                  priceMode={isSelfOrder ? 'visitor' : 'store'}
+                  defaultInStockOnly={false}
+                  storeId={currentSupermarket?.id}
+                />
               </div>
 
-              <button
-                disabled={isSubmitting || cartItems.length === 0}
-                onClick={handleSubmit}
-                className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-bold text-xs transition shadow-lg shadow-blue-600/20 flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                {isSubmitting ? (
-                  <span>در حال ثبت سفارش...</span>
-                ) : (
-                  <>
-                    <CheckCircle className="w-4 h-4" />
-                    <span>ثبت نهایی و رزرو در سردخانه</span>
-                  </>
-                )}
-              </button>
+              {/* Desktop Sticky Cart Sheet (lg:block) */}
+              <div className="hidden lg:block h-full max-h-[calc(92vh-9rem)] overflow-hidden">
+                <CartSheet
+                  isOpen={true}
+                  isMobileModal={false}
+                  onClose={() => {}}
+                  cart={cart}
+                  products={products}
+                  onUpdateQuantity={handleSetQuantity}
+                  onClearCart={handleClearCart}
+                  onSubmitOrder={handleSubmit}
+                  isSubmitting={isSubmitting}
+                  errorMessage={feedback?.type === 'error' ? feedback.message : null}
+                  onExceedLimit={handleExceedLimit}
+                />
+              </div>
             </div>
+
+            {/* Mobile Sticky Cart Bar at the bottom */}
+            <CartBar
+              itemCount={totalItemCount}
+              totalAmount={cartTotalAmount}
+              onOpenCart={() => setIsMobileCartOpen(true)}
+            />
+
+            {/* Mobile Cart Sheet (Drawer Modal) */}
+            <CartSheet
+              isOpen={isMobileCartOpen}
+              isMobileModal={true}
+              onClose={() => setIsMobileCartOpen(false)}
+              cart={cart}
+              products={products}
+              onUpdateQuantity={handleSetQuantity}
+              onClearCart={handleClearCart}
+              onSubmitOrder={handleSubmit}
+              isSubmitting={isSubmitting}
+              errorMessage={feedback?.type === 'error' ? feedback.message : null}
+              onExceedLimit={handleExceedLimit}
+            />
           </div>
-        </div>
-        </>
         )}
       </div>
-
-      {/* Brand Filter Sheet */}
-      <FilterSheet
-        isOpen={isFilterSheetOpen}
-        onClose={() => setIsFilterSheetOpen(false)}
-        availableBrands={availableBrandsInCategory.length > 0 ? availableBrandsInCategory : brands}
-        selectedBrand={selectedBrand}
-        onSelectBrand={(b) => setSelectedBrand(b)}
-        onClearFilter={() => setSelectedBrand('all')}
-      />
 
       {/* Official B2B Order Invoice Modal with PDF & Print */}
       <OrderInvoiceModal

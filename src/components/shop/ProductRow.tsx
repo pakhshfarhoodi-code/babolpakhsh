@@ -68,6 +68,13 @@ export const ProductRow: React.FC<ProductRowProps> = ({
     phone: currentShop?.phone || currentUser.phone || '',
   };
 
+  const [, setDiscountTick] = useState(0);
+  useEffect(() => {
+    const handleDiscountChange = () => setDiscountTick((t) => t + 1);
+    window.addEventListener('store-discount-changed', handleDiscountChange);
+    return () => window.removeEventListener('store-discount-changed', handleDiscountChange);
+  }, []);
+
   const isPickupGloballyEnabled = invoiceSettings?.pickup_discount_enabled !== false;
   const pickupPercent = invoiceSettings?.pickup_discount_percent || 3;
   const pickupEnabled = isPickupGloballyEnabled && priceMode === 'store' && getStorePickupDiscountEnabled(shopInfo.id);

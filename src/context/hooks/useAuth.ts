@@ -909,6 +909,23 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
           }
         }
 
+        // Send registration notification to admin via Edge Function (non-blocking)
+        supabase.functions
+          .invoke('notify-admin', {
+            body: {
+              type: 'store_registration',
+              store: {
+                id: storeId,
+                name: trimmedName,
+                owner: trimmedOwner,
+                phone: cleanPhone,
+                address: trimmedAddress,
+                registration_source: 'website_direct',
+              },
+            },
+          })
+          .catch(() => {});
+
         const newSupermarket: Supermarket = {
           id: storeId || generateUniqueId('sm'),
           name: trimmedName,

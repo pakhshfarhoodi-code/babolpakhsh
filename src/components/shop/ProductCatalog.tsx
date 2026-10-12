@@ -9,6 +9,8 @@ import {
   setStorePickupDiscountEnabled,
   getStoreRegistrationRank,
   getStoreFounderDiscountStatus,
+  getStoreFounderDiscountUserEnabled,
+  setStoreFounderDiscountUserEnabled,
 } from '../../utils/storeDiscount';
 import {
   Search,
@@ -62,15 +64,39 @@ const StoreDiscountSwitchesBox: React.FC = () => {
     window.dispatchEvent(new Event('store-discount-changed'));
   };
 
-  // 5% Founder Discount for the first 100 people (strictly active for first 3 orders)
+  // 5% Founder Discount for the first 100 stores
   const founderStatus = useMemo(() => {
     return getStoreFounderDiscountStatus(supermarkets, orders, storeId);
   }, [supermarkets, orders, storeId]);
 
+  const [founderUserEnabled, setFounderUserEnabled] = useState(() =>
+    getStoreFounderDiscountUserEnabled(storeId)
+  );
+
+  useEffect(() => {
+    setFounderUserEnabled(getStoreFounderDiscountUserEnabled(storeId));
+  }, [storeId]);
+
+  useEffect(() => {
+    const handleDiscountChange = () => {
+      setFounderUserEnabled(getStoreFounderDiscountUserEnabled(storeId));
+    };
+    window.addEventListener('store-discount-changed', handleDiscountChange);
+    return () => window.removeEventListener('store-discount-changed', handleDiscountChange);
+  }, [storeId]);
+
+  const handleToggleFounder = () => {
+    if (!founderStatus.isFounderQuotaAvailable) return;
+    const nextVal = !founderUserEnabled;
+    setFounderUserEnabled(nextVal);
+    setStoreFounderDiscountUserEnabled(storeId, nextVal);
+    window.dispatchEvent(new Event('store-discount-changed'));
+  };
+
   const [showFounderInfo, setShowFounderInfo] = useState(false);
 
-  // If pickup discount is globally disabled and founder discount is exhausted/inactive, hide the whole component
-  if (!isPickupGloballyEnabled && !founderStatus.isFounderActive) {
+  // If pickup discount is globally disabled and founder discount quota is exhausted/not eligible, hide the whole bar
+  if (!isPickupGloballyEnabled && !founderStatus.isFounderQuotaAvailable) {
     return null;
   }
 
@@ -84,7 +110,7 @@ const StoreDiscountSwitchesBox: React.FC = () => {
       </div>
 
       {/* Grid of active discount options */}
-      <div className={`grid grid-cols-1 ${isPickupGloballyEnabled && founderStatus.isFounderActive ? 'md:grid-cols-2' : ''} gap-2 text-[11px]`}>
+      <div className={`grid grid-cols-1 ${isPickupGloballyEnabled && founderStatus.isFounderQuotaAvailable ? 'md:grid-cols-2' : ''} gap-2 text-[11px]`}>
         {/* Switch A: Pickup Discount (Shown only when admin enabled) */}
         {isPickupGloballyEnabled && (
           <div
@@ -123,28 +149,70 @@ const StoreDiscountSwitchesBox: React.FC = () => {
           </div>
         )}
 
-        {/* Unified Card: 5% Founder Discount for First 100 people */}
-        {founderStatus.isFounderActive && (
+        {/* Switch B: 5% Founder Discount for First 100 Stores (Allows store user to toggle on/off) */}
+        {founderStatus.isFounderQuotaAvailable && (
           <div
-            onClick={() => setShowFounderInfo((prev) => !prev)}
-            className="p-2 rounded-lg border flex items-center justify-between cursor-pointer transition select-none bg-gradient-to-r from-purple-950/70 via-slate-900 to-amber-950/60 border-purple-500/50 text-purple-100 hover:border-purple-400 shadow-sm"
-            title="جهت مشاهده جزئیات تخفیف کلیک کنید"
+            className={`p-2 rounded-lg border flex items-center justify-between transition select-none ${
+              founderUserEnabled
+                ? 'bg-gradient-to-r from-purple-950/70 via-slate-900 to-amber-950/60 border-purple-500/60 text-purple-100 shadow-sm'
+                : 'bg-slate-950/60 border-slate-700/60 text-slate-300 hover:border-slate-600 shadow-sm'
+            }`}
           >
-            <div className="flex items-center gap-1.5 min-w-0">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              <span className="font-bold text-[11px] text-white truncate">
-                کد تخفیف ۵٪ ویژه ۱۰۰ فروشگاه اول
+            <div
+              onClick={handleToggleFounder}
+              className="flex items-center gap-2 cursor-pointer flex-1 min-w-0"
+              title="کلیک برای فعال یا غیرفعال‌سازی تخفیف ۵٪"
+            >
+              <div
+                className={`w-8 h-4.5 rounded-full p-0.5 transition-colors duration-200 ease-in-out shrink-0 ${
+                  founderUserEnabled ? 'bg-purple-500' : 'bg-slate-700'
+                }`}
+              >
+                <div
+                  className={`w-3.5 h-3.5 rounded-full bg-white shadow-md transition-transform duration-200 ease-in-out ${
+                    founderUserEnabled ? 'translate-x-[-14px]' : 'translate-x-0'
+                  }`}
+                />
+              </div>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Sparkles className={`w-3.5 h-3.5 shrink-0 ${founderUserEnabled ? 'text-amber-400' : 'text-slate-500'}`} />
+                <span className="font-bold text-[11px] truncate">
+                  کد تخفیف ۵٪ ویژه ۱۰۰ فروشگاه اول
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowFounderInfo((prev) => !prev);
+                }}
+                className="p-1 text-slate-400 hover:text-amber-300 transition cursor-pointer"
+                title="مشاهده جزئیات و شرایط استفاده"
+              >
+                <Info className="w-3.5 h-3.5" />
+              </button>
+              <span
+                onClick={handleToggleFounder}
+                className={`text-[9.5px] px-2 py-0.5 rounded-md font-bold border cursor-pointer ${
+                  founderUserEnabled
+                    ? 'bg-purple-500/25 text-purple-200 border-purple-500/50'
+                    : 'bg-slate-800 text-slate-400 border-slate-700'
+                }`}
+              >
+                {founderUserEnabled
+                  ? `روشن (${founderStatus.remainingOrdersCount.toLocaleString('fa-IR')} مانده)`
+                  : 'خاموش (ذخیره برای بعد)'}
               </span>
             </div>
-            <span className="text-[10px] px-2.5 py-0.5 rounded-md font-bold border bg-emerald-500 text-slate-950 border-emerald-400 shadow-md shrink-0">
-              فعال ({founderStatus.remainingOrdersCount.toLocaleString('fa-IR')} سفارش مانده)
-            </span>
           </div>
         )}
       </div>
 
-      {/* Info notice when clicking Founder switch */}
-      {showFounderInfo && founderStatus.isFounderActive && (
+      {/* Info notice when clicking Founder info */}
+      {showFounderInfo && founderStatus.isFounderQuotaAvailable && (
         <div className="p-2.5 rounded-lg bg-purple-950/90 border border-purple-500/40 text-purple-200 text-[11px] flex items-center justify-between gap-2 animate-in fade-in shadow-sm">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <Info className="w-3.5 h-3.5 text-purple-400 shrink-0" />
@@ -153,7 +221,7 @@ const StoreDiscountSwitchesBox: React.FC = () => {
                 طرح تخفیف ویژه ۵ درصدی ۱۰۰ فروشگاه اول:
               </p>
               <p className="text-[10.5px] text-purple-100 font-medium tracking-tight whitespace-normal leading-normal">
-                تبریک! شما به عنوان ۱۰۰ فروشگاه اول در سامانه ثبت‌نام شده‌اید. تخفیف ۵ درصدی برای ۳ سفارش اول شما فعال است (تاکنون {founderStatus.usedOrdersCount.toLocaleString('fa-IR')} بار استفاده شده و برای {founderStatus.remainingOrdersCount.toLocaleString('fa-IR')} سفارش دیگر فعال خواهد بود).
+                تبریک! شما به عنوان ۱۰۰ فروشگاه اول در سامانه ثبت‌نام شده‌اید. تخفیف ۵ درصدی برای ۳ سفارش اول شما در نظر گرفته شده است (تاکنون {founderStatus.usedOrdersCount.toLocaleString('fa-IR')} بار استفاده شده و برای {founderStatus.remainingOrdersCount.toLocaleString('fa-IR')} سفارش دیگر باقی مانده است). شما می‌توانید در هر سفارش این تخفیف را فعال یا غیرفعال کنید تا سهمیه آن برای سفارش‌های آینده ذخیره شود.
               </p>
             </div>
           </div>

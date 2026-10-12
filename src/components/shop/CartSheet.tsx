@@ -13,12 +13,15 @@ import {
   ArrowLeft,
   ChevronRight,
   Percent,
+  Sparkles,
 } from 'lucide-react';
 import {
   getStorePickupDiscountEnabled,
   calculateTotalDiscountPercent,
   calculateDiscountedPrice,
   getStoreFounderDiscountStatus,
+  getStoreFounderDiscountUserEnabled,
+  setStoreFounderDiscountUserEnabled,
 } from '../../utils/storeDiscount';
 
 interface CartSheetProps {
@@ -68,7 +71,31 @@ export const CartSheet: React.FC<CartSheetProps> = ({
   const pickupEnabled = isPickupGloballyEnabled && getStorePickupDiscountEnabled(storeId);
 
   const founderStatus = getStoreFounderDiscountStatus(supermarkets, orders, storeId);
-  const founderEnabled = founderStatus.isFounderActive;
+  const [founderUserEnabled, setFounderUserEnabled] = useState(() =>
+    getStoreFounderDiscountUserEnabled(storeId)
+  );
+
+  useEffect(() => {
+    setFounderUserEnabled(getStoreFounderDiscountUserEnabled(storeId));
+  }, [storeId]);
+
+  useEffect(() => {
+    const handleDiscountChange = () => {
+      setFounderUserEnabled(getStoreFounderDiscountUserEnabled(storeId));
+    };
+    window.addEventListener('store-discount-changed', handleDiscountChange);
+    return () => window.removeEventListener('store-discount-changed', handleDiscountChange);
+  }, [storeId]);
+
+  const handleToggleFounder = () => {
+    if (!founderStatus.isFounderQuotaAvailable) return;
+    const nextVal = !founderUserEnabled;
+    setFounderUserEnabled(nextVal);
+    setStoreFounderDiscountUserEnabled(storeId, nextVal);
+    window.dispatchEvent(new Event('store-discount-changed'));
+  };
+
+  const founderEnabled = founderStatus.isFounderQuotaAvailable && founderUserEnabled;
   const founderPercent = founderEnabled ? founderStatus.founderPercent : 0;
 
   const totalDiscountPercent = calculateTotalDiscountPercent(
@@ -266,6 +293,49 @@ export const CartSheet: React.FC<CartSheetProps> = ({
       {/* Footer & Final Checkout Button */}
       {cartEntries.length > 0 && (
         <div className="p-3.5 sm:p-4 border-t border-slate-800 bg-slate-950/80 space-y-3">
+          {/* Quick toggle for 5% Founder discount in CartSheet */}
+          {founderStatus.isFounderQuotaAvailable && (
+            <div
+              onClick={handleToggleFounder}
+              className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer select-none transition ${
+                founderUserEnabled
+                  ? 'bg-gradient-to-r from-purple-950/60 via-slate-900 to-amber-950/40 border-purple-500/50 text-purple-100 hover:border-purple-400 shadow-sm'
+                  : 'bg-slate-900/90 border-slate-800 text-slate-400 hover:border-slate-700 shadow-sm'
+              }`}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <div
+                  className={`w-7 h-4 rounded-full p-0.5 transition-colors duration-200 ease-in-out shrink-0 ${
+                    founderUserEnabled ? 'bg-purple-500' : 'bg-slate-700'
+                  }`}
+                >
+                  <div
+                    className={`w-3 h-3 rounded-full bg-white shadow transition-transform duration-200 ease-in-out ${
+                      founderUserEnabled ? 'translate-x-[-12px]' : 'translate-x-0'
+                    }`}
+                  />
+                </div>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Sparkles className={`w-3.5 h-3.5 shrink-0 ${founderUserEnabled ? 'text-amber-400' : 'text-slate-500'}`} />
+                  <span className="font-bold text-[11px] truncate">
+                    تخفیف ۵٪ ویژه ۱۰۰ فروشگاه اول
+                  </span>
+                </div>
+              </div>
+              <span
+                className={`text-[9.5px] px-2 py-0.5 rounded-md font-bold border shrink-0 ${
+                  founderUserEnabled
+                    ? 'bg-purple-500/20 text-purple-200 border-purple-500/40'
+                    : 'bg-slate-800 text-slate-400 border-slate-700'
+                }`}
+              >
+                {founderUserEnabled
+                  ? `روشن (${founderStatus.remainingOrdersCount.toLocaleString('fa-IR')} سفارش مانده)`
+                  : 'خاموش (ذخیره برای سفارش بعد)'}
+              </span>
+            </div>
+          )}
+
           {/* Discount Breakdown when totalDiscountPercent > 0 */}
           {totalDiscountPercent > 0 && (
             <div className="p-2 rounded-xl bg-slate-900 border border-slate-800/80 space-y-1 text-xs">

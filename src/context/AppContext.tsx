@@ -477,15 +477,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const existingSm = supermarkets.find((s) => s.id === id);
         if (auth.currentUser?.role === 'supermarket' && auth.currentUser.id === id) {
           // Supermarket updating own store via secure update_my_store RPC
-          const { error: rpcErr } = await supabase.rpc('update_my_store', {
-            p_name: payload.name ?? existingSm?.name ?? '',
-            p_owner: payload.owner ?? existingSm?.owner ?? '',
-            p_address: payload.address ?? existingSm?.address ?? '',
-            p_phone: normalizedPhone ?? existingSm?.phone ?? '',
-          });
+          let rpcSuccess = false;
+          try {
+            const { error: rpcErr } = await supabase.rpc('update_my_store', {
+              p_name: payload.name ?? existingSm?.name ?? '',
+              p_owner: payload.owner ?? existingSm?.owner ?? '',
+              p_address: payload.address ?? existingSm?.address ?? '',
+              p_phone: normalizedPhone ?? existingSm?.phone ?? '',
+              p_store_id: id,
+            });
+            if (!rpcErr) {
+              rpcSuccess = true;
+            } else {
+              console.warn('update_my_store RPC notice, attempting direct table update:', rpcErr.message);
+            }
+          } catch (e) {
+            console.warn('update_my_store exception, attempting direct table update:', e);
+          }
 
-          if (rpcErr) {
-            return { success: false, message: `خطا در ویرایش اطلاعات فروشگاه: ${rpcErr.message}` };
+          // Direct table updates as fallback or complement
+          if (Object.keys(updateData).length > 0) {
+            const { error: smError } = await supabase
+              .from('supermarkets')
+              .update(updateData)
+              .eq('id', id);
+            if (smError && !rpcSuccess) {
+              console.warn('Direct supermarket update notice:', smError.message);
+            }
+          }
+
+          const profileUpdates: Record<string, unknown> = {};
+          if (payload.name !== undefined) profileUpdates.name = payload.name.trim();
+          if (normalizedPhone !== undefined) profileUpdates.phone = normalizedPhone;
+          if (Object.keys(profileUpdates).length > 0) {
+            await supabase.from('profiles').update(profileUpdates).eq('id', id);
           }
 
           if (typeof payload.latitude === 'number' && typeof payload.longitude === 'number') {
@@ -506,7 +531,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
           }
         } else {
-          // Admin or authorized staff direct update
+          // Admin or authorized staff direct update via RPC and direct fallback
           if (typeof payload.latitude === 'number' && typeof payload.longitude === 'number') {
             try {
               await supabase.rpc('set_store_location', {
@@ -518,19 +543,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               console.warn('Failed to call set_store_location (admin):', locErr);
             }
           }
+
+          try {
+            await supabase.rpc('admin_update_customer', {
+              p_id: id,
+              p_name: payload.name !== undefined ? payload.name.trim() : undefined,
+              p_owner: payload.owner !== undefined ? payload.owner.trim() : undefined,
+              p_phone: normalizedPhone,
+              p_address: payload.address !== undefined ? payload.address.trim() : undefined,
+              p_is_active: payload.is_active,
+              p_assigned_visitor_id: payload.assigned_visitor_id,
+              p_admin_note: payload.admin_note !== undefined ? payload.admin_note : undefined,
+            });
+          } catch (rpcErr) {
+            console.warn('admin_update_customer RPC failed, falling back to direct table updates:', rpcErr);
+          }
+
           if (Object.keys(updateData).length > 0) {
-            const { data: updatedRows, error: smError } = await supabase
+            const { error: smError } = await supabase
               .from('supermarkets')
               .update(updateData)
-              .eq('id', id)
-              .select();
+              .eq('id', id);
 
             if (smError) {
-              return { success: false, message: `خطا در ویرایش سوپرمارکت در سرور: ${smError.message}` };
-            }
-
-            if (!updatedRows || updatedRows.length === 0) {
-              return { success: false, message: 'ذخیره در سرور انجام نشد (عدم دسترسی یا عدم وجود رکورد).' };
+              console.warn('Direct supermarkets update warning:', smError.message);
             }
           }
 

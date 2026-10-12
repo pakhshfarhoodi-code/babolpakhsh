@@ -25,8 +25,14 @@ import {
   BadgeCheck,
   Shield,
   Clock,
+  Sparkles,
 } from 'lucide-react';
 import { formatPersianDate } from '../../utils/dateUtils';
+import {
+  getStoreFounderDiscountStatus,
+  getStoreFounderDiscountUserEnabled,
+  setStoreFounderDiscountUserEnabled,
+} from '../../utils/storeDiscount';
 
 interface StoreProfileSheetProps {
   isOpen: boolean;
@@ -41,21 +47,59 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
   store,
   visitor,
 }) => {
-  const { visitors, updateSupermarket, resetSupermarketPassword } = useApp();
+  const { visitors, supermarkets, orders, updateSupermarket, resetSupermarketPassword } = useApp();
 
-  // Address and Location State
+  const founderStatus = useMemo(() => {
+    return getStoreFounderDiscountStatus(supermarkets, orders, store?.id);
+  }, [supermarkets, orders, store?.id]);
+
+  const [founderUserEnabled, setFounderUserEnabled] = useState(() =>
+    getStoreFounderDiscountUserEnabled(store?.id || '', store)
+  );
+
+  useEffect(() => {
+    if (store?.id) {
+      setFounderUserEnabled(getStoreFounderDiscountUserEnabled(store.id, store));
+    }
+  }, [store]);
+
+  useEffect(() => {
+    const handleDiscountChange = () => {
+      if (store?.id) {
+        setFounderUserEnabled(getStoreFounderDiscountUserEnabled(store.id, store));
+      }
+    };
+    window.addEventListener('store-discount-changed', handleDiscountChange);
+    return () => window.removeEventListener('store-discount-changed', handleDiscountChange);
+  }, [store]);
+
+  const handleToggleFounder = () => {
+    if (!store?.id || !founderStatus.isFounderQuotaAvailable) return;
+    const nextVal = !founderUserEnabled;
+    setFounderUserEnabled(nextVal);
+    setStoreFounderDiscountUserEnabled(store.id, nextVal);
+    window.dispatchEvent(new Event('store-discount-changed'));
+  };
+
+  // Profile State (Store Name, Owner Name, Phone, Address, Location)
+  const [nameInput, setNameInput] = useState(store?.name || '');
+  const [ownerInput, setOwnerInput] = useState(store?.owner || '');
+  const [phoneInput, setPhoneInput] = useState(store?.phone || '');
   const [addressInput, setAddressInput] = useState(store?.address || '');
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(
     store?.latitude && store?.longitude ? { lat: store.latitude, lng: store.longitude } : null
   );
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
-  const [isSavingAddress, setIsSavingAddress] = useState(false);
-  const [addressSaveSuccess, setAddressSaveSuccess] = useState<string | null>(null);
-  const [addressSaveError, setAddressSaveError] = useState<string | null>(null);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profileSaveSuccess, setProfileSaveSuccess] = useState<string | null>(null);
+  const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
 
-  // Sync state whenever store changes
+  // Sync state whenever store changes or sheet opens
   useEffect(() => {
     if (store) {
+      setNameInput(store.name || '');
+      setOwnerInput(store.owner || '');
+      setPhoneInput(store.phone || '');
       setAddressInput(store.address || '');
       if (typeof store.latitude === 'number' && typeof store.longitude === 'number') {
         setLocation({ lat: store.latitude, lng: store.longitude });
@@ -80,31 +124,51 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSaveAddressAndLocation = async (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!store?.id) return;
 
-    setAddressSaveError(null);
-    setAddressSaveSuccess(null);
-    setIsSavingAddress(true);
+    if (!nameInput.trim()) {
+      setProfileSaveError('نام فروشگاه الزامی است.');
+      return;
+    }
+    if (!ownerInput.trim()) {
+      setProfileSaveError('نام مدیر یا مالک فروشگاه الزامی است.');
+      return;
+    }
+    if (!phoneInput.trim()) {
+      setProfileSaveError('شماره تماس یا موبایل الزامی است.');
+      return;
+    }
+    if (!addressInput.trim()) {
+      setProfileSaveError('آدرس متنی فروشگاه الزامی است.');
+      return;
+    }
+
+    setProfileSaveError(null);
+    setProfileSaveSuccess(null);
+    setIsSavingProfile(true);
 
     try {
       const res = await updateSupermarket(store.id, {
+        name: nameInput.trim(),
+        owner: ownerInput.trim(),
+        phone: phoneInput.trim(),
         address: addressInput.trim(),
         latitude: location ? location.lat : null,
         longitude: location ? location.lng : null,
       });
 
       if (res.success) {
-        setAddressSaveSuccess('آدرس و موقعیت مکانی با موفقیت بروزرسانی شد.');
-        setTimeout(() => setAddressSaveSuccess(null), 3000);
+        setProfileSaveSuccess('مشخصات پروفایل با موفقیت بروزرسانی شد.');
+        setTimeout(() => setProfileSaveSuccess(null), 3500);
       } else {
-        setAddressSaveError(res.message || 'خطا در ذخیره مشخصات آدرس');
+        setProfileSaveError(res.message || 'خطا در ذخیره مشخصات پروفایل.');
       }
     } catch {
-      setAddressSaveError('خطا در برقراری ارتباط با سرور.');
+      setProfileSaveError('خطا در برقراری ارتباط با سرور.');
     } finally {
-      setIsSavingAddress(false);
+      setIsSavingProfile(false);
     }
   };
 
@@ -271,165 +335,191 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
           );
         })()}
 
-        {/* Details list */}
-        <div className="space-y-2.5 text-xs">
-          <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80">
-            <div className="flex items-center gap-2 text-slate-400">
-              <User className="w-4 h-4 text-emerald-400" />
-              <span>مدیریت / مالک:</span>
-            </div>
-            <span className="font-bold text-slate-200">{store?.owner || 'مدیر فروشگاه'}</span>
+        {/* Profile Information Edit Form */}
+        <form onSubmit={handleSaveProfile} className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800/90 space-y-3">
+          <div className="flex items-center justify-between pb-1 border-b border-slate-800/60">
+            <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+              <Store className="w-3.5 h-3.5 text-emerald-400" />
+              <span>مشخصات فروشگاه و اطلاعات تماس</span>
+            </span>
+            <span className="text-[10px] text-slate-400">امکان ویرایش توسط کاربر</span>
           </div>
 
-          {store?.username && (
-            <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80">
-              <div className="flex items-center gap-2 text-slate-400">
-                <Phone className="w-4 h-4 text-emerald-400" />
-                <span>شماره ورود:</span>
-              </div>
-              <span className="font-mono font-bold text-emerald-300 dir-ltr">{store.username}</span>
-            </div>
-          )}
+          {/* Store Name Input */}
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+              نام فروشگاه / سوپرمارکت:
+            </label>
+            <input
+              type="text"
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              placeholder="مثال: سوپرمارکت بهاران"
+              disabled={isSavingProfile}
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 transition"
+            />
+          </div>
 
+          {/* Owner / Manager Name Input */}
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+              نام و نام‌خانوادگی مالک یا مدیریت:
+            </label>
+            <input
+              type="text"
+              value={ownerInput}
+              onChange={(e) => setOwnerInput(e.target.value)}
+              placeholder="مثال: علیرضا رضایی"
+              disabled={isSavingProfile}
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 transition"
+            />
+          </div>
+
+          {/* Phone Number Input */}
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+              شماره تماس و موبایل فروشگاه:
+            </label>
+            <input
+              type="tel"
+              value={phoneInput}
+              onChange={(e) => setPhoneInput(e.target.value)}
+              placeholder="۰۹۱۲XXXXXXX"
+              disabled={isSavingProfile}
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 font-mono transition dir-ltr text-right"
+            />
+          </div>
+
+          {/* Registration Date (Read-only reference) */}
           {store?.created_at && (
-            <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80">
-              <div className="flex items-center gap-2 text-slate-400">
-                <Clock className="w-4 h-4 text-emerald-400" />
-                <span>تاریخ و ساعت ثبت‌نام:</span>
+            <div className="flex items-center justify-between p-2 rounded-lg bg-slate-900/60 border border-slate-800/80 text-[11px] text-slate-400">
+              <div className="flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                <span>تاریخ عضویت در سامانه:</span>
               </div>
-              <span className="font-mono font-bold text-slate-200 dir-ltr">{formatPersianDate(store.created_at)}</span>
+              <span className="font-mono text-slate-300 dir-ltr">{formatPersianDate(store.created_at)}</span>
             </div>
           )}
 
-          {/* Address and Map Location Section */}
-          <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800/90 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-slate-300 font-semibold text-xs">
-                <MapPin className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>آدرس و موقعیت دقیق فروشگاه:</span>
-              </div>
-            </div>
+          {/* Text Address Input */}
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+              آدرس دقیق متنی فروشگاه:
+            </label>
+            <textarea
+              rows={2}
+              value={addressInput}
+              onChange={(e) => setAddressInput(e.target.value)}
+              placeholder="خیابان، کوچه، پلاک، نام مجتمع..."
+              disabled={isSavingProfile}
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 transition resize-none"
+            />
+          </div>
 
-            {/* Detailed Text Address */}
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                آدرس متنی فروشگاه
-              </label>
-              <textarea
-                rows={2}
-                value={addressInput}
-                onChange={(e) => setAddressInput(e.target.value)}
-                placeholder="خیابان، کوچه، پلاک، نام مجتمع..."
-                disabled={isSavingAddress}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 transition resize-none"
-              />
-            </div>
-
-            {/* Map Location Box */}
-            <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800/80 space-y-2">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0">
-                    <Navigation className="w-3.5 h-3.5" />
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-bold text-slate-200 block">
-                      موقعیت مکانی روی نقشه
-                    </span>
-                    {location ? (
-                      <span className="text-[10px] text-emerald-400 font-medium">
-                        ✓ موقعیت ثبت شده است
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-slate-400">
-                        موقعیت ثبت نشده است (اختیاری)
-                      </span>
-                    )}
-                  </div>
+          {/* Map Location Box */}
+          <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800/80 space-y-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0">
+                  <Navigation className="w-3.5 h-3.5" />
                 </div>
+                <div>
+                  <span className="text-[11px] font-bold text-slate-200 block">
+                    موقعیت مکانی روی نقشه
+                  </span>
+                  {location ? (
+                    <span className="text-[10px] text-emerald-400 font-medium">
+                      ✓ موقعیت ثبت شده است
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-400">
+                      موقعیت ثبت نشده است (اختیاری)
+                    </span>
+                  )}
+                </div>
+              </div>
 
-                {location ? (
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => setIsLocationModalOpen(true)}
-                      className="px-2 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-medium transition cursor-pointer"
-                    >
-                      تغییر
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setLocation(null)}
-                      className="px-2 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[11px] font-medium transition cursor-pointer"
-                    >
-                      حذف
-                    </button>
-                    <a
-                      href={`https://www.google.com/maps?q=${location.lat},${location.lng}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-blue-400 text-[11px] transition flex items-center gap-1"
-                      title="مشاهده در گوگل مپ"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
-                  </div>
-                ) : (
+              {location ? (
+                <div className="flex items-center gap-1.5 flex-wrap">
                   <button
                     type="button"
                     onClick={() => setIsLocationModalOpen(true)}
-                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] transition shadow-xs cursor-pointer"
+                    className="px-2 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-medium transition cursor-pointer"
                   >
-                    <MapPin className="w-3.5 h-3.5" />
-                    <span>انتخاب روی نقشه</span>
+                    تغییر
                   </button>
-                )}
-              </div>
-
-              {location && (
-                <div className="pt-1.5 border-t border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
-                  <span>مختصات جغرافیایی:</span>
-                  <span className="font-mono text-slate-300 dir-ltr">
-                    {location.lat.toFixed(6)}, {location.lng.toFixed(6)}
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setLocation(null)}
+                    className="px-2 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[11px] font-medium transition cursor-pointer"
+                  >
+                    حذف
+                  </button>
+                  <a
+                    href={`https://www.google.com/maps?q=${location.lat},${location.lng}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-blue-400 text-[11px] transition flex items-center gap-1"
+                    title="مشاهده در گوگل مپ"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
                 </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsLocationModalOpen(true)}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] transition shadow-xs cursor-pointer"
+                >
+                  <MapPin className="w-3.5 h-3.5" />
+                  <span>انتخاب روی نقشه</span>
+                </button>
               )}
             </div>
 
-            {/* Notification messages */}
-            {addressSaveSuccess && (
-              <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-2 text-emerald-400 text-xs animate-in fade-in">
-                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                <span>{addressSaveSuccess}</span>
+            {location && (
+              <div className="pt-1.5 border-t border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
+                <span>مختصات جغرافیایی:</span>
+                <span className="font-mono text-slate-300 dir-ltr">
+                  {location.lat.toFixed(6)}, {location.lng.toFixed(6)}
+                </span>
               </div>
             )}
-            {addressSaveError && (
-              <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center gap-2 text-rose-400 text-xs animate-in fade-in">
-                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                <span>{addressSaveError}</span>
-              </div>
-            )}
-
-            {/* Save Address Button */}
-            <button
-              type="button"
-              onClick={handleSaveAddressAndLocation}
-              disabled={isSavingAddress}
-              className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-98 text-white font-bold text-xs transition shadow-sm cursor-pointer disabled:opacity-50"
-            >
-              {isSavingAddress ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>در حال ذخیره آدرس و موقعیت...</span>
-                </>
-              ) : (
-                <>
-                  <Save className="w-3.5 h-3.5" />
-                  <span>ذخیره تغییرات آدرس و موقعیت</span>
-                </>
-              )}
-            </button>
           </div>
+
+          {/* Notification Messages */}
+          {profileSaveSuccess && (
+            <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-2 text-emerald-400 text-xs animate-in fade-in">
+              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+              <span>{profileSaveSuccess}</span>
+            </div>
+          )}
+          {profileSaveError && (
+            <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center gap-2 text-rose-400 text-xs animate-in fade-in">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              <span>{profileSaveError}</span>
+            </div>
+          )}
+
+          {/* Unified Save Button */}
+          <button
+            type="submit"
+            disabled={isSavingProfile}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-98 text-white font-bold text-xs transition shadow-md shadow-emerald-600/30 cursor-pointer disabled:opacity-50"
+          >
+            {isSavingProfile ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>در حال ذخیره تغییرات...</span>
+              </>
+            ) : (
+              <>
+                <Save className="w-3.5 h-3.5" />
+                <span>ذخیره تغییرات مشخصات فروشگاه</span>
+              </>
+            )}
+          </button>
+        </form>
 
           {/* Visitor assignment display section */}
           <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800/90 space-y-2.5">
@@ -472,7 +562,63 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
               </div>
             )}
           </div>
-        </div>
+
+          {/* Founder Discount Settings Card (if eligible) */}
+          {founderStatus.isFounderQuotaAvailable && (
+            <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800/90 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-slate-300 font-semibold text-xs">
+                  <Sparkles className="w-4 h-4 text-amber-400" />
+                  <span>طرح تخفیف ۵٪ ویژه ۱۰۰ فروشگاه اول:</span>
+                </div>
+                <span className="text-[10px] px-2 py-0.5 rounded-md font-bold border bg-purple-950/60 text-purple-300 border-purple-500/40">
+                  {founderStatus.remainingOrdersCount.toLocaleString('fa-IR')} سفارش مانده
+                </span>
+              </div>
+
+              <div
+                onClick={handleToggleFounder}
+                className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer select-none transition ${
+                  founderUserEnabled
+                    ? 'bg-gradient-to-r from-purple-950/60 via-slate-900 to-amber-950/40 border-purple-500/50 text-purple-100 shadow-xs'
+                    : 'bg-slate-900/90 border-slate-800 text-slate-400 hover:border-slate-700 shadow-xs'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div
+                    className={`w-8 h-4.5 rounded-full p-0.5 transition-colors duration-200 ease-in-out shrink-0 ${
+                      founderUserEnabled ? 'bg-purple-500' : 'bg-slate-700'
+                    }`}
+                  >
+                    <div
+                      className={`w-3.5 h-3.5 rounded-full bg-white shadow transition-transform duration-200 ease-in-out ${
+                        founderUserEnabled ? 'translate-x-[-14px]' : 'translate-x-0'
+                      }`}
+                    />
+                  </div>
+                  <div>
+                    <span className="font-bold text-xs block text-slate-100">
+                      اعمال تخفیف ۵٪ در سبد سفارش
+                    </span>
+                    <span className="text-[10.5px] text-slate-400 block mt-0.5">
+                      {founderUserEnabled
+                        ? 'تخفیف در سفارش بعدی شما اعمال خواهد شد.'
+                        : 'غیرفعال است؛ سهمیه تخفیف برای سفارش‌های بعدی شما محفوظ می‌ماند.'}
+                    </span>
+                  </div>
+                </div>
+                <span
+                  className={`text-[10px] px-2 py-0.5 rounded-md font-bold border shrink-0 ${
+                    founderUserEnabled
+                      ? 'bg-purple-500/20 text-purple-200 border-purple-500/50'
+                      : 'bg-slate-800 text-slate-400 border-slate-700'
+                  }`}
+                >
+                  {founderUserEnabled ? 'فعال' : 'غیرفعال'}
+                </span>
+              </div>
+            </div>
+          )}
 
         {/* Password Change Action Section */}
         <div className="pt-2 border-t border-slate-800 space-y-3">

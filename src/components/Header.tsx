@@ -91,11 +91,11 @@ export const Header: React.FC<HeaderProps> = () => {
       <>
         <header className="border-b border-slate-800/80 bg-slate-900/90 sticky top-0 z-40 backdrop-blur-xl shadow-lg shadow-black/20">
           <div className="max-w-7xl mx-auto px-2 sm:px-5 py-1.5 sm:py-2">
-            <div className="flex items-center justify-between gap-1.5 sm:gap-2.5 min-w-0">
+            <div className="relative flex items-center justify-between gap-1.5 sm:gap-2.5 min-w-0">
               {/* Right Side: Logo Badge + "بارفروش | پخش فرهودی" Button to view Admin Profile */}
-              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-gradient-to-tr from-blue-600 to-amber-500 p-0.5 shadow-md shadow-blue-500/20 shrink-0 overflow-hidden flex items-center justify-center bg-slate-900">
-                  <img src={currentLogo} alt="لوگوی پخش فرهودی" className="w-full h-full object-contain rounded-[7px] sm:rounded-[10px]" />
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 z-10">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-gradient-to-tr from-blue-600 to-amber-500 p-0.5 shadow-md shadow-blue-500/20 shrink-0 overflow-hidden flex items-center justify-center bg-slate-900">
+                  <img src={currentLogo} alt="لوگوی پخش فرهودی" className="w-full h-full object-contain rounded-[7px] sm:rounded-[9px]" />
                 </div>
                 <button
                   type="button"
@@ -104,30 +104,30 @@ export const Header: React.FC<HeaderProps> = () => {
                   title="مشاهده اطلاعات و مشخصات مدیریت پخش فرهودی"
                 >
                   <ShieldCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-400 shrink-0" />
-                  <span className="hidden sm:inline font-extrabold">{adminProfile.business_title || 'بارفروش | پخش فرهودی'}</span>
-                  <span className="sm:hidden font-extrabold">{adminProfile.business_title ? adminProfile.business_title.split('|')[0].trim() : 'بارفروش'}</span>
+                  <span className="hidden md:inline font-extrabold">{adminProfile.business_title || 'بارفروش | پخش فرهودی'}</span>
+                  <span className="inline md:hidden font-extrabold">{adminProfile.business_title ? adminProfile.business_title.split('|')[0].trim() : 'بارفروش'}</span>
                 </button>
               </div>
 
-              {/* Center: Store Emoji & Name (Clickable to open Store Profile Sheet) */}
-              <button
-                type="button"
-                onClick={() => setIsStoreProfileOpen(true)}
-                className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 justify-center sm:justify-start hover:opacity-85 transition cursor-pointer text-right group p-1 sm:p-1.5 rounded-lg sm:rounded-xl hover:bg-slate-800/50"
-                title="مشاهده و ویرایش مشخصات فروشگاه"
-              >
-                <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-gradient-to-tr from-emerald-600/30 to-teal-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0 shadow-inner text-xs sm:text-base">
-                  🏪
-                </div>
-                <div className="min-w-0 truncate">
-                  <span className="text-xs sm:text-sm font-black text-slate-100 truncate block group-hover:text-emerald-300 transition">
+              {/* Center: Store Emoji & Name (Strictly Centered in Header using absolute positioning with translate-x-1/2) */}
+              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none max-w-[calc(100%-190px)] min-[380px]:max-w-[calc(100%-210px)] sm:max-w-[calc(100%-270px)] md:max-w-[calc(100%-360px)]">
+                <button
+                  type="button"
+                  onClick={() => setIsStoreProfileOpen(true)}
+                  className="pointer-events-auto inline-flex items-center justify-center gap-1.5 sm:gap-2 min-w-0 max-w-full hover:opacity-90 transition cursor-pointer group px-2 py-1 sm:px-2.5 sm:py-1 rounded-lg sm:rounded-xl bg-slate-800/60 hover:bg-slate-800/90 border border-slate-700/60 hover:border-emerald-500/40 shadow-xs backdrop-blur-xs"
+                  title={`مشاهده و ویرایش مشخصات ${currentStore?.name || 'فروشگاه'}`}
+                >
+                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-md sm:rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0 shadow-inner text-xs sm:text-sm">
+                    🏪
+                  </div>
+                  <span className="text-[11px] min-[360px]:text-xs sm:text-sm font-black text-slate-100 group-hover:text-emerald-300 transition truncate tracking-tight text-center">
                     {currentStore?.name || 'فروشگاه طرف قرارداد'}
                   </span>
-                </div>
-              </button>
+                </button>
+              </div>
 
               {/* Left Side: Call Visitor + Theme + Logout */}
-              <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+              <div className="flex items-center gap-1 sm:gap-2 shrink-0 z-10">
                 {assignedVisitor?.phone && (
                   <a
                     href={`tel:${assignedVisitor.phone}`}

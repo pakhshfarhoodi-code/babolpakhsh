@@ -19,7 +19,7 @@ import { ProductCatalog } from './shop/ProductCatalog';
 import { CartBar } from './shop/CartBar';
 import { CartSheet } from './shop/CartSheet';
 import { FilterSheet } from './shop/FilterSheet';
-import { formatPrice } from './shop/shopUtils';
+import { formatPrice, filterCatalogProducts } from './shop/shopUtils';
 import { Order, Supermarket, Visitor } from '../types';
 import { OrderInvoiceModal } from './invoice/OrderInvoiceModal';
 import { FileText, Printer, Percent } from 'lucide-react';

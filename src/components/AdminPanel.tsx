@@ -24,9 +24,11 @@ import {
   FileSpreadsheet,
   Wallet,
   Settings,
+  Send,
 } from 'lucide-react';
 import { AdminProfileModal } from './AdminProfileModal';
 import { AdminSettingsModal } from './admin/AdminSettingsModal';
+import { BroadcastModal } from './admin/BroadcastModal';
 
 export type AdminTabKey =
   | 'overview'
@@ -47,6 +49,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onTabChange,
 }) => {
   const {
+    currentUser,
     products,
     categories,
     brands,
@@ -94,6 +97,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [catBrandFeedback, setCatBrandFeedback] = useState<string | null>(null);
   const [isAdminProfileModalOpen, setIsAdminProfileModalOpen] = useState(false);
   const [isAdminSettingsModalOpen, setIsAdminSettingsModalOpen] = useState(false);
+  const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
 
   // Badge count for Overview Tab & Pending approvals
   const pendingApprovalsCount = useMemo(() => {
@@ -287,6 +291,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         })}
 
         <div className="mr-auto flex items-center gap-2">
+          {currentUser?.role === 'admin' && (
+            <button
+              type="button"
+              onClick={() => setIsBroadcastModalOpen(true)}
+              className="px-3 py-2 rounded-xl text-xs sm:text-sm font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 cursor-pointer shrink-0 shadow-xs"
+              title="ارسال پیام گروهی به کاربران ربات‌های ایتا و تلگرام"
+            >
+              <Send className="w-4 h-4 text-emerald-400" />
+              <span>ارسال پیام به ایتا و تلگرام</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => setIsAdminSettingsModalOpen(true)}
@@ -636,6 +652,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         isOpen={isAdminSettingsModalOpen}
         onClose={() => setIsAdminSettingsModalOpen(false)}
       />
+
+      {/* Broadcast Message to Eitaa & Telegram Modal (Admin Only) */}
+      {currentUser?.role === 'admin' && (
+        <BroadcastModal
+          isOpen={isBroadcastModalOpen}
+          onClose={() => setIsBroadcastModalOpen(false)}
+        />
+      )}
     </div>
   );
 };

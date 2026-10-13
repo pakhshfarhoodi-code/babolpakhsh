@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { supabase, isSupabaseConfigured, getFunctionErrorMessage } from '../../lib/supabase';
 import {
   Send,
@@ -16,6 +16,9 @@ import {
   AlertCircle,
   Check,
   RotateCcw,
+  Image as ImageIcon,
+  Trash2,
+  Info,
 } from 'lucide-react';
 
 export type BroadcastChannel = 'eitaa' | 'telegram';
@@ -26,6 +29,8 @@ interface ChannelStats {
   sent?: number;
   failed?: number;
   capped?: boolean;
+  aborted?: boolean;
+  firstError?: string;
 }
 
 interface BroadcastResponseResult {
@@ -38,13 +43,29 @@ interface BroadcastModalProps {
   onClose: () => void;
 }
 
-const MAX_CHAR_COUNT = 3500;
+interface CompressedImageState {
+  base64: string;
+  previewUrl: string;
+  originalFileName: string;
+  fileSizeBytes: number;
+}
+
+const MAX_CHAR_COUNT_DEFAULT = 3500;
+const MAX_CHAR_COUNT_IMAGE = 1024;
+const MAX_IMAGE_SIZE_BYTES = 3 * 1024 * 1024; // 3 MB
+const MAX_IMAGE_DIMENSION = 1280;
 
 export const BroadcastModal: React.FC<BroadcastModalProps> = ({ isOpen, onClose }) => {
   // Form State
   const [selectedChannels, setSelectedChannels] = useState<BroadcastChannel[]>(['eitaa', 'telegram']);
   const [selectedAudience, setSelectedAudience] = useState<BroadcastAudience>('all');
   const [messageText, setMessageText] = useState('');
+
+  // Image Attachment State
+  const [selectedImage, setSelectedImage] = useState<CompressedImageState | null>(null);
+  const [isProcessingImage, setIsProcessingImage] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Counting / Preview State
   const [isCounting, setIsCounting] = useState(false);
@@ -60,6 +81,8 @@ export const BroadcastModal: React.FC<BroadcastModalProps> = ({ isOpen, onClose 
 
   if (!isOpen) return null;
 
+  const currentMaxChars = selectedImage ? MAX_CHAR_COUNT_IMAGE : MAX_CHAR_COUNT_DEFAULT;
+
   const toggleChannel = (channel: BroadcastChannel) => {
     setSelectedChannels((prev) => {
       const exists = prev.includes(channel);
@@ -69,7 +92,6 @@ export const BroadcastModal: React.FC<BroadcastModalProps> = ({ isOpen, onClose 
         return [...prev, channel];
       }
     });
-    // Invalidate cached preview when channels change
     setPreviewResult(null);
   };
 
@@ -105,7 +127,115 @@ export const BroadcastModal: React.FC<BroadcastModalProps> = ({ isOpen, onClose 
     },
   ];
 
-  // Recipient Count Handler (preview: true)
+  // Client-side image compression and resizing using Canvas
+  const processImageFile = (file: File): Promise<CompressedImageState> => {
+    return new Promise((resolve, reject) => {
+      if (!file.type.match(/^image\/(jpeg|jpg|png|webp)$/i)) {
+        return reject(new Error('لطفاً یک فایل تصویری با فرمت معتبر (JPG, PNG یا WebP) انتخاب نمایید.'));
+      }
+
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('خطا در خواندن فایل تصویر.'));
+      reader.onload = (e) => {
+        const rawDataUrl = e.target?.result as string;
+        if (!rawDataUrl) {
+          return reject(new Error('داده‌های فایل تصویر قابل بارگذاری نیست.'));
+        }
+
+        const img = new Image();
+        img.onerror = () => reject(new Error('تصویر انتخاب شده معتبر نیست یا قابل پردازش نمی‌باشد.'));
+        img.onload = () => {
+          try {
+            let width = img.naturalWidth || img.width;
+            let height = img.naturalHeight || img.height;
+
+            // Resize maintaining aspect ratio if larger than 1280px
+            if (width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION) {
+              if (width > height) {
+                height = Math.round((height * MAX_IMAGE_DIMENSION) / width);
+                width = MAX_IMAGE_DIMENSION;
+              } else {
+                width = Math.round((width * MAX_IMAGE_DIMENSION) / height);
+                height = MAX_IMAGE_DIMENSION;
+              }
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+              return reject(new Error('عدم پشتیبانی مرورگر از محیط گرافیکی جهت فشرده‌سازی تصویر.'));
+            }
+
+            // Fill white background for transparent PNG/WebP conversions to JPEG
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, width, height);
+            ctx.drawImage(img, 0, 0, width, height);
+
+            // Export as image/jpeg with quality 0.8
+            const jpegDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+            // Pure base64 without data: prefix
+            const pureBase64 = jpegDataUrl.replace(/^data:image\/[^;]+;base64,/, '');
+
+            // Calculate byte size of base64
+            const byteSize = Math.round((pureBase64.length * 3) / 4);
+
+            if (byteSize > MAX_IMAGE_SIZE_BYTES) {
+              return reject(
+                new Error(
+                  `حجم تصویر پس از فشرده‌سازی (${(byteSize / (1024 * 1024)).toFixed(1)} مگابایت) بیش از سقف مجاز ۳ مگابایت است. لطفاً تصویر کم‌حجم‌تری انتخاب نمایید.`
+                )
+              );
+            }
+
+            resolve({
+              base64: pureBase64,
+              previewUrl: jpegDataUrl,
+              originalFileName: file.name,
+              fileSizeBytes: byteSize,
+            });
+          } catch (err) {
+            reject(err instanceof Error ? err : new Error('خطا در فشرده‌سازی تصویر.'));
+          }
+        };
+        img.src = rawDataUrl;
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImageError(null);
+    setIsProcessingImage(true);
+
+    try {
+      const processed = await processImageFile(file);
+      setSelectedImage(processed);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطا در بارگذاری تصویر.';
+      setImageError(msg);
+      setSelectedImage(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } finally {
+      setIsProcessingImage(false);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setSelectedImage(null);
+    setImageError(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  // Recipient Count Handler (preview: true - no text and no image)
   const handleCountRecipients = async () => {
     if (selectedChannels.length === 0) {
       setCountError('حداقل یک کانال (ایتا یا تلگرام) را انتخاب کنید.');
@@ -153,7 +283,8 @@ export const BroadcastModal: React.FC<BroadcastModalProps> = ({ isOpen, onClose 
 
   // Open Confirmation Modal
   const handleRequestSend = () => {
-    if (!messageText.trim() || selectedChannels.length === 0) return;
+    const hasContent = messageText.trim().length > 0 || Boolean(selectedImage);
+    if (!hasContent || selectedChannels.length === 0) return;
     setSendError(null);
     setIsConfirmOpen(true);
   };
@@ -170,13 +301,22 @@ export const BroadcastModal: React.FC<BroadcastModalProps> = ({ isOpen, onClose 
     setSendError(null);
 
     try {
+      const bodyPayload: Record<string, any> = {
+        channels: selectedChannels,
+        audience: selectedAudience,
+        text: messageText.trim(),
+        preview: false,
+      };
+
+      if (selectedImage?.base64) {
+        bodyPayload.image = {
+          base64: selectedImage.base64,
+          mime: 'image/jpeg',
+        };
+      }
+
       const { data, error } = await supabase.functions.invoke('broadcast-message', {
-        body: {
-          channels: selectedChannels,
-          audience: selectedAudience,
-          text: messageText.trim(),
-          preview: false,
-        },
+        body: bodyPayload,
       });
 
       if (error) {
@@ -207,6 +347,11 @@ export const BroadcastModal: React.FC<BroadcastModalProps> = ({ isOpen, onClose 
 
   const handleResetForm = () => {
     setMessageText('');
+    setSelectedImage(null);
+    setImageError(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
     setPreviewResult(null);
     setCountError(null);
     setSendResult(null);
@@ -215,16 +360,27 @@ export const BroadcastModal: React.FC<BroadcastModalProps> = ({ isOpen, onClose 
     setIsConfirmOpen(false);
   };
 
-  const isTextEmpty = !messageText.trim();
+  const hasContent = messageText.trim().length > 0 || Boolean(selectedImage);
   const isNoChannel = selectedChannels.length === 0;
-  const isOverLimit = messageText.length > MAX_CHAR_COUNT;
-  const isSendDisabled = isTextEmpty || isNoChannel || isOverLimit || isSending || isCounting;
+  const isOverLimit = messageText.length > currentMaxChars;
+  const isSendDisabled =
+    !hasContent ||
+    isNoChannel ||
+    isOverLimit ||
+    isSending ||
+    isCounting ||
+    isProcessingImage;
 
   const hasCappedRecipients =
     (previewResult?.eitaa?.capped === true) ||
     (previewResult?.telegram?.capped === true) ||
     (sendResult?.eitaa?.capped === true) ||
     (sendResult?.telegram?.capped === true);
+
+  // Check if any selected channel was aborted
+  const hasAbortedChannel =
+    Boolean(selectedChannels.includes('eitaa') && sendResult?.eitaa?.aborted) ||
+    Boolean(selectedChannels.includes('telegram') && sendResult?.telegram?.aborted);
 
   const getAudienceLabel = (aud: BroadcastAudience) => {
     switch (aud) {
@@ -296,21 +452,44 @@ export const BroadcastModal: React.FC<BroadcastModalProps> = ({ isOpen, onClose 
         {/* VIEW 1: Send Result Summary (if broadcast finished) */}
         {isComplete && sendResult ? (
           <div className="space-y-4 animate-in fade-in">
-            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 space-y-2 text-center">
-              <div className="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 mx-auto flex items-center justify-center">
-                <CheckCircle2 className="w-6 h-6" />
+            {/* Top status banner: Alert if aborted, Success if all completed */}
+            {hasAbortedChannel ? (
+              <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 space-y-2 text-center">
+                <div className="w-10 h-10 rounded-full bg-rose-500/20 text-rose-400 mx-auto flex items-center justify-center">
+                  <AlertCircle className="w-6 h-6" />
+                </div>
+                <h4 className="font-bold text-sm text-rose-300">
+                  ارسال پیام با توقف در برخی از کانال‌ها همراه شد
+                </h4>
+                <p className="text-slate-400 text-[11px]">
+                  برخی کانال‌ها به دلیل بروز خطا در حین ارسال متوقف شدند. جزئیات هر کانال را در زیر بررسی نمایید:
+                </p>
               </div>
-              <h4 className="font-bold text-sm text-emerald-300">عملیات ارسال پیام با موفقیت خاتمه یافت</h4>
-              <p className="text-slate-400 text-[11px]">
-                گزارش تفکیکی نتایج ارسال به ازای کانال‌های پیام‌رسان در زیر آورده شده است:
-              </p>
-            </div>
+            ) : (
+              <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 space-y-2 text-center">
+                <div className="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 mx-auto flex items-center justify-center">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <h4 className="font-bold text-sm text-emerald-300">
+                  عملیات ارسال پیام با موفقیت خاتمه یافت
+                </h4>
+                <p className="text-slate-400 text-[11px]">
+                  گزارش تفکیکی نتایج ارسال به ازای کانال‌های پیام‌رسان در زیر آورده شده است:
+                </p>
+              </div>
+            )}
 
             {/* Results Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {/* Eitaa Card */}
               {selectedChannels.includes('eitaa') && (
-                <div className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-2.5">
+                <div
+                  className={`p-4 rounded-2xl border space-y-2.5 ${
+                    sendResult.eitaa?.aborted
+                      ? 'bg-rose-950/20 border-rose-800/60'
+                      : 'bg-slate-950/70 border-slate-800'
+                  }`}
+                >
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-xs text-orange-400 flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-orange-500"></span>
@@ -322,6 +501,22 @@ export const BroadcastModal: React.FC<BroadcastModalProps> = ({ isOpen, onClose 
                       </span>
                     )}
                   </div>
+
+                  {/* Red Alert if aborted */}
+                  {sendResult.eitaa?.aborted && (
+                    <div className="p-2.5 bg-rose-500/15 border border-rose-500/30 rounded-xl text-rose-300 space-y-1">
+                      <div className="flex items-center gap-1.5 font-bold text-xs text-rose-400">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>ارسال این کانال متوقف شد</span>
+                      </div>
+                      {sendResult.eitaa.firstError && (
+                        <p className="text-[10px] text-rose-200/90 leading-relaxed">
+                          {sendResult.eitaa.firstError}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   <div className="space-y-1.5 pt-1 text-slate-300 text-xs">
                     <div className="flex justify-between">
                       <span className="text-slate-400">تعداد کل گیرندگان:</span>
@@ -341,7 +536,13 @@ export const BroadcastModal: React.FC<BroadcastModalProps> = ({ isOpen, onClose 
 
               {/* Telegram Card */}
               {selectedChannels.includes('telegram') && (
-                <div className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-2.5">
+                <div
+                  className={`p-4 rounded-2xl border space-y-2.5 ${
+                    sendResult.telegram?.aborted
+                      ? 'bg-rose-950/20 border-rose-800/60'
+                      : 'bg-slate-950/70 border-slate-800'
+                  }`}
+                >
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-xs text-sky-400 flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-sky-500"></span>
@@ -353,6 +554,22 @@ export const BroadcastModal: React.FC<BroadcastModalProps> = ({ isOpen, onClose 
                       </span>
                     )}
                   </div>
+
+                  {/* Red Alert if aborted */}
+                  {sendResult.telegram?.aborted && (
+                    <div className="p-2.5 bg-rose-500/15 border border-rose-500/30 rounded-xl text-rose-300 space-y-1">
+                      <div className="flex items-center gap-1.5 font-bold text-xs text-rose-400">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>ارسال این کانال متوقف شد</span>
+                      </div>
+                      {sendResult.telegram.firstError && (
+                        <p className="text-[10px] text-rose-200/90 leading-relaxed">
+                          {sendResult.telegram.firstError}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   <div className="space-y-1.5 pt-1 text-slate-300 text-xs">
                     <div className="flex justify-between">
                       <span className="text-slate-400">تعداد کل گیرندگان:</span>
@@ -496,21 +713,31 @@ export const BroadcastModal: React.FC<BroadcastModalProps> = ({ isOpen, onClose 
 
             {/* 3. Message Textarea & Counter */}
             <div className="space-y-1.5">
+              {/* Image Caption Note if image is selected */}
+              {selectedImage && (
+                <div className="p-2 rounded-xl bg-blue-500/10 border border-blue-500/25 flex items-center gap-2 text-blue-300 text-[11px]">
+                  <Info className="w-3.5 h-3.5 shrink-0 text-blue-400" />
+                  <span>متن به‌صورت کپشن زیر عکس ارسال می‌شود (متن می‌تواند خالی باشد).</span>
+                </div>
+              )}
+
               <div className="flex items-center justify-between">
                 <label className="text-slate-300 font-bold text-xs flex items-center gap-1.5">
                   <MessageSquare className="w-3.5 h-3.5 text-blue-400" />
-                  <span>۳. متن پیام:</span>
+                  <span>
+                    {selectedImage ? '۳. متن کپشن تصویر (اختیاری):' : '۳. متن پیام:'}
+                  </span>
                 </label>
                 <div
                   className={`text-[11px] font-mono ${
                     isOverLimit
                       ? 'text-rose-400 font-bold'
-                      : messageText.length > 3000
+                      : messageText.length > currentMaxChars - 100
                       ? 'text-amber-400 font-semibold'
                       : 'text-slate-500'
                   }`}
                 >
-                  {messageText.length} / {MAX_CHAR_COUNT}
+                  {messageText.length} / {currentMaxChars}
                 </div>
               </div>
 
@@ -518,15 +745,95 @@ export const BroadcastModal: React.FC<BroadcastModalProps> = ({ isOpen, onClose 
                 value={messageText}
                 onChange={(e) => setMessageText(e.target.value)}
                 disabled={isSending}
-                rows={5}
-                maxLength={MAX_CHAR_COUNT}
-                placeholder="متن پیام اطلاع‌رسانی، شرایط تخفیف، اعلامیه‌های بار جدید یا بخشنامه‌های مرکز پخش را اینجا بنویسید..."
-                className="w-full bg-slate-950 border border-slate-700/80 rounded-2xl p-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition leading-relaxed text-xs resize-y min-h-[120px] sm:min-h-[140px]"
+                rows={4}
+                maxLength={currentMaxChars}
+                placeholder={
+                  selectedImage
+                    ? 'متن کپشن زیر تصویر را بنویسید (اختیاری)...'
+                    : 'متن پیام اطلاع‌رسانی، شرایط تخفیف، اعلامیه‌های بار جدید یا بخشنامه‌های مرکز پخش را اینجا بنویسید...'
+                }
+                className="w-full bg-slate-950 border border-slate-700/80 rounded-2xl p-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition leading-relaxed text-xs resize-y min-h-[100px] sm:min-h-[120px]"
               />
 
-              <p className="text-[10px] text-slate-500">
-                پیام‌ها از طریق بات رسمی ثبت‌شده برای کاربران ارسال می‌شوند. از ارسال پیام‌های تکراری و متوالی خودداری کنید.
-              </p>
+              {/* 3.1 Image Attachment Section */}
+              <div className="pt-1 space-y-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={handleImageFileChange}
+                  disabled={isSending || isProcessingImage}
+                />
+
+                {!selectedImage ? (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={isSending || isProcessingImage}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      {isProcessingImage ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
+                          <span>در حال فشرده‌سازی عکس...</span>
+                        </>
+                      ) : (
+                        <>
+                          <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
+                          <span>افزودن عکس (اختیاری)</span>
+                        </>
+                      )}
+                    </button>
+                    <span className="text-[10px] text-slate-500">
+                      فرمت‌های مجاز: JPG, PNG, WebP (بزرگترین ضلع تا ۱۲۸۰ پیکسل و سقف ۳ مگابایت)
+                    </span>
+                  </div>
+                ) : (
+                  /* Image Preview Card */
+                  <div className="p-2.5 rounded-2xl bg-slate-950/80 border border-slate-800 flex items-center justify-between gap-3 animate-in fade-in">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-14 h-14 rounded-xl overflow-hidden border border-slate-750 bg-black/40 shrink-0 flex items-center justify-center">
+                        <img
+                          src={selectedImage.previewUrl}
+                          alt="پیش‌نمایش عکس"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="min-w-0 space-y-0.5">
+                        <p className="text-slate-200 font-bold text-xs truncate">
+                          {selectedImage.originalFileName}
+                        </p>
+                        <p className="text-slate-400 text-[10px] flex items-center gap-1.5">
+                          <span>کیفیت JPEG 80%</span>
+                          <span>•</span>
+                          <span className="font-mono">
+                            {(selectedImage.fileSizeBytes / 1024).toFixed(0)} KB
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={isSending}
+                      onClick={handleRemoveImage}
+                      className="px-2.5 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-bold transition flex items-center gap-1 cursor-pointer shrink-0"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>حذف عکس</span>
+                    </button>
+                  </div>
+                )}
+
+                {imageError && (
+                  <div className="p-2.5 bg-rose-500/15 border border-rose-500/30 rounded-xl text-rose-300 text-[11px] flex items-center gap-2">
+                    <XCircle className="w-4 h-4 shrink-0" />
+                    <span>{imageError}</span>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* 4. Recipient Counting Section */}
@@ -628,8 +935,8 @@ export const BroadcastModal: React.FC<BroadcastModalProps> = ({ isOpen, onClose 
                 title={
                   isNoChannel
                     ? 'ابتدا حداقل یک کانال را انتخاب کنید'
-                    : isTextEmpty
-                    ? 'متن پیام را وارد کنید'
+                    : !hasContent
+                    ? 'متن پیام یا عکس را وارد کنید'
                     : 'ارسال پیام'
                 }
               >
@@ -664,7 +971,7 @@ export const BroadcastModal: React.FC<BroadcastModalProps> = ({ isOpen, onClose 
             </div>
 
             <p className="text-slate-300 leading-relaxed text-xs">
-              لطفاً مشخصات پیام و مخاطبان را مرور کنید. پس از تأیید، پیام بلافاصله در کانال‌های انتخاب‌شده به ربات‌ها ارسال می‌گردد.
+              لطفاً مشخصات پیام، تصویر و مخاطبان را مرور کنید. پس از تأیید، پیام بلافاصله در کانال‌های انتخاب‌شده به ربات‌ها ارسال می‌گردد.
             </p>
 
             {/* Review Parameters */}
@@ -702,13 +1009,47 @@ export const BroadcastModal: React.FC<BroadcastModalProps> = ({ isOpen, onClose 
               )}
             </div>
 
-            {/* Message Preview Box */}
-            <div className="space-y-1">
-              <span className="text-slate-400 text-[11px] font-medium">پیش‌نمایش متن پیام:</span>
-              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-xs max-h-36 overflow-y-auto whitespace-pre-wrap leading-relaxed select-text font-sans">
-                {messageText}
+            {/* Attached Image Preview in Confirmation Dialog */}
+            {selectedImage && (
+              <div className="space-y-1">
+                <span className="text-slate-400 text-[11px] font-medium">تصویر پیوست‌شده:</span>
+                <div className="p-2.5 bg-slate-950 border border-slate-800 rounded-2xl flex items-center gap-3">
+                  <div className="w-16 h-16 rounded-xl overflow-hidden border border-slate-750 bg-black/50 shrink-0">
+                    <img
+                      src={selectedImage.previewUrl}
+                      alt="عکس پیوست"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="min-w-0 space-y-0.5">
+                    <p className="text-slate-200 font-bold text-xs truncate">
+                      {selectedImage.originalFileName}
+                    </p>
+                    <p className="text-emerald-400 text-[10px]">
+                      فشرده‌سازی شده (JPEG 80%) • {(selectedImage.fileSizeBytes / 1024).toFixed(0)} KB
+                    </p>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* Message Preview Box */}
+            {messageText.trim() ? (
+              <div className="space-y-1">
+                <span className="text-slate-400 text-[11px] font-medium">
+                  {selectedImage ? 'متن کپشن تصویر:' : 'پیش‌نمایش متن پیام:'}
+                </span>
+                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-xs max-h-32 overflow-y-auto whitespace-pre-wrap leading-relaxed select-text font-sans">
+                  {messageText}
+                </div>
+              </div>
+            ) : (
+              selectedImage && (
+                <p className="text-slate-500 text-[11px] italic">
+                  (پیام بدون کپشن متنی و فقط به صورت تصویر ارسال خواهد شد)
+                </p>
+              )
+            )}
 
             {/* Confirm Actions */}
             <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-800">
@@ -718,7 +1059,7 @@ export const BroadcastModal: React.FC<BroadcastModalProps> = ({ isOpen, onClose 
                 onClick={() => setIsConfirmOpen(false)}
                 className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold transition cursor-pointer"
               >
-                ویرایش متن
+                ویرایش
               </button>
 
               <button

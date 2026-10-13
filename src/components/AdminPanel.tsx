@@ -37,7 +37,7 @@ export type AdminTabKey =
   | 'team'
   | 'financial_accounts'
   | 'reports'
-  | 'invoice_settings';
+  | 'settings';
 
 interface AdminPanelProps {
   activeTab?: AdminTabKey;
@@ -98,6 +98,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [isAdminProfileModalOpen, setIsAdminProfileModalOpen] = useState(false);
   const [isAdminSettingsModalOpen, setIsAdminSettingsModalOpen] = useState(false);
   const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
+  const [settingsSubTab, setSettingsSubTab] = useState<'invoice' | 'system' | 'profile'>('invoice');
 
   // Badge count for Overview Tab & Pending approvals
   const pendingApprovalsCount = useMemo(() => {
@@ -217,9 +218,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       inactiveHover: 'hover:text-blue-300 hover:bg-slate-900',
     },
     {
-      id: 'invoice_settings' as const,
-      label: 'تنظیمات فاکتور',
-      icon: FileSpreadsheet,
+      id: 'settings' as const,
+      label: 'تنظیمات',
+      icon: Settings,
       badge: null,
       badgeColor: '',
       activeStyle:
@@ -302,26 +303,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <span>ارسال پیام به ایتا و تلگرام</span>
             </button>
           )}
-
-          <button
-            type="button"
-            onClick={() => setIsAdminSettingsModalOpen(true)}
-            className="px-3 py-2 rounded-xl text-xs sm:text-sm font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 cursor-pointer shrink-0 shadow-xs"
-            title="تنظیمات کلی سامانه (تخفیف ۳ درصدی، تایید انبار و...)"
-          >
-            <Settings className="w-4 h-4 text-blue-400" />
-            <span>تنظیمات سامانه</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setIsAdminProfileModalOpen(true)}
-            className="px-3 py-2 rounded-xl text-xs sm:text-sm font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition flex items-center gap-1.5 cursor-pointer shrink-0 shadow-xs"
-            title="مشاهده و ویرایش مشخصات مدیریت و مرکز پخش"
-          >
-            <Building2 className="w-4 h-4 text-amber-400" />
-            <span>پروفایل مدیریت</span>
-          </button>
         </div>
       </div>
 
@@ -485,9 +466,55 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         />
       )}
 
-      {/* Tab 6: Invoice Settings */}
-      {activeTab === 'invoice_settings' && (
-        <InvoiceSettingsTab />
+      {/* Tab: Settings (تنظیمات شامل تنظیمات فاکتور، تنظیمات سامانه، پروفایل مدیریت) */}
+      {activeTab === 'settings' && (
+        <div className="space-y-6">
+          {/* Sub-tabs for Settings */}
+          <div className="flex items-center gap-2 p-1.5 bg-slate-900 border border-slate-800 rounded-2xl w-fit">
+            <button
+              type="button"
+              onClick={() => setSettingsSubTab('invoice')}
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 cursor-pointer ${
+                settingsSubTab === 'invoice'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>تنظیمات فاکتور</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSettingsSubTab('system')}
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 cursor-pointer ${
+                settingsSubTab === 'system'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Settings className="w-4 h-4" />
+              <span>تنظیمات سامانه</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSettingsSubTab('profile')}
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 cursor-pointer ${
+                settingsSubTab === 'profile'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Building2 className="w-4 h-4" />
+              <span>پروفایل مدیریت</span>
+            </button>
+          </div>
+
+          <div className="pt-2">
+            {settingsSubTab === 'invoice' && <InvoiceSettingsTab />}
+            {settingsSubTab === 'system' && <AdminSettingsModal inline={true} />}
+            {settingsSubTab === 'profile' && <AdminProfileModal inline={true} initialEditMode={true} />}
+          </div>
+        </div>
       )}
 
       {/* Modal for Editing Category */}

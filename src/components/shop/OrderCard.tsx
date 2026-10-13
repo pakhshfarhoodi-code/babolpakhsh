@@ -76,7 +76,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
           )}
           {founderDiscount > 0 && (
             <span className="px-2 py-0.5 rounded-lg text-[11px] font-bold bg-purple-500/15 text-purple-300 border border-purple-500/30">
-              تخفیف ۱۰۰ نفر اول {founderDiscount}٪
+              تخفیف طرح آغازین {founderDiscount}٪
             </span>
           )}
           {manualDiscount > 0 && (

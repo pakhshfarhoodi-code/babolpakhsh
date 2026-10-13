@@ -1023,7 +1023,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
 
                           {(order.founder_discount_percent ?? 0) > 0 && (
                             <div className="inline-flex items-center gap-1 bg-purple-500/15 border border-purple-500/40 text-purple-300 px-2 py-0.5 rounded-lg text-[10px] font-bold">
-                              <span>تخفیف ۱۰۰ نفر اول: {order.founder_discount_percent}٪</span>
+                              <span>تخفیف طرح آغازین: {order.founder_discount_percent}٪</span>
                             </div>
                           )}
 

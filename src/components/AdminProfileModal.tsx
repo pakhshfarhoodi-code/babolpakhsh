@@ -22,15 +22,17 @@ import {
 } from 'lucide-react';
 
 interface AdminProfileModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen?: boolean;
+  onClose?: () => void;
   initialEditMode?: boolean;
+  inline?: boolean;
 }
 
 export const AdminProfileModal: React.FC<AdminProfileModalProps> = ({
-  isOpen,
+  isOpen = false,
   onClose,
   initialEditMode = false,
+  inline = false,
 }) => {
   const { adminProfile, updateAdminProfile, role, theme } = useApp();
   const isAdmin = role === 'admin';
@@ -44,14 +46,14 @@ export const AdminProfileModal: React.FC<AdminProfileModalProps> = ({
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen || inline) {
       setFormData(adminProfile);
       setIsEditing(initialEditMode && isAdmin);
       setFeedback(null);
     }
-  }, [isOpen, adminProfile, initialEditMode, isAdmin]);
+  }, [isOpen, inline, adminProfile, initialEditMode, isAdmin]);
 
-  if (!isOpen) return null;
+  if (!isOpen && !inline) return null;
 
   const handleCopy = (text: string | undefined, key: string) => {
     if (!text) return;
@@ -97,16 +99,15 @@ export const AdminProfileModal: React.FC<AdminProfileModalProps> = ({
     !formData.phone &&
     !formData.address;
 
-  return (
-    <>
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/75 backdrop-blur-xs animate-in fade-in"
-        onClick={onClose}
-      >
-        <div
-          className="admin-profile-modal rounded-2xl sm:rounded-3xl border border-slate-800 w-full max-w-xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden transition-colors"
-          onClick={(e) => e.stopPropagation()}
-        >
+  const content = (
+    <div
+      className={
+        inline
+          ? 'admin-profile-modal rounded-2xl sm:rounded-3xl border border-slate-800 w-full flex flex-col shadow-xl overflow-hidden transition-colors bg-slate-900'
+          : 'admin-profile-modal rounded-2xl sm:rounded-3xl border border-slate-800 w-full max-w-xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden transition-colors bg-slate-900'
+      }
+      onClick={inline ? undefined : (e) => e.stopPropagation()}
+    >
           {/* Header */}
           <div className="p-4 sm:p-5 border-b border-slate-800/80 bg-slate-950/40 flex items-center justify-between">
             <div className="flex items-center gap-3 min-w-0">
@@ -137,14 +138,16 @@ export const AdminProfileModal: React.FC<AdminProfileModalProps> = ({
                   <span>ویرایش</span>
                 </button>
               )}
-              <button
-                type="button"
-                onClick={onClose}
-                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition cursor-pointer"
-                title="بستن پنجره"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              {!inline && onClose && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="p-1.5 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition cursor-pointer"
+                  title="بستن پنجره"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
             </div>
           </div>
 
@@ -618,19 +621,24 @@ export const AdminProfileModal: React.FC<AdminProfileModalProps> = ({
                 <span className="text-xs text-slate-400 font-medium truncate">
                   {formData.business_title ? `مرکز پخش و توزیع: ${formData.business_title}` : 'سامانه جامع پخش و توزیع'}
                 </span>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="admin-profile-close-btn px-6 py-2 rounded-xl text-xs font-bold transition cursor-pointer shadow-xs"
-                >
-                  بستن
-                </button>
+                {!inline && onClose && (
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="admin-profile-close-btn px-6 py-2 rounded-xl text-xs font-bold transition cursor-pointer shadow-xs"
+                  >
+                    بستن
+                  </button>
+                )}
               </div>
             )}
           </div>
         </div>
-      </div>
+  );
 
+  const finalWrapper = (
+    <>
+      {content}
       {/* Map Picker Modal */}
       {isMapPickerOpen && (
         <LocationPickerModal
@@ -651,5 +659,18 @@ export const AdminProfileModal: React.FC<AdminProfileModalProps> = ({
         />
       )}
     </>
+  );
+
+  if (inline) {
+    return finalWrapper;
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/75 backdrop-blur-xs animate-in fade-in"
+      onClick={onClose}
+    >
+      {finalWrapper}
+    </div>
   );
 };

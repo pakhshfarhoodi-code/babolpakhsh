@@ -25,6 +25,7 @@ export interface FounderDiscountStatus {
   isStoreFounderOptedIn: boolean;
   isFounderActive: boolean;
   founderPercent: number;
+  ordersLimit: number;
   rank: number;
 }
 
@@ -98,7 +99,14 @@ export function setStoreFounderDiscountUserEnabled(storeId: string, enabled: boo
  * Stores can disable the discount for an order to save quota for future orders.
  */
 export function getStoreFounderDiscountStatus(
-  supermarkets: Array<{ id: string; created_at?: string; founder_discount_enabled?: boolean }>,
+  supermarkets: Array<{
+    id: string;
+    created_at?: string;
+    founder_discount_enabled?: boolean;
+    founder_discount_percent?: number;
+    founder_orders_limit?: number;
+    founder_campaign_no?: number;
+  }>,
   orders: Array<{ supermarket_id: string; status?: string; founder_discount_percent?: number }>,
   storeId?: string | null
 ): FounderDiscountStatus {
@@ -111,11 +119,21 @@ export function getStoreFounderDiscountStatus(
       isStoreFounderOptedIn: false,
       isFounderActive: false,
       founderPercent: 0,
+      ordersLimit: 3,
       rank: 999,
     };
   }
 
-  const { rank, isFounderEligible } = getStoreRegistrationRank(supermarkets, storeId);
+  const currentStore = supermarkets.find((s) => s.id === storeId);
+  const isFounderEligible = currentStore?.founder_discount_enabled === true;
+  const storePercent =
+    typeof currentStore?.founder_discount_percent === 'number'
+      ? currentStore.founder_discount_percent
+      : DEFAULT_FOUNDER_DISCOUNT_PERCENT;
+  const ordersLimit =
+    typeof currentStore?.founder_orders_limit === 'number'
+      ? currentStore.founder_orders_limit
+      : 3;
 
   // Count non-cancelled orders belonging to this store
   const storeOrders = (orders || []).filter(
@@ -129,18 +147,17 @@ export function getStoreFounderDiscountStatus(
   // Only count orders where founder discount was ACTUALLY applied!
   // This allows the store to disable the discount for current order and preserve it for future orders.
   const usedOrdersCount = Math.min(
-    FOUNDER_MAX_ORDERS_PER_STORE,
+    ordersLimit,
     explicitFounderOrders.length
   );
 
-  const remainingOrdersCount = Math.max(0, FOUNDER_MAX_ORDERS_PER_STORE - usedOrdersCount);
+  const remainingOrdersCount = Math.max(0, ordersLimit - usedOrdersCount);
   const isFounderQuotaAvailable = isFounderEligible && remainingOrdersCount > 0;
 
-  const currentStore = supermarkets.find((s) => s.id === storeId);
   const isStoreFounderOptedIn = getStoreFounderDiscountUserEnabled(storeId, currentStore);
 
   const isFounderActive = isFounderQuotaAvailable && isStoreFounderOptedIn;
-  const founderPercent = isFounderActive ? DEFAULT_FOUNDER_DISCOUNT_PERCENT : 0;
+  const founderPercent = isFounderActive ? storePercent : 0;
 
   return {
     isFounderEligible,
@@ -150,7 +167,8 @@ export function getStoreFounderDiscountStatus(
     isStoreFounderOptedIn,
     isFounderActive,
     founderPercent,
-    rank,
+    ordersLimit,
+    rank: 1,
   };
 }
 

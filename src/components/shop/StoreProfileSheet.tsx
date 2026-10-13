@@ -569,7 +569,7 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-slate-300 font-semibold text-xs">
                   <Sparkles className="w-4 h-4 text-amber-400" />
-                  <span>طرح تخفیف ۵٪ ویژه ۱۰۰ فروشگاه اول:</span>
+                  <span>طرح تخفیف {founderStatus.founderPercent}٪ آغازین:</span>
                 </div>
                 <span className="text-[10px] px-2 py-0.5 rounded-md font-bold border bg-purple-950/60 text-purple-300 border-purple-500/40">
                   {founderStatus.remainingOrdersCount.toLocaleString('fa-IR')} سفارش مانده

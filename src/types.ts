@@ -89,6 +89,10 @@ export interface Supermarket {
   created_at?: string;
   founder_discount_enabled?: boolean;
   founder_discount_percent?: number;
+  founder_orders_limit?: number;
+  founder_campaign_no?: number;
+  activated_at?: string | null;
+  import_batch?: string | null;
   approval_status?: 'pending' | 'approved' | 'rejected';
   verification_type?: 'none' | 'store' | 'bulk_consumer';
   verified_at?: string | null;
@@ -101,6 +105,16 @@ export interface Supermarket {
   latitude?: number | null;
   longitude?: number | null;
   admin_note?: string | null;
+}
+
+export interface FounderCampaignInfo {
+  active: boolean;
+  percent: number;
+  capacity: number;
+  granted: number;
+  remaining: number;
+  orders_per_store: number;
+  campaign_no: number;
 }
 
 export type OrderStatus = 'assigned' | 'loading' | 'delegated' | 'delivered' | 'undelivered';

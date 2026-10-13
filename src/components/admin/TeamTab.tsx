@@ -699,19 +699,19 @@ export const TeamTab: React.FC<TeamTabProps> = ({
         if (error) {
           setToastNotification({
             type: 'error',
-            message: error.message || 'خطا در تغییر وضعیت تخفیف ۱۰۰ نفر اول.',
+            message: error.message || 'خطا در تغییر وضعیت تخفیف طرح آغازین.',
           });
         } else {
           const res = data as { success: boolean; message: string };
           setToastNotification({
             type: res.success !== false ? 'success' : 'error',
-            message: res.message || 'وضعیت تخفیف ۱۰۰ نفر اول با موفقیت به‌روزرسانی شد.',
+            message: res.message || 'وضعیت تخفیف طرح آغازین با موفقیت به‌روزرسانی شد.',
           });
           refreshData();
         }
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'خطا در به‌روزرسانی تخفیف ۱۰۰ نفر اول.';
+      const msg = err instanceof Error ? err.message : 'خطا در به‌روزرسانی تخفیف طرح آغازین.';
       setToastNotification({ type: 'error', message: msg });
     } finally {
       setTimeout(() => setToastNotification(null), 3500);
@@ -1716,11 +1716,12 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                             const shopFounderStatus = getStoreFounderDiscountStatus(supermarkets, orders, shop.id);
                             const usedFa = shopFounderStatus.usedOrdersCount.toLocaleString('fa-IR');
                             const remainingFa = shopFounderStatus.remainingOrdersCount.toLocaleString('fa-IR');
+                            const limitFa = (shopFounderStatus.ordersLimit ?? 3).toLocaleString('fa-IR');
 
                             return (
                               <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg border text-[11px] font-medium bg-slate-950/80 border-slate-800/80">
                                 <Sparkles className={`w-3 h-3 ${shopFounderStatus.isFounderActive ? 'text-amber-400' : 'text-slate-500'}`} />
-                                <span className="text-slate-400 text-[10.5px]">تخفیف ۱۰۰ نفر اول:</span>
+                                <span className="text-slate-400 text-[10.5px]">تخفیف طرح آغازین:</span>
                                 {shopFounderStatus.isFounderEligible ? (
                                   <span
                                     className={`px-1.5 py-0.5 rounded font-bold text-[10px] border ${
@@ -1730,11 +1731,11 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                                     }`}
                                     title={
                                       shopFounderStatus.remainingOrdersCount === 0
-                                        ? 'هر ۳ بار استفاده شده و تخفیف به پایان رسیده است'
-                                        : `${usedFa} از ۳ سفارش استفاده شده، ${remainingFa} سفارش باقی‌مانده`
+                                        ? `هر ${limitFa} بار استفاده شده و تخفیف به پایان رسیده است`
+                                        : `${usedFa} از ${limitFa} سفارش استفاده شده، ${remainingFa} سفارش باقی‌مانده`
                                     }
                                   >
-                                    {usedFa} از ۳ سفارش ({shopFounderStatus.remainingOrdersCount === 0 ? 'پایان‌یافته' : `${remainingFa} مانده`})
+                                    {usedFa} از {limitFa} سفارش ({shopFounderStatus.remainingOrdersCount === 0 ? 'پایان‌یافته' : `${remainingFa} مانده`})
                                   </span>
                                 ) : (
                                   <span className="text-[10px] text-slate-500">غیرمشمول</span>

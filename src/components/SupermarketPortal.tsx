@@ -277,7 +277,7 @@ export const SupermarketPortal: React.FC = () => {
       const pickupPercent = invoiceSettings?.pickup_discount_percent || 3;
 
       const founderStatus = getStoreFounderDiscountStatus(supermarkets, orders, currentStore?.id || '');
-      const founderPercent = founderStatus.isFounderActive ? 5 : 0;
+      const founderPercent = founderStatus.founderPercent;
 
       const res = await createOrder({
         supermarketId: currentStore?.id || '',

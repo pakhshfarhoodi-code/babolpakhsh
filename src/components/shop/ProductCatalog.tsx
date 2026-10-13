@@ -205,7 +205,7 @@ const StoreDiscountSwitchesBox: React.FC<StoreDiscountSwitchesBoxProps> = ({ sto
               <div className="flex items-center gap-1 min-w-0">
                 <Sparkles className={`w-3.5 h-3.5 shrink-0 ${founderUserEnabled ? 'text-amber-400' : 'text-slate-500'}`} />
                 <span className="font-bold text-[10.5px] sm:text-[11px] truncate">
-                  تخفیف ۵٪ (۱۰۰ فروشگاه اول)
+                  تخفیف {founderStatus.founderPercent}٪ (طرح آغازین)
                 </span>
               </div>
             </div>
@@ -246,10 +246,10 @@ const StoreDiscountSwitchesBox: React.FC<StoreDiscountSwitchesBoxProps> = ({ sto
             <Info className="w-3.5 h-3.5 text-purple-400 shrink-0" />
             <div className="space-y-0.5 min-w-0 flex-1">
               <p className="font-bold text-white text-[11px]">
-                طرح تخفیف ویژه ۵ درصدی ۱۰۰ فروشگاه اول:
+                طرح تخفیف ویژه {founderStatus.founderPercent} درصدی آغازین:
               </p>
               <p className="text-[10px] sm:text-[10.5px] text-purple-100 font-medium tracking-tight whitespace-normal leading-normal">
-                تخفیف ۵ درصدی برای ۳ سفارش اول شما در نظر گرفته شده است (تاکنون {founderStatus.usedOrdersCount.toLocaleString('fa-IR')} بار استفاده شده و برای {founderStatus.remainingOrdersCount.toLocaleString('fa-IR')} سفارش دیگر باقی مانده است). شما می‌توانید در هر سفارش این تخفیف را فعال یا غیرفعال کنید.
+                تخفیف {founderStatus.founderPercent} درصدی برای {(founderStatus.ordersLimit ?? 3).toLocaleString('fa-IR')} سفارش اول شما در نظر گرفته شده است (تاکنون {founderStatus.usedOrdersCount.toLocaleString('fa-IR')} بار استفاده شده و برای {founderStatus.remainingOrdersCount.toLocaleString('fa-IR')} سفارش دیگر باقی مانده است). شما می‌توانید در هر سفارش این تخفیف را فعال یا غیرفعال کنید.
               </p>
             </div>
           </div>

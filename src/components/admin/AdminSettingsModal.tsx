@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { useApp } from '../../context/AppContext';
+import { FounderCampaignInfo } from '../../types';
 import {
   Settings,
   Warehouse,
@@ -15,18 +16,23 @@ import {
   Upload,
   Trash2,
   CheckCircle2,
+  Sparkles,
+  RotateCcw,
+  Users,
 } from 'lucide-react';
 import appLogo from '../../assets/images/farhoodi_b2b_logo.webp';
 import { syncPwaIconsAndManifest } from '../../utils/pwaIcons';
 
 interface AdminSettingsModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen?: boolean;
+  onClose?: () => void;
+  inline?: boolean;
 }
 
 export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
-  isOpen,
+  isOpen = false,
   onClose,
+  inline = false,
 }) => {
   const {
     currentUser,
@@ -41,12 +47,21 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isSavingDiscount, setIsSavingDiscount] = useState<boolean>(false);
 
+  // Founder Campaign State
+  const [campaignData, setCampaignData] = useState<FounderCampaignInfo | null>(null);
+  const [campaignActive, setCampaignActive] = useState<boolean>(true);
+  const [campaignPercent, setCampaignPercent] = useState<number>(5);
+  const [campaignCapacity, setCampaignCapacity] = useState<number>(100);
+  const [campaignOrdersPerStore, setCampaignOrdersPerStore] = useState<number>(3);
+  const [isLoadingCampaign, setIsLoadingCampaign] = useState<boolean>(true);
+  const [isSavingCampaign, setIsSavingCampaign] = useState<boolean>(false);
+
   const isPickupGloballyEnabled = invoiceSettings?.pickup_discount_enabled !== false;
   const pickupPercent = invoiceSettings?.pickup_discount_percent ?? 3;
 
-  // Fetch warehouse step setting on open
+  // Fetch settings & campaign on open
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen && !inline) return;
 
     let isMounted = true;
     const fetchSetting = async () => {
@@ -86,11 +101,35 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
       }
     };
 
+    const fetchCampaign = async () => {
+      setIsLoadingCampaign(true);
+      try {
+        if (isSupabaseConfigured && supabase) {
+          const { data, error } = await supabase.rpc('get_founder_campaign');
+          if (!error && data) {
+            const c: FounderCampaignInfo = typeof data === 'string' ? JSON.parse(data) : data;
+            if (isMounted) {
+              setCampaignData(c);
+              setCampaignActive(c.active ?? true);
+              setCampaignPercent(typeof c.percent === 'number' ? c.percent : 5);
+              setCampaignCapacity(typeof c.capacity === 'number' ? c.capacity : 100);
+              setCampaignOrdersPerStore(typeof c.orders_per_store === 'number' ? c.orders_per_store : 3);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching founder campaign:', err);
+      } finally {
+        if (isMounted) setIsLoadingCampaign(false);
+      }
+    };
+
     fetchSetting();
+    fetchCampaign();
     return () => {
       isMounted = false;
     };
-  }, [isOpen]);
+  }, [isOpen, inline]);
 
   const handleToggleWarehouse = async (newVal: boolean) => {
     setIsSaving(true);
@@ -182,6 +221,75 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
       showToast(msg, 'error');
     } finally {
       setIsSavingDiscount(false);
+    }
+  };
+
+  const handleSaveCampaign = async (restart: boolean = false) => {
+    if (campaignPercent < 0 || campaignPercent > 100) {
+      showToast('درصد تخفیف باید بین ۰ تا ۱۰۰ باشد.', 'error');
+      return;
+    }
+    if (campaignCapacity < 1) {
+      showToast('ظرفیت کمپین باید حداقل ۱ فروشگاه باشد.', 'error');
+      return;
+    }
+    if (campaignOrdersPerStore < 1) {
+      showToast('سقف سفارشات هر فروشگاه باید حداقل ۱ باشد.', 'error');
+      return;
+    }
+
+    if (
+      restart &&
+      typeof window !== 'undefined' &&
+      !window.confirm(
+        'آیا از شروع دوره جدید کمپین اطمینان دارید؟ با شروع دوره جدید، دوره قبلی بسته شده و دوره جدید با ظرفیت و تنظیمات مشخص‌شده فعال می‌شود.'
+      )
+    ) {
+      return;
+    }
+
+    setIsSavingCampaign(true);
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const { error } = await supabase.rpc('admin_set_founder_campaign', {
+          p_percent: campaignPercent,
+          p_capacity: campaignCapacity,
+          p_orders_per_store: campaignOrdersPerStore,
+          p_active: campaignActive,
+          p_restart: restart,
+        });
+
+        if (error) {
+          throw error;
+        }
+
+        showToast(
+          restart
+            ? 'دوره جدید کمپین تخفیف با موفقیت آغاز شد.'
+            : 'تنظیمات کمپین تخفیف با موفقیت ذخیره شد.',
+          'success'
+        );
+
+        // Refetch updated campaign
+        const { data: updatedData } = await supabase.rpc('get_founder_campaign');
+        if (updatedData) {
+          const c: FounderCampaignInfo =
+            typeof updatedData === 'string' ? JSON.parse(updatedData) : updatedData;
+          setCampaignData(c);
+          setCampaignActive(c.active ?? true);
+          setCampaignPercent(typeof c.percent === 'number' ? c.percent : 5);
+          setCampaignCapacity(typeof c.capacity === 'number' ? c.capacity : 100);
+          setCampaignOrdersPerStore(typeof c.orders_per_store === 'number' ? c.orders_per_store : 3);
+        }
+        refreshData();
+      } else {
+        showToast('پایگاه داده متصل نیست.', 'error');
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'خطا در ذخیره تنظیمات کمپین';
+      showToast(msg, 'error');
+    } finally {
+      setIsSavingCampaign(false);
     }
   };
 
@@ -280,33 +388,33 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen && !inline) return null;
 
-  return (
+  const content = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm"
-      onClick={onClose}
-      dir="rtl"
+      className={
+        inline
+          ? 'w-full bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-7 shadow-xl text-xs space-y-6'
+          : 'w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl text-xs space-y-5 max-h-[90vh] overflow-y-auto'
+      }
+      onClick={inline ? undefined : (e) => e.stopPropagation()}
     >
-      <div
-        className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl text-xs space-y-5 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center border border-blue-500/30">
-              <Settings className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="font-bold text-sm sm:text-base text-slate-100">
-                تنظیمات کلی سامانه
-              </h3>
-              <p className="text-slate-400 text-[11px] mt-0.5">
-                تخفیف‌های سراسری، فرآیند انبار و مراحل صدور فاکتور
-              </p>
-            </div>
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center border border-blue-500/30">
+            <Settings className="w-4 h-4" />
           </div>
+          <div>
+            <h3 className="font-bold text-sm sm:text-base text-slate-100">
+              تنظیمات کلی سامانه
+            </h3>
+            <p className="text-slate-400 text-[11px] mt-0.5">
+              تخفیف‌های سراسری، فرآیند انبار و مراحل صدور فاکتور
+            </p>
+          </div>
+        </div>
+        {!inline && onClose && (
           <button
             type="button"
             onClick={onClose}
@@ -314,9 +422,10 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
           >
             <X className="w-5 h-5" />
           </button>
-        </div>
+        )}
+      </div>
 
-        {/* 1. Global Store 3% Pickup Discount Setting */}
+      {/* 1. Global Store 3% Pickup Discount Setting */}
         <div className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-4">
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">
@@ -403,7 +512,180 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
           </div>
         </div>
 
-        {/* 2. Warehouse Step Setting Card */}
+        {/* 2. Founder Campaign Setting Card */}
+        <div className="p-4 rounded-2xl bg-slate-950/60 border border-purple-900/40 space-y-4 relative overflow-hidden">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Sparkles className="w-4 h-4 text-purple-400" />
+                <h4 className="font-bold text-sm text-slate-100">
+                  کمپین تخفیف فروشگاه‌های آغازین (طرح موسس)
+                </h4>
+                {campaignData && (
+                  <span className="text-[11px] px-2 py-0.5 rounded-md bg-purple-950/80 border border-purple-800/60 text-purple-300 font-bold font-mono">
+                    دوره {campaignData.campaign_no?.toLocaleString('fa-IR') ?? '۱'}
+                  </span>
+                )}
+              </div>
+              <p className="text-slate-400 leading-relaxed text-xs">
+                تنظیم ظرفیت پذیرش فروشگاه‌ها، درصد تخفیف ویژه و سقف سفارشات مشمول تخفیف.
+              </p>
+            </div>
+
+            {/* Campaign Active Switch */}
+            <button
+              type="button"
+              disabled={isLoadingCampaign || isSavingCampaign}
+              onClick={() => setCampaignActive(!campaignActive)}
+              className={`p-1 rounded-full transition-colors cursor-pointer shrink-0 disabled:opacity-50 ${
+                campaignActive ? 'text-purple-400' : 'text-slate-600'
+              }`}
+              title={campaignActive ? 'کلیک جهت غیرفعال‌سازی موقت کمپین' : 'کلیک جهت فعال‌سازی کمپین'}
+            >
+              {campaignActive ? (
+                <ToggleRight className="w-10 h-10" />
+              ) : (
+                <ToggleLeft className="w-10 h-10" />
+              )}
+            </button>
+          </div>
+
+          {/* Stats Bar */}
+          {campaignData && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+              <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-center space-y-0.5">
+                <span className="text-[10.5px] text-slate-400 block">ظرفیت کل دوره</span>
+                <span className="font-bold text-slate-100 font-mono text-sm">
+                  {campaignData.capacity?.toLocaleString('fa-IR')} فروشگاه
+                </span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-center space-y-0.5">
+                <span className="text-[10.5px] text-purple-300 block">اعطا شده (فعال)</span>
+                <span className="font-bold text-purple-400 font-mono text-sm">
+                  {campaignData.granted?.toLocaleString('fa-IR')} فروشگاه
+                </span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-center space-y-0.5">
+                <span className="text-[10.5px] text-emerald-400 block">ظرفیت باقیمانده</span>
+                <span className="font-bold text-emerald-300 font-mono text-sm">
+                  {campaignData.remaining?.toLocaleString('fa-IR')} فروشگاه
+                </span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-center space-y-0.5">
+                <span className="text-[10.5px] text-amber-300 block">سقف سفارش هر فروشگاه</span>
+                <span className="font-bold text-amber-400 font-mono text-sm">
+                  {campaignData.orders_per_store?.toLocaleString('fa-IR')} سفارش
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Form Inputs */}
+          <div className="pt-2 border-t border-slate-850 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* 1. Percent */}
+            <div className="space-y-1">
+              <label className="text-slate-300 font-bold text-xs block">
+                درصد تخفیف کمپین:
+              </label>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.5}
+                  value={campaignPercent}
+                  onChange={(e) => setCampaignPercent(parseFloat(e.target.value) || 0)}
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-xs font-bold text-center font-mono focus:border-purple-500 focus:outline-none"
+                />
+                <span className="text-xs text-purple-300 font-mono font-bold">٪</span>
+              </div>
+            </div>
+
+            {/* 2. Capacity */}
+            <div className="space-y-1">
+              <label className="text-slate-300 font-bold text-xs block">
+                ظرفیت کل فروشگاه‌ها:
+              </label>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  min={1}
+                  max={10000}
+                  step={1}
+                  value={campaignCapacity}
+                  onChange={(e) => setCampaignCapacity(parseInt(e.target.value, 10) || 1)}
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-xs font-bold text-center font-mono focus:border-purple-500 focus:outline-none"
+                />
+                <span className="text-xs text-slate-400 text-nowrap">فروشگاه</span>
+              </div>
+            </div>
+
+            {/* 3. Orders per Store */}
+            <div className="space-y-1">
+              <label className="text-slate-300 font-bold text-xs block">
+                سقف سفارش هر فروشگاه:
+              </label>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  step={1}
+                  value={campaignOrdersPerStore}
+                  onChange={(e) => setCampaignOrdersPerStore(parseInt(e.target.value, 10) || 1)}
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-xs font-bold text-center font-mono focus:border-purple-500 focus:outline-none"
+                />
+                <span className="text-xs text-slate-400 text-nowrap">سفارش</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="pt-2 border-t border-slate-850 flex items-center justify-between gap-2 flex-wrap">
+            <button
+              type="button"
+              disabled={isSavingCampaign}
+              onClick={() => handleSaveCampaign(false)}
+              className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-95 text-white font-bold text-xs transition cursor-pointer flex items-center gap-1.5 shadow-md shadow-purple-600/20 disabled:opacity-50"
+            >
+              {isSavingCampaign ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>در حال ذخیره...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>ذخیره تنظیمات کمپین</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              disabled={isSavingCampaign}
+              onClick={() => handleSaveCampaign(true)}
+              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-amber-950/60 text-slate-300 hover:text-amber-300 border border-slate-700 hover:border-amber-700/60 text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+              title="آغاز دوره جدید و صفر کردن شمارنده ظرفیت پذیرش"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+              <span>شروع دوره جدید (ریستارت)</span>
+            </button>
+          </div>
+
+          {/* Explanation Banner */}
+          <div className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 text-xs space-y-1.5">
+            <div className="flex items-center gap-1.5 text-slate-300 font-semibold">
+              <Info className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+              <span>نحوه اعمال در حساب فروشگاه‌ها:</span>
+            </div>
+            <p className="text-slate-300 leading-relaxed text-[11px]">
+              فروشگاه‌های ثبت‌شده تا سقف ظرفیت، به مدت {campaignOrdersPerStore.toLocaleString('fa-IR')} سفارش اول خود از تخفیف {campaignPercent.toLocaleString('fa-IR')}٪ بهره‌مند می‌شوند. فروشگاه‌ها می‌توانند در هر سفارش این تخفیف را خاموش کنند تا سهمیه آن برای سفارش‌های بعدی حفظ گردد.
+            </p>
+          </div>
+        </div>
+
+        {/* 3. Warehouse Step Setting Card */}
         <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-4">
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">
@@ -551,15 +833,30 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
             <span>تنظیمات بلافاصله در کل سامانه و پایگاه داده اعمال می‌گردند.</span>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold transition cursor-pointer"
-          >
-            بستن
-          </button>
+          {!inline && onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold transition cursor-pointer"
+            >
+              بستن
+            </button>
+          )}
         </div>
       </div>
+  );
+
+  if (inline) {
+    return content;
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm"
+      onClick={onClose}
+      dir="rtl"
+    >
+      {content}
     </div>
   );
 };

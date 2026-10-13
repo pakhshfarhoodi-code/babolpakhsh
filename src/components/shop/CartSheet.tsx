@@ -318,7 +318,7 @@ export const CartSheet: React.FC<CartSheetProps> = ({
                 <div className="flex items-center gap-1.5 min-w-0">
                   <Sparkles className={`w-3.5 h-3.5 shrink-0 ${founderUserEnabled ? 'text-amber-400' : 'text-slate-500'}`} />
                   <span className="font-bold text-[11px] truncate">
-                    تخفیف ۵٪ ویژه ۱۰۰ فروشگاه اول
+                    تخفیف {founderStatus.founderPercent}٪ طرح آغازین
                   </span>
                 </div>
               </div>

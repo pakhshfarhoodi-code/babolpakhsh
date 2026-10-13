@@ -1027,7 +1027,7 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
 
             {founderDiscountPercent > 0 && founderDiscountAmount > 0 && (
               <div className="flex items-center justify-between text-purple-700 font-medium">
-                <span className={cardLabelClass}>تخفیف ۱۰۰ نفر اول ({founderDiscountPercent}٪):</span>
+                <span className={cardLabelClass}>تخفیف طرح آغازین ({founderDiscountPercent}٪):</span>
                 <span className={`num-fa font-bold text-purple-700 ${cardValueClass}`}>
                   -{formatMoney(founderDiscountAmount)} {currencyLabel}
                 </span>

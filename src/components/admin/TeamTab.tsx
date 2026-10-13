@@ -38,10 +38,12 @@ import {
   Sparkles,
   FileText,
   StickyNote,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { getStoreFounderDiscountStatus } from '../../utils/storeDiscount';
 import { LocationPickerModal } from '../LocationPickerModal';
 import { SupermarketRegisterModal } from '../SupermarketRegisterModal';
+import { ExcelStoreImportModal } from './ExcelStoreImportModal';
 import { AccountLedgerModal } from './AccountLedgerModal';
 import { formatPrice } from './helpers';
 import { formatPersianDate } from '../../utils/dateUtils';
@@ -122,6 +124,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
   const [isProcessingApproval, setIsProcessingApproval] = useState(false);
 
   const [isRegisterStoreModalOpen, setIsRegisterStoreModalOpen] = useState(false);
+  const [isExcelStoreImportOpen, setIsExcelStoreImportOpen] = useState(false);
   const [togglingStoreId, setTogglingStoreId] = useState<string | null>(null);
   const [togglingVisitorId, setTogglingVisitorId] = useState<string | null>(null);
   const [toastNotification, setToastNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -1340,15 +1343,30 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                 </div>
               </div>
 
-              {/* Add Store Button */}
-              <button
-                type="button"
-                onClick={() => setIsRegisterStoreModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold transition shadow-md shadow-blue-600/30 cursor-pointer"
-              >
-                <UserPlus className="w-3.5 h-3.5" />
-                <span>+ ثبت فروشگاه جدید</span>
-              </button>
+              {/* Action Buttons for Supermarkets */}
+              <div className="flex items-center gap-2">
+                {currentUser?.role === 'admin' && (
+                  <button
+                    type="button"
+                    onClick={() => setIsExcelStoreImportOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold transition shadow-md shadow-emerald-600/30 cursor-pointer"
+                    title="ورود گروهی فروشگاه‌ها از فایل اکسل"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5" />
+                    <span>ورود از اکسل</span>
+                  </button>
+                )}
+
+                {/* Add Store Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsRegisterStoreModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold transition shadow-md shadow-blue-600/30 cursor-pointer"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>+ ثبت فروشگاه جدید</span>
+                </button>
+              </div>
             </div>
 
             {/* Status Filter Tabs */}
@@ -1944,6 +1962,15 @@ export const TeamTab: React.FC<TeamTabProps> = ({
         isOpen={isRegisterStoreModalOpen}
         onClose={() => setIsRegisterStoreModalOpen(false)}
       />
+
+      {/* Excel Store Import Modal (Admin Only) */}
+      {currentUser?.role === 'admin' && (
+        <ExcelStoreImportModal
+          isOpen={isExcelStoreImportOpen}
+          onClose={() => setIsExcelStoreImportOpen(false)}
+          visitors={visitors}
+        />
+      )}
 
       {/* Add Staff Account Modal */}
       {isAddStaffOpen && (

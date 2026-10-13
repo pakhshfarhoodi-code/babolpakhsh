@@ -82,6 +82,7 @@ export interface Supermarket {
   owner: string;
   phone: string;
   address: string;
+  landline?: string;
   assigned_visitor_id: string;
   is_active: boolean;
   username?: string;

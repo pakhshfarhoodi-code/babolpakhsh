@@ -229,6 +229,21 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
     }
   });
 
+  const [mustChangePassword, setMustChangePassword] = useState<boolean>(false);
+
+  // Non-blocking, idempotent registration of first store login
+  const recordStoreFirstLogin = useCallback(() => {
+    if (isSupabaseConfigured && supabase) {
+      (async () => {
+        try {
+          await supabase.rpc('activate_my_store');
+        } catch (err) {
+          console.warn('[activate_my_store] notice:', err);
+        }
+      })();
+    }
+  }, []);
+
   // Setter wrappers that sync to localStorage
   const setIsLoggedIn = useCallback((val: boolean) => {
     setIsLoggedInState(val);
@@ -346,8 +361,17 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
 
           if (userRole === 'visitor') {
             setSelectedVisitorIdState(prof.id);
+            setMustChangePassword(false);
           } else if (userRole === 'supermarket') {
             setSelectedSupermarketIdState(prof.id);
+            recordStoreFirstLogin();
+            if (isSupabaseConfigured && supabase) {
+              supabase.auth.getSession().then(({ data: { session: s } }) => {
+                setMustChangePassword(Boolean(s?.user?.user_metadata?.must_change_password === true));
+              }).catch(() => {});
+            }
+          } else {
+            setMustChangePassword(false);
           }
 
           return { success: true };
@@ -384,6 +408,7 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
         if (sessionError || !session?.user) {
           lastProfileFetchedUserIdRef.current = null;
           setIsLoggedInState(false);
+          setMustChangePassword(false);
           setAuthProfile(null);
           localStorage.setItem(STORAGE_KEYS.AUTH_LOGGED_IN, 'false');
           localStorage.removeItem(STORAGE_KEYS.AUTH_ROLE);
@@ -391,6 +416,13 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
           localStorage.removeItem(STORAGE_KEYS.AUTH_SUPERMARKET_ID);
           localStorage.removeItem('alborz_auth_profile');
         } else if (session?.user) {
+          const isSupermarket = session.user.user_metadata?.role === 'supermarket';
+          if (isSupermarket) {
+            recordStoreFirstLogin();
+            setMustChangePassword(Boolean(session.user.user_metadata?.must_change_password === true));
+          } else {
+            setMustChangePassword(false);
+          }
           if (lastProfileFetchedUserIdRef.current !== session.user.id) {
             await syncUserProfile(session.user.id);
           }
@@ -408,6 +440,7 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
         lastProfileFetchedUserIdRef.current = null;
         activeProfilePromiseRef.current = null;
         setIsLoggedInState(false);
+        setMustChangePassword(false);
         localStorage.setItem(STORAGE_KEYS.AUTH_LOGGED_IN, 'false');
         localStorage.removeItem(STORAGE_KEYS.AUTH_ROLE);
         localStorage.removeItem(STORAGE_KEYS.AUTH_VISITOR_ID);
@@ -415,6 +448,13 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
         localStorage.removeItem('alborz_auth_profile');
         setAuthProfile(null);
       } else if (session?.user) {
+        const isSupermarket = session.user.user_metadata?.role === 'supermarket';
+        if (isSupermarket) {
+          recordStoreFirstLogin();
+          setMustChangePassword(Boolean(session.user.user_metadata?.must_change_password === true));
+        } else {
+          setMustChangePassword(false);
+        }
         const userId = session.user.id;
         // Do not re-fetch if this user ID is already processed
         if (lastProfileFetchedUserIdRef.current !== userId) {
@@ -591,6 +631,16 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
           };
         }
 
+        if (authData?.user) {
+          const isSupermarket = authData.user.user_metadata?.role === 'supermarket';
+          if (isSupermarket) {
+            recordStoreFirstLogin();
+            setMustChangePassword(Boolean(authData.user.user_metadata?.must_change_password === true));
+          } else {
+            setMustChangePassword(false);
+          }
+        }
+
         // 3. Read profile through unified single-source syncUserProfile (no duplicate queries)
         const profileResult = await syncUserProfile(authData.user.id, allowedRoles);
         if (!profileResult.success) {
@@ -598,6 +648,11 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
             success: false,
             message: profileResult.message || 'خطا در دریافت مشخصات کاربر از سرور',
           };
+        }
+
+        // Ensure recordStoreFirstLogin is triggered for supermarket logins
+        if (authData.user.user_metadata?.role === 'supermarket') {
+          recordStoreFirstLogin();
         }
 
         const eitaaInitDataForLink = getEitaaInitData();
@@ -637,6 +692,7 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
     lastProfileFetchedUserIdRef.current = null;
     activeProfilePromiseRef.current = null;
     setIsLoggedInState(false);
+    setMustChangePassword(false);
     localStorage.setItem(STORAGE_KEYS.AUTH_LOGGED_IN, 'false');
     localStorage.removeItem(STORAGE_KEYS.AUTH_ROLE);
     localStorage.removeItem(STORAGE_KEYS.AUTH_VISITOR_ID);
@@ -975,5 +1031,7 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
     loginWithCredentials,
     logout,
     registerSupermarket,
+    mustChangePassword,
+    setMustChangePassword,
   };
 }

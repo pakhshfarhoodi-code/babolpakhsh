@@ -76,6 +76,8 @@ interface AppContextType {
 
   authReady: boolean;
   isLoggedIn: boolean;
+  mustChangePassword: boolean;
+  setMustChangePassword: (val: boolean) => void;
   currentUser: CurrentUser;
   loginWithCredentials: (username: string, password: string, allowedRoles?: UserRole[]) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
@@ -1544,6 +1546,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     deleteVisitor,
     resetVisitorPassword,
     createStaffAccount,
+    mustChangePassword: auth.mustChangePassword,
+    setMustChangePassword: auth.setMustChangePassword,
     resetToDefaults,
     isOnlineDb: isSupabaseConfigured,
     isDataReady,
@@ -1579,6 +1583,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     auth.loginWithCredentials,
     auth.logout,
     auth.registerSupermarket,
+    auth.mustChangePassword,
+    auth.setMustChangePassword,
     updateSupermarket,
     deleteSupermarket,
     toggleSupermarketApproval,

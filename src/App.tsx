@@ -11,6 +11,7 @@ const AdminPanel = lazy(() => import('./components/AdminPanel').then((m) => ({ d
 const VisitorPortal = lazy(() => import('./components/VisitorPortal').then((m) => ({ default: m.VisitorPortal })));
 const SupermarketPortal = lazy(() => import('./components/SupermarketPortal').then((m) => ({ default: m.SupermarketPortal })));
 const WarehousePanel = lazy(() => import('./components/WarehousePanel').then((m) => ({ default: m.WarehousePanel })));
+import { ForcePasswordChangeModal } from './components/ForcePasswordChangeModal';
 import { AlertTriangle, RefreshCw, Loader2 } from 'lucide-react';
 
 // Helper to detect base path (e.g. '/babolpakhsh' on GitHub Pages or '' for root/ArvanCloud)
@@ -53,6 +54,7 @@ export const App: React.FC = () => {
     retryFetch,
     theme,
     invoiceSettings,
+    mustChangePassword,
   } = useApp();
 
   const currentLogo = invoiceSettings?.logo_url || appLogo;
@@ -293,6 +295,9 @@ export const App: React.FC = () => {
           )}
         </Suspense>
       </main>
+
+      {/* Mandatory password change for Excel-imported store accounts */}
+      <ForcePasswordChangeModal isOpen={isLoggedIn && mustChangePassword} />
     </div>
   );
 };

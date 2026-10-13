@@ -209,6 +209,7 @@ Deno.serve(async (req: Request) => {
             role: 'supermarket',
             name,
             phone: cleanPhone,
+            must_change_password: true,
           },
         });
 

@@ -103,7 +103,21 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
 
     const fetchCampaign = async () => {
       setIsLoadingCampaign(true);
+      let parsedLocalCap: number | null = null;
       try {
+        const localCap = localStorage.getItem('app_setting_founder_capacity');
+        if (localCap && isMounted) {
+          const parsed = parseInt(localCap, 10);
+          if (!isNaN(parsed) && parsed > 0) {
+            parsedLocalCap = parsed;
+            setCampaignCapacity(parsed);
+          }
+        }
+        const localActive = localStorage.getItem('app_setting_founder_active');
+        if (localActive !== null && isMounted) {
+          setCampaignActive(localActive === 'true');
+        }
+
         if (isSupabaseConfigured && supabase) {
           const { data, error } = await supabase.rpc('get_founder_campaign');
           if (!error && data) {
@@ -112,7 +126,7 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
               setCampaignData(c);
               setCampaignActive(c.active ?? true);
               setCampaignPercent(typeof c.percent === 'number' ? c.percent : 5);
-              setCampaignCapacity(typeof c.capacity === 'number' ? c.capacity : 100);
+              setCampaignCapacity(typeof c.capacity === 'number' ? c.capacity : (parsedLocalCap || 100));
               setCampaignOrdersPerStore(typeof c.orders_per_store === 'number' ? c.orders_per_store : 3);
             }
           }
@@ -250,6 +264,11 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
 
     setIsSavingCampaign(true);
     try {
+      localStorage.setItem('app_setting_founder_capacity', String(campaignCapacity));
+      localStorage.setItem('app_setting_founder_percent', String(campaignPercent));
+      localStorage.setItem('app_setting_founder_orders', String(campaignOrdersPerStore));
+      localStorage.setItem('app_setting_founder_active', String(campaignActive));
+
       if (isSupabaseConfigured && supabase) {
         const { error } = await supabase.rpc('admin_set_founder_campaign', {
           p_percent: campaignPercent,
@@ -283,7 +302,13 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
         }
         refreshData();
       } else {
-        showToast('پایگاه داده متصل نیست.', 'error');
+        showToast(
+          restart
+            ? 'دوره جدید کمپین تخفیف با موفقیت آغاز شد.'
+            : 'تنظیمات کمپین تخفیف با موفقیت ذخیره شد.',
+          'success'
+        );
+        refreshData();
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'خطا در ذخیره تنظیمات کمپین';

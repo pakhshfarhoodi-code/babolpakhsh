@@ -18,11 +18,14 @@ import {
   getPackSize,
   isPackaged,
   getBaseUnit,
+  getSaleUnitLabel,
   getUnitColumnText,
   getUnitPriceFromOrderItem,
   getItemUnitPriceAndTotal,
   computeLine,
   findProductMatch,
+  getOrderPricing,
+  splitDiscountAmounts,
 } from '../../utils/orderLine';
 import { Building2, Store } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
@@ -262,41 +265,25 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
   // ---------------------------------------------------------------------------
   const rawItems = order.items || [];
 
-  const pickupDiscountPercent = order.pickup_discount_percent || 0;
-  const founderDiscountPercent = order.founder_discount_percent || 0;
-  const manualDiscountPercent = order.discount_status === 'approved' ? (order.discount_percent || 0) : 0;
-  const totalDiscountPercent = Math.min(100, Math.max(0, pickupDiscountPercent + founderDiscountPercent + manualDiscountPercent));
+  // All money totals come from ONE shared function (also used by the admin orders list),
+  // so the invoice and the list can never disagree.
+  const pricing = getOrderPricing(order, products);
+  const pickupDiscountPercent = pricing.pickupPercent;
+  const founderDiscountPercent = pricing.founderPercent;
+  const manualDiscountPercent = pricing.manualPercent;
+  const totalDiscountPercent = pricing.totalDiscountPercent;
 
-  const isSelfOrder = Boolean(order.supermarket_id?.startsWith('self-'));
   // Store customer invoices should always use store selling price; only visitor self-orders use visitor purchase price
-  const isVisitorOrder = isSelfOrder;
+  const isVisitorOrder = pricing.isVisitorOrder;
 
-  // originalSubtotal is the sum of raw item totals before discount
-  const originalSubtotal = rawItems.reduce((sum, item) => {
-    const product = findProductMatch(item, products);
-    const { total } = getItemUnitPriceAndTotal(item, product, isVisitorOrder);
-    return sum + total;
-  }, 0);
+  const subtotal = pricing.subtotal;
+  const discountedSubtotal = pricing.discountedSubtotal;
 
-  const subtotal = originalSubtotal > 0 ? originalSubtotal : (order.total_amount || 0);
-
-  // Calculate discounted row totals and sum them up with computeLine
-  const discountedSubtotal = rawItems.reduce((sum, item) => {
-    const product = findProductMatch(item, products);
-    const { pack, unitPrice } = getItemUnitPriceAndTotal(item, product, isVisitorOrder);
-    const { total } = computeLine({
-      quantity: Number(item.quantity) || 0,
-      pack,
-      unitPrice,
-      discountPercent: totalDiscountPercent,
-    });
-    return sum + total;
-  }, 0);
-
-  // Discount Amounts for Summary
-  const pickupDiscountAmount = Math.round(subtotal * (pickupDiscountPercent / 100));
-  const founderDiscountAmount = Math.round(subtotal * (founderDiscountPercent / 100));
-  const manualDiscountAmount = Math.round(subtotal * (manualDiscountPercent / 100));
+  // Discount amounts for the summary: they always add up exactly to (subtotal - discountedSubtotal)
+  const splitDiscounts = splitDiscountAmounts(pricing);
+  const pickupDiscountAmount = splitDiscounts.pickup;
+  const founderDiscountAmount = splitDiscounts.founder;
+  const manualDiscountAmount = splitDiscounts.manual;
 
   const hasOverallDiscount = totalDiscountPercent > 0;
 
@@ -854,7 +841,7 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
                     {qty.toLocaleString('fa-IR')}
                   </span>
                   {packaged && (
-                    <span className="text-[10px] text-slate-500 mr-1 font-normal">کارتن</span>
+                    <span className="text-[10px] text-slate-500 mr-1 font-normal">{getSaleUnitLabel(rawUnit, pack)}</span>
                   )}
                 </td>
               );

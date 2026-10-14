@@ -11,6 +11,23 @@
 
 export const PACKAGE_WORDS = ['کارتن', 'جعبه', 'بسته', 'پک', 'باکس'];
 
+/**
+ * واحدهای «محتوا/اندازهگیری». اگر واحد کالا یکی از اینهاست و کالا بستهای است (pack > 1)،
+ * یعنی واحد همان چیزی است که داخل بسته قرار دارد (مثلاً ۱۰ کیلوگرم) و واحد فروش
+ * (ستون تعداد) به «کارتن» برمیگردد.
+ * هر واحد دیگری (کارتن، بسته، کیسه، جعبه، سطل، شانه، دبه، ... یا هر واحد دلخواه ادمین)
+ * «واحد فروش» است و باید عیناً در ستون تعداد فاکتور نمایش داده شود؛ محتوای هر واحد = «عدد».
+ */
+export const CONTENT_UNIT_WORDS = [
+  'عدد', 'دانه', 'تکه', 'کیلوگرم', 'کیلو', 'گرم', 'لیتر', 'میلیلیتر', 'متر',
+];
+
+/** آیا این واحد یک «ظرف/بستهبندی» (واحد فروش) است؟ */
+export function isContainerUnit(unit?: string | null): boolean {
+  const u = (unit || '').trim();
+  return u.length > 0 && !CONTENT_UNIT_WORDS.includes(u);
+}
+
 export type PackInput =
   | { items_per_package?: number | string | null }
   | number
@@ -47,24 +64,29 @@ export function isPackaged(x: PackInput): boolean {
 }
 
 /**
- * Returns base unit name. If item is packaged and unit is a package word, returns 'عدد'.
+ * Returns the unit of the CONTENT of one sale unit.
+ * If item is packaged and the admin-selected unit is a container word (کارتن، بسته، کیسه، ...)
+ * or empty, the content is counted in 'عدد'.
  */
 export function getBaseUnit(unit?: string | null, pack?: number | PackInput): string {
   const p = typeof pack === 'number' ? pack : getPackSize(pack);
   const u = (unit || '').trim();
-  if (p > 1 && (!u || PACKAGE_WORDS.includes(u))) {
+  if (p > 1 && (!u || isContainerUnit(u))) {
     return 'عدد';
   }
   return u || 'عدد';
 }
 
 /**
- * Returns sale unit label (e.g. 'کارتن' for packaged, or base unit for non-packaged).
+ * Returns the SALE unit label shown next to the quantity (e.g. '۱ بسته', '۲ کیسه').
+ * - packaged + container unit (بسته، کیسه، کارتن، ...) -> that exact unit chosen by admin
+ * - packaged + content/measure unit (عدد، کیلوگرم، ...) or empty -> 'کارتن' (legacy fallback)
+ * - non-packaged -> the unit itself
  */
 export function getSaleUnitLabel(unit?: string | null, pack?: number | PackInput): string {
   const p = typeof pack === 'number' ? pack : getPackSize(pack);
   if (p > 1) {
-    return 'کارتن';
+    return isContainerUnit(unit) ? (unit as string).trim() : 'کارتن';
   }
   return getBaseUnit(unit, p);
 }
@@ -191,36 +213,31 @@ export function getItemUnitPriceAndTotal(
   const pStorePrice = Number(product?.price ?? 0);
   const hasRealRaw = rawPrice > 1;
 
+  // Reference catalog unit price (only used to detect legacy rows saved with a per-unit price,
+  // and as a fallback when the saved price is a placeholder).
+  const refPrice = isVisitorOrder
+    ? (pVisitorPrice > 1 ? pVisitorPrice : (pStorePrice > 1 ? pStorePrice : 0))
+    : (pStorePrice > 1 ? pStorePrice : 0);
+
   let unitPrice = 0;
 
-  if (isVisitorOrder) {
-    if (pVisitorPrice > 1) {
-      unitPrice = pVisitorPrice;
-    } else if (pStorePrice > 1) {
-      unitPrice = pStorePrice;
-    } else if (hasRealRaw) {
-      if (pStorePrice > 0 && Math.abs(rawPrice - pStorePrice * pack) < Math.abs(rawPrice - pStorePrice)) {
-        unitPrice = Math.round(rawPrice / pack);
-      } else {
-        unitPrice = rawPrice;
-      }
+  if (hasRealRaw) {
+    // The price SAVED on the order item is the source of truth (it is what the customer saw and
+    // agreed to). It never depends on the live catalog, so totals cannot change when products
+    // load late, are re-fetched, or when the catalog price is edited later.
+    if (pack <= 1) {
+      unitPrice = rawPrice;
+    } else if (refPrice > 0 && Math.abs(rawPrice - refPrice) < Math.abs(rawPrice - refPrice * pack)) {
+      // legacy row that was saved with a per-unit price
+      unitPrice = rawPrice;
     } else {
-      unitPrice = pVisitorPrice > 0 ? pVisitorPrice : (pStorePrice > 0 ? pStorePrice : rawPrice);
+      // standard rule: order_items.price = price of one whole sale package (unit * pack)
+      unitPrice = Math.round(rawPrice / pack);
     }
+  } else if (isVisitorOrder) {
+    unitPrice = pVisitorPrice > 1 ? pVisitorPrice : (pStorePrice > 1 ? pStorePrice : (pVisitorPrice || pStorePrice || rawPrice));
   } else {
-    if (pStorePrice > 1) {
-      if (hasRealRaw && Math.abs(rawPrice - pStorePrice * pack) < Math.abs(rawPrice - pStorePrice)) {
-        unitPrice = Math.round(rawPrice / pack);
-      } else {
-        unitPrice = pStorePrice;
-      }
-    } else if (hasRealRaw) {
-      unitPrice = rawPrice;
-    } else if (pVisitorPrice > 1) {
-      unitPrice = pVisitorPrice;
-    } else {
-      unitPrice = rawPrice;
-    }
+    unitPrice = pStorePrice > 1 ? pStorePrice : (pVisitorPrice > 1 ? pVisitorPrice : (pStorePrice || rawPrice));
   }
 
   const cartonPrice = Math.round(unitPrice * pack);
@@ -268,7 +285,7 @@ export function computeLine({
 
 /**
  * Helper to format line breakdown string:
- * Packaged: "۲ کارتن × ۵۰ عدد × ۳۵٬۰۰۰ = ۳٬۵۰۰٬۰۰۰"
+ * Packaged: "۲ بسته × ۵۰ عدد × ۳۵٬۰۰۰ = ۳٬۵۰۰٬۰۰۰" (saleUnit = unit chosen by admin)
  * Non-packaged: "۲٫۵ کیلوگرم × ۲۰۰٬۰۰۰ = ۵۰۰٬۰۰۰"
  */
 export function formatLineCalculation(
@@ -276,7 +293,8 @@ export function formatLineCalculation(
   pack: number | PackInput,
   unitPrice: number,
   baseUnit: string,
-  discountPercent: number = 0
+  discountPercent: number = 0,
+  saleUnit: string = 'کارتن'
 ): string {
   const p = getPackSize(pack);
   const { discountedUnitPrice, total } = computeLine({
@@ -292,7 +310,114 @@ export function formatLineCalculation(
   const totalStr = total.toLocaleString('fa-IR');
 
   if (p > 1) {
-    return `${qtyStr} کارتن × ${p.toLocaleString('fa-IR')} ${bu} × ${unitPriceStr} = ${totalStr} تومان`;
+    return `${qtyStr} ${saleUnit || 'کارتن'} × ${p.toLocaleString('fa-IR')} ${bu} × ${unitPriceStr} = ${totalStr} تومان`;
   }
   return `${qtyStr} ${bu} × ${unitPriceStr} = ${totalStr} تومان`;
 }
+
+export interface OrderPricingInput {
+  items?: Array<{
+    price: number;
+    quantity: number;
+    items_per_package?: number | string | null;
+    product_id?: string;
+    productId?: string;
+    name?: string;
+    product_name?: string;
+  }> | null;
+  supermarket_id?: string | null;
+  total_amount?: number | null;
+  pickup_discount_percent?: number | null;
+  founder_discount_percent?: number | null;
+  discount_status?: string | null;
+  discount_percent?: number | null;
+}
+
+export interface OrderPricingResult {
+  isVisitorOrder: boolean;
+  pickupPercent: number;
+  founderPercent: number;
+  manualPercent: number;
+  totalDiscountPercent: number;
+  /** sum of line totals before discount */
+  subtotal: number;
+  /** sum of line totals after discount (same per-line rounding as the printed invoice) */
+  discountedSubtotal: number;
+}
+
+/**
+ * SINGLE source of truth for an order's money totals.
+ * Used by the invoice (InvoiceDocument) and the admin orders list so both always show the same number.
+ * Store invoices use the store price; only visitor self-orders ("self-" supermarket ids) use visitor price.
+ */
+export function getOrderPricing(
+  order: OrderPricingInput,
+  products: Array<{ id: string; name?: string; price?: number; visitor_price?: number; items_per_package?: number }>
+): OrderPricingResult {
+  const items = order.items || [];
+  const isVisitorOrder = Boolean(order.supermarket_id?.startsWith('self-'));
+
+  const pickupPercent = order.pickup_discount_percent || 0;
+  const founderPercent = order.founder_discount_percent || 0;
+  const manualPercent = order.discount_status === 'approved' ? (order.discount_percent || 0) : 0;
+  const totalDiscountPercent = Math.min(100, Math.max(0, pickupPercent + founderPercent + manualPercent));
+
+  let rawSubtotal = 0;
+  let discountedSum = 0;
+  for (const item of items) {
+    const product = findProductMatch(item, products);
+    const { pack, unitPrice, total } = getItemUnitPriceAndTotal(item, product, isVisitorOrder);
+    rawSubtotal += total;
+    discountedSum += computeLine({
+      quantity: Number(item.quantity) || 0,
+      pack,
+      unitPrice,
+      discountPercent: totalDiscountPercent,
+    }).total;
+  }
+
+  if (rawSubtotal > 0) {
+    return {
+      isVisitorOrder, pickupPercent, founderPercent, manualPercent, totalDiscountPercent,
+      subtotal: rawSubtotal,
+      discountedSubtotal: discountedSum,
+    };
+  }
+
+  const fallback = Number(order.total_amount || 0);
+  return {
+    isVisitorOrder, pickupPercent, founderPercent, manualPercent, totalDiscountPercent,
+    subtotal: fallback,
+    discountedSubtotal: Math.round(fallback * (1 - totalDiscountPercent / 100)),
+  };
+}
+
+/**
+ * Splits (subtotal - discountedSubtotal) between the active discounts so that the displayed
+ * discount lines always add up exactly to the difference shown in the totals (no 1-5 toman drift
+ * caused by per-unit rounding). The last active discount absorbs the rounding remainder.
+ */
+export function splitDiscountAmounts(p: OrderPricingResult): { pickup: number; founder: number; manual: number } {
+  const totalDiscount = Math.max(0, p.subtotal - p.discountedSubtotal);
+  const active: Array<['pickup' | 'founder' | 'manual', number]> = [];
+  if (p.pickupPercent > 0) active.push(['pickup', p.pickupPercent]);
+  if (p.founderPercent > 0) active.push(['founder', p.founderPercent]);
+  if (p.manualPercent > 0) active.push(['manual', p.manualPercent]);
+
+  const out = { pickup: 0, founder: 0, manual: 0 };
+  if (active.length === 0 || totalDiscount === 0) return out;
+
+  const sumPct = active.reduce((a, [, pct]) => a + pct, 0);
+  let allocated = 0;
+  active.forEach(([key, pct], i) => {
+    if (i === active.length - 1) {
+      out[key] = totalDiscount - allocated;
+    } else {
+      const part = Math.round((totalDiscount * pct) / sumPct);
+      out[key] = part;
+      allocated += part;
+    }
+  });
+  return out;
+}
+

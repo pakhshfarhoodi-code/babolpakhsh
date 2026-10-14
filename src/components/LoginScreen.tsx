@@ -43,14 +43,35 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const { loginWithCredentials, isLoggedIn, isDataReady, theme, toggleTheme, invoiceSettings, supermarkets } = useApp();
   const currentLogo = invoiceSettings?.logo_url || appLogo;
 
-  // Live registered stores counter and campaign capacity fetched from server
+  // Live registered stores counter and campaign capacity fetched from server or admin setting
   const [serverStoreCount, setServerStoreCount] = useState<number | null>(null);
-  const [campaignCapacity, setCampaignCapacity] = useState<number>(FOUNDER_INITIAL_CAPACITY);
+  const [campaignCapacity, setCampaignCapacity] = useState<number>(() => {
+    try {
+      const localCap = localStorage.getItem('app_setting_founder_capacity');
+      if (localCap) {
+        const parsed = parseInt(localCap, 10);
+        if (!isNaN(parsed) && parsed > 0) return parsed;
+      }
+    } catch {
+      // Fallback
+    }
+    return FOUNDER_INITIAL_CAPACITY;
+  });
 
   // Fetch real registered stores count and campaign capacity on mount
   useEffect(() => {
     let isMounted = true;
     const fetchData = async () => {
+      try {
+        const localCap = localStorage.getItem('app_setting_founder_capacity');
+        if (localCap && isMounted) {
+          const parsed = parseInt(localCap, 10);
+          if (!isNaN(parsed) && parsed > 0) setCampaignCapacity(parsed);
+        }
+      } catch {
+        // Fallback
+      }
+
       if (!supabase) return;
       try {
         const { data: campaignData, error: campaignErr } = await supabase.rpc('get_founder_campaign');

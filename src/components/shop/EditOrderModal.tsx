@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Order, Product } from '../../types';
 import { formatPrice, roundQty } from './shopUtils';
-import { getPackSize, getBaseUnit } from '../../utils/orderLine';
+import { getPackSize, getBaseUnit, getSaleUnitLabel } from '../../utils/orderLine';
 import { useApp } from '../../context/AppContext';
 import {
   X,
@@ -230,7 +230,7 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
                         </h4>
                         <p className="text-[10px] text-slate-400 mt-0.5">
                           قیمت واحد: {formatPrice(it.price)}
-                          {pack > 1 && ` (کارتن ${pack} عددی)`}
+                          {pack > 1 && ` (${getSaleUnitLabel(it.unit, pack)} ${pack} عددی)`}
                         </p>
                       </div>
 

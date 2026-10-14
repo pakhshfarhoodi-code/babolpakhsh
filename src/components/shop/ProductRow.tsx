@@ -182,7 +182,7 @@ export const ProductRow: React.FC<ProductRowProps> = ({
               ) : null}
               {product.items_per_package && product.items_per_package > 0 ? (
                 <span className="shrink-0 whitespace-nowrap px-1.5 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 font-bold border border-indigo-500/30 text-[11px] num-fa">
-                  بسته {product.items_per_package.toLocaleString('fa-IR')} عددی
+                  {getSaleUnitLabel(product.unit, product.items_per_package)} {product.items_per_package.toLocaleString('fa-IR')} عددی
                 </span>
               ) : null}
             </div>

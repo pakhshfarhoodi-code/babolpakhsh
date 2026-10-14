@@ -1187,7 +1187,8 @@ export const DirectInvoiceSheet: React.FC<DirectInvoiceSheetProps> = ({
                         pack,
                         line.unit_price,
                         baseUnit,
-                        0
+                        0,
+                        getSaleUnitLabel(line.product.unit, pack)
                       );
                       const isEditingPrice = editingPriceLineId === line.id;
 
@@ -1203,7 +1204,7 @@ export const DirectInvoiceSheet: React.FC<DirectInvoiceSheetProps> = ({
                               </h4>
                               <p className="text-[10px] text-slate-400 mt-0.5">
                                 {line.product.brand ? `برند: ${line.product.brand} | ` : ''}
-                                واحد پایه: {baseUnit} {pack > 1 ? `(کارتن ${pack} عددی)` : ''}
+                                واحد پایه: {baseUnit} {pack > 1 ? `(${getSaleUnitLabel(line.product.unit, pack)} ${pack} عددی)` : ''}
                               </p>
                             </div>
                             <button
@@ -1228,7 +1229,7 @@ export const DirectInvoiceSheet: React.FC<DirectInvoiceSheetProps> = ({
                                 -
                               </button>
                               <span className="font-bold font-mono text-xs px-2 text-slate-100">
-                                {line.quantity.toLocaleString('fa-IR')} {pack > 1 ? 'کارتن' : baseUnit}
+                                {line.quantity.toLocaleString('fa-IR')} {getSaleUnitLabel(line.product.unit, pack)}
                               </span>
                               <button
                                 type="button"

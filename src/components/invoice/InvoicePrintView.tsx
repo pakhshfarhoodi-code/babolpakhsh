@@ -8,6 +8,7 @@ import { useApp } from '../../context/AppContext';
 import {
   getPackSize,
   getBaseUnit,
+  getSaleUnitLabel,
   getUnitColumnText,
   isPackaged,
   computeLine,
@@ -66,6 +67,7 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
       productName: string;
       pack: number;
       baseUnit: string;
+      saleUnit: string;
       totalQuantity: number;
       visitorPrice: number;
       totalAmount: number;
@@ -78,6 +80,7 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
       const prod = productMap.get(it.product_id) || (it.product_name ? productMap.get(it.product_name.trim().toLowerCase()) : undefined);
       const pack = getPackSize(it.items_per_package || prod?.items_per_package);
       const baseUnit = getBaseUnit(it.unit || prod?.unit, pack);
+      const saleUnit = getSaleUnitLabel(it.unit || prod?.unit, pack);
 
       const liveVisitorPrice = Number(prod?.visitor_price ?? 0);
       const liveStorePrice = Number(prod?.price ?? 0);
@@ -118,6 +121,7 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
           productName: it.product_name || prod?.name || 'کالای نامشخص',
           pack,
           baseUnit,
+          saleUnit,
           totalQuantity: it.quantity,
           visitorPrice: vPrice,
           totalAmount: lineCalc.total,
@@ -339,7 +343,7 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
                     <td className="py-2.5 px-3 text-center font-bold text-slate-900">
                       <span className="text-sm">{toPersianDigits(item.totalQuantity.toLocaleString('fa-IR'))}</span>
                       {isPackaged(item.pack) && (
-                        <span className="text-[10px] text-slate-500 font-normal mr-1">کارتن</span>
+                        <span className="text-[10px] text-slate-500 font-normal mr-1">{item.saleUnit}</span>
                       )}
                     </td>
                     <td className="py-2.5 px-3 text-center text-slate-600 font-medium">
@@ -561,7 +565,7 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
                             <td className="py-2 px-3 text-center font-bold text-slate-900">
                               <span className="font-mono">{Number(it.quantity).toLocaleString('fa-IR')}</span>
                               {isPackaged(pack) && (
-                                <span className="text-[10px] text-slate-500 font-normal mr-1">کارتن</span>
+                                <span className="text-[10px] text-slate-500 font-normal mr-1">{getSaleUnitLabel(it.unit || prod?.unit, pack)}</span>
                               )}
                             </td>
                             <td className="py-2 px-3 text-center text-slate-600 font-medium">

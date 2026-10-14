@@ -37,7 +37,7 @@ import { DirectInvoiceSheet } from './DirectInvoiceSheet';
 import { getOrderChannel } from '../../context/utils';
 import { useApp } from '../../context/AppContext';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
-import { getItemUnitPriceAndTotal } from '../../utils/orderLine';
+import { getOrderPricing } from '../../utils/orderLine';
 
 export type OrderSortField =
   | 'id'
@@ -75,30 +75,12 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
 }) => {
   const { refreshData, products = [], loadingBills = [], supermarkets = [] } = useApp();
 
+  // Same shared calculation as the printed invoice (getOrderPricing) -> list total == invoice total.
+  // Based on the price saved on each order item, so it does not jump while the catalog is loading/refreshing.
   const getCalculatedOrderTotal = useCallback(
     (order: Order): number => {
       if (!order.items || order.items.length === 0) return Number(order.total_amount || 0);
-
-      const isVisitorOrder =
-        order.order_channel === 'visitor_field' ||
-        order.order_source === 'visitor' ||
-        Boolean(order.assigned_visitor_id && order.assigned_visitor_id !== 'direct');
-
-      const rawSubtotal = order.items.reduce((sum, item) => {
-        const product = products.find((p) => p.id === item.product_id);
-        const { total } = getItemUnitPriceAndTotal(item, product, isVisitorOrder);
-        return sum + total;
-      }, 0);
-
-      const pickupDisc = order.pickup_discount_percent || 0;
-      const founderDisc = order.founder_discount_percent || 0;
-      const manualDisc = order.discount_status === 'approved' ? (order.discount_percent || 0) : 0;
-      const totalDiscPercent = Math.min(100, Math.max(0, pickupDisc + founderDisc + manualDisc));
-
-      if (totalDiscPercent > 0) {
-        return Math.round(rawSubtotal * (1 - totalDiscPercent / 100));
-      }
-      return rawSubtotal > 0 ? rawSubtotal : Number(order.total_amount || 0);
+      return getOrderPricing(order, products).discountedSubtotal;
     },
     [products]
   );
@@ -417,7 +399,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
     });
 
     return list;
-  }, [filteredOrders, sortField, sortDirection]);
+  }, [filteredOrders, sortField, sortDirection, getCalculatedOrderTotal]);
 
   const handleOpenOverride = (order: Order, target: OrderStatus) => {
     setOverrideModalOrder(order);

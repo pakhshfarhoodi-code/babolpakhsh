@@ -1,15 +1,5 @@
-# دستیار حکم (سلطان حکم)
-
-باز کردن: Android Studio ← Open ← همین پوشه، یا بیلد ابری با GitHub Actions (فایل .github/workflows/build.yml).
-
-## جریان استفاده
-1. مجوز «نمایش روی برنامه‌ها» و «دسترسی به آمار استفاده» را بدهید (بعد از نصب APK: App info ← ⋮ ← Allow restricted settings) و برنامه‌ی سلطان حکم را انتخاب کنید.
-2. «روشن کردن دکمه‌ی شناور»: فقط یک دکمه‌ی «خاموش»؛ هیچ اسکنی نیست.
-3. وارد بازی شوید، حکم را خودتان انتخاب کنید و وقتی ورق‌ها آمد دکمه را بزنید (مجوز ضبط صفحه) ← «روشن».
-4. پنل کوچکی بین میز و شمارنده‌ها دو خط نشان می‌دهد: حکم و نوبت، و «بزن: ...» با گزینه‌های جایگزین. دست شما فقط در حافظه است و نمایش داده نمی‌شود.
-5. دوباره دکمه را بزنید ← ضبط قطع می‌شود.
-
-## چه چیزی را یاد گرفته
-برگ‌های بازی‌شده‌ی همه، برنده‌ی هر رگ (ما یا حریف)، کات‌ها (کسی که پیروی نکرد آن خال را ندارد)، شمارنده‌ی رگ‌ها،
-شروع‌کننده‌ی هر رگ (برنده‌ی قبلی/حاکم/ترتیب ظاهر شدن)، برگ‌های مجاز (برگ‌های تیره‌شده مجاز نیستند)، شروع دست جدید و پاک شدن حافظه.
-پیشنهاد فقط از برگ‌های مجاز و برگ‌هایی است که در دست دارید.
+# hokm-vision (نسخه‌ی JVM برای تست و ساخت قالب‌ها)
+کامپایل: kotlinc Cards.kt HandMemory.kt Advisor.kt src/main/kotlin/hokm/vision/*.kt src/main/kotlin/hokm/game/*.kt tools/*.kt -include-runtime -d v.jar
+- ساخت قالب: java -cp v.jar BuildTemplatesKt src/test/resources/fixtures src/test/resources/samples.txt src/main/resources/templates.txt
+- ارزیابی (قالب‌ها بدون نمونه‌های همان عکس): java -cp v.jar VisionCheckKt src/test/resources/fixtures src/test/resources/samples.txt
+- تست ردیاب: java -cp v.jar TrackerCheckKt

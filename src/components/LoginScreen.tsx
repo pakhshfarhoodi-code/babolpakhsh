@@ -43,14 +43,27 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const { loginWithCredentials, isLoggedIn, isDataReady, theme, toggleTheme, invoiceSettings, supermarkets } = useApp();
   const currentLogo = invoiceSettings?.logo_url || appLogo;
 
-  // Live registered stores counter fetched from server (including past registrations)
+  // Live registered stores counter and campaign capacity fetched from server
   const [serverStoreCount, setServerStoreCount] = useState<number | null>(null);
+  const [campaignCapacity, setCampaignCapacity] = useState<number>(FOUNDER_INITIAL_CAPACITY);
 
-  // Fetch real registered stores count on mount or tab switch
+  // Fetch real registered stores count and campaign capacity on mount
   useEffect(() => {
     let isMounted = true;
-    const fetchRegisteredCount = async () => {
+    const fetchData = async () => {
       if (!supabase) return;
+      try {
+        const { data: campaignData, error: campaignErr } = await supabase.rpc('get_founder_campaign');
+        if (!campaignErr && campaignData) {
+          const c = typeof campaignData === 'string' ? JSON.parse(campaignData) : campaignData;
+          if (typeof c.capacity === 'number' && isMounted) {
+            setCampaignCapacity(c.capacity);
+          }
+        }
+      } catch {
+        // Fallback
+      }
+
       try {
         // 1. Primary: Fast and secure RPC (migration 28)
         const { data, error } = await supabase.rpc('get_registered_stores_count');
@@ -75,15 +88,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       }
     };
 
-    fetchRegisteredCount();
+    fetchData();
     return () => {
       isMounted = false;
     };
   }, []);
 
-  // Remaining capacity for the first stores discount (starts from 90 minus total registered stores)
+  // Remaining capacity for the first stores discount (starts from admin-configured capacity minus total registered stores)
   const totalRegisteredStores = Math.max(serverStoreCount ?? 0, supermarkets?.length || 0);
-  const remainingFounderSpots = Math.max(0, FOUNDER_INITIAL_CAPACITY - totalRegisteredStores);
+  const remainingFounderSpots = Math.max(0, campaignCapacity - totalRegisteredStores);
   const [activeTab, setActiveTab] = useState<UserRole>(() => {
     if (initialRole) return initialRole;
     if (allowedRoles && allowedRoles.length > 0) return allowedRoles[0];

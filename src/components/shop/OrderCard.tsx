@@ -43,12 +43,15 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   const [isExpanded, setIsExpanded] = useState(false);
   const statusInfo = getOrderStatusLabel(order.status);
 
-  const pickupDiscount = order.pickup_discount_percent || 0;
-  const founderDiscount = order.founder_discount_percent || 0;
-  const manualDiscount = order.discount_status === 'approved' ? (order.discount_percent || 0) : 0;
+  const isConsumerOrder = order.customer_type === 'consumer';
+  const pickupDiscount = isConsumerOrder ? 0 : (order.pickup_discount_percent || 0);
+  const founderDiscount = isConsumerOrder ? 0 : (order.founder_discount_percent || 0);
+  const manualDiscount = isConsumerOrder ? 0 : (order.discount_status === 'approved' ? (order.discount_percent || 0) : 0);
   const totalDiscountPercent = calculateTotalDiscountPercent(pickupDiscount, founderDiscount, manualDiscount);
 
-  const discountedTotal = order.items && order.items.length > 0
+  const discountedTotal = isConsumerOrder
+    ? Number(order.total_amount || 0)
+    : order.items && order.items.length > 0
     ? order.items.reduce((sum, item) => {
         const discountedUnitPrice = calculateDiscountedPrice(item.price, totalDiscountPercent);
         return sum + discountedUnitPrice * item.quantity;
@@ -69,17 +72,22 @@ export const OrderCard: React.FC<OrderCardProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {pickupDiscount > 0 && (
+          {isConsumerOrder && (
+            <span className="px-2 py-0.5 rounded-lg text-[11px] font-bold bg-sky-500/15 text-sky-300 border border-sky-500/30">
+              سفارش مصرف‌کننده
+            </span>
+          )}
+          {!isConsumerOrder && pickupDiscount > 0 && (
             <span className="px-2 py-0.5 rounded-lg text-[11px] font-bold bg-blue-500/15 text-blue-300 border border-blue-500/30">
               تخفیف تحویل {pickupDiscount}٪
             </span>
           )}
-          {founderDiscount > 0 && (
+          {!isConsumerOrder && founderDiscount > 0 && (
             <span className="px-2 py-0.5 rounded-lg text-[11px] font-bold bg-purple-500/15 text-purple-300 border border-purple-500/30">
               تخفیف طرح آغازین {founderDiscount}٪
             </span>
           )}
-          {manualDiscount > 0 && (
+          {!isConsumerOrder && manualDiscount > 0 && (
             <span className="px-2 py-0.5 rounded-lg text-[11px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
               تخفیف فاکتور {manualDiscount}٪
             </span>
@@ -163,7 +171,24 @@ export const OrderCard: React.FC<OrderCardProps> = ({
       <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 gap-2 flex-wrap sm:flex-nowrap">
         <div className="text-xs flex items-center flex-wrap gap-1.5 min-w-0">
           <span className="text-slate-400">مبلغ سفارش: </span>
-          {totalDiscountPercent > 0 ? (
+          {isConsumerOrder && (order.consumer_savings ?? 0) > 0 ? (
+            <div className="flex items-baseline gap-1.5 flex-wrap">
+              <span className="line-through text-slate-500 text-[11px] font-mono">
+                {formatPrice(order.total_amount + (order.consumer_savings || 0))}
+              </span>
+              <Price
+                value={order.total_amount}
+                size="md"
+                tone="success"
+                unit="تومان"
+                bold
+                className="text-sm font-extrabold"
+              />
+              <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-1 py-0.2 rounded border border-emerald-800/50">
+                ({formatPrice(order.consumer_savings!)} ت سود شما)
+              </span>
+            </div>
+          ) : totalDiscountPercent > 0 ? (
             <div className="flex items-baseline gap-1.5 flex-wrap">
               <span className="line-through text-slate-500 text-[11px] font-mono">
                 {formatPrice(order.total_amount)}

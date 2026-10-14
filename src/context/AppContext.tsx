@@ -1267,6 +1267,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               localStorage.setItem('barfroosh_admin_customer_notes', JSON.stringify(parsedNotes));
             }
           }
+
+          // Fetch founder_campaign setting
+          const { data: founderCampaignData } = await supabase
+            .from('app_settings')
+            .select('value')
+            .eq('key', 'founder_campaign')
+            .maybeSingle();
+
+          if (founderCampaignData && founderCampaignData.value && isMounted) {
+            const val = typeof founderCampaignData.value === 'string'
+              ? JSON.parse(founderCampaignData.value)
+              : founderCampaignData.value;
+            if (val && typeof val.capacity === 'number' && typeof window !== 'undefined') {
+              localStorage.setItem('app_setting_founder_capacity', String(val.capacity));
+            }
+          }
         } catch (err) {
           console.warn('Error fetching invoice_settings from app_settings:', err);
         }

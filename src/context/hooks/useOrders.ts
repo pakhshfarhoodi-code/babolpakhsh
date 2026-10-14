@@ -226,11 +226,17 @@ export function useOrders({
       }
 
       const orderIsoDate = new Date().toISOString();
-      const isVisitorChannel = orderSource === 'visitor' || Boolean(finalAssignedVisitorId && finalAssignedVisitorId !== 'direct');
+      const isConsumerOrder = Boolean(
+        (payload as any).customer_type === 'consumer' ||
+        (payload as any).customerType === 'consumer' ||
+        (supermarket as any).verification_type === 'bulk_consumer'
+      );
+      const isVisitorChannel =
+        !isConsumerOrder && (orderSource === 'visitor' || Boolean(finalAssignedVisitorId && finalAssignedVisitorId !== 'direct'));
 
       const totalAmount = payload.items.reduce((sum, item) => {
         const prod = products.find((p) => p.id === item.productId);
-        const { total } = getItemUnitPriceAndTotal(item, prod, isVisitorChannel);
+        const { total } = getItemUnitPriceAndTotal(item, prod, isVisitorChannel, isConsumerOrder);
         return sum + total;
       }, 0);
 
@@ -253,11 +259,13 @@ export function useOrders({
         visitor_name: isSelfBuyer ? '' : finalVisitorName,
         status: 'assigned',
         total_amount: totalAmount,
+        customer_type: isConsumerOrder ? 'consumer' : ((payload as any).customer_type || 'store'),
+        consumer_savings: (payload as any).consumer_savings ? Number((payload as any).consumer_savings) : undefined,
         order_source: orderSource,
         order_channel: orderChannel,
         order_date: orderIsoDate,
-        pickup_discount_percent: orderSource === 'visitor' ? 0 : (payload.pickupDiscountPercent || 0),
-        founder_discount_percent: payload.founderDiscountPercent || 0,
+        pickup_discount_percent: (isConsumerOrder || orderSource === 'visitor') ? 0 : (payload.pickupDiscountPercent || 0),
+        founder_discount_percent: isConsumerOrder ? 0 : (payload.founderDiscountPercent || 0),
         items: payload.items.map((i, idx) => {
           const prod = products.find((p) => p.id === i.productId);
           return {
@@ -903,14 +911,17 @@ export function useOrders({
         })
       );
 
+      const isConsumerOrder = targetOrder.customer_type === 'consumer';
       const isVisitorChannel =
-        targetOrder.order_channel === 'visitor_field' ||
-        targetOrder.order_source === 'visitor' ||
-        Boolean(targetOrder.assigned_visitor_id && targetOrder.assigned_visitor_id !== 'direct');
+        !isConsumerOrder && (
+          targetOrder.order_channel === 'visitor_field' ||
+          targetOrder.order_source === 'visitor' ||
+          Boolean(targetOrder.assigned_visitor_id && targetOrder.assigned_visitor_id !== 'direct')
+        );
 
       const newTotalAmount = updatedItems.reduce((sum, item) => {
         const prod = products.find((p) => p.id === item.productId);
-        const { total } = getItemUnitPriceAndTotal(item, prod, isVisitorChannel);
+        const { total } = getItemUnitPriceAndTotal(item, prod, isVisitorChannel, isConsumerOrder);
         return sum + total;
       }, 0);
 

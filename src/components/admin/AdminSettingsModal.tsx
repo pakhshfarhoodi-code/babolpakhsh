@@ -119,15 +119,41 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
         }
 
         if (isSupabaseConfigured && supabase) {
-          const { data, error } = await supabase.rpc('get_founder_campaign');
-          if (!error && data) {
-            const c: FounderCampaignInfo = typeof data === 'string' ? JSON.parse(data) : data;
-            if (isMounted) {
-              setCampaignData(c);
-              setCampaignActive(c.active ?? true);
-              setCampaignPercent(typeof c.percent === 'number' ? c.percent : 5);
-              setCampaignCapacity(typeof c.capacity === 'number' ? c.capacity : (parsedLocalCap || 100));
-              setCampaignOrdersPerStore(typeof c.orders_per_store === 'number' ? c.orders_per_store : 3);
+          let campaignLoaded = false;
+          try {
+            const { data, error } = await supabase.rpc('get_founder_campaign');
+            if (!error && data) {
+              const c: FounderCampaignInfo = typeof data === 'string' ? JSON.parse(data) : data;
+              if (isMounted) {
+                setCampaignData(c);
+                setCampaignActive(c.active ?? true);
+                setCampaignPercent(typeof c.percent === 'number' ? c.percent : 5);
+                setCampaignCapacity(typeof c.capacity === 'number' ? c.capacity : (parsedLocalCap || 100));
+                setCampaignOrdersPerStore(typeof c.orders_per_store === 'number' ? c.orders_per_store : 3);
+                campaignLoaded = true;
+              }
+            }
+          } catch {
+            // Fallback to app_settings table
+          }
+
+          if (!campaignLoaded && isMounted) {
+            try {
+              const { data: settingRow } = await supabase
+                .from('app_settings')
+                .select('value')
+                .eq('key', 'founder_campaign')
+                .maybeSingle();
+
+              if (settingRow && settingRow.value && isMounted) {
+                const val = typeof settingRow.value === 'string' ? JSON.parse(settingRow.value) : settingRow.value;
+                if (typeof val.capacity === 'number') setCampaignCapacity(val.capacity);
+                if (typeof val.percent === 'number') setCampaignPercent(val.percent);
+                if (typeof val.orders_per_store === 'number') setCampaignOrdersPerStore(val.orders_per_store);
+                if (typeof val.active === 'boolean') setCampaignActive(val.active);
+              }
+            } catch {
+              // Ignore
             }
           }
         }
@@ -270,16 +296,38 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
       localStorage.setItem('app_setting_founder_active', String(campaignActive));
 
       if (isSupabaseConfigured && supabase) {
-        const { error } = await supabase.rpc('admin_set_founder_campaign', {
-          p_percent: campaignPercent,
-          p_capacity: campaignCapacity,
-          p_orders_per_store: campaignOrdersPerStore,
-          p_active: campaignActive,
-          p_restart: restart,
-        });
+        let rpcError = null;
+        try {
+          const { error } = await supabase.rpc('admin_set_founder_campaign', {
+            p_percent: campaignPercent,
+            p_capacity: campaignCapacity,
+            p_orders_per_store: campaignOrdersPerStore,
+            p_active: campaignActive,
+            p_restart: restart,
+          });
+          rpcError = error;
+        } catch (e) {
+          rpcError = e;
+        }
 
-        if (error) {
-          throw error;
+        // Also persist to app_settings so all client components can immediately read it
+        try {
+          await supabase.from('app_settings').upsert({
+            key: 'founder_campaign',
+            value: {
+              capacity: campaignCapacity,
+              percent: campaignPercent,
+              orders_per_store: campaignOrdersPerStore,
+              active: campaignActive,
+            },
+            updated_at: new Date().toISOString(),
+          });
+        } catch (setErr) {
+          console.error('Error saving founder_campaign to app_settings:', setErr);
+        }
+
+        if (rpcError) {
+          console.warn('RPC admin_set_founder_campaign had an issue, fallback to app_settings was saved:', rpcError);
         }
 
         showToast(

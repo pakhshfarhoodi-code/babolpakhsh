@@ -156,6 +156,8 @@ export interface Order {
   discount_reviewed_at?: string;
   pickup_discount_percent?: number;
   founder_discount_percent?: number;
+  customer_type?: 'store' | 'consumer' | string;
+  consumer_savings?: number;
   created_at?: string;
 }
 

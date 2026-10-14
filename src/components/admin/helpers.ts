@@ -133,16 +133,19 @@ export const getCategorySalesSummaries = (
   orders
     .filter((o) => o.status !== 'undelivered')
     .forEach((order) => {
+      const isConsumerOrder = order.customer_type === 'consumer';
       const isVisitorOrder =
-        order.order_channel === 'visitor_field' ||
-        order.order_source === 'visitor' ||
-        Boolean(order.assigned_visitor_id && order.assigned_visitor_id !== 'direct');
+        !isConsumerOrder && (
+          order.order_channel === 'visitor_field' ||
+          order.order_source === 'visitor' ||
+          Boolean(order.assigned_visitor_id && order.assigned_visitor_id !== 'direct')
+        );
 
       order.items?.forEach((item) => {
         const prod = productMap.get(item.product_id);
         const catId = prod?.category_id;
         if (catId && catSalesMap.has(catId)) {
-          const { pack, total } = getItemUnitPriceAndTotal(item, prod, isVisitorOrder);
+          const { pack, total } = getItemUnitPriceAndTotal(item, prod, isVisitorOrder, isConsumerOrder);
           const current = catSalesMap.get(catId)!;
           current.totalSales += total;
           current.itemsSold += item.quantity * pack;

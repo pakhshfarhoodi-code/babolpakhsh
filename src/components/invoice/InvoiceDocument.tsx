@@ -268,6 +268,8 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
   // All money totals come from ONE shared function (also used by the admin orders list),
   // so the invoice and the list can never disagree.
   const pricing = getOrderPricing(order, products);
+  const isConsumerOrder = pricing.isConsumerOrder;
+  const consumerSavings = pricing.consumerSavings;
   const pickupDiscountPercent = pricing.pickupPercent;
   const founderDiscountPercent = pricing.founderPercent;
   const manualDiscountPercent = pricing.manualPercent;
@@ -790,7 +792,7 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
   const renderItemRow = (item: typeof rawItems[0], globalIndex: number) => {
     // Lookup missing items_per_package and unit from AppContext products (matching by id or name)
     const product = findProductMatch(item, products);
-    const { pack, unitPrice } = getItemUnitPriceAndTotal(item, product, isVisitorOrder);
+    const { pack, unitPrice } = getItemUnitPriceAndTotal(item, product, isVisitorOrder, isConsumerOrder);
     const packaged = isPackaged(pack);
     const rawUnit = (item as any).unit || product?.unit || settings.default_unit_name || 'عدد';
     const baseUnit = getBaseUnit(rawUnit, pack);
@@ -981,6 +983,60 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
 
   const renderTotalsSummary = () => {
     if (!hasAnySummaryInfo) return null;
+
+    if (isConsumerOrder) {
+      const consumerSavingsAmount = consumerSavings;
+      const amountBeforeDiscount = discountedSubtotal + consumerSavingsAmount;
+
+      return (
+        <div
+          className={`${cardBorderClass} ${cardPaddingClass} bg-slate-50/50 flex flex-col ${totalsFontClass} break-inside-avoid`}
+        >
+          <div className="space-y-1.5 mb-1.5">
+            {show.summary_items_count && (
+              <div className="flex items-center justify-between text-slate-600">
+                <span className={cardLabelClass}>تعداد کل اقلام سفارش:</span>
+                <span className={`num-fa ${cardValueClass}`}>{totalItemsCount.toLocaleString('fa-IR')}</span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between text-slate-700">
+              <span className={cardLabelClass}>مبلغ قبل از تخفیف:</span>
+              <span className={`num-fa ${cardValueClass}`}>
+                {formatMoney(amountBeforeDiscount)} {currencyLabel}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between text-emerald-700 font-medium">
+              <span className={cardLabelClass}>تخفیف اعمال‌شده:</span>
+              <span className={`num-fa font-bold text-emerald-700 ${cardValueClass}`}>
+                {consumerSavingsAmount > 0 ? `-${formatMoney(consumerSavingsAmount)}` : '۰'} {currencyLabel}
+              </span>
+            </div>
+
+            {show.summary_vat && hasVat && vatAmount > 0 && (
+              <div className="flex items-center justify-between text-slate-700">
+                <span className={cardLabelClass}>مالیات و ارزش افزوده ({vatPercent}٪):</span>
+                <span className={`num-fa ${cardValueClass}`}>
+                  {formatMoney(vatAmount)} {currencyLabel}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {show.summary_final_total && (
+            <div
+              className="mt-1 pt-1.5 border-t border-slate-300 flex items-center justify-between bg-slate-100/90 p-2 rounded"
+            >
+              <span className="font-black text-slate-950 text-xs sm:text-sm">مبلغ قابل پرداخت:</span>
+              <span className="num-fa font-black text-slate-950 text-sm sm:text-base">
+                {formatMoney(finalTotal)} {currencyLabel}
+              </span>
+            </div>
+          )}
+        </div>
+      );
+    }
 
     const hasTopRows = Boolean(
       show.summary_items_count ||

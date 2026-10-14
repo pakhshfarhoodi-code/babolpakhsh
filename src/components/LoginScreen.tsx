@@ -44,7 +44,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const currentLogo = invoiceSettings?.logo_url || appLogo;
 
   // Live registered stores counter and campaign capacity fetched from server or admin setting
-  const [serverStoreCount, setServerStoreCount] = useState<number | null>(null);
+  const [serverStoreCount, setServerStoreCount] = useState<number | null>(() => {
+    try {
+      const cached = localStorage.getItem('app_last_known_registered_stores');
+      if (cached) {
+        const parsed = parseInt(cached, 10);
+        if (!isNaN(parsed) && parsed >= 0) return parsed;
+      }
+    } catch {}
+    return null;
+  });
+
   const [campaignCapacity, setCampaignCapacity] = useState<number>(() => {
     try {
       const localCap = localStorage.getItem('app_setting_founder_capacity');
@@ -56,6 +66,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       // Fallback
     }
     return FOUNDER_INITIAL_CAPACITY;
+  });
+
+  const [serverRemainingSpots, setServerRemainingSpots] = useState<number | null>(() => {
+    try {
+      const cached = localStorage.getItem('app_last_known_founder_remaining');
+      if (cached) {
+        const parsed = parseInt(cached, 10);
+        if (!isNaN(parsed) && parsed >= 0) return parsed;
+      }
+    } catch {}
+    return null;
   });
 
   // Fetch real registered stores count and campaign capacity on mount
@@ -73,23 +94,59 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       }
 
       if (!supabase) return;
+
+      // 1. Fetch campaign settings from RPC or app_settings table
+      let campaignLoaded = false;
       try {
         const { data: campaignData, error: campaignErr } = await supabase.rpc('get_founder_campaign');
         if (!campaignErr && campaignData) {
           const c = typeof campaignData === 'string' ? JSON.parse(campaignData) : campaignData;
           if (typeof c.capacity === 'number' && isMounted) {
             setCampaignCapacity(c.capacity);
+            localStorage.setItem('app_setting_founder_capacity', String(c.capacity));
           }
+          if (typeof c.remaining === 'number' && isMounted) {
+            setServerRemainingSpots(c.remaining);
+            localStorage.setItem('app_last_known_founder_remaining', String(c.remaining));
+          }
+          if (typeof c.granted === 'number' && isMounted) {
+            setServerStoreCount(c.granted);
+            localStorage.setItem('app_last_known_registered_stores', String(c.granted));
+          }
+          campaignLoaded = true;
         }
       } catch {
         // Fallback
       }
 
+      // If RPC was not available, read from app_settings
+      if (!campaignLoaded) {
+        try {
+          const { data: appSetData } = await supabase
+            .from('app_settings')
+            .select('value')
+            .eq('key', 'founder_campaign')
+            .maybeSingle();
+
+          if (appSetData?.value && isMounted) {
+            const val = typeof appSetData.value === 'string' ? JSON.parse(appSetData.value) : appSetData.value;
+            if (typeof val.capacity === 'number') {
+              setCampaignCapacity(val.capacity);
+              localStorage.setItem('app_setting_founder_capacity', String(val.capacity));
+            }
+          }
+        } catch {
+          // Fallback
+        }
+      }
+
+      // 2. Fetch registered stores count
       try {
-        // 1. Primary: Fast and secure RPC (migration 28)
+        // Primary: Fast and secure RPC (migration 28)
         const { data, error } = await supabase.rpc('get_registered_stores_count');
         if (!error && typeof data === 'number' && isMounted) {
           setServerStoreCount(data);
+          localStorage.setItem('app_last_known_registered_stores', String(data));
           return;
         }
       } catch {
@@ -97,12 +154,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       }
 
       try {
-        // 2. Secondary fallback: head count query
+        // Secondary fallback: head count query
         const { count, error: countErr } = await supabase
           .from('supermarkets')
           .select('id', { count: 'exact', head: true });
         if (!countErr && typeof count === 'number' && isMounted) {
           setServerStoreCount(count);
+          localStorage.setItem('app_last_known_registered_stores', String(count));
         }
       } catch {
         // Keep local count
@@ -117,7 +175,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
   // Remaining capacity for the first stores discount (starts from admin-configured capacity minus total registered stores)
   const totalRegisteredStores = Math.max(serverStoreCount ?? 0, supermarkets?.length || 0);
-  const remainingFounderSpots = Math.max(0, campaignCapacity - totalRegisteredStores);
+  const remainingFounderSpots = serverRemainingSpots !== null && serverStoreCount === null
+    ? serverRemainingSpots
+    : Math.max(0, campaignCapacity - totalRegisteredStores);
   const [activeTab, setActiveTab] = useState<UserRole>(() => {
     if (initialRole) return initialRole;
     if (allowedRoles && allowedRoles.length > 0) return allowedRoles[0];

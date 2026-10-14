@@ -519,8 +519,14 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
                       <span className="font-mono font-bold text-slate-600">{gIdx + 1}.</span>
                       <strong className="text-slate-900 font-bold text-xs">{group.customerName}</strong>
                       {group.source === 'order' && (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800">
-                          سفارش سامانه ({group.orderId})
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          orderMap.get(group.orderId || '')?.customer_type === 'consumer'
+                            ? 'bg-sky-100 text-sky-800'
+                            : 'bg-blue-100 text-blue-800'
+                        }`}>
+                          {orderMap.get(group.orderId || '')?.customer_type === 'consumer'
+                            ? `سفارش مصرف‌کننده (${group.orderId})`
+                            : `سفارش سامانه (${group.orderId})`}
                         </span>
                       )}
                       {group.source === 'visitor_manual' && (

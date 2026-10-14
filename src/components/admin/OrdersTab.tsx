@@ -986,43 +986,56 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                       </td>
                       <td className="py-3 px-4 font-bold text-slate-100 whitespace-nowrap">
                         <div>{formatPrice(getCalculatedOrderTotal(order))}</div>
-                        <div className="flex flex-col items-start gap-1 mt-1">
-                          {(orderChannel === 'store_self' || orderChannel === 'store_direct') && (
-                            <button
-                              type="button"
-                              disabled={order.status === 'delivered'}
-                              onClick={() => handleToggleOrderPickupDiscount(order)}
-                              className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition flex items-center gap-1 cursor-pointer ${
-                                (order.pickup_discount_percent ?? 0) > 0
-                                  ? 'bg-blue-500/20 text-blue-300 border-blue-500/50 hover:bg-blue-500/30'
-                                  : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
-                              } ${order.status === 'delivered' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                              title={order.status === 'delivered' ? 'سفارش تحویل شده است و امکان تغییر تخفیف ندارد.' : 'فعال/غیرفعال‌سازی تخفیف تحویل درب انبار'}
-                            >
-                              <span>تخفیف تحویل ({(order.pickup_discount_percent ?? 0) > 0 ? `${order.pickup_discount_percent}٪` : 'غیرفعال'})</span>
-                            </button>
-                          )}
+                        {order.customer_type === 'consumer' ? (
+                          <div className="flex flex-col items-start gap-1 mt-1">
+                            <span className="inline-flex items-center gap-1 bg-sky-500/15 border border-sky-500/40 text-sky-300 px-2 py-0.5 rounded-lg text-[10px] font-bold">
+                              سفارش مصرف‌کننده
+                            </span>
+                            {(order.consumer_savings ?? 0) > 0 && (
+                              <span className="inline-flex items-center gap-1 bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 px-2 py-0.5 rounded-lg text-[10px] font-bold">
+                                تخفیف: {formatPrice(order.consumer_savings!)} تومان
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-start gap-1 mt-1">
+                            {(orderChannel === 'store_self' || orderChannel === 'store_direct') && (
+                              <button
+                                type="button"
+                                disabled={order.status === 'delivered'}
+                                onClick={() => handleToggleOrderPickupDiscount(order)}
+                                className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition flex items-center gap-1 cursor-pointer ${
+                                  (order.pickup_discount_percent ?? 0) > 0
+                                    ? 'bg-blue-500/20 text-blue-300 border-blue-500/50 hover:bg-blue-500/30'
+                                    : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                                } ${order.status === 'delivered' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                title={order.status === 'delivered' ? 'سفارش تحویل شده است و امکان تغییر تخفیف ندارد.' : 'فعال/غیرفعال‌سازی تخفیف تحویل درب انبار'}
+                              >
+                                <span>تخفیف تحویل ({(order.pickup_discount_percent ?? 0) > 0 ? `${order.pickup_discount_percent}٪` : 'غیرفعال'})</span>
+                              </button>
+                            )}
 
-                          {(order.founder_discount_percent ?? 0) > 0 && (
-                            <div className="inline-flex items-center gap-1 bg-purple-500/15 border border-purple-500/40 text-purple-300 px-2 py-0.5 rounded-lg text-[10px] font-bold">
-                              <span>تخفیف طرح آغازین: {order.founder_discount_percent}٪</span>
-                            </div>
-                          )}
+                            {(order.founder_discount_percent ?? 0) > 0 && (
+                              <div className="inline-flex items-center gap-1 bg-purple-500/15 border border-purple-500/40 text-purple-300 px-2 py-0.5 rounded-lg text-[10px] font-bold">
+                                <span>تخفیف طرح آغازین: {order.founder_discount_percent}٪</span>
+                              </div>
+                            )}
 
-                          {order.discount_status === 'pending' && (
-                            <div className="inline-flex items-center gap-1 bg-amber-500/15 border border-amber-500/40 text-amber-300 px-2 py-0.5 rounded-lg text-[10px] font-bold">
-                              <Percent className="w-3 h-3 text-amber-400 shrink-0" />
-                              <span>تخفیف در انتظار: {order.discount_percent || 0}٪</span>
-                            </div>
-                          )}
+                            {order.discount_status === 'pending' && (
+                              <div className="inline-flex items-center gap-1 bg-amber-500/15 border border-amber-500/40 text-amber-300 px-2 py-0.5 rounded-lg text-[10px] font-bold">
+                                <Percent className="w-3 h-3 text-amber-400 shrink-0" />
+                                <span>تخفیف در انتظار: {order.discount_percent || 0}٪</span>
+                              </div>
+                            )}
 
-                          {order.discount_status === 'approved' && (order.discount_percent ?? 0) > 0 && (
-                            <div className="inline-flex items-center gap-1 bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 px-2 py-0.5 rounded-lg text-[10px] font-bold">
-                              <Percent className="w-3 h-3 text-emerald-400 shrink-0" />
-                              <span>تخفیف تأییدشده: {order.discount_percent}٪</span>
-                            </div>
-                          )}
-                        </div>
+                            {order.discount_status === 'approved' && (order.discount_percent ?? 0) > 0 && (
+                              <div className="inline-flex items-center gap-1 bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 px-2 py-0.5 rounded-lg text-[10px] font-bold">
+                                <Percent className="w-3 h-3 text-emerald-400 shrink-0" />
+                                <span>تخفیف تأییدشده: {order.discount_percent}٪</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-slate-400 font-mono whitespace-nowrap">
                         {formatOrderDate(order.order_date)}

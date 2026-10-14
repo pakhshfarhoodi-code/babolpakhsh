@@ -135,10 +135,15 @@ export function getUnitPriceFromOrderItem(
     items_per_package?: number | string | null;
   },
   product?: { price?: number; visitor_price?: number; items_per_package?: number } | null,
-  isVisitorOrder: boolean = false
+  isVisitorOrder: boolean = false,
+  useOrderPrice: boolean = false
 ): number {
   const pack = getPackSize(item.items_per_package || product?.items_per_package);
   const rawPrice = Number(item.price || 0);
+
+  if (useOrderPrice) {
+    return pack > 1 ? Math.round(rawPrice / pack) : rawPrice;
+  }
 
   // Reference base price from catalog product
   const pVisitorPrice = Number(product?.visitor_price ?? 0);
@@ -203,11 +208,19 @@ export function getItemUnitPriceAndTotal(
     product_name?: string;
   },
   product?: { price?: number; visitor_price?: number; items_per_package?: number } | null,
-  isVisitorOrder: boolean = false
+  isVisitorOrder: boolean = false,
+  useOrderPrice: boolean = false
 ): ItemPricingDetails {
   const pack = getPackSize(item.items_per_package || product?.items_per_package);
   const qty = Number(item.quantity) || 0;
   const rawPrice = Number(item.price) || 0;
+
+  if (useOrderPrice) {
+    const unitPrice = pack > 1 ? Math.round(rawPrice / pack) : rawPrice;
+    const cartonPrice = Math.round(unitPrice * pack);
+    const total = Math.round(qty * pack * unitPrice);
+    return { pack, unitPrice, cartonPrice, total };
+  }
 
   const pVisitorPrice = Number(product?.visitor_price ?? 0);
   const pStorePrice = Number(product?.price ?? 0);
@@ -326,6 +339,8 @@ export interface OrderPricingInput {
     product_name?: string;
   }> | null;
   supermarket_id?: string | null;
+  customer_type?: string | null;
+  consumer_savings?: number | null;
   total_amount?: number | null;
   pickup_discount_percent?: number | null;
   founder_discount_percent?: number | null;
@@ -335,6 +350,8 @@ export interface OrderPricingInput {
 
 export interface OrderPricingResult {
   isVisitorOrder: boolean;
+  isConsumerOrder: boolean;
+  consumerSavings: number;
   pickupPercent: number;
   founderPercent: number;
   manualPercent: number;
@@ -349,24 +366,28 @@ export interface OrderPricingResult {
  * SINGLE source of truth for an order's money totals.
  * Used by the invoice (InvoiceDocument) and the admin orders list so both always show the same number.
  * Store invoices use the store price; only visitor self-orders ("self-" supermarket ids) use visitor price.
+ * For consumer orders (customer_type === 'consumer'), order_items.price is the final discounted price
+ * (useOrderPrice = true), and discounts are set to 0.
  */
 export function getOrderPricing(
   order: OrderPricingInput,
   products: Array<{ id: string; name?: string; price?: number; visitor_price?: number; items_per_package?: number }>
 ): OrderPricingResult {
   const items = order.items || [];
-  const isVisitorOrder = Boolean(order.supermarket_id?.startsWith('self-'));
+  const isConsumerOrder = order.customer_type === 'consumer';
+  const isVisitorOrder = !isConsumerOrder && Boolean(order.supermarket_id?.startsWith('self-'));
 
-  const pickupPercent = order.pickup_discount_percent || 0;
-  const founderPercent = order.founder_discount_percent || 0;
-  const manualPercent = order.discount_status === 'approved' ? (order.discount_percent || 0) : 0;
-  const totalDiscountPercent = Math.min(100, Math.max(0, pickupPercent + founderPercent + manualPercent));
+  const pickupPercent = isConsumerOrder ? 0 : (order.pickup_discount_percent || 0);
+  const founderPercent = isConsumerOrder ? 0 : (order.founder_discount_percent || 0);
+  const manualPercent = isConsumerOrder ? 0 : (order.discount_status === 'approved' ? (order.discount_percent || 0) : 0);
+  const totalDiscountPercent = isConsumerOrder ? 0 : Math.min(100, Math.max(0, pickupPercent + founderPercent + manualPercent));
+  const consumerSavings = isConsumerOrder ? Number(order.consumer_savings || 0) : 0;
 
   let rawSubtotal = 0;
   let discountedSum = 0;
   for (const item of items) {
     const product = findProductMatch(item, products);
-    const { pack, unitPrice, total } = getItemUnitPriceAndTotal(item, product, isVisitorOrder);
+    const { pack, unitPrice, total } = getItemUnitPriceAndTotal(item, product, isVisitorOrder, isConsumerOrder);
     rawSubtotal += total;
     discountedSum += computeLine({
       quantity: Number(item.quantity) || 0,
@@ -378,17 +399,29 @@ export function getOrderPricing(
 
   if (rawSubtotal > 0) {
     return {
-      isVisitorOrder, pickupPercent, founderPercent, manualPercent, totalDiscountPercent,
-      subtotal: rawSubtotal,
+      isVisitorOrder,
+      isConsumerOrder,
+      consumerSavings,
+      pickupPercent,
+      founderPercent,
+      manualPercent,
+      totalDiscountPercent,
+      subtotal: isConsumerOrder ? (rawSubtotal + consumerSavings) : rawSubtotal,
       discountedSubtotal: discountedSum,
     };
   }
 
   const fallback = Number(order.total_amount || 0);
   return {
-    isVisitorOrder, pickupPercent, founderPercent, manualPercent, totalDiscountPercent,
-    subtotal: fallback,
-    discountedSubtotal: Math.round(fallback * (1 - totalDiscountPercent / 100)),
+    isVisitorOrder,
+    isConsumerOrder,
+    consumerSavings,
+    pickupPercent,
+    founderPercent,
+    manualPercent,
+    totalDiscountPercent,
+    subtotal: isConsumerOrder ? (fallback + consumerSavings) : fallback,
+    discountedSubtotal: isConsumerOrder ? fallback : Math.round(fallback * (1 - totalDiscountPercent / 100)),
   };
 }
 

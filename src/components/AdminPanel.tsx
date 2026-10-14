@@ -462,7 +462,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           products={products}
           categories={categories}
           visitors={visitors}
-          loadingBills={useApp().loadingBills}
+          loadingBills={loadingBills}
         />
       )}
 

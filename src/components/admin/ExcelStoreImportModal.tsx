@@ -126,6 +126,14 @@ export const ExcelStoreImportModal: React.FC<ExcelStoreImportModalProps> = ({
   onClose,
   visitors,
 }) => {
+  if (!isOpen) return null;
+  return <ExcelStoreImportModalInner onClose={onClose} visitors={visitors} />;
+};
+
+const ExcelStoreImportModalInner: React.FC<Omit<ExcelStoreImportModalProps, 'isOpen'>> = ({
+  onClose,
+  visitors,
+}) => {
   const { refreshData, showToast } = useApp();
 
   // Wizard Steps: 1: upload & preview, 2: mapping & settings, 3: importing, 4: results
@@ -179,23 +187,6 @@ export const ExcelStoreImportModal: React.FC<ExcelStoreImportModalProps> = ({
   const [isClosePromptOpen, setIsClosePromptOpen] = useState(false);
   const [resultFilter, setResultFilter] = useState<'all' | 'created' | 'duplicate' | 'error' | 'invalid'>('all');
 
-  // Reset state when modal opens
-  useEffect(() => {
-    if (!isOpen) {
-      setStep(1);
-      setFileName('');
-      setRawHeaders([]);
-      setRawRows([]);
-      setProcessedRows([]);
-      setAllResults([]);
-      setIsImporting(false);
-      setIsPaused(false);
-      setHasDownloadedExport(false);
-      setIsClosePromptOpen(false);
-      setIsConfirmModalOpen(false);
-    }
-  }, [isOpen]);
-
   // Prevent accidental tab closing if passwords exist and haven't been exported
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -209,8 +200,6 @@ export const ExcelStoreImportModal: React.FC<ExcelStoreImportModalProps> = ({
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [allResults, hasDownloadedExport]);
-
-  if (!isOpen) return null;
 
   // File Upload and Parsing Handler
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {

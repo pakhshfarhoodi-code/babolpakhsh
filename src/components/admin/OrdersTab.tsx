@@ -28,12 +28,14 @@ import {
   ChevronDown,
   RotateCcw,
   Navigation,
+  Edit2,
 } from 'lucide-react';
 import { isToday, isWithinDays, formatPrice, formatOrderDate } from './helpers';
 import { getTehranDateParts } from '../../utils/dateUtils';
 import { OrderOverrideModal } from './OrderOverrideModal';
 import { OrderInvoiceModal } from '../invoice/OrderInvoiceModal';
 import { DirectInvoiceSheet } from './DirectInvoiceSheet';
+import { EditOrderModal } from '../shop/EditOrderModal';
 import { getOrderChannel } from '../../context/utils';
 import { useApp } from '../../context/AppContext';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
@@ -120,6 +122,9 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
 
   // Invoice view / print modal state
   const [invoiceModalOrder, setInvoiceModalOrder] = useState<Order | null>(null);
+
+  // Edit order items modal state
+  const [editModalOrder, setEditModalOrder] = useState<Order | null>(null);
 
   // Direct Invoice Sheet Modal State
   const [isDirectInvoiceOpen, setIsDirectInvoiceOpen] = useState(false);
@@ -1097,6 +1102,28 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                             </div>
                           </div>
 
+                          {/* 1.5 Edit Order Items Button */}
+                          {order.status !== 'delivered' && (
+                            <div className="relative group/tooltip inline-flex items-center justify-center">
+                              <button
+                                type="button"
+                                onClick={() => setEditModalOrder(order)}
+                                className="w-8.5 h-8.5 rounded-xl bg-amber-500/15 hover:bg-amber-600 text-amber-300 hover:text-white border border-amber-500/30 hover:border-amber-500 transition-all duration-150 cursor-pointer flex items-center justify-center shrink-0 shadow-xs hover:shadow-amber-500/20"
+                                title="ویرایش اقلام و تعداد سفارش"
+                                aria-label="ویرایش اقلام"
+                              >
+                                <Edit2 className="w-4.5 h-4.5 shrink-0" />
+                              </button>
+                              <div
+                                role="tooltip"
+                                className="pointer-events-none absolute bottom-full mb-2 left-1/2 -translate-x-1/2 opacity-0 group-hover/tooltip:opacity-100 transition-all duration-150 transform group-hover/tooltip:-translate-y-0.5 z-40 whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-900/95 text-amber-300 text-[11px] font-medium border border-amber-500/40 shadow-2xl backdrop-blur-xs flex items-center gap-1"
+                              >
+                                <span>ویرایش اقلام</span>
+                                <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-slate-900/95" />
+                              </div>
+                            </div>
+                          )}
+
                           {/* 2. Single Delivery Status Toggle Button */}
                           {order.status === 'delivered' ? (
                             <div className="relative group/tooltip inline-flex items-center justify-center">
@@ -1520,6 +1547,17 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
           }}
         />
       )}
+
+      {/* Edit Order Items Modal for Admin */}
+      <EditOrderModal
+        isOpen={Boolean(editModalOrder)}
+        onClose={() => setEditModalOrder(null)}
+        order={editModalOrder}
+        products={products}
+        onSaveSuccess={() => {
+          refreshData();
+        }}
+      />
     </div>
   );
 };

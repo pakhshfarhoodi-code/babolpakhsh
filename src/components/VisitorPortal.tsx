@@ -8,6 +8,7 @@ import { CustomersTab } from './visitor/CustomersTab';
 import { ReportsTab } from './visitor/ReportsTab';
 import { UndeliveredModal } from './visitor/UndeliveredModal';
 import { DelegateModal } from './visitor/DelegateModal';
+import { EditOrderModal } from './shop/EditOrderModal';
 import { Order, Supermarket, Visitor } from '../types';
 import {
   Truck,
@@ -32,6 +33,8 @@ export const VisitorPortal: React.FC = () => {
     respondToReassignment,
     createLoadingBill,
     deleteOrder,
+    products = [],
+    refreshData,
   } = useApp();
 
   const currentVisitor: Visitor = useMemo(() => {
@@ -65,6 +68,7 @@ export const VisitorPortal: React.FC = () => {
   // Delegate & Undelivered modals
   const [selectedOrderForDelegate, setSelectedOrderForDelegate] = useState<Order | null>(null);
   const [selectedOrderForUndelivered, setSelectedOrderForUndelivered] = useState<Order | null>(null);
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
 
   // Filtered data for current visitor
   const mySupermarkets = useMemo(
@@ -252,6 +256,7 @@ export const VisitorPortal: React.FC = () => {
           onOpenDelegateModal={(order) => setSelectedOrderForDelegate(order)}
           onRespondHandover={respondToReassignment}
           onOpenNewOrder={() => handleOpenNewOrder()}
+          onOpenEditOrder={(order) => setEditingOrder(order)}
           onCreateLoadingBill={createLoadingBill}
         />
       )}
@@ -269,6 +274,7 @@ export const VisitorPortal: React.FC = () => {
           orders={myOrders}
           onOpenNewOrder={(customerId) => handleOpenNewOrder(customerId)}
           onOpenRegisterCustomer={() => setIsRegisterStoreModalOpen(true)}
+          onEditOrder={(order) => setEditingOrder(order)}
         />
       )}
 
@@ -381,6 +387,17 @@ export const VisitorPortal: React.FC = () => {
         isOpen={isRegisterStoreModalOpen}
         onClose={() => setIsRegisterStoreModalOpen(false)}
         defaultVisitorId={currentVisitor?.id || ''}
+      />
+
+      {/* Edit Order Modal for Visitor */}
+      <EditOrderModal
+        isOpen={Boolean(editingOrder)}
+        onClose={() => setEditingOrder(null)}
+        order={editingOrder}
+        products={products}
+        onSaveSuccess={() => {
+          refreshData();
+        }}
       />
     </div>
   );

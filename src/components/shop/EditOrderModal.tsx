@@ -144,6 +144,8 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
         name: i.name,
         price: i.price,
         quantity: i.quantity,
+        items_per_package: i.items_per_package,
+        unit: i.unit,
       }));
 
       const res = await updateOrder(order.id, payload);
@@ -183,7 +185,7 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
                 </span>
               </h2>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                تغییر تعداد کالاها یا افزودن اقلام جدید قبل از مرحله در راه
+                تغییر تعداد کالاها یا افزودن اقلام جدید به سفارش
               </p>
             </div>
           </div>

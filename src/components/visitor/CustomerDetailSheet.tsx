@@ -17,6 +17,7 @@ import {
   FileText,
   Navigation,
   ExternalLink,
+  Edit2,
 } from 'lucide-react';
 import { formatPrice, formatOrderDate } from './helpers';
 import { OrderInvoiceModal } from '../invoice/OrderInvoiceModal';
@@ -27,6 +28,7 @@ interface CustomerDetailSheetProps {
   isOpen: boolean;
   onClose: () => void;
   onNewOrder: (customerId: string) => void;
+  onEditOrder?: (order: Order) => void;
 }
 
 export const CustomerDetailSheet: React.FC<CustomerDetailSheetProps> = ({
@@ -35,6 +37,7 @@ export const CustomerDetailSheet: React.FC<CustomerDetailSheetProps> = ({
   isOpen,
   onClose,
   onNewOrder,
+  onEditOrder,
 }) => {
   const { showToast } = useApp();
   const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState<Order | null>(null);
@@ -204,14 +207,28 @@ export const CustomerDetailSheet: React.FC<CustomerDetailSheetProps> = ({
                     )}
 
                     <div className="pt-2 border-t border-slate-900 flex items-center justify-between">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedInvoiceOrder(ord)}
-                        className="px-2.5 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/30 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
-                      >
-                        <FileText className="w-3.5 h-3.5" />
-                        <span>فاکتور و چاپ / PDF</span>
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedInvoiceOrder(ord)}
+                          className="px-2.5 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/30 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>فاکتور</span>
+                        </button>
+
+                        {onEditOrder && ord.status !== 'delivered' && (
+                          <button
+                            type="button"
+                            onClick={() => onEditOrder(ord)}
+                            className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-600 text-amber-300 hover:text-white border border-amber-500/30 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
+                            title="ویرایش اقلام سفارش"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                            <span>ویرایش</span>
+                          </button>
+                        )}
+                      </div>
 
                       <span className="font-bold text-slate-200 text-xs">
                         {formatPrice(ord.total_amount)} تومان

@@ -22,6 +22,7 @@ interface CustomersTabProps {
   orders: Order[];
   onOpenNewOrder: (customerId: string) => void;
   onOpenRegisterCustomer: () => void;
+  onEditOrder?: (order: Order) => void;
 }
 
 export const CustomersTab: React.FC<CustomersTabProps> = ({
@@ -29,6 +30,7 @@ export const CustomersTab: React.FC<CustomersTabProps> = ({
   orders,
   onOpenNewOrder,
   onOpenRegisterCustomer,
+  onEditOrder,
 }) => {
   const { showToast } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
@@ -209,6 +211,7 @@ export const CustomersTab: React.FC<CustomersTabProps> = ({
           setSelectedCustomerForDetail(null);
           onOpenNewOrder(customerId);
         }}
+        onEditOrder={onEditOrder}
       />
     </div>
   );

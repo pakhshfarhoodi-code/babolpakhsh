@@ -60,7 +60,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       const localCap = localStorage.getItem('app_setting_founder_capacity');
       if (localCap) {
         const parsed = parseInt(localCap, 10);
-        if (!isNaN(parsed) && parsed > 0) return parsed;
+        if (!isNaN(parsed) && parsed > 0 && parsed !== 90) return parsed;
       }
     } catch {
       // Fallback
@@ -87,7 +87,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         const localCap = localStorage.getItem('app_setting_founder_capacity');
         if (localCap && isMounted) {
           const parsed = parseInt(localCap, 10);
-          if (!isNaN(parsed) && parsed > 0) setCampaignCapacity(parsed);
+          if (!isNaN(parsed) && parsed > 0 && parsed !== 90) setCampaignCapacity(parsed);
         }
       } catch {
         // Fallback
@@ -173,9 +173,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     };
   }, []);
 
-  // Remaining capacity for the first stores discount (starts from admin-configured capacity minus total registered stores)
+  // Remaining capacity for the first stores discount (matches admin settings)
   const totalRegisteredStores = Math.max(serverStoreCount ?? 0, supermarkets?.length || 0);
-  const remainingFounderSpots = serverRemainingSpots !== null && serverStoreCount === null
+  const remainingFounderSpots = serverRemainingSpots !== null
     ? serverRemainingSpots
     : Math.max(0, campaignCapacity - totalRegisteredStores);
   const [activeTab, setActiveTab] = useState<UserRole>(() => {

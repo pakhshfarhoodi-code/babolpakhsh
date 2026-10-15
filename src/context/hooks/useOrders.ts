@@ -15,7 +15,7 @@ import { STORAGE_KEYS, generateUniqueId } from '../utils';
 import { LEGACY_MOCK_NAMES } from './useCatalog';
 
 import { generateStructuredInvoiceNumber } from '../../utils/numberToPersianWords';
-import { getItemUnitPriceAndTotal, getPackSize } from '../../utils/orderLine';
+import { getItemUnitPriceAndTotal, getPackSize, getOrderPricing } from '../../utils/orderLine';
 
 export interface CreateOrderPayload {
   supermarketId: string;
@@ -866,8 +866,8 @@ export function useOrders({
       const targetOrder = orders.find((o) => o.id === orderId);
       if (!targetOrder) return { success: false, message: 'سفارش مورد نظر یافت نشد.' };
 
-      if (targetOrder.status !== 'assigned') {
-        return { success: false, message: 'سفارش در مرحله در راه قرار گرفته و دیگر قابل ویرایش نیست.' };
+      if (targetOrder.status === 'delivered') {
+        return { success: false, message: 'این سفارش قبلاً تحویل داده شده و امکان ویرایش آن وجود ندارد.' };
       }
 
       if (!updatedItems || updatedItems.length === 0) {
@@ -911,65 +911,92 @@ export function useOrders({
         })
       );
 
-      const isConsumerOrder = targetOrder.customer_type === 'consumer';
-      const isVisitorChannel =
-        !isConsumerOrder && (
-          targetOrder.order_channel === 'visitor_field' ||
-          targetOrder.order_source === 'visitor' ||
-          Boolean(targetOrder.assigned_visitor_id && targetOrder.assigned_visitor_id !== 'direct')
-        );
+      const newOrderItems = updatedItems.map((i, idx) => {
+        const prod = products.find((p) => p.id === i.productId);
+        return {
+          id: `item-${Date.now()}-${idx}`,
+          order_id: orderId,
+          product_id: i.productId,
+          name: i.name,
+          price: i.price,
+          quantity: i.quantity,
+          items_per_package: getPackSize(i.items_per_package ?? prod?.items_per_package),
+          unit: i.unit ?? prod?.unit,
+        };
+      });
 
-      const newTotalAmount = updatedItems.reduce((sum, item) => {
-        const prod = products.find((p) => p.id === item.productId);
-        const { total } = getItemUnitPriceAndTotal(item, prod, isVisitorChannel, isConsumerOrder);
-        return sum + total;
-      }, 0);
-
-      const updatedOrderObj: Order = {
+      const tempOrderObj: Order = {
         ...targetOrder,
-        total_amount: newTotalAmount,
-        invoice_revised_at: nowIso,
-        items: updatedItems.map((i, idx) => {
-          const prod = products.find((p) => p.id === i.productId);
-          return {
-            id: `item-${Date.now()}-${idx}`,
-            order_id: orderId,
-            product_id: i.productId,
-            name: i.name,
-            price: i.price,
-            quantity: i.quantity,
-            items_per_package: getPackSize(i.items_per_package ?? prod?.items_per_package),
-            unit: i.unit ?? prod?.unit,
-          };
-        }),
+        items: newOrderItems,
       };
 
-      // Supabase sync
+      // Accurate shared pricing (same as invoice & orders tab)
+      const pricing = getOrderPricing(tempOrderObj, products);
+      const newTotalAmount =
+        pricing.discountedSubtotal > 0
+          ? pricing.discountedSubtotal
+          : newOrderItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+      const updatedOrderObj: Order = {
+        ...tempOrderObj,
+        total_amount: newTotalAmount,
+        invoice_revised_at: nowIso,
+      };
+
+      // Supabase sync (Primary: secure RPC edit_store_order; Secondary: direct table update)
       if (isSupabaseConfigured && supabase) {
         try {
-          await supabase.from('order_items').delete().eq('order_id', orderId);
-
-          const itemRows = updatedItems.map((i) => {
+          const rpcItems = updatedItems.map((i) => {
             const prod = products.find((p) => p.id === i.productId);
             return {
-              order_id: orderId,
               product_id: i.productId,
               name: i.name,
               price: i.price,
               quantity: i.quantity,
-              items_per_package: i.items_per_package ?? prod?.items_per_package,
+              items_per_package: getPackSize(i.items_per_package ?? prod?.items_per_package),
               unit: i.unit ?? prod?.unit,
             };
           });
-          await supabase.from('order_items').insert(itemRows);
 
-          await supabase
-            .from('orders')
-            .update({
-              total_amount: newTotalAmount,
-              invoice_revised_at: nowIso,
-            })
-            .eq('id', orderId);
+          let synced = false;
+          try {
+            const { data: rpcRes, error: rpcErr } = await supabase.rpc('edit_store_order', {
+              p_order_id: orderId,
+              p_items: rpcItems,
+              p_total_amount: newTotalAmount,
+            });
+            if (!rpcErr && (rpcRes?.success !== false)) {
+              synced = true;
+            }
+          } catch {
+            // RPC not deployed yet, proceed to direct fallback
+          }
+
+          if (!synced) {
+            await supabase.from('order_items').delete().eq('order_id', orderId);
+
+            const itemRows = updatedItems.map((i) => {
+              const prod = products.find((p) => p.id === i.productId);
+              return {
+                order_id: orderId,
+                product_id: i.productId,
+                name: i.name,
+                price: i.price,
+                quantity: i.quantity,
+                items_per_package: getPackSize(i.items_per_package ?? prod?.items_per_package),
+                unit: i.unit ?? prod?.unit,
+              };
+            });
+            await supabase.from('order_items').insert(itemRows);
+
+            await supabase
+              .from('orders')
+              .update({
+                total_amount: newTotalAmount,
+                invoice_revised_at: nowIso,
+              })
+              .eq('id', orderId);
+          }
         } catch (err) {
           console.error('Error updating order on Supabase:', err);
         }

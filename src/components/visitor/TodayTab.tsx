@@ -22,6 +22,7 @@ import {
   Package,
   Plus,
   Navigation,
+  Edit2,
 } from 'lucide-react';
 import { isToday, formatPrice } from './helpers';
 import { OrderInvoiceModal } from '../invoice/OrderInvoiceModal';
@@ -38,6 +39,7 @@ interface TodayTabProps {
   onOpenDelegateModal: (order: Order) => void;
   onRespondHandover: (requestId: string, accept: boolean) => void;
   onOpenNewOrder?: () => void;
+  onOpenEditOrder?: (order: Order) => void;
   onCreateLoadingBill?: (
     visitorId: string,
     orderIds: string[]
@@ -56,6 +58,7 @@ export const TodayTab: React.FC<TodayTabProps> = ({
   onOpenDelegateModal,
   onRespondHandover,
   onOpenNewOrder,
+  onOpenEditOrder,
 }) => {
   const { loadingBills } = useApp();
 
@@ -471,6 +474,19 @@ export const TodayTab: React.FC<TodayTabProps> = ({
                       <FileText className="w-4 h-4" />
                     </button>
 
+                    {/* Quick Edit Order Button for Visitor: 40x40px */}
+                    {onOpenEditOrder && order.status !== 'delivered' && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenEditOrder(order)}
+                        title="ویرایش اقلام سفارش"
+                        aria-label="ویرایش اقلام سفارش"
+                        className="w-10 h-10 shrink-0 rounded-xl bg-amber-500/15 hover:bg-amber-600 text-amber-300 hover:text-white border border-amber-500/30 transition flex items-center justify-center cursor-pointer shadow-xs"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                    )}
+
                     {/* 3-Dot Menu Toggle: 40x40px */}
                     <div className="relative shrink-0">
                       <button
@@ -508,6 +524,19 @@ export const TodayTab: React.FC<TodayTabProps> = ({
                               <FileText className="w-3.5 h-3.5" />
                               <span>مشاهده و چاپ فاکتور</span>
                             </button>
+                            {onOpenEditOrder && order.status !== 'delivered' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveMenuOrderId(null);
+                                  onOpenEditOrder(order);
+                                }}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-amber-400 hover:bg-slate-800 transition cursor-pointer text-right border-t border-slate-800/80"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                                <span>ویرایش اقلام سفارش</span>
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => {

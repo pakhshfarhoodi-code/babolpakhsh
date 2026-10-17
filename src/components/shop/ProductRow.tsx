@@ -110,7 +110,7 @@ export const ProductRow: React.FC<ProductRowProps> = ({
   return (
     <>
       <div
-        className={`relative overflow-hidden p-2 rounded-xl border transition shadow-xs flex items-stretch gap-2.5 ${
+        className={`relative overflow-hidden p-2 sm:p-2.5 rounded-xl border transition shadow-xs flex flex-col justify-between gap-2 ${
           isOutOfStock
             ? 'opacity-60 bg-slate-950/40 border-slate-800'
             : quantity > 0
@@ -120,7 +120,9 @@ export const ProductRow: React.FC<ProductRowProps> = ({
             : 'bg-slate-900 border-slate-800 hover:border-slate-700'
         }`}
       >
-        {/* Part A: Image (Square 72px on sm+, 64px on mobile, relative, object-cover) */}
+        {/* Main Product Info Row */}
+        <div className="flex items-stretch gap-2.5 sm:gap-3 w-full">
+          {/* Part A: Image (Square 72px on sm+, 64px on mobile, relative, object-cover) */}
         <button
           type="button"
           onClick={() => setIsImageModalOpen(true)}
@@ -185,17 +187,6 @@ export const ProductRow: React.FC<ProductRowProps> = ({
                   {getSaleUnitLabel(product.unit, product.items_per_package)} {product.items_per_package.toLocaleString('fa-IR')} عددی
                 </span>
               ) : null}
-            </div>
-          )}
-
-          {/* Line 2.5: Product Description Box (Only when admin provided description, max 100 chars, compact & doesn't break card look) */}
-          {Boolean(product.description?.trim()) && (
-            <div
-              className="mt-0.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-200/90 text-[10.5px] leading-tight max-w-full overflow-hidden"
-              title={product.description!.trim()}
-            >
-              <Info className="w-3 h-3 text-amber-400 shrink-0" />
-              <span className="truncate min-w-0">{product.description!.trim()}</span>
             </div>
           )}
 
@@ -295,6 +286,20 @@ export const ProductRow: React.FC<ProductRowProps> = ({
         </div>
       </div>
 
+      {/* Product Description Banner (Full width across bottom of card, high contrast and zero truncation) */}
+      {Boolean(product.description?.trim()) && (
+        <div className="product-description-banner w-full flex items-start gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs leading-relaxed select-text shadow-2xs">
+          <Info className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0 text-[11px] sm:text-xs leading-relaxed">
+            <span className="desc-title font-bold ml-1">توضیح کالا:</span>
+            <span className="desc-body font-medium break-words">
+              {product.description!.trim()}
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+
       {/* Large Image Lightbox / Modal */}
       {isImageModalOpen && (
         <div
@@ -355,11 +360,11 @@ export const ProductRow: React.FC<ProductRowProps> = ({
 
             {/* Admin Product Description Note if present */}
             {Boolean(product.description?.trim()) && (
-              <div className="mx-4 mt-3 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-200 text-xs flex items-start gap-2.5 leading-relaxed">
-                <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div className="product-description-banner mx-4 mt-3 p-3 rounded-2xl border text-xs flex items-start gap-2.5 leading-relaxed">
+                <Info className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0 mt-0.5" />
                 <div className="min-w-0">
-                  <span className="font-bold text-[11px] text-amber-300 block mb-0.5">توضیحات و نکات این کالا:</span>
-                  <p className="text-slate-200 text-xs leading-relaxed">{product.description!.trim()}</p>
+                  <span className="desc-title font-bold text-xs block mb-0.5">توضیحات و نکات این کالا:</span>
+                  <p className="desc-body text-xs leading-relaxed font-medium">{product.description!.trim()}</p>
                 </div>
               </div>
             )}

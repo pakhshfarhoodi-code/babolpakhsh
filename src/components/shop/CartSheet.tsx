@@ -234,8 +234,8 @@ export const CartSheet: React.FC<CartSheetProps> = ({
                 <div className="min-w-0 flex-1">
                   <h4 className="text-xs font-bold text-slate-100 truncate">{product.name}</h4>
                   {product.description?.trim() && (
-                    <p className="text-[10px] text-amber-300/80 truncate mt-0.5" title={product.description.trim()}>
-                      نکته: {product.description.trim()}
+                    <p className="text-[10.5px] text-sky-700 dark:text-sky-300 truncate mt-0.5 font-medium" title={product.description.trim()}>
+                      توضیح: {product.description.trim()}
                     </p>
                   )}
                   <div className="text-[11px] text-slate-400 mt-0.5 space-y-0.5">

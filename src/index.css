@@ -577,3 +577,32 @@ html.theme-light .admin-edit-modal h3,
     break-inside: avoid !important;
   }
 }
+
+/* Product Description Banner (High contrast, clean informational banner) */
+.product-description-banner {
+  background-color: #f0f9ff;
+  border-color: #bae6fd;
+  color: #0f172a;
+}
+.product-description-banner .desc-title {
+  color: #0369a1;
+}
+.product-description-banner .desc-body {
+  color: #1e293b;
+}
+
+html:not(.theme-light) .product-description-banner,
+body:not(.theme-light) .product-description-banner {
+  background-color: rgba(8, 47, 73, 0.4);
+  border-color: rgba(14, 116, 144, 0.5);
+  color: #f1f5f9;
+}
+html:not(.theme-light) .product-description-banner .desc-title,
+body:not(.theme-light) .product-description-banner .desc-title {
+  color: #7dd3fc;
+}
+html:not(.theme-light) .product-description-banner .desc-body,
+body:not(.theme-light) .product-description-banner .desc-body {
+  color: #e2e8f0;
+}
+

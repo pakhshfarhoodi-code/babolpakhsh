@@ -145,6 +145,9 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   const [newProdImage, setNewProdImage] = useState<string>('');
   const [newProdIsMarketTest, setNewProdIsMarketTest] = useState(false);
   const [newProdDescription, setNewProdDescription] = useState('');
+  const [newProdDiscountPercent, setNewProdDiscountPercent] = useState<number | ''>('');
+  const [newProdDiscountStartsAt, setNewProdDiscountStartsAt] = useState('');
+  const [newProdDiscountEndsAt, setNewProdDiscountEndsAt] = useState('');
   const [addModalError, setAddModalError] = useState<string | null>(null);
 
   const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -178,6 +181,9 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   const [editProdIsActive, setEditProdIsActive] = useState(true);
   const [editProdIsMarketTest, setEditProdIsMarketTest] = useState(false);
   const [editProdDescription, setEditProdDescription] = useState('');
+  const [editProdDiscountPercent, setEditProdDiscountPercent] = useState<number | ''>('');
+  const [editProdDiscountStartsAt, setEditProdDiscountStartsAt] = useState('');
+  const [editProdDiscountEndsAt, setEditProdDiscountEndsAt] = useState('');
   const [editModalError, setEditModalError] = useState<string | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
@@ -196,6 +202,9 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
     setEditProdIsActive(prod.is_active !== false);
     setEditProdIsMarketTest(Boolean(prod.is_market_test));
     setEditProdDescription(prod.description || '');
+    setEditProdDiscountPercent(prod.discount_percent ?? '');
+    setEditProdDiscountStartsAt(prod.discount_starts_at ? prod.discount_starts_at.slice(0, 16) : '');
+    setEditProdDiscountEndsAt(prod.discount_ends_at ? prod.discount_ends_at.slice(0, 16) : '');
     setEditModalError(null);
   };
 
@@ -247,6 +256,9 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
           is_active: editProdIsActive,
           is_market_test: editProdIsMarketTest,
           description: editProdDescription.trim() ? editProdDescription.trim().slice(0, 100) : undefined,
+          discount_percent: Number(editProdDiscountPercent) > 0 ? Number(editProdDiscountPercent) : undefined,
+          discount_starts_at: editProdDiscountStartsAt ? editProdDiscountStartsAt : null,
+          discount_ends_at: editProdDiscountEndsAt ? editProdDiscountEndsAt : null,
         });
       } else {
         onUpdateProductPrice(
@@ -690,6 +702,9 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
       is_active: true,
       is_market_test: newProdIsMarketTest,
       description: newProdDescription.trim() ? newProdDescription.trim().slice(0, 100) : undefined,
+      discount_percent: Number(newProdDiscountPercent) > 0 ? Number(newProdDiscountPercent) : undefined,
+      discount_starts_at: newProdDiscountStartsAt ? newProdDiscountStartsAt : null,
+      discount_ends_at: newProdDiscountEndsAt ? newProdDiscountEndsAt : null,
     });
 
     setIsAddModalOpen(false);
@@ -702,6 +717,9 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
     setNewProdImage('');
     setNewProdIsMarketTest(false);
     setNewProdDescription('');
+    setNewProdDiscountPercent('');
+    setNewProdDiscountStartsAt('');
+    setNewProdDiscountEndsAt('');
     setAddModalError(null);
   };
 
@@ -2048,6 +2066,40 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                     <span className="text-[10px] text-slate-400 mt-1 block">درج روی جلد کالا (در صورت وجود)</span>
                   </div>
                 </div>
+
+                {/* Product Discount Fields */}
+                <div className="pt-3 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-slate-200 mb-1 font-semibold text-xs">درصد تخفیف کالا (٪)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={newProdDiscountPercent}
+                      onChange={(e) => setNewProdDiscountPercent(e.target.value === '' ? '' : Number(e.target.value))}
+                      placeholder="مثلاً ۱۰٪"
+                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-amber-500 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-200 mb-1 font-semibold text-xs">شروع تخفیف</label>
+                    <input
+                      type="datetime-local"
+                      value={newProdDiscountStartsAt}
+                      onChange={(e) => setNewProdDiscountStartsAt(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-2 py-2 text-xs text-slate-100 focus:outline-none focus:border-amber-500 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-200 mb-1 font-semibold text-xs">پایان تخفیف</label>
+                    <input
+                      type="datetime-local"
+                      value={newProdDiscountEndsAt}
+                      onChange={(e) => setNewProdDiscountEndsAt(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-2 py-2 text-xs text-slate-100 focus:outline-none focus:border-amber-500 font-mono"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Section 3: Inventory & Unit */}
@@ -2437,6 +2489,40 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                       className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-amber-300 focus:outline-none focus:border-amber-500 font-mono font-bold"
                     />
                     <span className="text-[10px] text-slate-400 mt-1 block">قیمت روی جلد کالا</span>
+                  </div>
+                </div>
+
+                {/* Product Discount Fields */}
+                <div className="pt-3 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-slate-200 mb-1 font-semibold text-xs">درصد تخفیف کالا (٪)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={editProdDiscountPercent}
+                      onChange={(e) => setEditProdDiscountPercent(e.target.value === '' ? '' : Number(e.target.value))}
+                      placeholder="مثلاً ۱۰٪"
+                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-amber-500 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-200 mb-1 font-semibold text-xs">شروع تخفیف</label>
+                    <input
+                      type="datetime-local"
+                      value={editProdDiscountStartsAt}
+                      onChange={(e) => setEditProdDiscountStartsAt(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-2 py-2 text-xs text-slate-100 focus:outline-none focus:border-amber-500 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-200 mb-1 font-semibold text-xs">پایان تخفیف</label>
+                    <input
+                      type="datetime-local"
+                      value={editProdDiscountEndsAt}
+                      onChange={(e) => setEditProdDiscountEndsAt(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-2 py-2 text-xs text-slate-100 focus:outline-none focus:border-amber-500 font-mono"
+                    />
                   </div>
                 </div>
               </div>

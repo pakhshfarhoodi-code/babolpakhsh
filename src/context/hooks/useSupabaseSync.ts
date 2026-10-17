@@ -185,10 +185,10 @@ export function useSupabaseSync({
       }
     })();
 
-    const storeColumnsWithDesc = 'id, category_id, brand, name, price, consumer_price, stock, reserved_stock, unit, items_per_package, image_url, is_active, is_market_test, description, created_at';
-    const storeColumnsNoDesc = 'id, category_id, brand, name, price, consumer_price, stock, reserved_stock, unit, items_per_package, image_url, is_active, is_market_test, created_at';
-    const fullColumnsWithDesc = 'id, category_id, brand, name, price, visitor_price, consumer_price, stock, reserved_stock, unit, items_per_package, image_url, is_active, is_market_test, description, created_at';
-    const fullColumnsNoDesc = 'id, category_id, brand, name, price, visitor_price, consumer_price, stock, reserved_stock, unit, items_per_package, image_url, is_active, is_market_test, created_at';
+    const storeColumnsWithDesc = 'id, category_id, brand, name, price, consumer_price, stock, reserved_stock, unit, items_per_package, image_url, is_active, is_market_test, description, discount_percent, discount_starts_at, discount_ends_at, created_at';
+    const storeColumnsNoDesc = 'id, category_id, brand, name, price, consumer_price, stock, reserved_stock, unit, items_per_package, image_url, is_active, is_market_test, discount_percent, discount_starts_at, discount_ends_at, created_at';
+    const fullColumnsWithDesc = 'id, category_id, brand, name, price, visitor_price, consumer_price, stock, reserved_stock, unit, items_per_package, image_url, is_active, is_market_test, description, discount_percent, discount_starts_at, discount_ends_at, created_at';
+    const fullColumnsNoDesc = 'id, category_id, brand, name, price, visitor_price, consumer_price, stock, reserved_stock, unit, items_per_package, image_url, is_active, is_market_test, discount_percent, discount_starts_at, discount_ends_at, created_at';
 
     let prods: any[] | null = null;
     let prodsErr: any = null;
@@ -353,7 +353,7 @@ export function useSupabaseSync({
     const { data: ords, error: ordsErr } = await withTimeout(
       supabase
         .from('orders')
-        .select('id, supermarket_id, supermarket_name, assigned_visitor_id, visitor_name, status, total_amount, order_source, order_channel, reassignment_id, loading_bill_id, invoice_revised_at, order_date, stock_deducted, discount_percent, discount_status, discount_set_by, discount_reviewed_by, discount_reviewed_at, pickup_discount_percent, founder_discount_percent, founder_campaign_no, items:order_items(id, order_id, product_id, name, price, quantity, items_per_package, unit, created_at)'),
+        .select('id, supermarket_id, supermarket_name, assigned_visitor_id, visitor_name, status, total_amount, order_source, order_channel, reassignment_id, loading_bill_id, invoice_revised_at, order_date, stock_deducted, discount_percent, discount_status, discount_set_by, discount_reviewed_by, discount_reviewed_at, pickup_discount_percent, founder_discount_percent, founder_campaign_no, items:order_items(id, order_id, product_id, name, price, quantity, items_per_package, unit, discount_percent, created_at)'),
       15000,
       'مهلت زمانی دریافت اطلاعات سفارش‌ها به پایان رسید'
     );
@@ -371,7 +371,7 @@ export function useSupabaseSync({
       );
       if (rawOrdersErr && ordsErr) throw ordsErr;
       const { data: rawItems } = await withTimeout(
-        supabase.from('order_items').select('id, order_id, product_id, name, price, quantity, items_per_package, unit, created_at'),
+        supabase.from('order_items').select('id, order_id, product_id, name, price, quantity, items_per_package, unit, discount_percent, created_at'),
         15000
       ).catch(() => ({ data: [] }));
 
@@ -503,7 +503,7 @@ export function useSupabaseSync({
       withTimeout(
         supabase
           .from('supermarkets')
-          .select('id, name, owner, phone, address, assigned_visitor_id, is_active, username, created_at, founder_discount_enabled, founder_discount_percent, founder_orders_limit, founder_campaign_no, activated_at, import_batch, verification_type, verified_at, verified_by, verification_note, latitude, longitude'),
+          .select('id, name, owner, phone, address, assigned_visitor_id, is_active, username, created_at, founder_discount_enabled, founder_discount_percent, founder_orders_limit, founder_campaign_no, pickup_discount_opt_in, founder_discount_opt_in, activated_at, import_batch, verification_type, verified_at, verified_by, verification_note, latitude, longitude'),
         15000,
         'مهلت زمانی دریافت اطلاعات فروشگاه‌ها به پایان رسید'
       ),
@@ -536,6 +536,8 @@ export function useSupabaseSync({
         founder_discount_percent: typeof sm.founder_discount_percent === 'number' ? sm.founder_discount_percent : 5,
         founder_orders_limit: typeof sm.founder_orders_limit === 'number' ? sm.founder_orders_limit : 3,
         founder_campaign_no: typeof sm.founder_campaign_no === 'number' ? sm.founder_campaign_no : undefined,
+        pickup_discount_opt_in: sm.pickup_discount_opt_in ?? false,
+        founder_discount_opt_in: sm.founder_discount_opt_in ?? true,
         activated_at: sm.activated_at || null,
         import_batch: sm.import_batch || null,
         verification_type: (sm.verification_type as any) || 'none',

@@ -43,6 +43,9 @@ export interface Product {
   is_active: boolean;
   is_market_test?: boolean; // قابلیت تست بازار و اعلام به زودی
   description?: string; // توضیحات و نکات اختصاصی کالا (حداکثر ۱۰۰ کاراکتر)
+  discount_percent?: number;
+  discount_starts_at?: string | null;
+  discount_ends_at?: string | null;
   created_at?: string;
 }
 
@@ -92,6 +95,8 @@ export interface Supermarket {
   founder_discount_percent?: number;
   founder_orders_limit?: number;
   founder_campaign_no?: number;
+  pickup_discount_opt_in?: boolean;
+  founder_discount_opt_in?: boolean;
   activated_at?: string | null;
   import_batch?: string | null;
   approval_status?: 'pending' | 'approved' | 'rejected';
@@ -144,6 +149,7 @@ export interface OrderItem {
   quantity: number;
   items_per_package?: number;
   unit?: string;
+  discount_percent?: number | null;
   created_at?: string;
 }
 
@@ -369,7 +375,6 @@ export interface InvoiceShowSettings {
   // Summary & Totals
   summary_items_count: boolean;
   summary_subtotal: boolean;
-  summary_discount: boolean;
   summary_vat: boolean;
   summary_final_total: boolean;
 
@@ -504,8 +509,6 @@ export interface InvoiceSettings {
   default_unit_name: string; // پیش‌فرض واحد کالا (مثلا 'عدد')
   has_vat: boolean;
   vat_percent: number;
-  has_overall_discount?: boolean;
-  discount_percent?: number;
   pickup_discount_enabled?: boolean; // فعال/غیرفعال بودن تخفیف تحویل درب انبار در کل سامانه
   pickup_discount_percent: number; // پیش‌فرض درصد تخفیف تحویل درب انبار (پیش‌فرض ۳)
   max_visitor_discount_percent: number; // حداکثر درصد تخفیف مجاز ویزیتور (پیش‌فرض ۱۰)
@@ -588,7 +591,6 @@ export const DEFAULT_INVOICE_SHOW_SETTINGS: InvoiceShowSettings = {
 
   summary_items_count: true,
   summary_subtotal: true,
-  summary_discount: false,
   summary_vat: true,
   summary_final_total: true,
 
@@ -704,8 +706,6 @@ export const DEFAULT_INVOICE_SETTINGS: InvoiceSettings = {
   default_unit_name: 'عدد',
   has_vat: false,
   vat_percent: 10,
-  has_overall_discount: false,
-  discount_percent: 0,
   pickup_discount_enabled: true,
   pickup_discount_percent: 3,
   max_visitor_discount_percent: 10,

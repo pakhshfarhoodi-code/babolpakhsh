@@ -30,6 +30,96 @@ export interface FounderDiscountStatus {
   campaignNo?: number;
 }
 
+export interface OrderDiscountResolution {
+  appliedType: 'pickup' | 'founder' | 'none';
+  pickupPercent: number;   // درصد اعمال‌شده (۰ اگر اعمال نشد)
+  founderPercent: number;  // درصد اعمال‌شده (۰ اگر اعمال نشد)
+  eligiblePickup: number;  // درصدی که مشمول بود (قبل از انتخاب)
+  eligibleFounder: number;
+  skippedReason?: string;
+}
+
+export function getProductDiscountPercent(
+  product: { discount_percent?: number; discount_starts_at?: string | null; discount_ends_at?: string | null },
+  now: Date = new Date()
+): number {
+  const p = Number(product?.discount_percent) || 0;
+  if (p <= 0) return 0;
+  if (product.discount_starts_at) {
+    const start = new Date(product.discount_starts_at);
+    if (!isNaN(start.getTime()) && now < start) return 0;
+  }
+  if (product.discount_ends_at) {
+    const end = new Date(product.discount_ends_at);
+    if (!isNaN(end.getTime()) && now > end) return 0;
+  }
+  return Math.min(100, Math.max(0, p));
+}
+
+export function resolveOrderDiscounts(eligiblePickup: number, eligibleFounder: number): OrderDiscountResolution {
+  const p = Math.max(0, eligiblePickup || 0);
+  const f = Math.max(0, eligibleFounder || 0);
+
+  if (p <= 0 && f <= 0) {
+    return {
+      appliedType: 'none',
+      pickupPercent: 0,
+      founderPercent: 0,
+      eligiblePickup: p,
+      eligibleFounder: f,
+    };
+  }
+
+  if (p > 0 && f <= 0) {
+    return {
+      appliedType: 'pickup',
+      pickupPercent: p,
+      founderPercent: 0,
+      eligiblePickup: p,
+      eligibleFounder: f,
+    };
+  }
+
+  if (f > 0 && p <= 0) {
+    return {
+      appliedType: 'founder',
+      pickupPercent: 0,
+      founderPercent: f,
+      eligiblePickup: p,
+      eligibleFounder: f,
+    };
+  }
+
+  if (f > p) {
+    return {
+      appliedType: 'founder',
+      pickupPercent: 0,
+      founderPercent: f,
+      eligiblePickup: p,
+      eligibleFounder: f,
+      skippedReason: `تحویل حضوری (${p}٪) مشمول است ولی ورودی جدید (${f}٪) بالاتر است`,
+    };
+  } else if (p > f) {
+    return {
+      appliedType: 'pickup',
+      pickupPercent: p,
+      founderPercent: 0,
+      eligiblePickup: p,
+      eligibleFounder: f,
+      skippedReason: `ورودی جدید (${f}٪) مشمول است ولی تحویل حضوری (${p}٪) بالاتر است`,
+    };
+  } else {
+    return {
+      appliedType: 'pickup',
+      pickupPercent: p,
+      founderPercent: 0,
+      eligiblePickup: p,
+      eligibleFounder: f,
+      skippedReason: `هر دو (${p}٪) برابرند؛ تحویل حضوری اعمال شد تا سهمیه ورودی جدید حفظ شود`,
+    };
+  }
+}
+
 export function getStoreRegistrationRank(
   supermarkets: Array<{ id: string; created_at?: string }>,
   storeId?: string | null
@@ -43,7 +133,6 @@ export function getStoreRegistrationRank(
     };
   }
 
-  // Sort chronologically ascending by created_at
   const sorted = [...supermarkets].sort((a, b) => {
     const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
     const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
@@ -59,17 +148,47 @@ export function getStoreRegistrationRank(
   return { rank, totalStores, isFounderEligible, remainingCapacity };
 }
 
-/**
- * Storage helpers for store user's founder discount opt-in/opt-out preference
- */
 export function getStoreFounderDiscountStorageKey(storeId: string): string {
   return `farhoodi_store_founder_discount_${storeId}`;
 }
 
+export function getStorePickupDiscountStorageKey(storeId: string): string {
+  return `farhoodi_store_pickup_discount_${storeId}`;
+}
+
+export function getStorePickupDiscountEnabled(
+  storeId: string,
+  storeObject?: { pickup_discount_opt_in?: boolean } | null
+): boolean {
+  if (storeObject && typeof storeObject.pickup_discount_opt_in === 'boolean') {
+    return storeObject.pickup_discount_opt_in;
+  }
+  if (!storeId || typeof window === 'undefined') return false;
+  try {
+    const val = localStorage.getItem(getStorePickupDiscountStorageKey(storeId));
+    if (val !== null) return val === 'true';
+    return false; // Default pickup: off
+  } catch {
+    return false;
+  }
+}
+
+export function setStorePickupDiscountEnabled(storeId: string, enabled: boolean): void {
+  if (!storeId || typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(getStorePickupDiscountStorageKey(storeId), enabled ? 'true' : 'false');
+  } catch (err) {
+    console.error('Failed to save pickup discount state:', err);
+  }
+}
+
 export function getStoreFounderDiscountUserEnabled(
   storeId: string,
-  storeObject?: { founder_discount_enabled?: boolean } | null
+  storeObject?: { founder_discount_opt_in?: boolean; founder_discount_enabled?: boolean } | null
 ): boolean {
+  if (storeObject && typeof storeObject.founder_discount_opt_in === 'boolean') {
+    return storeObject.founder_discount_opt_in;
+  }
   if (!storeId || typeof window === 'undefined') return true;
   try {
     const val = localStorage.getItem(getStoreFounderDiscountStorageKey(storeId));
@@ -79,7 +198,7 @@ export function getStoreFounderDiscountUserEnabled(
     if (storeObject && typeof storeObject.founder_discount_enabled === 'boolean') {
       return storeObject.founder_discount_enabled;
     }
-    return true; // Default to enabled for eligible stores
+    return true; // Default founder: on
   } catch {
     return true;
   }
@@ -94,11 +213,6 @@ export function setStoreFounderDiscountUserEnabled(storeId: string, enabled: boo
   }
 }
 
-/**
- * Calculates whether the 5% founder discount for the first 100 stores is active,
- * ensuring it applies strictly to orders where the discount is actually used.
- * Stores can disable the discount for an order to save quota for future orders.
- */
 export function getStoreFounderDiscountStatus(
   supermarkets: Array<{
     id: string;
@@ -107,6 +221,7 @@ export function getStoreFounderDiscountStatus(
     founder_discount_percent?: number;
     founder_orders_limit?: number;
     founder_campaign_no?: number;
+    founder_discount_opt_in?: boolean;
   }>,
   orders: Array<{ supermarket_id: string; status?: string; founder_discount_percent?: number; founder_campaign_no?: number }>,
   storeId?: string | null
@@ -136,13 +251,10 @@ export function getStoreFounderDiscountStatus(
       ? currentStore.founder_orders_limit
       : 3;
 
-  // Count non-cancelled orders belonging to this store
   const storeOrders = (orders || []).filter(
     (o) => o.supermarket_id === storeId && o.status !== 'cancelled'
   );
 
-  // فقط سفارش‌هایی که در «دوره‌ی همین فروشگاه» تخفیف گرفته‌اند شمرده می‌شوند.
-  // سفارش‌های قدیمی بدون شماره دوره (null) مثل قبل شمرده می‌شوند.
   const storeCampaignNo = currentStore?.founder_campaign_no;
   const explicitFounderOrders = storeOrders.filter(
     (o) =>
@@ -152,8 +264,6 @@ export function getStoreFounderDiscountStatus(
         o.founder_campaign_no === storeCampaignNo)
   );
 
-  // Only count orders where founder discount was ACTUALLY applied!
-  // This allows the store to disable the discount for current order and preserve it for future orders.
   const usedOrdersCount = Math.min(
     ordersLimit,
     explicitFounderOrders.length
@@ -200,25 +310,33 @@ export function calculateDiscountedPrice(
   return Math.round((originalPrice * (100 - totalDiscountPercent)) / 100);
 }
 
-export function getStorePickupDiscountStorageKey(storeId: string): string {
-  return `farhoodi_store_pickup_discount_${storeId}`;
-}
+export function getStoreOrderDiscountPlan(args: {
+  store?: any;
+  supermarkets?: Array<any>;
+  orders?: Array<any>;
+  invoiceSettings?: any;
+  priceMode: 'store' | 'visitor' | 'consumer';
+}): OrderDiscountResolution & { founderStatus: FounderDiscountStatus; pickupGloballyEnabled: boolean; storeWantsPickup: boolean } {
+  const { store, supermarkets = [], orders = [], invoiceSettings, priceMode } = args || {};
+  const storeId = store?.id || null;
 
-export function getStorePickupDiscountEnabled(storeId: string): boolean {
-  if (!storeId || typeof window === 'undefined') return false;
-  try {
-    const val = localStorage.getItem(getStorePickupDiscountStorageKey(storeId));
-    return val === 'true';
-  } catch {
-    return false;
-  }
-}
+  const pickupGloballyEnabled = invoiceSettings?.pickup_discount_enabled !== false;
+  const storeWantsPickup = storeId ? getStorePickupDiscountEnabled(storeId, store) : false;
+  const eligiblePickup = pickupGloballyEnabled && storeWantsPickup && priceMode === 'store'
+    ? (Number(invoiceSettings?.pickup_discount_percent) || 3)
+    : 0;
 
-export function setStorePickupDiscountEnabled(storeId: string, enabled: boolean): void {
-  if (!storeId || typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(getStorePickupDiscountStorageKey(storeId), enabled ? 'true' : 'false');
-  } catch (err) {
-    console.error('Failed to save pickup discount state:', err);
-  }
+  const founderStatus = getStoreFounderDiscountStatus(supermarkets, orders, storeId);
+  const eligibleFounder = priceMode === 'store' && founderStatus.isFounderActive
+    ? founderStatus.founderPercent
+    : 0;
+
+  const resolution = resolveOrderDiscounts(eligiblePickup, eligibleFounder);
+
+  return {
+    ...resolution,
+    founderStatus,
+    pickupGloballyEnabled,
+    storeWantsPickup,
+  };
 }

@@ -310,9 +310,10 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
                   <div className="min-w-0 pr-1">
                     <span className="font-bold text-slate-200 block truncate">{prod.name}</span>
                     {prod.description?.trim() && (
-                      <span className="text-[10px] text-amber-300/90 block truncate" title={prod.description.trim()}>
-                        نکته: {prod.description.trim()}
-                      </span>
+                      <div className="mt-1 p-2 rounded-lg bg-amber-950/40 border border-amber-500/30 text-[10px] leading-relaxed text-amber-200/90 whitespace-pre-wrap break-words">
+                        <span className="font-bold text-amber-300 ml-1">نکته:</span>
+                        <span>{prod.description.trim()}</span>
+                      </div>
                     )}
                     <span className="text-[10px] text-slate-400">
                       موجود: {Math.max(0, prod.stock - prod.reserved_stock)} {prod.unit} | {formatPrice(prod.price)}

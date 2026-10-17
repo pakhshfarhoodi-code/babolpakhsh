@@ -1082,51 +1082,6 @@ export const InvoiceSettingsTab: React.FC = () => {
                       })}
                     </div>
                   </div>
-
-                  {/* Overall Discount Box */}
-                  <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 space-y-3 pt-3">
-                    <div className="flex items-center justify-between">
-                      <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-200">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(form.has_overall_discount)}
-                          onChange={(e) =>
-                            handleFieldChange('has_overall_discount', e.target.checked)
-                          }
-                          className="w-4 h-4 rounded text-blue-600 bg-slate-800 border-slate-700"
-                        />
-                        <span>اعمال درصد تخفیف روی جمع کل فاکتور</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-400">
-                        <span>نمایش سطر در خلاصه جمع‌ها</span>
-                        <input
-                          type="checkbox"
-                          checked={form.show.summary_discount}
-                          onChange={(e) =>
-                            handleShowChange('summary_discount', e.target.checked)
-                          }
-                          className="w-4 h-4 rounded text-blue-600 bg-slate-800 border-slate-700"
-                        />
-                      </label>
-                    </div>
-
-                    {form.has_overall_discount && (
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs text-slate-400">درصد تخفیف کل سفارش:</span>
-                        <input
-                          type="number"
-                          min={0}
-                          max={100}
-                          value={form.discount_percent || 0}
-                          onChange={(e) =>
-                            handleFieldChange('discount_percent', Number(e.target.value) || 0)
-                          }
-                          className="w-24 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-xs num-fa text-center font-bold"
-                        />
-                        <span className="text-xs text-slate-400">درصد (٪)</span>
-                      </div>
-                    )}
-                  </div>
                 </div>
               )}
             </div>

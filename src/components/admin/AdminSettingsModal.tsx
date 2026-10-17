@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { useApp } from '../../context/AppContext';
-import { FounderCampaignInfo } from '../../types';
+import { FounderCampaignInfo, FounderCampaignHistoryItem } from '../../types';
 import {
   Settings,
   Warehouse,
@@ -54,6 +54,8 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
   const [campaignCapacity, setCampaignCapacity] = useState<number>(100);
   const [campaignOrdersPerStore, setCampaignOrdersPerStore] = useState<number>(3);
   const [isLoadingCampaign, setIsLoadingCampaign] = useState<boolean>(true);
+  const [campaignHistory, setCampaignHistory] = useState<FounderCampaignHistoryItem[]>([]);
+  const [showCampaignHistory, setShowCampaignHistory] = useState<boolean>(false);
   const [isSavingCampaign, setIsSavingCampaign] = useState<boolean>(false);
 
   const isPickupGloballyEnabled = invoiceSettings?.pickup_discount_enabled !== false;
@@ -98,6 +100,20 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
         console.error('Error fetching warehouse step setting:', err);
       } finally {
         if (isMounted) setIsLoading(false);
+      }
+    };
+
+    const fetchCampaignHistory = async () => {
+      try {
+        if (isSupabaseConfigured && supabase) {
+          const { data, error } = await supabase.rpc('get_founder_campaign_history');
+          if (!error && data && isMounted) {
+            const list: FounderCampaignHistoryItem[] = typeof data === 'string' ? JSON.parse(data) : data;
+            setCampaignHistory(Array.isArray(list) ? list : []);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching founder campaign history:', err);
       }
     };
 
@@ -166,6 +182,7 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
 
     fetchSetting();
     fetchCampaign();
+    fetchCampaignHistory();
     return () => {
       isMounted = false;
     };
@@ -282,7 +299,7 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
       restart &&
       typeof window !== 'undefined' &&
       !window.confirm(
-        'آیا از شروع دوره جدید کمپین اطمینان دارید؟ با شروع دوره جدید، دوره قبلی بسته شده و دوره جدید با ظرفیت و تنظیمات مشخص‌شده فعال می‌شود.'
+        'آیا از شروع دوره جدید کمپین اطمینان دارید؟ دوره فعلی بسته می‌شود (سوابق آن در «تاریخچه دوره‌ها» می‌ماند و فروشگاه‌های آن دوره سهمیه باقی‌مانده خود را حفظ می‌کنند). دوره جدید با شمارنده «اعطا شده» صفر و تنظیمات فرم فعلی شروع می‌شود.'
       )
     ) {
       return;
@@ -328,6 +345,14 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
 
         if (rpcError) {
           console.warn('RPC admin_set_founder_campaign had an issue, fallback to app_settings was saved:', rpcError);
+          // اگر تابع اصلاً روی دیتابیس نیست (مایگریشن اجرا نشده) همان مسیر جایگزین کافی است؛
+          // در غیر این‌صورت (مثلاً خطای دسترسی) خطا را به ادمین نشان بده.
+          const e = rpcError as { code?: string; message?: string };
+          const fnMissing = e.code === 'PGRST202' || e.code === '42883';
+          if (!fnMissing) {
+            showToast(e.message || 'ذخیره دوره کمپین در دیتابیس با خطا مواجه شد.', 'error');
+            return;
+          }
         }
 
         showToast(
@@ -347,6 +372,11 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
           setCampaignPercent(typeof c.percent === 'number' ? c.percent : 5);
           setCampaignCapacity(typeof c.capacity === 'number' ? c.capacity : 100);
           setCampaignOrdersPerStore(typeof c.orders_per_store === 'number' ? c.orders_per_store : 3);
+        }
+        const { data: histData } = await supabase.rpc('get_founder_campaign_history');
+        if (histData) {
+          const list: FounderCampaignHistoryItem[] = typeof histData === 'string' ? JSON.parse(histData) : histData;
+          setCampaignHistory(Array.isArray(list) ? list : []);
         }
         refreshData();
       } else {
@@ -633,7 +663,7 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
                 </span>
               </div>
               <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-center space-y-0.5">
-                <span className="text-[10.5px] text-purple-300 block">اعطا شده (فعال)</span>
+                <span className="text-[10.5px] text-purple-300 block">اعطا شده در این دوره</span>
                 <span className="font-bold text-purple-400 font-mono text-sm">
                   {campaignData.granted?.toLocaleString('fa-IR')} فروشگاه
                 </span>
@@ -739,12 +769,74 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
               disabled={isSavingCampaign}
               onClick={() => handleSaveCampaign(true)}
               className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-amber-950/60 text-slate-300 hover:text-amber-300 border border-slate-700 hover:border-amber-700/60 text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
-              title="آغاز دوره جدید و صفر کردن شمارنده ظرفیت پذیرش"
+              title="بستن دوره فعلی و شروع دوره جدید با شمارنده اعطا شده صفر"
             >
               <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
               <span>شروع دوره جدید (ریستارت)</span>
             </button>
           </div>
+
+          {/* Difference between the two buttons */}
+          <div className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 text-[11px] space-y-1.5 leading-relaxed">
+            <p className="text-slate-300">
+              <span className="font-bold text-purple-300">ذخیره تنظیمات کمپین: </span>
+              مقادیر فرم (درصد، ظرفیت، سقف سفارش، فعال/غیرفعال) روی <b>همین دوره</b>
+              {campaignData ? ` (دوره ${campaignData.campaign_no.toLocaleString('fa-IR')})` : ''} اعمال می‌شود.
+              شمارنده «اعطا شده» و سوابق فروشگاه‌ها دست‌نخورده می‌ماند.
+            </p>
+            <p className="text-slate-300">
+              <span className="font-bold text-amber-300">شروع دوره جدید (ریستارت): </span>
+              دوره فعلی بسته و دوره بعدی با شمارنده «اعطا شده» صفر باز می‌شود. فروشگاه‌های دوره‌های قبل
+              تخفیف و سهمیه باقی‌مانده خود را همان‌طور که بود حفظ می‌کنند و سوابق هر دوره در تاریخچه می‌ماند.
+            </p>
+          </div>
+
+          {/* Campaign history */}
+          {campaignHistory.length > 0 && (
+            <div className="rounded-xl bg-slate-900 border border-slate-800/80 text-xs overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowCampaignHistory(!showCampaignHistory)}
+                className="w-full px-3 py-2 flex items-center justify-between text-slate-300 font-semibold cursor-pointer hover:bg-slate-800/60 transition"
+              >
+                <span>تاریخچه دوره‌های کمپین ({campaignHistory.length.toLocaleString('fa-IR')} دوره)</span>
+                <span className="text-slate-500">{showCampaignHistory ? '▲' : '▼'}</span>
+              </button>
+              {showCampaignHistory && (
+                <div className="overflow-x-auto border-t border-slate-800">
+                  <table className="w-full text-[11px] text-center">
+                    <thead className="text-slate-400 bg-slate-950/60">
+                      <tr>
+                        <th className="p-2">دوره</th>
+                        <th className="p-2">درصد</th>
+                        <th className="p-2">اعطا شده / ظرفیت</th>
+                        <th className="p-2">سفارش دارای تخفیف</th>
+                        <th className="p-2">شروع</th>
+                        <th className="p-2">پایان</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-slate-200">
+                      {campaignHistory.map((h) => (
+                        <tr key={h.campaign_no} className="border-t border-slate-800/70">
+                          <td className="p-2 font-bold text-purple-300">
+                            {h.campaign_no.toLocaleString('fa-IR')}
+                            {!h.ended_at && <span className="mr-1 text-emerald-400">(جاری)</span>}
+                          </td>
+                          <td className="p-2 font-mono">{Number(h.percent).toLocaleString('fa-IR')}٪</td>
+                          <td className="p-2 font-mono">
+                            {Number(h.granted).toLocaleString('fa-IR')} / {Number(h.capacity).toLocaleString('fa-IR')}
+                          </td>
+                          <td className="p-2 font-mono">{Number(h.discounted_orders).toLocaleString('fa-IR')}</td>
+                          <td className="p-2">{new Date(h.started_at).toLocaleDateString('fa-IR')}</td>
+                          <td className="p-2">{h.ended_at ? new Date(h.ended_at).toLocaleDateString('fa-IR') : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Explanation Banner */}
           <div className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 text-xs space-y-1.5">

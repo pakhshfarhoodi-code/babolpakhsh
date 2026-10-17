@@ -116,6 +116,19 @@ export interface FounderCampaignInfo {
   remaining: number;
   orders_per_store: number;
   campaign_no: number;
+  started_at?: string;
+}
+
+export interface FounderCampaignHistoryItem {
+  campaign_no: number;
+  percent: number;
+  capacity: number;
+  orders_per_store: number;
+  active: boolean;
+  started_at: string;
+  ended_at: string | null;
+  granted: number;
+  discounted_orders: number;
 }
 
 export type OrderStatus = 'assigned' | 'loading' | 'delegated' | 'delivered' | 'undelivered';
@@ -157,6 +170,7 @@ export interface Order {
   discount_reviewed_at?: string;
   pickup_discount_percent?: number;
   founder_discount_percent?: number;
+  founder_campaign_no?: number;
   customer_type?: 'store' | 'consumer' | string;
   consumer_savings?: number;
   created_at?: string;

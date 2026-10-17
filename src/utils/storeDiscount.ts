@@ -27,6 +27,7 @@ export interface FounderDiscountStatus {
   founderPercent: number;
   ordersLimit: number;
   rank: number;
+  campaignNo?: number;
 }
 
 export function getStoreRegistrationRank(
@@ -107,7 +108,7 @@ export function getStoreFounderDiscountStatus(
     founder_orders_limit?: number;
     founder_campaign_no?: number;
   }>,
-  orders: Array<{ supermarket_id: string; status?: string; founder_discount_percent?: number }>,
+  orders: Array<{ supermarket_id: string; status?: string; founder_discount_percent?: number; founder_campaign_no?: number }>,
   storeId?: string | null
 ): FounderDiscountStatus {
   if (!storeId) {
@@ -140,8 +141,15 @@ export function getStoreFounderDiscountStatus(
     (o) => o.supermarket_id === storeId && o.status !== 'cancelled'
   );
 
+  // فقط سفارش‌هایی که در «دوره‌ی همین فروشگاه» تخفیف گرفته‌اند شمرده می‌شوند.
+  // سفارش‌های قدیمی بدون شماره دوره (null) مثل قبل شمرده می‌شوند.
+  const storeCampaignNo = currentStore?.founder_campaign_no;
   const explicitFounderOrders = storeOrders.filter(
-    (o) => (o.founder_discount_percent ?? 0) > 0
+    (o) =>
+      (o.founder_discount_percent ?? 0) > 0 &&
+      (storeCampaignNo == null ||
+        o.founder_campaign_no == null ||
+        o.founder_campaign_no === storeCampaignNo)
   );
 
   // Only count orders where founder discount was ACTUALLY applied!
@@ -169,6 +177,7 @@ export function getStoreFounderDiscountStatus(
     founderPercent,
     ordersLimit,
     rank: 1,
+    campaignNo: storeCampaignNo,
   };
 }
 

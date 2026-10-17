@@ -353,7 +353,7 @@ export function useSupabaseSync({
     const { data: ords, error: ordsErr } = await withTimeout(
       supabase
         .from('orders')
-        .select('id, supermarket_id, supermarket_name, assigned_visitor_id, visitor_name, status, total_amount, order_source, order_channel, reassignment_id, loading_bill_id, invoice_revised_at, order_date, stock_deducted, discount_percent, discount_status, discount_set_by, discount_reviewed_by, discount_reviewed_at, pickup_discount_percent, founder_discount_percent, items:order_items(id, order_id, product_id, name, price, quantity, items_per_package, unit, created_at)'),
+        .select('id, supermarket_id, supermarket_name, assigned_visitor_id, visitor_name, status, total_amount, order_source, order_channel, reassignment_id, loading_bill_id, invoice_revised_at, order_date, stock_deducted, discount_percent, discount_status, discount_set_by, discount_reviewed_by, discount_reviewed_at, pickup_discount_percent, founder_discount_percent, founder_campaign_no, items:order_items(id, order_id, product_id, name, price, quantity, items_per_package, unit, created_at)'),
       15000,
       'مهلت زمانی دریافت اطلاعات سفارش‌ها به پایان رسید'
     );

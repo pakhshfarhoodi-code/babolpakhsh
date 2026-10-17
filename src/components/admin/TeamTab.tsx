@@ -687,7 +687,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
     }
   };
 
-  const handleUpdateFounderDiscount = async (shop: Supermarket, enabled: boolean, percent: number) => {
+  const handleUpdateFounderDiscount = async (shop: Supermarket, enabled: boolean, percent: number | null = null) => {
     try {
       if (isSupabaseConfigured && supabase) {
         const { data, error } = await supabase.rpc('admin_set_store_founder_discount', {
@@ -1739,6 +1739,37 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                                   </span>
                                 ) : (
                                   <span className="text-[10px] text-slate-500">غیرمشمول</span>
+                                )}
+                                {shopFounderStatus.isFounderEligible && shopFounderStatus.campaignNo != null && (
+                                  <span
+                                    className="px-1.5 py-0.5 rounded font-bold text-[10px] border bg-slate-900 text-purple-300 border-purple-900/60"
+                                    title="دوره‌ای از کمپین که این فروشگاه در آن مشمول شده است"
+                                  >
+                                    دوره {shopFounderStatus.campaignNo.toLocaleString('fa-IR')}
+                                  </span>
+                                )}
+                                {shopFounderStatus.isFounderEligible ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (window.confirm(`تخفیف طرح آغازین فروشگاه «${shop.name}» غیرفعال شود؟`)) {
+                                        handleUpdateFounderDiscount(shop, false);
+                                      }
+                                    }}
+                                    className="text-[10px] px-1.5 py-0.5 rounded border border-red-900/60 text-red-300 hover:bg-red-950/60 transition cursor-pointer"
+                                    title="لغو تخفیف طرح آغازین این فروشگاه"
+                                  >
+                                    لغو
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateFounderDiscount(shop, true)}
+                                    className="text-[10px] px-1.5 py-0.5 rounded border border-purple-700/60 text-purple-200 bg-purple-950/60 hover:bg-purple-900 transition cursor-pointer"
+                                    title="فعال‌سازی تخفیف طرح آغازین برای این فروشگاه در دوره جاری کمپین"
+                                  >
+                                    اعطای تخفیف
+                                  </button>
                                 )}
                               </div>
                             );

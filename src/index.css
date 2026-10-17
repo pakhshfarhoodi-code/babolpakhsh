@@ -578,31 +578,31 @@ html.theme-light .admin-edit-modal h3,
   }
 }
 
-/* Product Description Banner (High contrast, clean informational banner) */
+/* Product Description Banner (Warm amber informational banner for store panel) */
 .product-description-banner {
-  background-color: #f0f9ff;
-  border-color: #bae6fd;
-  color: #0f172a;
+  background-color: #fef3c7;
+  border-color: #fde68a;
+  color: #78350f;
 }
 .product-description-banner .desc-title {
-  color: #0369a1;
+  color: #b45309;
 }
 .product-description-banner .desc-body {
-  color: #1e293b;
+  color: #92400e;
 }
 
 html:not(.theme-light) .product-description-banner,
 body:not(.theme-light) .product-description-banner {
-  background-color: rgba(8, 47, 73, 0.4);
-  border-color: rgba(14, 116, 144, 0.5);
-  color: #f1f5f9;
+  background-color: rgba(120, 53, 15, 0.22);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #fde68a;
 }
 html:not(.theme-light) .product-description-banner .desc-title,
 body:not(.theme-light) .product-description-banner .desc-title {
-  color: #7dd3fc;
+  color: #fcd34d;
 }
 html:not(.theme-light) .product-description-banner .desc-body,
 body:not(.theme-light) .product-description-banner .desc-body {
-  color: #e2e8f0;
+  color: #fef08a;
 }
 

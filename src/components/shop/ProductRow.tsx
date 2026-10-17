@@ -286,11 +286,11 @@ export const ProductRow: React.FC<ProductRowProps> = ({
         </div>
       </div>
 
-      {/* Product Description Banner (Full width across bottom of card, high contrast and zero truncation) */}
+      {/* Product Description Banner (Optimized 2 steps smaller font, warm amber theme, fully visible) */}
       {Boolean(product.description?.trim()) && (
-        <div className="product-description-banner w-full flex items-start gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs leading-relaxed select-text shadow-2xs">
-          <Info className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400 shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0 text-[11px] sm:text-xs leading-relaxed">
+        <div className="product-description-banner w-full flex items-start gap-1.5 px-2 py-1 rounded-md border text-[10.5px] leading-tight select-text mt-1.5 shadow-2xs">
+          <Info className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0 text-[10.5px] leading-tight">
             <span className="desc-title font-bold ml-1">توضیح کالا:</span>
             <span className="desc-body font-medium break-words">
               {product.description!.trim()}

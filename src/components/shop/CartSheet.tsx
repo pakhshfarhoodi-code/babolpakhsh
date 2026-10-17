@@ -233,6 +233,11 @@ export const CartSheet: React.FC<CartSheetProps> = ({
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <h4 className="text-xs font-bold text-slate-100 truncate">{product.name}</h4>
+                  {product.description?.trim() && (
+                    <p className="text-[10px] text-amber-300/80 truncate mt-0.5" title={product.description.trim()}>
+                      نکته: {product.description.trim()}
+                    </p>
+                  )}
                   <div className="text-[11px] text-slate-400 mt-0.5 space-y-0.5">
                     {multiplier > 1 ? (
                       <div className="flex items-baseline gap-1">

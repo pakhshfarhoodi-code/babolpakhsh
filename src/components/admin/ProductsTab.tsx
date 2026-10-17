@@ -40,6 +40,7 @@ import {
   RotateCcw,
   Save,
   AlertCircle,
+  Info,
 } from 'lucide-react';
 import { LOW_STOCK_THRESHOLD, formatPrice } from './helpers';
 import { PriceHistoryDrawer } from './PriceHistoryDrawer';
@@ -143,6 +144,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   const [newProdItemsPerPackage, setNewProdItemsPerPackage] = useState<number | string>('');
   const [newProdImage, setNewProdImage] = useState<string>('');
   const [newProdIsMarketTest, setNewProdIsMarketTest] = useState(false);
+  const [newProdDescription, setNewProdDescription] = useState('');
   const [addModalError, setAddModalError] = useState<string | null>(null);
 
   const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -175,6 +177,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   const [editProdImage, setEditProdImage] = useState('');
   const [editProdIsActive, setEditProdIsActive] = useState(true);
   const [editProdIsMarketTest, setEditProdIsMarketTest] = useState(false);
+  const [editProdDescription, setEditProdDescription] = useState('');
   const [editModalError, setEditModalError] = useState<string | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
@@ -192,6 +195,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
     setEditProdImage(prod.image_url || '');
     setEditProdIsActive(prod.is_active !== false);
     setEditProdIsMarketTest(Boolean(prod.is_market_test));
+    setEditProdDescription(prod.description || '');
     setEditModalError(null);
   };
 
@@ -242,6 +246,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
           image_url: finalImage,
           is_active: editProdIsActive,
           is_market_test: editProdIsMarketTest,
+          description: editProdDescription.trim() ? editProdDescription.trim().slice(0, 100) : undefined,
         });
       } else {
         onUpdateProductPrice(
@@ -352,7 +357,8 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
         (draft.unit || 'عدد') !== (p.unit || 'عدد') ||
         Number(draft.items_per_package ?? 0) !== Number(p.items_per_package ?? 0) ||
         draft.is_active !== p.is_active ||
-        Boolean(draft.is_market_test) !== Boolean(p.is_market_test)
+        Boolean(draft.is_market_test) !== Boolean(p.is_market_test) ||
+        (draft.description || '').trim() !== (p.description || '').trim()
       );
     });
   }, [isBatchEditMode, products, batchDrafts]);
@@ -402,6 +408,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
           is_active: draft.is_active !== false,
           is_market_test: Boolean(draft.is_market_test),
           image_url: draft.image_url,
+          description: draft.description?.trim() ? draft.description.trim().slice(0, 100) : undefined,
         };
       });
 
@@ -682,6 +689,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
       image_url: newProdImage.trim() || getSampleImage(newProdCat),
       is_active: true,
       is_market_test: newProdIsMarketTest,
+      description: newProdDescription.trim() ? newProdDescription.trim().slice(0, 100) : undefined,
     });
 
     setIsAddModalOpen(false);
@@ -693,6 +701,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
     setNewProdItemsPerPackage('');
     setNewProdImage('');
     setNewProdIsMarketTest(false);
+    setNewProdDescription('');
     setAddModalError(null);
   };
 
@@ -1572,9 +1581,19 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                           </button>
                           <div className="min-w-0">
                             <span className="font-semibold text-slate-100 block truncate">{product.name}</span>
-                            {product.brand && (
-                              <span className="text-[11px] text-slate-400 font-normal">{product.brand}</span>
-                            )}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {product.brand && (
+                                <span className="text-[11px] text-slate-400 font-normal">{product.brand}</span>
+                              )}
+                              {product.description?.trim() && (
+                                <span
+                                  className="text-[10px] bg-amber-500/10 text-amber-300 border border-amber-500/20 px-1.5 py-0.2 rounded font-normal truncate max-w-[140px]"
+                                  title={`توضیحات: ${product.description.trim()}`}
+                                >
+                                  نکته: {product.description.trim()}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </td>
@@ -1948,6 +1967,31 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                     onEditBrandClick={onOpenEditBrand}
                   />
                 </div>
+
+                {/* Product Description Field (Max 100 characters) */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-slate-300 font-semibold text-xs flex items-center gap-1.5">
+                      <Info className="w-3.5 h-3.5 text-amber-400" />
+                      <span>توضیحات کوتاه کالا جهت نمایش به فروشگاه‌ها</span>
+                      <span className="text-[10px] text-slate-400 font-normal">(اختیاری)</span>
+                    </label>
+                    <span className={`text-[10px] font-mono ${newProdDescription.length > 90 ? 'text-amber-400 font-bold' : 'text-slate-500'}`}>
+                      {newProdDescription.length.toLocaleString('fa-IR')} / ۱۰۰
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    maxLength={100}
+                    value={newProdDescription}
+                    onChange={(e) => setNewProdDescription(e.target.value.slice(0, 100))}
+                    placeholder="مثلاً: تخفیف ویژه نقدی، تولید روز، دارای استاندارد ملی (حداکثر ۱۰۰ کاراکتر)"
+                    className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition"
+                  />
+                  <p className="text-[10.5px] text-slate-500 mt-1">
+                    این توضیح فقط برای این کالا در کارت خرید فروشگاه و ویزیتور به شکل کادری جمع‌وجور نمایش داده می‌شود.
+                  </p>
+                </div>
               </div>
 
               {/* Section 2: Pricing Structure */}
@@ -2312,6 +2356,31 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                     onSelectBrand={setEditProdBrand}
                     onEditBrandClick={onOpenEditBrand}
                   />
+                </div>
+
+                {/* Product Description Field (Max 100 characters) */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-slate-200 font-semibold text-xs flex items-center gap-1.5">
+                      <Info className="w-3.5 h-3.5 text-amber-400" />
+                      <span>توضیحات کوتاه کالا جهت نمایش به فروشگاه‌ها</span>
+                      <span className="text-[10px] text-slate-400 font-normal">(اختیاری)</span>
+                    </label>
+                    <span className={`text-[10px] font-mono ${editProdDescription.length > 90 ? 'text-amber-400 font-bold' : 'text-slate-500'}`}>
+                      {editProdDescription.length.toLocaleString('fa-IR')} / ۱۰۰
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    maxLength={100}
+                    value={editProdDescription}
+                    onChange={(e) => setEditProdDescription(e.target.value.slice(0, 100))}
+                    placeholder="مثلاً: مناسب فصل سرما، دارای سیب سلامت، تخفیف ویژه خرید نقدی (حداکثر ۱۰۰ کاراکتر)"
+                    className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition font-medium"
+                  />
+                  <p className="text-[10.5px] text-slate-500 mt-1">
+                    این توضیح در پنل خرید فروشگاه و ویزیتور روی کارت این کالا نشان داده می‌شود. در صورت خالی بودن، هیچ باکسی نمایش داده نخواهد شد.
+                  </p>
                 </div>
               </div>
 

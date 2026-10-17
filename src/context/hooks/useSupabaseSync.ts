@@ -175,82 +175,113 @@ export function useSupabaseSync({
   const fetchProducts = useCallback(async () => {
     if (!supabase) return;
     const isStoreRole = role === 'supermarket';
-    const storeColumns = 'id, category_id, brand, name, price, consumer_price, stock, reserved_stock, unit, items_per_package, image_url, is_active, is_market_test, created_at';
-    const fullColumns = 'id, category_id, brand, name, price, visitor_price, consumer_price, stock, reserved_stock, unit, items_per_package, image_url, is_active, is_market_test, created_at';
+
+    const localDescMap: Record<string, string> = (() => {
+      try {
+        const raw = localStorage.getItem('barfroosh_product_descriptions');
+        return raw ? JSON.parse(raw) : {};
+      } catch {
+        return {};
+      }
+    })();
+
+    const storeColumnsWithDesc = 'id, category_id, brand, name, price, consumer_price, stock, reserved_stock, unit, items_per_package, image_url, is_active, is_market_test, description, created_at';
+    const storeColumnsNoDesc = 'id, category_id, brand, name, price, consumer_price, stock, reserved_stock, unit, items_per_package, image_url, is_active, is_market_test, created_at';
+    const fullColumnsWithDesc = 'id, category_id, brand, name, price, visitor_price, consumer_price, stock, reserved_stock, unit, items_per_package, image_url, is_active, is_market_test, description, created_at';
+    const fullColumnsNoDesc = 'id, category_id, brand, name, price, visitor_price, consumer_price, stock, reserved_stock, unit, items_per_package, image_url, is_active, is_market_test, created_at';
 
     let prods: any[] | null = null;
     let prodsErr: any = null;
 
     if (isStoreRole) {
-      // 1. Try reading from products_store view (which does not expose visitor_price)
+      // 1. Try reading from products_store view or table
       try {
         const viewRes = await withTimeout(
           supabase
             .from('products_store')
-            .select(storeColumns),
+            .select(storeColumnsWithDesc),
           15000,
           'مهلت زمانی دریافت اطلاعات کالاها به پایان رسید'
         );
 
         if (viewRes.error) {
-          const errCode = (viewRes.error as any)?.code;
-          const errMsg = String((viewRes.error as any)?.message || '');
-          const isMissingRelation =
-            errCode === '42P01' ||
-            errMsg.includes('42P01') ||
-            (errMsg.toLowerCase().includes('relation') && errMsg.toLowerCase().includes('does not exist'));
+          // Retry without description column if not exists in view
+          const viewRes2 = await withTimeout(
+            supabase
+              .from('products_store')
+              .select(storeColumnsNoDesc),
+            15000,
+            'مهلت زمانی دریافت اطلاعات کالاها به پایان رسید'
+          );
 
-          if (isMissingRelation) {
-            // Fallback once to table 'products' with the store columns without visitor_price
-            const fallbackRes = await withTimeout(
+          if (viewRes2.error) {
+            // Fallback to table 'products'
+            const fbRes = await withTimeout(
               supabase
                 .from('products')
-                .select(storeColumns),
+                .select(storeColumnsWithDesc),
               15000,
               'مهلت زمانی دریافت اطلاعات کالاها به پایان رسید'
             );
-            prods = fallbackRes.data;
-            prodsErr = fallbackRes.error;
+            if (fbRes.error) {
+              const fbRes2 = await withTimeout(
+                supabase
+                  .from('products')
+                  .select(storeColumnsNoDesc),
+                15000,
+                'مهلت زمانی دریافت اطلاعات کالاها به پایان رسید'
+              );
+              prods = fbRes2.data;
+              prodsErr = fbRes2.error;
+            } else {
+              prods = fbRes.data;
+            }
           } else {
-            prodsErr = viewRes.error;
+            prods = viewRes2.data;
           }
         } else {
           prods = viewRes.data;
         }
       } catch (err: any) {
-        const errCode = err?.code;
-        const errMsg = String(err?.message || '');
-        const isMissingRelation =
-          errCode === '42P01' ||
-          errMsg.includes('42P01') ||
-          (errMsg.toLowerCase().includes('relation') && errMsg.toLowerCase().includes('does not exist'));
-
-        if (isMissingRelation) {
-          // Fallback once to table 'products' with the store columns without visitor_price
+        // Fallback directly to products table
+        try {
           const fallbackRes = await withTimeout(
             supabase
               .from('products')
-              .select(storeColumns),
+              .select(storeColumnsNoDesc),
             15000,
             'مهلت زمانی دریافت اطلاعات کالاها به پایان رسید'
           );
           prods = fallbackRes.data;
           prodsErr = fallbackRes.error;
-        } else {
+        } catch (e) {
           prodsErr = err;
         }
       }
     } else {
-      // For other roles (admin, warehouse, visitor): fetch full product columns including visitor_price
+      // For other roles (admin, warehouse, visitor): fetch full product columns including visitor_price and description
       const fullRes = await withTimeout(
         supabase
           .from('products')
-          .select(fullColumns),
+          .select(fullColumnsWithDesc),
         15000,
         'مهلت زمانی دریافت اطلاعات کالاها به پایان رسید'
       );
-      prods = fullRes.data;
-      prodsErr = fullRes.error;
+
+      if (fullRes.error) {
+        // If description column doesn't exist yet on remote DB, fallback to fullColumnsNoDesc
+        const fullRes2 = await withTimeout(
+          supabase
+            .from('products')
+            .select(fullColumnsNoDesc),
+          15000,
+          'مهلت زمانی دریافت اطلاعات کالاها به پایان رسید'
+        );
+        prods = fullRes2.data;
+        prodsErr = fullRes2.error;
+      } else {
+        prods = fullRes.data;
+      }
     }
 
     if (prodsErr) throw prodsErr;
@@ -262,6 +293,7 @@ export function useSupabaseSync({
         visitor_price: isStoreRole ? undefined : (p.visitor_price !== undefined && p.visitor_price !== null ? Number(p.visitor_price) : undefined),
         is_active: p.is_active ?? true,
         is_market_test: Boolean(p.is_market_test),
+        description: p.description?.trim() ? p.description.trim() : (localDescMap[p.id] || undefined),
       }));
 
     const jsonStr = JSON.stringify(validProds);

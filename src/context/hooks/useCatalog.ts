@@ -286,6 +286,8 @@ export function useCatalog() {
           }
         }
 
+        const targetDescription = newProd.description?.trim() ? newProd.description.trim().slice(0, 100) : null;
+
         const row = {
           id,
           name: newProd.name.trim(),
@@ -301,20 +303,41 @@ export function useCatalog() {
           image_url: newProd.image_url,
           is_active: newProd.is_active ?? true,
           is_market_test: Boolean(newProd.is_market_test),
+          description: targetDescription,
         };
 
-        // Try 1: Full insert
+        // Fallback sync to app_settings if description exists
+        if (targetDescription) {
+          try {
+            const rawMap = localStorage.getItem('barfroosh_product_descriptions');
+            const descMap = rawMap ? JSON.parse(rawMap) : {};
+            descMap[id] = targetDescription;
+            localStorage.setItem('barfroosh_product_descriptions', JSON.stringify(descMap));
+            supabase.from('app_settings').upsert({
+              key: 'product_descriptions',
+              value: descMap,
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'key' }).then(() => {});
+          } catch {}
+        }
+
+        // Try 1: Full insert (with description)
         const { error: err1 } = await supabase.from('products').insert(row);
         if (!err1) return;
 
-        console.warn('Supabase product insert failed, retrying without is_market_test / FK:', err1.message);
+        console.warn('Supabase product insert failed, retrying without description / optional columns:', err1.message);
         
-        // Try 2: Without is_market_test (if column doesn't exist on remote DB)
-        const { is_market_test, ...rowNoMarket } = row;
+        // Try 2: Without description
+        const { description: _d, ...rowNoDesc } = row;
+        const { error: err1b } = await supabase.from('products').insert(rowNoDesc);
+        if (!err1b) return;
+
+        // Try 3: Without is_market_test (if column doesn't exist on remote DB)
+        const { is_market_test, ...rowNoMarket } = rowNoDesc;
         const { error: err2 } = await supabase.from('products').insert(rowNoMarket);
         if (!err2) return;
 
-        // Try 3: With category_id = null (avoids foreign key constraint violation)
+        // Try 4: With category_id = null (avoids foreign key constraint violation)
         const rowNoFK = { ...rowNoMarket, category_id: null };
         const { error: err3 } = await supabase.from('products').insert(rowNoFK);
         if (!err3) return;
@@ -359,6 +382,9 @@ export function useCatalog() {
     const targetImage = updates.image_url !== undefined
       ? sanitizeImageUrl(updates.image_url, targetCatId, targetName)
       : sanitizeImageUrl(prod.image_url, targetCatId, targetName);
+    const targetDescription = updates.description !== undefined
+      ? (updates.description?.trim() ? updates.description.trim().slice(0, 100) : undefined)
+      : prod.description;
 
     const updatedProd: Product = {
       ...prod,
@@ -377,6 +403,7 @@ export function useCatalog() {
       consumer_price: targetConsumerPrice,
       is_active: updates.is_active !== undefined ? updates.is_active : (prod.is_active ?? true),
       is_market_test: targetIsMarketTest,
+      description: targetDescription,
     };
 
     if (updates.is_market_test !== undefined) {
@@ -425,6 +452,27 @@ export function useCatalog() {
 
     if (isSupabaseConfigured && supabase) {
       (async () => {
+        // Fallback sync to app_settings product_descriptions
+        if (updates.description !== undefined) {
+          try {
+            const rawMap = localStorage.getItem('barfroosh_product_descriptions');
+            const descMap = rawMap ? JSON.parse(rawMap) : {};
+            if (targetDescription) {
+              descMap[productId] = targetDescription;
+            } else {
+              delete descMap[productId];
+            }
+            localStorage.setItem('barfroosh_product_descriptions', JSON.stringify(descMap));
+            await supabase.from('app_settings').upsert({
+              key: 'product_descriptions',
+              value: descMap,
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'key' });
+          } catch (e) {
+            console.warn('Error saving product_descriptions to app_settings:', e);
+          }
+        }
+
         const payload: Record<string, unknown> = {};
         if (updates.name !== undefined) payload.name = updates.name.trim();
         if (updates.brand !== undefined) payload.brand = updates.brand.trim();
@@ -440,17 +488,18 @@ export function useCatalog() {
         if (updates.image_url !== undefined) payload.image_url = updates.image_url;
         if (updates.is_active !== undefined) payload.is_active = updates.is_active;
         if (updates.is_market_test !== undefined) payload.is_market_test = updates.is_market_test;
+        if (updates.description !== undefined) payload.description = targetDescription ?? null;
 
         if (Object.keys(payload).length === 0) return;
 
-        // Try 1: Full payload update
+        // Try 1: Full payload update (including description)
         const { error: err1 } = await supabase.from('products').update(payload).eq('id', productId);
         if (!err1) return;
 
         console.warn('Supabase product update failed, retrying without optional columns:', err1.message);
 
-        // Try 2: Without is_market_test & consumer_price
-        const { is_market_test, consumer_price, ...payload2 } = payload;
+        // Try 2: Without description, is_market_test & consumer_price
+        const { is_market_test, consumer_price, description, ...payload2 } = payload;
         const { error: err2 } = await supabase.from('products').update(payload2).eq('id', productId);
         if (!err2) return;
 
@@ -839,6 +888,7 @@ export function useCatalog() {
             image_url: p.image_url && p.image_url.trim() ? p.image_url.trim() : 'https://images.unsplash.com/photo-1551024601-bec78aea704b?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer',
             is_active: p.is_active ?? true,
             is_market_test: Boolean(p.is_market_test),
+            description: p.description?.trim() ? p.description.trim().slice(0, 100) : null,
           });
         });
 
@@ -860,8 +910,8 @@ export function useCatalog() {
             const { error: sErr1 } = await supabase.from('products').upsert(item, { onConflict: 'id' });
             if (!sErr1) continue;
 
-            // 2. Without items_per_package & with category_id = null fallback
-            const { items_per_package, ...rowNoPack } = item;
+            // 2. Without description & items_per_package & with category_id = null fallback
+            const { description: _desc, items_per_package, ...rowNoPack } = item;
             const { error: sErr2 } = await supabase.from('products').upsert({ ...rowNoPack, category_id: null }, { onConflict: 'id' });
             if (!sErr2) continue;
 

@@ -1283,6 +1283,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               localStorage.setItem('app_setting_founder_capacity', String(val.capacity));
             }
           }
+
+          // Fetch product_descriptions setting fallback
+          const { data: productDescData } = await supabase
+            .from('app_settings')
+            .select('value')
+            .eq('key', 'product_descriptions')
+            .maybeSingle();
+
+          if (productDescData && productDescData.value && typeof productDescData.value === 'object' && isMounted) {
+            const parsedDesc = productDescData.value as Record<string, string>;
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('barfroosh_product_descriptions', JSON.stringify(parsedDesc));
+            }
+            catalog.setProducts((prev) =>
+              prev.map((p) => {
+                const note = parsedDesc[p.id];
+                if (note && (!p.description || p.description !== note)) {
+                  return { ...p, description: note };
+                }
+                return p;
+              })
+            );
+          }
         } catch (err) {
           console.warn('Error fetching invoice_settings from app_settings:', err);
         }

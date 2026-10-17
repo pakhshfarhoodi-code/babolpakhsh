@@ -230,6 +230,14 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
                         <h4 className="font-bold text-xs text-slate-100 truncate">
                           {it.name}
                         </h4>
+                        {(() => {
+                          const matchedDesc = products.find((p) => p.id === it.productId)?.description;
+                          return matchedDesc?.trim() ? (
+                            <span className="text-[10px] text-amber-300/80 block truncate mt-0.5" title={matchedDesc.trim()}>
+                              نکته: {matchedDesc.trim()}
+                            </span>
+                          ) : null;
+                        })()}
                         <p className="text-[10px] text-slate-400 mt-0.5">
                           قیمت واحد: {formatPrice(it.price)}
                           {pack > 1 && ` (${getSaleUnitLabel(it.unit, pack)} ${pack} عددی)`}
@@ -301,6 +309,11 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
                 >
                   <div className="min-w-0 pr-1">
                     <span className="font-bold text-slate-200 block truncate">{prod.name}</span>
+                    {prod.description?.trim() && (
+                      <span className="text-[10px] text-amber-300/90 block truncate" title={prod.description.trim()}>
+                        نکته: {prod.description.trim()}
+                      </span>
+                    )}
                     <span className="text-[10px] text-slate-400">
                       موجود: {Math.max(0, prod.stock - prod.reserved_stock)} {prod.unit} | {formatPrice(prod.price)}
                     </span>

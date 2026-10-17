@@ -42,6 +42,7 @@ export interface Product {
   image_url: string;
   is_active: boolean;
   is_market_test?: boolean; // قابلیت تست بازار و اعلام به زودی
+  description?: string; // توضیحات و نکات اختصاصی کالا (حداکثر ۱۰۰ کاراکتر)
   created_at?: string;
 }
 

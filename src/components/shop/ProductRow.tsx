@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { QuantityStepper } from './QuantityStepper';
 import { formatPrice, LOW_STOCK_THRESHOLD } from './shopUtils';
 import { Price } from './Price';
-import { Package, Maximize2, X, Tag, Warehouse, Heart, Clock, Sparkles, Check } from 'lucide-react';
+import { Package, Maximize2, X, Tag, Warehouse, Heart, Clock, Sparkles, Check, Info } from 'lucide-react';
 import { SafeImage } from '../common/SafeImage';
 import {
   getStorePickupDiscountEnabled,
@@ -188,6 +188,17 @@ export const ProductRow: React.FC<ProductRowProps> = ({
             </div>
           )}
 
+          {/* Line 2.5: Product Description Box (Only when admin provided description, max 100 chars, compact & doesn't break card look) */}
+          {Boolean(product.description?.trim()) && (
+            <div
+              className="mt-0.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-200/90 text-[10.5px] leading-tight max-w-full overflow-hidden"
+              title={product.description!.trim()}
+            >
+              <Info className="w-3 h-3 text-amber-400 shrink-0" />
+              <span className="truncate min-w-0">{product.description!.trim()}</span>
+            </div>
+          )}
+
           {/* Line 3: Price block with mt-auto, flex-col without wrap */}
           <div className="mt-auto flex flex-col gap-0.5 pt-0.5 leading-tight min-w-0">
             {/* Purchase Price: 14px bold number + 'تومان / واحد' with Price component and whitespace-nowrap */}
@@ -341,6 +352,17 @@ export const ProductRow: React.FC<ProductRowProps> = ({
                 </div>
               ) : null}
             </div>
+
+            {/* Admin Product Description Note if present */}
+            {Boolean(product.description?.trim()) && (
+              <div className="mx-4 mt-3 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-200 text-xs flex items-start gap-2.5 leading-relaxed">
+                <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <span className="font-bold text-[11px] text-amber-300 block mb-0.5">توضیحات و نکات این کالا:</span>
+                  <p className="text-slate-200 text-xs leading-relaxed">{product.description!.trim()}</p>
+                </div>
+              </div>
+            )}
 
             {/* Price & Order Action Bar */}
             <div className="p-4 sm:p-5 bg-slate-900 space-y-4">

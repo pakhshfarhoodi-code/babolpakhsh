@@ -33,7 +33,9 @@ jobs:
           echo "STAMP=$STAMP" >> "$GITHUB_ENV"
           mkdir -p backups
           FILE="backups/supabase_backup_${STAMP}.sql.gz.gpg"
-          pg_dump "$DB_URL" | gzip | gpg --batch --yes --pinentry-mode loopback \
+          PG_DUMP=/usr/lib/postgresql/17/bin/pg_dump   # نسخه ۱۷ (نسخه پیش‌فرض runner، ۱۶ است و با سرور ۱۷ سازگار نیست)
+          "$PG_DUMP" --version
+          "$PG_DUMP" "$DB_URL" | gzip | gpg --batch --yes --pinentry-mode loopback \
             --passphrase-fd 3 --symmetric --cipher-algo AES256 -o "$FILE" 3<<<"$BACKUP_PASSPHRASE"
           SIZE=$(stat -c%s "$FILE")
           echo "backup size: $SIZE bytes"

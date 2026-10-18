@@ -1,39 +1,47 @@
-name: Supabase Backup (6 times daily)
+name: Supabase Backup (encrypted, every 4 hours)
 
 on:
   schedule:
-    # اجرا هر ۴ ساعت یک‌بار
     - cron: '0 */4 * * *'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   backup:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install PostgreSQL Client
+      - name: Install PostgreSQL 17 client (must match Supabase server version)
         run: |
           sudo apt-get update
-          sudo apt-get install -y postgresql-client
+          sudo apt-get install -y curl ca-certificates gnupg lsb-release
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /usr/share/keyrings/pgdg.gpg
+          echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
 
-      - name: Create Backup Directory
-        run: mkdir -p backups
-
-      - name: Generate Timestamp
-        id: timestamp
-        run: echo "TIMESTAMP=$(date +'%Y-%m-%d_%H-%M-%S')" >> $GITHUB_ENV
-
-      - name: Dump Database
+      - name: Dump and encrypt (AES-256)
+        env:
+          DB_URL: ${{ secrets.DB_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
         run: |
-          FILE_NAME="backups/supabase_backup_${{ env.TIMESTAMP }}.sql.gz"
-          pg_dump "${{ secrets.DB_URL }}" | gzip > "$FILE_NAME"
+          set -euo pipefail
+          test -n "$DB_URL" || { echo "secret DB_URL is empty"; exit 1; }
+          test -n "$BACKUP_PASSPHRASE" || { echo "secret BACKUP_PASSPHRASE is empty"; exit 1; }
+          STAMP="$(date -u +'%Y-%m-%d_%H-%M-%S')"
+          echo "STAMP=$STAMP" >> "$GITHUB_ENV"
+          mkdir -p backups
+          FILE="backups/supabase_backup_${STAMP}.sql.gz.gpg"
+          pg_dump "$DB_URL" | gzip | gpg --batch --yes --pinentry-mode loopback \
+            --passphrase-fd 3 --symmetric --cipher-algo AES256 -o "$FILE" 3<<<"$BACKUP_PASSPHRASE"
+          SIZE=$(stat -c%s "$FILE")
+          echo "backup size: $SIZE bytes"
+          test "$SIZE" -gt 2000 || { echo "backup looks empty/failed"; exit 1; }
 
-      - name: Upload Backup Artifact
+      - name: Upload encrypted backup
         uses: actions/upload-artifact@v4
         with:
-          name: backup-${{ env.TIMESTAMP }}
-          path: backups/*.sql.gz
-          retention-days: 30 # ذخیره به مدت ۳۰ روز
+          name: backup-${{ env.STAMP }}
+          path: backups/*.gpg
+          retention-days: 30

@@ -1,5 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertCircle, RefreshCw, Trash2 } from 'lucide-react';
+import { isChunkLoadError, reloadOnceForNewDeploy } from '../lib/chunkReload';
 
 interface Props {
   children: ReactNode;
@@ -8,20 +9,28 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+  /** true وقتی خطا از نوع «فایل قدیمی بعد از دیپلوی» است و صفحه در حال تازه‌سازی خودکار است */
+  updating: boolean;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
   override state: State = {
     hasError: false,
     error: null,
+    updating: false,
   };
 
   static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+    return { hasError: true, error, updating: isChunkLoadError(error) };
   }
 
   override componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
+    // نسخه‌ی جدید منتشر شده و این تب هنوز فایل‌های قدیمی را می‌خواهد → خودکار تازه‌سازی
+    if (isChunkLoadError(error)) {
+      // اگر ریلود انجام نشد (مثلاً بار دوم در ۳۰ ثانیه)، صفحه‌ی خطای معمولی نشان بده
+      if (!reloadOnceForNewDeploy()) this.setState({ updating: false });
+    }
   }
 
   handleReload = () => {
@@ -39,6 +48,17 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   override render() {
+    if (this.state.hasError && this.state.updating) {
+      return (
+        <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4" dir="rtl">
+          <div className="text-center space-y-3">
+            <RefreshCw className="w-8 h-8 mx-auto animate-spin text-blue-400" />
+            <p className="text-sm text-slate-300">نسخه جدید برنامه منتشر شده است. در حال به‌روزرسانی…</p>
+          </div>
+        </div>
+      );
+    }
+
     if (this.state.hasError) {
       return (
         <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 selection:bg-blue-600 selection:text-white" dir="rtl">

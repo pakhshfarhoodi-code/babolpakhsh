@@ -4,7 +4,15 @@ import { App } from './App';
 import { AppProvider } from './context/AppContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { getMessengerScope } from './lib/messengerScope';
+import { reloadOnceForNewDeploy } from './lib/chunkReload';
 import './index.css';
+
+// اگر بعد از دیپلوی جدید، فایل chunk قدیمی پیدا نشد، یک‌بار صفحه را تازه کن.
+// عمداً preventDefault() صدا زده نمی‌شود: Vite خطا را به ErrorBoundary می‌رساند
+// که در این حالت پیام «در حال به‌روزرسانی» نشان می‌دهد (نه خطای ترسناک).
+window.addEventListener('vite:preloadError', () => {
+  reloadOnceForNewDeploy();
+});
 
 // Unregister service worker in development to prevent stale assets / blank iframe screens
 if ('serviceWorker' in navigator) {

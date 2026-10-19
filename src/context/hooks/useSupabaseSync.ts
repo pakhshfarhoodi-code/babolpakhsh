@@ -185,10 +185,10 @@ export function useSupabaseSync({
       }
     })();
 
-    const storeColumnsWithDesc = 'id, category_id, brand, name, price, consumer_price, stock, reserved_stock, unit, items_per_package, image_url, is_active, is_market_test, description, discount_percent, discount_starts_at, discount_ends_at, created_at';
-    const storeColumnsNoDesc = 'id, category_id, brand, name, price, consumer_price, stock, reserved_stock, unit, items_per_package, image_url, is_active, is_market_test, discount_percent, discount_starts_at, discount_ends_at, created_at';
-    const fullColumnsWithDesc = 'id, category_id, brand, name, price, visitor_price, consumer_price, stock, reserved_stock, unit, items_per_package, image_url, is_active, is_market_test, description, discount_percent, discount_starts_at, discount_ends_at, created_at';
-    const fullColumnsNoDesc = 'id, category_id, brand, name, price, visitor_price, consumer_price, stock, reserved_stock, unit, items_per_package, image_url, is_active, is_market_test, discount_percent, discount_starts_at, discount_ends_at, created_at';
+    const storeColumnsWithDesc = 'id, category_id, brand, name, price, consumer_price, stock, reserved_stock, unit, items_per_package, package_type, image_url, is_active, is_market_test, description, discount_percent, discount_starts_at, discount_ends_at, created_at';
+    const storeColumnsNoDesc = 'id, category_id, brand, name, price, consumer_price, stock, reserved_stock, unit, items_per_package, package_type, image_url, is_active, is_market_test, discount_percent, discount_starts_at, discount_ends_at, created_at';
+    const fullColumnsWithDesc = 'id, category_id, brand, name, price, visitor_price, consumer_price, stock, reserved_stock, unit, items_per_package, package_type, image_url, is_active, is_market_test, description, discount_percent, discount_starts_at, discount_ends_at, created_at';
+    const fullColumnsNoDesc = 'id, category_id, brand, name, price, visitor_price, consumer_price, stock, reserved_stock, unit, items_per_package, package_type, image_url, is_active, is_market_test, discount_percent, discount_starts_at, discount_ends_at, created_at';
 
     let prods: any[] | null = null;
     let prodsErr: any = null;

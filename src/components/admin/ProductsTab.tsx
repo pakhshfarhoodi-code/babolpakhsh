@@ -279,7 +279,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
           category_id: editProdCat,
           price: editProdPrice,
           visitor_price: visitorPrice,
-          consumer_price: editProdConsumerPrice > 0 ? editProdConsumerPrice : undefined,
+          consumer_price: editProdConsumerPrice > 0 ? editProdConsumerPrice : 0, // ۰ = حذف قیمت مصرف‌کننده
           stock: editProdStock,
           unit: editProdUnit,
           items_per_package: Number(editProdItemsPerPackage) > 0 ? Number(editProdItemsPerPackage) : undefined,
@@ -450,7 +450,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
           category_id: draft.category_id || '',
           price: Number(draft.price),
           visitor_price: draft.visitor_price !== undefined ? Number(draft.visitor_price) : 0,
-          consumer_price: draft.consumer_price && Number(draft.consumer_price) > 0 ? Number(draft.consumer_price) : undefined,
+          consumer_price: draft.consumer_price && Number(draft.consumer_price) > 0 ? Number(draft.consumer_price) : 0, // ۰ = حذف
           stock: Math.max(0, Number(draft.stock) || 0),
           unit: draft.unit || 'عدد',
           items_per_package: draft.items_per_package && Number(draft.items_per_package) > 0 ? Number(draft.items_per_package) : undefined,

@@ -377,7 +377,10 @@ export function useCatalog() {
     const targetVisitorPrice = updates.visitor_price !== undefined
       ? updates.visitor_price
       : (prod.visitor_price ?? 0);
-    const targetConsumerPrice = updates.consumer_price !== undefined ? updates.consumer_price : prod.consumer_price;
+    // updates.consumer_price: undefined = بدون تغییر؛ ۰ = حذف قیمت مصرف‌کننده (در دیتابیس NULL می‌شود)
+    const targetConsumerPrice = updates.consumer_price !== undefined
+      ? (Number(updates.consumer_price) > 0 ? Number(updates.consumer_price) : undefined)
+      : prod.consumer_price;
     const targetIsMarketTest = updates.is_market_test !== undefined
       ? Boolean(updates.is_market_test)
       : (prod.is_market_test ?? false);

@@ -330,9 +330,10 @@ export interface ComputeLineResult {
 }
 
 /**
- * Standard stepwise line calculation:
- * itemDiscountedUnitPrice = round(unitPrice * (100 - itemDiscountPercent) / 100)
- * discountedUnitPrice = round(itemDiscountedUnitPrice * (100 - orderDiscountPercent) / 100)
+ * Direct-sum line calculation (تخفیف‌ها مستقیم با هم جمع می‌شوند):
+ * totalPercent = min(100, itemDiscountPercent + orderDiscountPercent)
+ * discountedUnitPrice = round(unitPrice * (100 - totalPercent) / 100)   // فقط یک بار گرد می‌شود
+ * itemDiscountedUnitPrice = round(unitPrice * (100 - itemDiscountPercent) / 100)   // فقط برای نمایش/تفکیک مبلغ تخفیف کالا
  * total = qty * pack * discountedUnitPrice
  */
 export function computeLine({
@@ -349,7 +350,8 @@ export function computeLine({
   const safeOrderDisc = Math.max(0, Math.min(100, Number(discountPercent) || 0));
 
   const itemDiscountedUnitPrice = Math.round((safeUnitPrice * (100 - safeItemDisc)) / 100);
-  const discountedUnitPrice = Math.round((itemDiscountedUnitPrice * (100 - safeOrderDisc)) / 100);
+  const combinedPercent = Math.min(100, safeItemDisc + safeOrderDisc);
+  const discountedUnitPrice = Math.round((safeUnitPrice * (100 - combinedPercent)) / 100);
   const total = Math.round(safeQty * safePack * discountedUnitPrice);
 
   return {
@@ -426,6 +428,22 @@ export interface OrderPricingResult {
   totalDiscountEffectivePercent: number;
 }
 
+/**
+ * درصد تخفیف کالا برای یک ردیف سفارش (منبع واحد برای فاکتور، لیست سفارش‌ها و سبد).
+ * مقدار ثبت‌شده روی ردیف (snapshot) اولویت دارد؛ برای ردیف‌های بدون مقدار، تخفیف فعال فعلی کالا.
+ * سفارش مصرف‌کننده و خرید شخصی ویزیتور تخفیف کالا ندارند.
+ */
+export function getItemDiscountPercent(
+  item: { discount_percent?: number | null },
+  product: { discount_percent?: number | null; discount_starts_at?: string | null; discount_ends_at?: string | null } | null | undefined,
+  isVisitorOrder: boolean,
+  isConsumerOrder: boolean
+): number {
+  if (isConsumerOrder || isVisitorOrder) return 0;
+  const raw = item.discount_percent ?? (product ? getProductDiscountPercent(product) : 0);
+  return Math.max(0, Math.min(100, Number(raw) || 0));
+}
+
 export function getOrderPricing(
   order: OrderPricingInput,
   products: Array<{ id: string; name?: string; price?: number; visitor_price?: number; items_per_package?: number; discount_percent?: number; discount_starts_at?: string | null; discount_ends_at?: string | null }>
@@ -448,8 +466,7 @@ export function getOrderPricing(
     const product = findProductMatch(item, products);
     const { pack, unitPrice, total } = getItemUnitPriceAndTotal(item, product, isVisitorOrder, isConsumerOrder);
     
-    const rawItemDisc = isConsumerOrder || isVisitorOrder ? 0 : (item.discount_percent ?? (product ? getProductDiscountPercent(product) : 0));
-    const itemPercent = Math.max(0, Math.min(100, Number(rawItemDisc) || 0));
+    const itemPercent = getItemDiscountPercent(item, product, isVisitorOrder, isConsumerOrder);
 
     rawSubtotal += total;
 
@@ -470,8 +487,9 @@ export function getOrderPricing(
   const discountedSubtotal = rawSubtotal > 0 ? finalDiscSubtotal : (isConsumerOrder ? subtotal : Math.round(subtotal * (1 - totalDiscountPercent / 100)));
 
   const productDiscountAmount = Math.max(0, subtotal - itemDiscountedSubtotal);
-  const orderDiscountAmount = Math.max(0, itemDiscountedSubtotal - discountedSubtotal);
   const totalDiscountAmount = isConsumerOrder ? consumerSavings : Math.max(0, subtotal - discountedSubtotal);
+  // اختلاف گردکردن در سهم «تخفیف سفارش» جذب می‌شود تا product + order دقیقاً برابر مجموع شود
+  const orderDiscountAmount = Math.max(0, totalDiscountAmount - productDiscountAmount);
   const totalDiscountEffectivePercent = subtotal > 0 ? Number((totalDiscountAmount / subtotal * 100).toFixed(1)) : 0;
 
   return {

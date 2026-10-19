@@ -23,6 +23,7 @@ import {
   getUnitPriceFromOrderItem,
   getItemUnitPriceAndTotal,
   computeLine,
+  getItemDiscountPercent,
   findProductMatch,
   getOrderPricing,
   splitDiscountAmounts,
@@ -288,6 +289,8 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
   const manualDiscountAmount = splitDiscounts.manual;
 
   const hasOverallDiscount = totalDiscountPercent > 0;
+  // هر نوع تخفیف (کالا یا سفارش) باعث نمایش ستون تخفیف می‌شود
+  const hasAnyLineDiscount = !isConsumerOrder && pricing.totalDiscountAmount > 0;
 
   // VAT
   const hasVat = Boolean(settings.has_vat);
@@ -504,8 +507,8 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
       product_name: 'شرح کالا / خدمات',
       quantity_unit: 'تعداد',
       items_per_package: 'واحد (تعداد در کارتن)',
-      unit_price: totalDiscountPercent > 0 ? `قیمت اصلی (${currencyLabel})` : `قیمت واحد (${currencyLabel})`,
-      discount_percent: totalDiscountPercent > 0 ? `قیمت با تخفیف (${currencyLabel})` : 'تخفیف (٪)',
+      unit_price: hasAnyLineDiscount ? `قیمت اصلی (${currencyLabel})` : `قیمت واحد (${currencyLabel})`,
+      discount_percent: 'تخفیف (٪)',
       total_price: `مبلغ کل (${currencyLabel})`,
     };
 
@@ -518,7 +521,7 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
 
     tableCols.forEach((colConfig) => {
       // Force discount_percent to be visible if totalDiscountPercent > 0
-      const isVisible = colConfig.key === 'discount_percent' && totalDiscountPercent > 0
+      const isVisible = colConfig.key === 'discount_percent' && hasAnyLineDiscount
         ? true
         : colConfig.visible;
 
@@ -557,7 +560,7 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
       ...c,
       normalizedPercent: Number(((c.rawWidth / totalRaw) * 100).toFixed(2)),
     }));
-  }, [settings.table_columns, layout.column_widths, currencyLabel, totalDiscountPercent]);
+  }, [settings.table_columns, layout.column_widths, currencyLabel, totalDiscountPercent, hasAnyLineDiscount]);
 
   // Pointer drag resizing state
   const tableRef = useRef<HTMLTableElement>(null);
@@ -799,12 +802,16 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
     const packageType = (item as any).package_type || product?.package_type;
 
     const qty = Number(item.quantity) || 0;
-    const { discountedUnitPrice, total: lineTotal } = computeLine({
+    const lineItemPercent = getItemDiscountPercent(item as any, product, isVisitorOrder, isConsumerOrder);
+    const { total: lineTotal } = computeLine({
       quantity: qty,
       pack,
       unitPrice,
+      itemDiscountPercent: lineItemPercent,
       discountPercent: totalDiscountPercent,
     });
+    // درصد مؤثر همین ردیف = جمع مستقیم تخفیف کالا و تخفیف سفارش
+    const lineCombinedPercent = isConsumerOrder ? 0 : Math.min(100, lineItemPercent + totalDiscountPercent);
 
     const isLastCol = (idx: number) => idx === activeColumns.length - 1;
 
@@ -875,9 +882,9 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
                   key={col.key}
                   className={`${tableRowPaddingClass} text-center num-fa font-bold text-slate-700 ${borderClass}`}
                 >
-                  {totalDiscountPercent > 0
-                    ? formatMoney(discountedUnitPrice)
-                    : '۰٪'}
+                  {lineCombinedPercent > 0
+                    ? `${lineCombinedPercent.toLocaleString('fa-IR')}٪`
+                    : '—'}
                 </td>
               );
 

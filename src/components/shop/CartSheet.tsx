@@ -23,7 +23,6 @@ import {
   getProductPriceBreakdown,
   resolveOrderDiscounts,
   getStoreFounderDiscountUserEnabled,
-  setStoreFounderDiscountUserEnabled,
 } from '../../utils/storeDiscount';
 import { getSaleUnitLabel, getPackageFullLabel } from '../../utils/orderLine';
 
@@ -54,7 +53,7 @@ export const CartSheet: React.FC<CartSheetProps> = ({
   errorMessage,
   onExceedLimit,
 }) => {
-  const { invoiceSettings, currentUser, selectedSupermarketId, supermarkets, orders } = useApp();
+  const { invoiceSettings, currentUser, selectedSupermarketId, supermarkets, orders, updateStoreDiscountPreferences } = useApp();
   const [isConfirmingClear, setIsConfirmingClear] = useState(false);
 
   // Re-evaluation listener for store discount
@@ -71,31 +70,14 @@ export const CartSheet: React.FC<CartSheetProps> = ({
   const storeId = currentShop?.id || currentUser?.id || '';
   const isPickupGloballyEnabled = invoiceSettings?.pickup_discount_enabled !== false;
   const pickupPercent = invoiceSettings?.pickup_discount_percent || 3;
-  const pickupEnabled = isPickupGloballyEnabled && getStorePickupDiscountEnabled(storeId);
+  const pickupEnabled = isPickupGloballyEnabled && getStorePickupDiscountEnabled(storeId, currentShop);
 
   const founderStatus = getStoreFounderDiscountStatus(supermarkets, orders, storeId);
-  const [founderUserEnabled, setFounderUserEnabled] = useState(() =>
-    getStoreFounderDiscountUserEnabled(storeId)
-  );
-
-  useEffect(() => {
-    setFounderUserEnabled(getStoreFounderDiscountUserEnabled(storeId));
-  }, [storeId]);
-
-  useEffect(() => {
-    const handleDiscountChange = () => {
-      setFounderUserEnabled(getStoreFounderDiscountUserEnabled(storeId));
-    };
-    window.addEventListener('store-discount-changed', handleDiscountChange);
-    return () => window.removeEventListener('store-discount-changed', handleDiscountChange);
-  }, [storeId]);
+  const founderUserEnabled = getStoreFounderDiscountUserEnabled(storeId, currentShop);
 
   const handleToggleFounder = () => {
     if (!founderStatus.isFounderQuotaAvailable) return;
-    const nextVal = !founderUserEnabled;
-    setFounderUserEnabled(nextVal);
-    setStoreFounderDiscountUserEnabled(storeId, nextVal);
-    window.dispatchEvent(new Event('store-discount-changed'));
+    void updateStoreDiscountPreferences(storeId, { founder: !founderUserEnabled });
   };
 
   const founderEnabled = founderStatus.isFounderQuotaAvailable && founderUserEnabled;
@@ -120,8 +102,9 @@ export const CartSheet: React.FC<CartSheetProps> = ({
       const originalRowTotal = Math.round(numQty * multiplier * originalUnitPrice);
       const afterProductRowTotal = Math.round(numQty * multiplier * bd.afterProductPrice);
       const discountedRowTotal = Math.round(numQty * multiplier * discountedUnitPrice);
+      // تخفیف‌ها مستقیم جمع می‌شوند؛ اختلاف گردکردن در سهم «تخفیف سفارش» جذب می‌شود
       const productDiscountRow = originalRowTotal - afterProductRowTotal;
-      const orderDiscountRow = afterProductRowTotal - discountedRowTotal;
+      const orderDiscountRow = Math.max(0, originalRowTotal - discountedRowTotal - productDiscountRow);
 
       return {
         product,

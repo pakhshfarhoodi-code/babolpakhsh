@@ -77,7 +77,7 @@ export const ProductRow: React.FC<ProductRowProps> = ({
 
   const isPickupGloballyEnabled = invoiceSettings?.pickup_discount_enabled !== false;
   const pickupPercent = invoiceSettings?.pickup_discount_percent || 3;
-  const pickupEnabled = isPickupGloballyEnabled && priceMode === 'store' && getStorePickupDiscountEnabled(shopInfo.id);
+  const pickupEnabled = isPickupGloballyEnabled && priceMode === 'store' && getStorePickupDiscountEnabled(shopInfo.id, currentShop);
 
   const founderStatus = getStoreFounderDiscountStatus(supermarkets, orders, shopInfo.id);
   const founderEnabled = priceMode === 'store' && founderStatus.isFounderActive;

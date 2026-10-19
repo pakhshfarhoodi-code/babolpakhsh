@@ -13,7 +13,11 @@ import {
 } from './shop/shopUtils';
 import {
   getStorePickupDiscountEnabled,
-  getStoreFounderDiscountStatus, resolveOrderDiscounts } from '../utils/storeDiscount';
+  getStoreFounderDiscountStatus,
+  resolveOrderDiscounts,
+  getStoreFounderDiscountUserEnabled,
+  getProductPriceBreakdown,
+} from '../utils/storeDiscount';
 import {
   Search,
   X,
@@ -179,13 +183,29 @@ export const SupermarketPortal: React.FC = () => {
   }, [cart]);
 
   const totalCartAmount = useMemo(() => {
+    const shopInfo = {
+      id: currentStore?.id || currentUser?.id || 'current-shop',
+      name: currentStore?.name || currentUser?.name || 'فروشگاه',
+    };
+    const isPickupGloballyEnabled = invoiceSettings?.pickup_discount_enabled !== false;
+    const pickupPercent = invoiceSettings?.pickup_discount_percent || 3;
+    const pickupEnabled = isPickupGloballyEnabled && getStorePickupDiscountEnabled(shopInfo.id, currentStore);
+
+    const founderStatus = getStoreFounderDiscountStatus(supermarkets, orders, shopInfo.id);
+    const founderUserEnabled = getStoreFounderDiscountUserEnabled(shopInfo.id, currentStore);
+    const founderEnabled = founderStatus.isFounderQuotaAvailable && founderUserEnabled;
+    const founderPercent = founderEnabled ? founderStatus.founderPercent : 0;
+    const orderPickupPercent = pickupEnabled ? pickupPercent : 0;
+
     return Object.entries(cart).reduce((sum: number, [pId, qty]) => {
       const prod = products.find((p) => p.id === pId);
       const numQty = Number(qty) || 0;
-      const multiplier = prod?.items_per_package && prod.items_per_package > 0 ? prod.items_per_package : 1;
-      return sum + (prod ? prod.price * numQty * multiplier : 0);
+      if (!prod || numQty <= 0) return sum;
+      const multiplier = prod.items_per_package && prod.items_per_package > 0 ? prod.items_per_package : 1;
+      const bd = getProductPriceBreakdown(prod.price, prod, orderPickupPercent, founderPercent);
+      return sum + Math.round(numQty * multiplier * bd.finalPrice);
     }, 0);
-  }, [cart, products]);
+  }, [cart, products, supermarkets, orders, invoiceSettings, currentStore, currentUser]);
 
   // Quantity updates
   const handleQuantityChange = useCallback((productId: string, newQty: number) => {
@@ -273,7 +293,7 @@ export const SupermarketPortal: React.FC = () => {
 
     try {
       const isPickupGloballyEnabled = invoiceSettings?.pickup_discount_enabled !== false;
-      const isPickupEnabled = isPickupGloballyEnabled && getStorePickupDiscountEnabled(currentStore?.id || '');
+      const isPickupEnabled = isPickupGloballyEnabled && getStorePickupDiscountEnabled(currentStore?.id || '', currentStore);
       const pickupPercent = invoiceSettings?.pickup_discount_percent || 3;
 
       const founderStatus = getStoreFounderDiscountStatus(supermarkets, orders, currentStore?.id || '');

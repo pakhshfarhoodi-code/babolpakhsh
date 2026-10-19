@@ -6,11 +6,9 @@ import { BrandDropdown } from './BrandDropdown';
 import { filterCatalogProducts, sortCatalogProducts, sortBrandColonyProducts } from './shopUtils';
 import {
   getStorePickupDiscountEnabled,
-  setStorePickupDiscountEnabled,
   getStoreRegistrationRank,
   getStoreFounderDiscountStatus,
   getStoreFounderDiscountUserEnabled,
-  setStoreFounderDiscountUserEnabled,
 } from '../../utils/storeDiscount';
 import {
   Search,
@@ -33,7 +31,7 @@ interface StoreDiscountSwitchesBoxProps {
 }
 
 const StoreDiscountSwitchesBox: React.FC<StoreDiscountSwitchesBoxProps> = ({ storeId: propStoreId }) => {
-  const { invoiceSettings, currentUser, selectedSupermarketId, supermarkets, orders } = useApp();
+  const { invoiceSettings, currentUser, selectedSupermarketId, supermarkets, orders, updateStoreDiscountPreferences } = useApp();
   const currentShop = supermarkets.find(
     (s) =>
       s.id === (propStoreId || selectedSupermarketId) ||
@@ -47,54 +45,24 @@ const StoreDiscountSwitchesBox: React.FC<StoreDiscountSwitchesBoxProps> = ({ sto
   const isPickupGloballyEnabled = invoiceSettings?.pickup_discount_enabled !== false;
   const pickupPercent = invoiceSettings?.pickup_discount_percent || 3;
 
-  const [pickupEnabled, setPickupEnabled] = useState<boolean>(() => {
-    return isPickupGloballyEnabled && getStorePickupDiscountEnabled(storeId);
-  });
-
-  useEffect(() => {
-    if (!isPickupGloballyEnabled) {
-      setPickupEnabled(false);
-      return;
-    }
-    setPickupEnabled(getStorePickupDiscountEnabled(storeId));
-  }, [storeId, isPickupGloballyEnabled]);
-
-  const handleTogglePickup = () => {
-    if (!isPickupGloballyEnabled) return;
-    const nextVal = !pickupEnabled;
-    setPickupEnabled(nextVal);
-    setStorePickupDiscountEnabled(storeId, nextVal);
-    // Dispatch custom event so ProductRow & CartSheet re-evaluate instantly
-    window.dispatchEvent(new Event('store-discount-changed'));
-  };
+  // مقدار کلیدها همیشه از حساب فروشگاه (دیتابیس) خوانده می‌شود، نه state محلی
+  const pickupEnabled = isPickupGloballyEnabled && getStorePickupDiscountEnabled(storeId, currentShop);
 
   // 5% Founder Discount for the first 100 stores
   const founderStatus = useMemo(() => {
     return getStoreFounderDiscountStatus(supermarkets, orders, storeId);
   }, [supermarkets, orders, storeId]);
 
-  const [founderUserEnabled, setFounderUserEnabled] = useState(() =>
-    getStoreFounderDiscountUserEnabled(storeId)
-  );
+  const founderUserEnabled = getStoreFounderDiscountUserEnabled(storeId, currentShop);
 
-  useEffect(() => {
-    setFounderUserEnabled(getStoreFounderDiscountUserEnabled(storeId));
-  }, [storeId]);
-
-  useEffect(() => {
-    const handleDiscountChange = () => {
-      setFounderUserEnabled(getStoreFounderDiscountUserEnabled(storeId));
-    };
-    window.addEventListener('store-discount-changed', handleDiscountChange);
-    return () => window.removeEventListener('store-discount-changed', handleDiscountChange);
-  }, [storeId]);
+  const handleTogglePickup = () => {
+    if (!isPickupGloballyEnabled) return;
+    void updateStoreDiscountPreferences(storeId, { pickup: !pickupEnabled });
+  };
 
   const handleToggleFounder = () => {
     if (!founderStatus.isFounderQuotaAvailable) return;
-    const nextVal = !founderUserEnabled;
-    setFounderUserEnabled(nextVal);
-    setStoreFounderDiscountUserEnabled(storeId, nextVal);
-    window.dispatchEvent(new Event('store-discount-changed'));
+    void updateStoreDiscountPreferences(storeId, { founder: !founderUserEnabled });
   };
 
   const [showFounderInfo, setShowFounderInfo] = useState(false);

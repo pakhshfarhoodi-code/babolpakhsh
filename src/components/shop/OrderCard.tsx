@@ -22,7 +22,7 @@ import {
   calculateTotalDiscountPercent,
   calculateDiscountedPrice,
 } from '../../utils/storeDiscount';
-import { getSaleUnitLabel, getPackageFullLabel } from '../../utils/orderLine';
+import { getSaleUnitLabel, getPackageFullLabel, getPackSize, computeLine } from '../../utils/orderLine';
 
 interface OrderCardProps {
   order: Order;
@@ -48,16 +48,37 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   const pickupDiscount = isConsumerOrder ? 0 : (order.pickup_discount_percent || 0);
   const founderDiscount = isConsumerOrder ? 0 : (order.founder_discount_percent || 0);
   const manualDiscount = isConsumerOrder ? 0 : (order.discount_status === 'approved' ? (order.discount_percent || 0) : 0);
-  const totalDiscountPercent = calculateTotalDiscountPercent(pickupDiscount, founderDiscount, manualDiscount);
+  // تخفیف سفارش (تحویل/آغازین/دستی)؛ تخفیف کالای هر ردیف مستقیم به آن اضافه می‌شود
+  const orderLevelPercent = calculateTotalDiscountPercent(pickupDiscount, founderDiscount, manualDiscount);
+
+  // جمع هر ردیف دقیقاً مثل فاکتور (computeLine): item.price = قیمت یک بسته/کارتن
+  const lineTotals = (order.items || []).map((item) => {
+    const pack = getPackSize(item.items_per_package);
+    const unit = pack > 1 ? Math.round(Number(item.price) / pack) : Number(item.price);
+    const itemPct = isConsumerOrder ? 0 : Math.max(0, Math.min(100, Number(item.discount_percent) || 0));
+    const gross = computeLine({ quantity: item.quantity, pack, unitPrice: unit }).total;
+    const net = computeLine({
+      quantity: item.quantity,
+      pack,
+      unitPrice: unit,
+      itemDiscountPercent: itemPct,
+      discountPercent: isConsumerOrder ? 0 : orderLevelPercent,
+    }).total;
+    return { gross, net, combinedPercent: isConsumerOrder ? 0 : Math.min(100, itemPct + orderLevelPercent) };
+  });
+  const hasItems = lineTotals.length > 0;
+  const grossTotal = hasItems ? lineTotals.reduce((s, l) => s + l.gross, 0) : Number(order.total_amount || 0);
 
   const discountedTotal = isConsumerOrder
     ? Number(order.total_amount || 0)
-    : order.items && order.items.length > 0
-    ? order.items.reduce((sum, item) => {
-        const discountedUnitPrice = calculateDiscountedPrice(item.price, totalDiscountPercent);
-        return sum + discountedUnitPrice * item.quantity;
-      }, 0)
-    : calculateDiscountedPrice(order.total_amount, totalDiscountPercent);
+    : hasItems
+    ? lineTotals.reduce((s, l) => s + l.net, 0)
+    : calculateDiscountedPrice(order.total_amount, orderLevelPercent);
+
+  // درصد مؤثر کل برای نمایش (۰ اگر هیچ تخفیفی نیست)
+  const totalDiscountPercent = !isConsumerOrder && grossTotal > discountedTotal
+    ? Number((((grossTotal - discountedTotal) / grossTotal) * 100).toFixed(1))
+    : 0;
 
   return (
     <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3 shadow-xs hover:border-slate-700 transition">
@@ -192,7 +213,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
           ) : totalDiscountPercent > 0 ? (
             <div className="flex items-baseline gap-1.5 flex-wrap">
               <span className="line-through text-slate-500 text-[11px] font-mono">
-                {formatPrice(order.total_amount)}
+                {formatPrice(grossTotal)}
               </span>
               <Price
                 value={discountedTotal}
@@ -308,8 +329,9 @@ export const OrderCard: React.FC<OrderCardProps> = ({
 
           <div className="p-2.5 rounded-xl bg-slate-950/60 divide-y divide-slate-800/60 space-y-1.5">
             {order.items && order.items.map((item, idx) => {
-              const originalRowTotal = item.price * item.quantity;
-              const discountedRowTotal = calculateDiscountedPrice(item.price, totalDiscountPercent) * item.quantity;
+              const originalRowTotal = lineTotals[idx]?.gross ?? item.price * item.quantity;
+              const discountedRowTotal = lineTotals[idx]?.net ?? originalRowTotal;
+              const rowHasDiscount = !isConsumerOrder && discountedRowTotal < originalRowTotal;
               return (
                 <div key={idx} className="pt-1.5 first:pt-0 flex items-center justify-between">
                   <div className="flex items-center gap-1.5 min-w-0">
@@ -321,7 +343,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
                     </span>
                   </div>
                   <div className="text-left shrink-0">
-                    {totalDiscountPercent > 0 && (
+                    {rowHasDiscount && (
                       <span className="line-through text-slate-500 font-mono text-[10px] block text-left">
                         {formatPrice(originalRowTotal)}
                       </span>

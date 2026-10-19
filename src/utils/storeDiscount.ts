@@ -345,8 +345,8 @@ export function getStoreOrderDiscountPlan(args: {
 // ───────────────────────────────────────────────────────────────────────────
 // تخفیف کالا + تخفیف سفارش (تحویل حضوری / ورودی جدید)
 // فرمول یکسان با فاکتور (computeLine در orderLine.ts) و دیتابیس:
-//   قیمت پس از تخفیف کالا = round(قیمت × (100 − درصد کالا) / 100)
-//   قیمت نهایی           = round(قیمت پس از تخفیف کالا × (100 − درصد سفارش) / 100)
+//   درصد کل    = min(100, درصد کالا + درصد سفارش)   (جمع مستقیم، نه پله‌ای)
+//   قیمت نهایی = round(قیمت × (100 − درصد کل) / 100)   (فقط یک بار گرد می‌شود)
 // تخفیف سفارش فقط یکی است (بالاترین؛ در تساوی «حضوری») — مطابق تریگر دیتابیس.
 // تخفیف کالا فقط روی «قیمت خرید فروشگاه» اعمال می‌شود.
 // ───────────────────────────────────────────────────────────────────────────
@@ -382,7 +382,7 @@ export interface ProductPriceBreakdown {
   orderType: 'pickup' | 'founder' | 'none';
   afterProductPrice: number;  // پس از تخفیف کالا
   finalPrice: number;         // قیمت نهایی هر واحد
-  totalPercent: number;       // درصد مؤثر کل (نسبت به قیمت پایه)
+  totalPercent: number;       // مجموع مستقیم درصد کالا + درصد سفارش (حداکثر ۱۰۰)
   hasDiscount: boolean;
 }
 
@@ -405,8 +405,8 @@ export function getProductPriceBreakdown(
   const resolved = resolveOrderDiscounts(pickupPercent, founderPercent);
   const orderPercent = resolved.pickupPercent + resolved.founderPercent;
   const afterProductPrice = Math.round((base * (100 - productPercent)) / 100);
-  const finalPrice = Math.round((afterProductPrice * (100 - orderPercent)) / 100);
-  const totalPercent = base > 0 ? Number((((base - finalPrice) / base) * 100).toFixed(1)) : 0;
+  const totalPercent = Math.min(100, Math.max(0, productPercent + orderPercent));
+  const finalPrice = Math.round((base * (100 - totalPercent)) / 100);
   return {
     basePrice: base,
     productPercent,

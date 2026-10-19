@@ -59,6 +59,7 @@ import { useOrders, CreateOrderPayload } from './hooks/useOrders';
 import { useSupabaseSync } from './hooks/useSupabaseSync';
 import { useFinancialAccounts } from './hooks/useFinancialAccounts';
 import { syncPwaIconsAndManifest } from '../utils/pwaIcons';
+import { setStorePickupDiscountEnabled, setStoreFounderDiscountUserEnabled } from '../utils/storeDiscount';
 import { CheckCircle2, AlertTriangle, Info, X, Bell, Clock } from 'lucide-react';
 
 // Re-export helpers for backwards compatibility
@@ -82,6 +83,11 @@ interface AppContextType {
   loginWithCredentials: (username: string, password: string, allowedRoles?: UserRole[]) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
   showToast: (message: string, type?: 'info' | 'success' | 'warning' | 'error', durationMs?: number) => void;
+  /** ذخیره‌ی انتخاب فروشگاه برای کلیدهای تخفیف (تحویل حضوری / ورودی جدید) روی حساب فروشگاه در دیتابیس */
+  updateStoreDiscountPreferences: (
+    storeId: string,
+    prefs: { pickup?: boolean; founder?: boolean }
+  ) => Promise<{ success: boolean; message?: string }>;
 
   categories: Category[];
   brands: string[];
@@ -377,6 +383,67 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setGlobalToast((curr) => (curr?.message === message ? null : curr));
     }, durationMs);
   }, []);
+
+  // ذخیره‌ی کلیدهای تخفیف فروشگاه: اول آبجکت فروشگاه در state عوض می‌شود (UI فوری)،
+  // بعد RPC دیتابیس صدا زده می‌شود؛ در صورت خطا همه‌چیز به حالت قبل برمی‌گردد.
+  const updateStoreDiscountPreferences = useCallback(
+    async (
+      storeId: string,
+      prefs: { pickup?: boolean; founder?: boolean }
+    ): Promise<{ success: boolean; message?: string }> => {
+      if (!storeId) return { success: false, message: 'فروشگاه مشخص نیست.' };
+
+      const prevStore = supermarkets.find((s) => s.id === storeId);
+      const prevPickup = prevStore?.pickup_discount_opt_in ?? false;
+      const prevFounder = prevStore?.founder_discount_opt_in ?? true;
+
+      const applyLocal = (pickup: boolean | undefined, founder: boolean | undefined) => {
+        if (pickup !== undefined) setStorePickupDiscountEnabled(storeId, pickup);
+        if (founder !== undefined) setStoreFounderDiscountUserEnabled(storeId, founder);
+        setSupermarkets((prev) =>
+          prev.map((s) =>
+            s.id === storeId
+              ? {
+                  ...s,
+                  ...(pickup !== undefined ? { pickup_discount_opt_in: pickup } : {}),
+                  ...(founder !== undefined ? { founder_discount_opt_in: founder } : {}),
+                }
+              : s
+          )
+        );
+        window.dispatchEvent(new Event('store-discount-changed'));
+      };
+
+      applyLocal(prefs.pickup, prefs.founder);
+
+      if (!isSupabaseConfigured || !supabase) {
+        return { success: true };
+      }
+
+      try {
+        const { data, error } = await supabase.rpc('set_my_discount_preferences', {
+          p_pickup: prefs.pickup ?? null,
+          p_founder: prefs.founder ?? null,
+          p_store_id: auth.currentUser?.role === 'admin' ? storeId : null,
+        });
+        const res = (typeof data === 'string' ? JSON.parse(data) : data) as { success?: boolean; message?: string } | null;
+        if (error || res?.success === false) {
+          throw new Error(error?.message || res?.message || 'خطا در ذخیره انتخاب تخفیف');
+        }
+        return { success: true };
+      } catch (err) {
+        applyLocal(
+          prefs.pickup !== undefined ? prevPickup : undefined,
+          prefs.founder !== undefined ? prevFounder : undefined
+        );
+        const msg = err instanceof Error ? err.message : 'خطا در ذخیره انتخاب تخفیف';
+        showToast('ذخیره انتخاب تخفیف انجام نشد، دوباره تلاش کنید.', 'error');
+        console.error('set_my_discount_preferences failed:', msg);
+        return { success: false, message: msg };
+      }
+    },
+    [supermarkets, setSupermarkets, auth.currentUser?.role, showToast]
+  );
 
   // Hook 5: Supabase Realtime / Polling Sync & LocalStorage Cross-Tab Sync
   useSupabaseSync({
@@ -1506,6 +1573,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     logout: auth.logout,
     invoiceSettings,
     updateInvoiceSettings,
+    updateStoreDiscountPreferences,
     categories: catalog.categories,
     brands: catalog.brands,
     units: catalog.units,
@@ -1665,6 +1733,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast,
     invoiceSettings,
     updateInvoiceSettings,
+    updateStoreDiscountPreferences,
     adminProfile,
     updateAdminProfile,
     financial.accounts,

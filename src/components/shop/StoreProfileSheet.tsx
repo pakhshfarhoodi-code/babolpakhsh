@@ -31,7 +31,6 @@ import { formatPersianDate } from '../../utils/dateUtils';
 import {
   getStoreFounderDiscountStatus,
   getStoreFounderDiscountUserEnabled,
-  setStoreFounderDiscountUserEnabled,
 } from '../../utils/storeDiscount';
 
 interface StoreProfileSheetProps {
@@ -47,38 +46,19 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
   store,
   visitor,
 }) => {
-  const { visitors, supermarkets, orders, updateSupermarket, resetSupermarketPassword } = useApp();
+  const { visitors, supermarkets, orders, updateSupermarket, resetSupermarketPassword, updateStoreDiscountPreferences } = useApp();
 
   const founderStatus = useMemo(() => {
     return getStoreFounderDiscountStatus(supermarkets, orders, store?.id);
   }, [supermarkets, orders, store?.id]);
 
-  const [founderUserEnabled, setFounderUserEnabled] = useState(() =>
-    getStoreFounderDiscountUserEnabled(store?.id || '', store)
-  );
-
-  useEffect(() => {
-    if (store?.id) {
-      setFounderUserEnabled(getStoreFounderDiscountUserEnabled(store.id, store));
-    }
-  }, [store]);
-
-  useEffect(() => {
-    const handleDiscountChange = () => {
-      if (store?.id) {
-        setFounderUserEnabled(getStoreFounderDiscountUserEnabled(store.id, store));
-      }
-    };
-    window.addEventListener('store-discount-changed', handleDiscountChange);
-    return () => window.removeEventListener('store-discount-changed', handleDiscountChange);
-  }, [store]);
+  // مقدار کلید از آبجکت زنده‌ی فروشگاه در state (دیتابیس) خوانده می‌شود، نه نسخه‌ی قدیمی prop
+  const liveStore = store ? (supermarkets.find((s) => s.id === store.id) || store) : undefined;
+  const founderUserEnabled = getStoreFounderDiscountUserEnabled(store?.id || '', liveStore);
 
   const handleToggleFounder = () => {
     if (!store?.id || !founderStatus.isFounderQuotaAvailable) return;
-    const nextVal = !founderUserEnabled;
-    setFounderUserEnabled(nextVal);
-    setStoreFounderDiscountUserEnabled(store.id, nextVal);
-    window.dispatchEvent(new Event('store-discount-changed'));
+    void updateStoreDiscountPreferences(store.id, { founder: !founderUserEnabled });
   };
 
   // Profile State (Store Name, Owner Name, Phone, Address, Location)

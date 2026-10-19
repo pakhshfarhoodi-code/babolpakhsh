@@ -3,6 +3,21 @@ import { useApp } from '../../context/AppContext';
 import { Product, Category, ProductPriceHistory } from '../../types';
 import { SafeImage } from '../common/SafeImage';
 import { compressImageFile, getCategoryFallbackImage, sanitizeImageUrl } from '../../utils/imageUtils';
+import { getProductDiscountState, getProductPriceBreakdown } from '../../utils/storeDiscount';
+
+// datetime-local ←→ ISO با منطقه‌ی زمانی (قبلاً ساعت‌ها به‌صورت UTC ذخیره می‌شد و ۳:۳۰ ساعت جابه‌جا می‌شد)
+const isoToLocalInput = (iso?: string | null): string => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+const localInputToIso = (v?: string | null): string | null => {
+  if (!v) return null;
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d.toISOString();
+};
 import {
   Search,
   Plus,
@@ -203,8 +218,8 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
     setEditProdIsMarketTest(Boolean(prod.is_market_test));
     setEditProdDescription(prod.description || '');
     setEditProdDiscountPercent(prod.discount_percent ?? '');
-    setEditProdDiscountStartsAt(prod.discount_starts_at ? prod.discount_starts_at.slice(0, 16) : '');
-    setEditProdDiscountEndsAt(prod.discount_ends_at ? prod.discount_ends_at.slice(0, 16) : '');
+    setEditProdDiscountStartsAt(isoToLocalInput(prod.discount_starts_at));
+    setEditProdDiscountEndsAt(isoToLocalInput(prod.discount_ends_at));
     setEditModalError(null);
   };
 
@@ -257,8 +272,8 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
           is_market_test: editProdIsMarketTest,
           description: editProdDescription.trim() ? editProdDescription.trim().slice(0, 100) : undefined,
           discount_percent: Number(editProdDiscountPercent) > 0 ? Number(editProdDiscountPercent) : undefined,
-          discount_starts_at: editProdDiscountStartsAt ? editProdDiscountStartsAt : null,
-          discount_ends_at: editProdDiscountEndsAt ? editProdDiscountEndsAt : null,
+          discount_starts_at: localInputToIso(editProdDiscountStartsAt),
+          discount_ends_at: localInputToIso(editProdDiscountEndsAt),
         });
       } else {
         onUpdateProductPrice(
@@ -402,6 +417,11 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
 
     setIsBatchSaving(true);
     setBatchFeedback(null);
+
+    if (changedProducts.some((p) => p.visitor_price === undefined)) {
+      alert('قیمت خرید ویزیتور برخی کالاها هنوز بارگذاری نشده است. چند ثانیه صبر کنید و دوباره ذخیره کنید.');
+      return;
+    }
 
     try {
       const payload = changedProducts.map((p) => {
@@ -703,8 +723,8 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
       is_market_test: newProdIsMarketTest,
       description: newProdDescription.trim() ? newProdDescription.trim().slice(0, 100) : undefined,
       discount_percent: Number(newProdDiscountPercent) > 0 ? Number(newProdDiscountPercent) : undefined,
-      discount_starts_at: newProdDiscountStartsAt ? newProdDiscountStartsAt : null,
-      discount_ends_at: newProdDiscountEndsAt ? newProdDiscountEndsAt : null,
+      discount_starts_at: localInputToIso(newProdDiscountStartsAt),
+      discount_ends_at: localInputToIso(newProdDiscountEndsAt),
     });
 
     setIsAddModalOpen(false);
@@ -1559,6 +1579,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                   const categoryObj = categories.find((c) => c.id === product.category_id);
                   const isLow = freeStock < LOW_STOCK_THRESHOLD;
                   const visitorPrice = product.visitor_price ?? 0;
+                  const visitorPriceLoaded = product.visitor_price !== undefined;
                   const itemLikes = productLikes.filter((pl) => pl.product_id === product.id);
 
                   return (
@@ -1643,7 +1664,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                         ) : (
                           <div className="flex items-center gap-1.5">
                             <span className="font-bold font-mono text-blue-400">
-                              {formatPrice(visitorPrice)}
+                              {visitorPriceLoaded ? formatPrice(visitorPrice) : '…'}
                             </span>
                             <span className="text-[11px] text-slate-500">تومان</span>
                           </div>
@@ -1663,11 +1684,41 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                             />
                           </div>
                         ) : (
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold font-mono text-emerald-400">
-                              {formatPrice(product.price)}
-                            </span>
-                            <span className="text-[11px] text-slate-500">تومان</span>
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`font-bold font-mono text-emerald-400 ${getProductDiscountState(product).state === 'active' ? 'line-through opacity-60' : ''}`}>
+                                {formatPrice(product.price)}
+                              </span>
+                              <span className="text-[11px] text-slate-500">تومان</span>
+                            </div>
+                            {(() => {
+                              const ds = getProductDiscountState(product);
+                              if (ds.state === 'none') return null;
+                              const bd = getProductPriceBreakdown(product.price, product);
+                              const fmtDate = (d?: Date) => (d ? d.toLocaleDateString('fa-IR') : '');
+                              if (ds.state === 'active') {
+                                return (
+                                  <div className="text-[11px] leading-tight">
+                                    <span className="font-bold font-mono text-amber-300">{formatPrice(bd.afterProductPrice)}</span>
+                                    <span className="text-slate-400"> تومان پس از </span>
+                                    <span className="inline-block font-bold text-white bg-emerald-600 px-1.5 rounded-md num-fa">{ds.percent.toLocaleString('fa-IR')}٪ تخفیف</span>
+                                    {ds.endsAt && <span className="block text-[10px] text-slate-500">تا {fmtDate(ds.endsAt)}</span>}
+                                  </div>
+                                );
+                              }
+                              if (ds.state === 'scheduled') {
+                                return (
+                                  <div className="text-[10px] text-sky-300/90 leading-tight">
+                                    تخفیف {ds.percent.toLocaleString('fa-IR')}٪ از {fmtDate(ds.startsAt)} فعال می‌شود
+                                  </div>
+                                );
+                              }
+                              return (
+                                <div className="text-[10px] text-slate-500 leading-tight">
+                                  تخفیف {ds.percent.toLocaleString('fa-IR')}٪ منقضی شده
+                                </div>
+                              );
+                            })()}
                           </div>
                         )}
                       </td>
@@ -1821,6 +1872,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                           {!isEditing && (
                             <button
                               type="button"
+                              disabled={!visitorPriceLoaded}
                               onClick={() => {
                                 setEditingPriceId(product.id);
                                 setTempVisitorPrice(product.visitor_price ?? 0);
@@ -2100,6 +2152,27 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                     />
                   </div>
                 </div>
+
+                {Number(newProdDiscountPercent) > 0 && Number(newProdPrice) > 0 && (() => {
+                  const bd = getProductPriceBreakdown(Number(newProdPrice), {
+                    discount_percent: Number(newProdDiscountPercent),
+                    discount_starts_at: newProdDiscountStartsAt || null,
+                    discount_ends_at: newProdDiscountEndsAt || null,
+                  });
+                  const pack = Number(newProdItemsPerPackage) > 0 ? Number(newProdItemsPerPackage) : 1;
+                  const active = bd.productPercent > 0;
+                  return (
+                    <div className="mt-2 p-2.5 rounded-xl bg-amber-950/30 border border-amber-500/30 text-xs space-y-0.5">
+                      <div className="text-amber-200 font-bold">
+                        قیمت فروشگاه پس از تخفیف: <span className="font-mono">{formatPrice(bd.afterProductPrice)}</span> تومان
+                        {pack > 1 && <span className="text-amber-300/80"> (هر کارتن: <span className="font-mono">{formatPrice(bd.afterProductPrice * pack)}</span>)</span>}
+                      </div>
+                      <div className="text-slate-400">
+                        {active ? 'این تخفیف هم‌اکنون فعال است.' : 'این تخفیف هنوز شروع نشده یا پایان یافته است؛ بازه زمانی را بررسی کنید.'} (فقط روی قیمت خرید فروشگاه اعمال می‌شود)
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Section 3: Inventory & Unit */}
@@ -2525,6 +2598,27 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                     />
                   </div>
                 </div>
+
+                {Number(editProdDiscountPercent) > 0 && Number(editProdPrice) > 0 && (() => {
+                  const bd = getProductPriceBreakdown(Number(editProdPrice), {
+                    discount_percent: Number(editProdDiscountPercent),
+                    discount_starts_at: editProdDiscountStartsAt || null,
+                    discount_ends_at: editProdDiscountEndsAt || null,
+                  });
+                  const pack = Number(editProdItemsPerPackage) > 0 ? Number(editProdItemsPerPackage) : 1;
+                  const active = bd.productPercent > 0;
+                  return (
+                    <div className="mt-2 p-2.5 rounded-xl bg-amber-950/30 border border-amber-500/30 text-xs space-y-0.5">
+                      <div className="text-amber-200 font-bold">
+                        قیمت فروشگاه پس از تخفیف: <span className="font-mono">{formatPrice(bd.afterProductPrice)}</span> تومان
+                        {pack > 1 && <span className="text-amber-300/80"> (هر کارتن: <span className="font-mono">{formatPrice(bd.afterProductPrice * pack)}</span>)</span>}
+                      </div>
+                      <div className="text-slate-400">
+                        {active ? 'این تخفیف هم‌اکنون فعال است.' : 'این تخفیف هنوز شروع نشده یا پایان یافته است؛ بازه زمانی را بررسی کنید.'} (فقط روی قیمت خرید فروشگاه اعمال می‌شود)
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Section 4: Inventory, Catalog Visibility & Market Test */}

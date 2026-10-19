@@ -282,12 +282,12 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
           consumer_price: editProdConsumerPrice > 0 ? editProdConsumerPrice : 0, // ۰ = حذف قیمت مصرف‌کننده
           stock: editProdStock,
           unit: editProdUnit,
-          items_per_package: Number(editProdItemsPerPackage) > 0 ? Number(editProdItemsPerPackage) : undefined,
-          package_type: editProdPackageType.trim() ? editProdPackageType.trim() : undefined,
+          items_per_package: Number(editProdItemsPerPackage) > 0 ? Number(editProdItemsPerPackage) : 0,
+          package_type: editProdPackageType.trim() ? editProdPackageType.trim() : '',
           image_url: finalImage,
           is_active: editProdIsActive,
           is_market_test: editProdIsMarketTest,
-          description: editProdDescription.trim() ? editProdDescription.trim().slice(0, 100) : undefined,
+          description: editProdDescription.trim() ? editProdDescription.trim().slice(0, 100) : '',
           discount_percent: Number(editProdDiscountPercent) > 0 ? Number(editProdDiscountPercent) : 0,
           discount_starts_at: localInputToIso(editProdDiscountStartsAt),
           discount_ends_at: localInputToIso(editProdDiscountEndsAt),
@@ -400,6 +400,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
         Number(draft.stock) !== Number(p.stock) ||
         (draft.unit || 'عدد') !== (p.unit || 'عدد') ||
         Number(draft.items_per_package ?? 0) !== Number(p.items_per_package ?? 0) ||
+        ((draft as any).package_type || '').trim() !== (p.package_type || '').trim() ||
         draft.is_active !== p.is_active ||
         Boolean(draft.is_market_test) !== Boolean(p.is_market_test) ||
         (draft.description || '').trim() !== (p.description || '').trim()
@@ -453,11 +454,12 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
           consumer_price: draft.consumer_price && Number(draft.consumer_price) > 0 ? Number(draft.consumer_price) : 0, // ۰ = حذف
           stock: Math.max(0, Number(draft.stock) || 0),
           unit: draft.unit || 'عدد',
-          items_per_package: draft.items_per_package && Number(draft.items_per_package) > 0 ? Number(draft.items_per_package) : undefined,
+          items_per_package: draft.items_per_package && Number(draft.items_per_package) > 0 ? Number(draft.items_per_package) : 0,
+          package_type: (draft as any).package_type?.trim() ? (draft as any).package_type.trim() : '',
           is_active: draft.is_active !== false,
           is_market_test: Boolean(draft.is_market_test),
           image_url: draft.image_url,
-          description: draft.description?.trim() ? draft.description.trim().slice(0, 100) : undefined,
+          description: draft.description?.trim() ? draft.description.trim().slice(0, 100) : '',
         };
       });
 

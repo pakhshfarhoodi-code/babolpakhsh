@@ -311,21 +311,6 @@ export function useCatalog() {
           discount_ends_at: newProd.discount_ends_at || null,
         };
 
-        // Fallback sync to app_settings if description exists
-        if (targetDescription) {
-          try {
-            const rawMap = localStorage.getItem('barfroosh_product_descriptions');
-            const descMap = rawMap ? JSON.parse(rawMap) : {};
-            descMap[id] = targetDescription;
-            localStorage.setItem('barfroosh_product_descriptions', JSON.stringify(descMap));
-            supabase.from('app_settings').upsert({
-              key: 'product_descriptions',
-              value: descMap,
-              updated_at: new Date().toISOString(),
-            }, { onConflict: 'key' }).then(() => {});
-          } catch {}
-        }
-
         // Try 1: Full insert (with description, discounts, and package_type)
         const { error: err1 } = await supabase.from('products').insert(row);
         if (!err1) return;
@@ -472,27 +457,6 @@ export function useCatalog() {
 
     if (isSupabaseConfigured && supabase) {
       (async () => {
-        // Fallback sync to app_settings product_descriptions
-        if (updates.description !== undefined) {
-          try {
-            const rawMap = localStorage.getItem('barfroosh_product_descriptions');
-            const descMap = rawMap ? JSON.parse(rawMap) : {};
-            if (targetDescription) {
-              descMap[productId] = targetDescription;
-            } else {
-              delete descMap[productId];
-            }
-            localStorage.setItem('barfroosh_product_descriptions', JSON.stringify(descMap));
-            await supabase.from('app_settings').upsert({
-              key: 'product_descriptions',
-              value: descMap,
-              updated_at: new Date().toISOString(),
-            }, { onConflict: 'key' });
-          } catch (e) {
-            console.warn('Error saving product_descriptions to app_settings:', e);
-          }
-        }
-
         const payload: Record<string, unknown> = {};
         if (updates.name !== undefined) payload.name = updates.name.trim();
         if (updates.brand !== undefined) payload.brand = updates.brand.trim();
@@ -702,6 +666,8 @@ export function useCatalog() {
     stock?: number;
     unit?: string;
     items_per_package?: number;
+    package_type?: string;
+    description?: string;
     image_url?: string;
     is_active?: boolean;
     is_market_test?: boolean;
@@ -784,10 +750,12 @@ export function useCatalog() {
           category_id: catId,
           price: storePrice > 0 ? storePrice : current.price,
           visitor_price: visitorPrice > 0 ? visitorPrice : current.visitor_price,
-          consumer_price: item.consumer_price !== undefined ? Number(item.consumer_price) || undefined : current.consumer_price,
+          consumer_price: item.consumer_price !== undefined ? (Number(item.consumer_price) > 0 ? Number(item.consumer_price) : undefined) : current.consumer_price,
           stock: stockQty !== undefined ? stockQty : current.stock,
           unit: unitStr || current.unit,
           items_per_package: parsedPackQty !== undefined ? parsedPackQty : current.items_per_package,
+          package_type: item.package_type !== undefined ? (item.package_type && String(item.package_type).trim() ? String(item.package_type).trim() : undefined) : current.package_type,
+          description: item.description !== undefined ? (item.description?.trim() ? item.description.trim().slice(0, 100) : undefined) : current.description,
           image_url: imageUrlStr || current.image_url,
           is_active: item.is_active !== undefined ? item.is_active : current.is_active,
           is_market_test: item.is_market_test !== undefined ? Boolean(item.is_market_test) : (current.is_market_test ?? false),
@@ -806,11 +774,13 @@ export function useCatalog() {
           category_id: catId,
           price: storePrice,
           visitor_price: visitorPrice,
-          consumer_price: item.consumer_price !== undefined ? Number(item.consumer_price) || undefined : undefined,
+          consumer_price: item.consumer_price !== undefined && Number(item.consumer_price) > 0 ? Number(item.consumer_price) : undefined,
           stock: stockQty,
           reserved_stock: 0,
           unit: unitStr,
           items_per_package: parsedPackQty,
+          package_type: item.package_type && String(item.package_type).trim() ? String(item.package_type).trim() : undefined,
+          description: item.description?.trim() ? item.description.trim().slice(0, 100) : undefined,
           image_url: imageUrlStr || 'https://images.unsplash.com/photo-1551024601-bec78aea704b?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer',
           is_active: item.is_active !== undefined ? item.is_active : true,
           is_market_test: Boolean(item.is_market_test),
@@ -916,6 +886,7 @@ export function useCatalog() {
             reserved_stock: 0,
             unit: p.unit || 'عدد',
             items_per_package: p.items_per_package !== undefined && Number(p.items_per_package) > 0 ? Number(p.items_per_package) : null,
+            package_type: p.package_type && String(p.package_type).trim() ? String(p.package_type).trim() : null,
             image_url: p.image_url && p.image_url.trim() ? p.image_url.trim() : 'https://images.unsplash.com/photo-1551024601-bec78aea704b?w=400&auto=format&fit=crop&q=60&referrerPolicy=no-referrer',
             is_active: p.is_active ?? true,
             is_market_test: Boolean(p.is_market_test),
@@ -941,8 +912,8 @@ export function useCatalog() {
             const { error: sErr1 } = await supabase.from('products').upsert(item, { onConflict: 'id' });
             if (!sErr1) continue;
 
-            // 2. Without description & items_per_package & with category_id = null fallback
-            const { description: _desc, items_per_package, ...rowNoPack } = item;
+            // 2. Without description & items_per_package & package_type & with category_id = null fallback
+            const { description: _desc, items_per_package, package_type, ...rowNoPack } = item;
             const { error: sErr2 } = await supabase.from('products').upsert({ ...rowNoPack, category_id: null }, { onConflict: 'id' });
             if (!sErr2) continue;
 

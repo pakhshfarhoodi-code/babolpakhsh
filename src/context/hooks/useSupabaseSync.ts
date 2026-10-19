@@ -176,15 +176,6 @@ export function useSupabaseSync({
     if (!supabase) return;
     const isStoreRole = role === 'supermarket';
 
-    const localDescMap: Record<string, string> = (() => {
-      try {
-        const raw = localStorage.getItem('barfroosh_product_descriptions');
-        return raw ? JSON.parse(raw) : {};
-      } catch {
-        return {};
-      }
-    })();
-
     const storeColumnsWithDesc = 'id, category_id, brand, name, price, consumer_price, stock, reserved_stock, unit, items_per_package, package_type, image_url, is_active, is_market_test, description, discount_percent, discount_starts_at, discount_ends_at, created_at';
     const storeColumnsNoDesc = 'id, category_id, brand, name, price, consumer_price, stock, reserved_stock, unit, items_per_package, package_type, image_url, is_active, is_market_test, discount_percent, discount_starts_at, discount_ends_at, created_at';
     const fullColumnsWithDesc = 'id, category_id, brand, name, price, visitor_price, consumer_price, stock, reserved_stock, unit, items_per_package, package_type, image_url, is_active, is_market_test, description, discount_percent, discount_starts_at, discount_ends_at, created_at';
@@ -294,7 +285,7 @@ export function useSupabaseSync({
         visitor_price: isStoreRole ? undefined : (Number(p.visitor_price) || 0),
         is_active: p.is_active ?? true,
         is_market_test: Boolean(p.is_market_test),
-        description: p.description?.trim() ? p.description.trim() : (localDescMap[p.id] || undefined),
+        description: p.description?.trim() ? p.description.trim() : undefined,
         package_type: p.package_type && String(p.package_type).trim() ? String(p.package_type).trim() : undefined,
         discount_percent: p.discount_percent !== undefined && p.discount_percent !== null ? Number(p.discount_percent) || 0 : 0,
         discount_starts_at: p.discount_starts_at || null,

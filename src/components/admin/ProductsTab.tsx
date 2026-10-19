@@ -271,7 +271,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
           is_active: editProdIsActive,
           is_market_test: editProdIsMarketTest,
           description: editProdDescription.trim() ? editProdDescription.trim().slice(0, 100) : undefined,
-          discount_percent: Number(editProdDiscountPercent) > 0 ? Number(editProdDiscountPercent) : undefined,
+          discount_percent: Number(editProdDiscountPercent) > 0 ? Number(editProdDiscountPercent) : 0,
           discount_starts_at: localInputToIso(editProdDiscountStartsAt),
           discount_ends_at: localInputToIso(editProdDiscountEndsAt),
         });
@@ -722,7 +722,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
       is_active: true,
       is_market_test: newProdIsMarketTest,
       description: newProdDescription.trim() ? newProdDescription.trim().slice(0, 100) : undefined,
-      discount_percent: Number(newProdDiscountPercent) > 0 ? Number(newProdDiscountPercent) : undefined,
+      discount_percent: Number(newProdDiscountPercent) > 0 ? Number(newProdDiscountPercent) : 0,
       discount_starts_at: localInputToIso(newProdDiscountStartsAt),
       discount_ends_at: localInputToIso(newProdDiscountEndsAt),
     });

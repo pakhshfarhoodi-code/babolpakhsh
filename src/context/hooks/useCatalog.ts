@@ -304,6 +304,9 @@ export function useCatalog() {
           is_active: newProd.is_active ?? true,
           is_market_test: Boolean(newProd.is_market_test),
           description: targetDescription,
+          discount_percent: Math.min(100, Math.max(0, Number(newProd.discount_percent) || 0)),
+          discount_starts_at: newProd.discount_starts_at || null,
+          discount_ends_at: newProd.discount_ends_at || null,
         };
 
         // Fallback sync to app_settings if description exists
@@ -321,14 +324,14 @@ export function useCatalog() {
           } catch {}
         }
 
-        // Try 1: Full insert (with description)
+        // Try 1: Full insert (with description and discounts)
         const { error: err1 } = await supabase.from('products').insert(row);
         if (!err1) return;
 
-        console.warn('Supabase product insert failed, retrying without description / optional columns:', err1.message);
+        console.warn('Supabase product insert failed, retrying without description / discount columns:', err1.message);
         
-        // Try 2: Without description
-        const { description: _d, ...rowNoDesc } = row;
+        // Try 2: Without description & discount fields
+        const { description: _d, discount_percent: _dp, discount_starts_at: _dsa, discount_ends_at: _dea, ...rowNoDesc } = row;
         const { error: err1b } = await supabase.from('products').insert(rowNoDesc);
         if (!err1b) return;
 
@@ -404,6 +407,15 @@ export function useCatalog() {
       is_active: updates.is_active !== undefined ? updates.is_active : (prod.is_active ?? true),
       is_market_test: targetIsMarketTest,
       description: targetDescription,
+      discount_percent: updates.discount_percent !== undefined
+        ? Math.min(100, Math.max(0, Number(updates.discount_percent) || 0))
+        : prod.discount_percent,
+      discount_starts_at: updates.discount_starts_at !== undefined
+        ? (updates.discount_starts_at || null)
+        : prod.discount_starts_at,
+      discount_ends_at: updates.discount_ends_at !== undefined
+        ? (updates.discount_ends_at || null)
+        : prod.discount_ends_at,
     };
 
     if (updates.is_market_test !== undefined) {
@@ -489,17 +501,25 @@ export function useCatalog() {
         if (updates.is_active !== undefined) payload.is_active = updates.is_active;
         if (updates.is_market_test !== undefined) payload.is_market_test = updates.is_market_test;
         if (updates.description !== undefined) payload.description = targetDescription ?? null;
+        if (updates.discount_percent !== undefined) {
+          payload.discount_percent = Math.min(100, Math.max(0, Number(updates.discount_percent) || 0));
+        }
+        if (updates.discount_starts_at !== undefined) payload.discount_starts_at = updates.discount_starts_at || null;
+        if (updates.discount_ends_at !== undefined) payload.discount_ends_at = updates.discount_ends_at || null;
 
         if (Object.keys(payload).length === 0) return;
 
-        // Try 1: Full payload update (including description)
+        // Try 1: Full payload update (including description and discounts)
         const { error: err1 } = await supabase.from('products').update(payload).eq('id', productId);
         if (!err1) return;
 
-        console.warn('Supabase product update failed, retrying without optional columns:', err1.message);
+        console.error('Supabase product update failed:', err1.message);
+        if (payload.discount_percent !== undefined) {
+          console.error('ذخیره تخفیف کالا در دیتابیس ناموفق بود:', err1.message);
+        }
 
-        // Try 2: Without description, is_market_test & consumer_price
-        const { is_market_test, consumer_price, description, ...payload2 } = payload;
+        // Try 2: Without description, discounts, is_market_test & consumer_price
+        const { is_market_test, consumer_price, description, discount_percent, discount_starts_at, discount_ends_at, ...payload2 } = payload;
         const { error: err2 } = await supabase.from('products').update(payload2).eq('id', productId);
         if (!err2) return;
 

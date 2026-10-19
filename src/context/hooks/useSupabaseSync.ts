@@ -290,7 +290,8 @@ export function useSupabaseSync({
       .filter((p: any) => !LEGACY_MOCK_NAMES.has(p.name?.trim()))
       .map((p: any) => ({
         ...p,
-        visitor_price: isStoreRole ? undefined : (p.visitor_price !== undefined && p.visitor_price !== null ? Number(p.visitor_price) : undefined),
+        // برای کارمندان: مقدار خالی دیتابیس = ۰ (بارگذاری‌شده)؛ undefined یعنی «هنوز بارگذاری نشده»
+        visitor_price: isStoreRole ? undefined : (Number(p.visitor_price) || 0),
         is_active: p.is_active ?? true,
         is_market_test: Boolean(p.is_market_test),
         description: p.description?.trim() ? p.description.trim() : (localDescMap[p.id] || undefined),
@@ -906,9 +907,11 @@ export function useSupabaseSync({
       lastObservedRoleRef.current = role;
       if (role && role !== 'supermarket' && prev !== role) {
         scheduleReload(['products'], true);
+        // دریافت فوری قیمت‌های کامل (قیمت خرید ویزیتور) بدون انتظار برای کند‌ترین جدول‌ها
+        void fetchProducts().catch(() => {});
       }
     }
-  }, [role, scheduleReload]);
+  }, [role, scheduleReload, fetchProducts]);
 
   // 6. User Login/Logout Lifecycle Listener (Requirement 1)
   useEffect(() => {

@@ -51,6 +51,71 @@ export function isPackaged(x: PackInput): boolean {
   return getPackSize(x) > 1;
 }
 
+export function normalizePackageType(packageType?: string | null): string | undefined {
+  if (!packageType) return undefined;
+  const pt = packageType.trim();
+  if (
+    !pt ||
+    pt === 'none' ||
+    pt === 'null' ||
+    pt === 'بدون بسته‌بندی' ||
+    pt === 'بدون بسته‌بندی / تکی' ||
+    pt === 'تکی'
+  ) {
+    return undefined;
+  }
+  return pt;
+}
+
+/**
+ * Returns the attributed / adjective form of a base unit in Persian
+ * e.g. عدد -> عددی, کیلوگرم -> کیلوگرمی, کیلو -> کیلویی, گرم -> گرمی, لیتر -> لیتری, دانه -> دانه‌ای
+ */
+export function getUnitAttributed(unit?: string | null): string {
+  const u = (unit || '').trim();
+  if (!u) return 'عددی';
+
+  const SPECIAL_MAP: Record<string, string> = {
+    'عدد': 'عددی',
+    'کیلوگرم': 'کیلوگرمی',
+    'کیلو': 'کیلویی',
+    'گرم': 'گرمی',
+    'میلی‌گرم': 'میلی‌گرمی',
+    'میلی گرم': 'میلی‌گرمی',
+    'لیتر': 'لیتری',
+    'میلی‌لیتر': 'میلی‌لیتری',
+    'میلی لیتر': 'میلی‌لیتری',
+    'سی‌سی': 'سی‌سی',
+    'متر': 'متری',
+    'سانتی‌متر': 'سانتی‌متری',
+    'دانه': 'دانه‌ای',
+    'تکه': 'تکه‌ای',
+    'شاخه': 'شاخه‌ای',
+    'حبه': 'حبه‌ای',
+    'برگ': 'برگی',
+    'حلب': 'حلبی',
+    'باکس': 'باکسی',
+    'پک': 'پکی',
+    'کیسه': 'کیسه‌ای',
+    'بسته': 'بسته‌ای',
+    'کارتن': 'کارتنی',
+    'جعبه': 'جعبه‌ای',
+    'شانه': 'شانه‌ای',
+    'طاقه': 'طاقه‌ای',
+    'رول': 'رولی',
+    'بطری': 'بطری',
+    'قوطی': 'قوطی',
+  };
+
+  if (SPECIAL_MAP[u]) return SPECIAL_MAP[u];
+
+  if (u.endsWith('ی')) return u;
+  if (u.endsWith('ه') || u.endsWith('ة')) {
+    return `${u}‌ای`;
+  }
+  return `${u}ی`;
+}
+
 export function getBaseUnit(unit?: string | null, pack?: number | PackInput): string {
   const p = typeof pack === 'number' ? pack : getPackSize(pack);
   const u = (unit || '').trim();
@@ -60,19 +125,58 @@ export function getBaseUnit(unit?: string | null, pack?: number | PackInput): st
   return u || 'عدد';
 }
 
-export function getSaleUnitLabel(unit?: string | null, pack?: number | PackInput): string {
+export function getSaleUnitLabel(
+  unit?: string | null,
+  pack?: number | PackInput,
+  packageType?: string | null
+): string {
   const p = typeof pack === 'number' ? pack : getPackSize(pack);
-  if (p > 1) {
-    return isContainerUnit(unit) ? (unit as string).trim() : 'کارتن';
+  const normalizedPackType = normalizePackageType(packageType);
+
+  if (p <= 1 && !normalizedPackType) {
+    return getBaseUnit(unit, p);
   }
+
+  if (normalizedPackType) {
+    return normalizedPackType;
+  }
+
+  if (p > 1) {
+    return isContainerUnit(unit) ? (unit as string).trim() : 'بسته';
+  }
+
   return getBaseUnit(unit, p);
 }
 
-export function getUnitColumnText(pack: number | PackInput, baseUnit: string): string {
+export function getPackageFullLabel(
+  unit?: string | null,
+  pack?: number | PackInput,
+  packageType?: string | null
+): string {
+  const p = typeof pack === 'number' ? pack : getPackSize(pack);
+  const bu = getBaseUnit(unit, p);
+  const normalizedPackType = normalizePackageType(packageType);
+
+  if (p <= 1 && !normalizedPackType) {
+    return bu;
+  }
+
+  const pStr = p.toLocaleString('fa-IR');
+  const attrUnit = getUnitAttributed(bu);
+  const container = normalizedPackType || (isContainerUnit(unit) ? (unit as string).trim() : 'بسته');
+
+  return `${container} ${pStr} ${attrUnit}`;
+}
+
+export function getUnitColumnText(
+  pack: number | PackInput,
+  baseUnit: string,
+  packageType?: string | null
+): string {
   const p = typeof pack === 'number' ? pack : getPackSize(pack);
   const bu = baseUnit || 'عدد';
   if (p > 1) {
-    return `${p.toLocaleString('fa-IR')} ${bu}`;
+    return getPackageFullLabel(bu, p, packageType);
   }
   return bu;
 }

@@ -249,6 +249,7 @@ export function useCatalog() {
       image_url: safeImage,
       visitor_price,
       items_per_package: newProd.items_per_package !== undefined && Number(newProd.items_per_package) > 0 ? Number(newProd.items_per_package) : undefined,
+      package_type: newProd.package_type && newProd.package_type.trim() ? newProd.package_type.trim() : undefined,
       reserved_stock: 0,
       is_market_test: Boolean(newProd.is_market_test),
     };
@@ -300,6 +301,7 @@ export function useCatalog() {
           reserved_stock: 0,
           unit: newProd.unit || 'عدد',
           items_per_package: newProd.items_per_package !== undefined && Number(newProd.items_per_package) > 0 ? Number(newProd.items_per_package) : null,
+          package_type: newProd.package_type && newProd.package_type.trim() ? newProd.package_type.trim() : null,
           image_url: newProd.image_url,
           is_active: newProd.is_active ?? true,
           is_market_test: Boolean(newProd.is_market_test),
@@ -324,14 +326,14 @@ export function useCatalog() {
           } catch {}
         }
 
-        // Try 1: Full insert (with description and discounts)
+        // Try 1: Full insert (with description, discounts, and package_type)
         const { error: err1 } = await supabase.from('products').insert(row);
         if (!err1) return;
 
-        console.warn('Supabase product insert failed, retrying without description / discount columns:', err1.message);
+        console.warn('Supabase product insert failed, retrying without description / discount / package_type columns:', err1.message);
         
-        // Try 2: Without description & discount fields
-        const { description: _d, discount_percent: _dp, discount_starts_at: _dsa, discount_ends_at: _dea, ...rowNoDesc } = row;
+        // Try 2: Without description, discount fields & package_type
+        const { description: _d, discount_percent: _dp, discount_starts_at: _dsa, discount_ends_at: _dea, package_type: _pt, ...rowNoDesc } = row;
         const { error: err1b } = await supabase.from('products').insert(rowNoDesc);
         if (!err1b) return;
 
@@ -400,6 +402,9 @@ export function useCatalog() {
       items_per_package: updates.items_per_package !== undefined
         ? (Number(updates.items_per_package) > 0 ? Number(updates.items_per_package) : undefined)
         : prod.items_per_package,
+      package_type: updates.package_type !== undefined
+        ? (updates.package_type && updates.package_type.trim() ? updates.package_type.trim() : undefined)
+        : prod.package_type,
       stock: updates.stock !== undefined ? updates.stock : prod.stock,
       price: targetPrice,
       visitor_price: targetVisitorPrice,
@@ -497,6 +502,9 @@ export function useCatalog() {
         if (updates.items_per_package !== undefined) {
           payload.items_per_package = Number(updates.items_per_package) > 0 ? Number(updates.items_per_package) : null;
         }
+        if (updates.package_type !== undefined) {
+          payload.package_type = updates.package_type && updates.package_type.trim() ? updates.package_type.trim() : null;
+        }
         if (updates.image_url !== undefined) payload.image_url = updates.image_url;
         if (updates.is_active !== undefined) payload.is_active = updates.is_active;
         if (updates.is_market_test !== undefined) payload.is_market_test = updates.is_market_test;
@@ -509,7 +517,7 @@ export function useCatalog() {
 
         if (Object.keys(payload).length === 0) return;
 
-        // Try 1: Full payload update (including description and discounts)
+        // Try 1: Full payload update (including description, discounts, and package_type)
         const { error: err1 } = await supabase.from('products').update(payload).eq('id', productId);
         if (!err1) return;
 
@@ -518,8 +526,8 @@ export function useCatalog() {
           console.error('ذخیره تخفیف کالا در دیتابیس ناموفق بود:', err1.message);
         }
 
-        // Try 2: Without description, discounts, is_market_test & consumer_price
-        const { is_market_test, consumer_price, description, discount_percent, discount_starts_at, discount_ends_at, ...payload2 } = payload;
+        // Try 2: Without description, discounts, package_type, is_market_test & consumer_price
+        const { is_market_test, consumer_price, description, discount_percent, discount_starts_at, discount_ends_at, package_type, ...payload2 } = payload;
         const { error: err2 } = await supabase.from('products').update(payload2).eq('id', productId);
         if (!err2) return;
 

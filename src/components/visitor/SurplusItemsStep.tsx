@@ -4,6 +4,7 @@ import { formatPrice } from './helpers';
 import {
   getPackSize,
   getBaseUnit,
+  getPackageFullLabel,
 } from '../../utils/orderLine';
 import {
   Package,
@@ -264,7 +265,7 @@ export const SurplusItemsStep: React.FC<SurplusItemsStepProps> = ({
                       )}
                       {p.brand && <span className="text-slate-600">·</span>}
                       <span>
-                        بسته <strong className="num-fa">{pack.toLocaleString('fa-IR')}</strong> عددی ({baseUnit})
+                        {getPackageFullLabel(p.unit, pack, p.package_type)}
                       </span>
                     </div>
                   </div>

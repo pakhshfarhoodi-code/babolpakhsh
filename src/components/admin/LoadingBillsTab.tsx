@@ -12,6 +12,8 @@ import {
   getPackSize,
   getBaseUnit,
   getUnitColumnText,
+  getSaleUnitLabel,
+  getPackageFullLabel,
 } from '../../utils/orderLine';
 import { formatUnifiedBillNumber } from '../../utils/numberToPersianWords';
 import {
@@ -1715,12 +1717,14 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
                                   const prod = products.find((p) => p.id === it.product_id);
                                   const packCount = it.items_per_package || prod?.items_per_package;
                                   const unitStr = it.unit || prod?.unit || 'واحد';
+                                  const packageType = it.package_type || prod?.package_type;
+                                  const saleUnit = getSaleUnitLabel(unitStr, packCount, packageType);
                                   return (
                                     <span className="font-mono font-bold text-slate-100">
-                                      {it.quantity} {unitStr}
+                                      {it.quantity.toLocaleString('fa-IR')} {saleUnit}
                                       {packCount && packCount > 1 && (
                                         <span className="text-[11px] text-indigo-400 font-semibold mr-1 font-sans">
-                                          ({packCount} عددی)
+                                          ({getPackageFullLabel(unitStr, packCount, packageType)})
                                         </span>
                                       )}
                                     </span>

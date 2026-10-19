@@ -12,6 +12,7 @@ import {
   getBaseUnit,
   getUnitColumnText,
   getSaleUnitLabel,
+  getPackageFullLabel,
   isPackaged,
   computeLine,
   formatLineCalculation,
@@ -1204,7 +1205,7 @@ export const DirectInvoiceSheet: React.FC<DirectInvoiceSheetProps> = ({
                               </h4>
                               <p className="text-[10px] text-slate-400 mt-0.5">
                                 {line.product.brand ? `برند: ${line.product.brand} | ` : ''}
-                                واحد پایه: {baseUnit} {pack > 1 ? `(${getSaleUnitLabel(line.product.unit, pack)} ${pack} عددی)` : ''}
+                                واحد پایه: {baseUnit} {pack > 1 ? `(${getPackageFullLabel(line.product.unit, pack, line.product.package_type)})` : ''}
                               </p>
                             </div>
                             <button
@@ -1229,7 +1230,7 @@ export const DirectInvoiceSheet: React.FC<DirectInvoiceSheetProps> = ({
                                 -
                               </button>
                               <span className="font-bold font-mono text-xs px-2 text-slate-100">
-                                {line.quantity.toLocaleString('fa-IR')} {getSaleUnitLabel(line.product.unit, pack)}
+                                {line.quantity.toLocaleString('fa-IR')} {getSaleUnitLabel(line.product.unit, pack, line.product.package_type)}
                               </span>
                               <button
                                 type="button"

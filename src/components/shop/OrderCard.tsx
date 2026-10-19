@@ -22,6 +22,7 @@ import {
   calculateTotalDiscountPercent,
   calculateDiscountedPrice,
 } from '../../utils/storeDiscount';
+import { getSaleUnitLabel, getPackageFullLabel } from '../../utils/orderLine';
 
 interface OrderCardProps {
   order: Order;
@@ -315,8 +316,8 @@ export const OrderCard: React.FC<OrderCardProps> = ({
                     <Package className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                     <span className="text-slate-200 truncate">{item.name || 'کالا'}</span>
                     <span className="text-slate-500 text-[11px] num-fa">
-                      × {item.quantity.toLocaleString('fa-IR')} {item.unit || ''}
-                      {item.items_per_package && item.items_per_package > 1 && ` (${item.items_per_package.toLocaleString('fa-IR')} عددی)`}
+                      × {item.quantity.toLocaleString('fa-IR')} {getSaleUnitLabel(item.unit, item.items_per_package, item.package_type)}
+                      {item.items_per_package && item.items_per_package > 1 && ` (${getPackageFullLabel(item.unit, item.items_per_package, item.package_type)})`}
                     </span>
                   </div>
                   <div className="text-left shrink-0">

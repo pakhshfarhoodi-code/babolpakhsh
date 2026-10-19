@@ -295,6 +295,7 @@ export function useSupabaseSync({
         is_active: p.is_active ?? true,
         is_market_test: Boolean(p.is_market_test),
         description: p.description?.trim() ? p.description.trim() : (localDescMap[p.id] || undefined),
+        package_type: p.package_type && String(p.package_type).trim() ? String(p.package_type).trim() : undefined,
         discount_percent: p.discount_percent !== undefined && p.discount_percent !== null ? Number(p.discount_percent) || 0 : 0,
         discount_starts_at: p.discount_starts_at || null,
         discount_ends_at: p.discount_ends_at || null,

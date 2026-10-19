@@ -259,6 +259,7 @@ export const SupermarketPortal: React.FC = () => {
           price: prod.price * multiplier,
           quantity: numQty,
           items_per_package: prod.items_per_package,
+          package_type: prod.package_type,
           unit: prod.unit,
         };
       })

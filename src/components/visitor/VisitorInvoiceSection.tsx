@@ -387,13 +387,15 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
           discountPercent: 0,
         });
         orderTotal += lineCalc.total;
+        const packageType = it.package_type || prod?.package_type;
         return {
           id: it.id || `${ord.id}-${it.product_id}`,
           name: it.name,
           quantity: it.quantity,
           pack,
           baseUnit,
-          unit: getSaleUnitLabel(it.unit || prod?.unit, pack),
+          packageType,
+          unit: getSaleUnitLabel(it.unit || prod?.unit, pack, packageType),
           visitorPrice,
           lineTotal: lineCalc.total,
         };
@@ -427,6 +429,7 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
       const prod = productMap.get(it.product_id) || (it.product_name ? productMap.get(it.product_name.trim().toLowerCase()) : undefined);
       const pack = getPackSize(it.items_per_package || prod?.items_per_package);
       const baseUnit = getBaseUnit(it.unit || prod?.unit, pack);
+      const packageType = it.package_type || prod?.package_type;
 
       const liveVisitorPrice = Number(prod?.visitor_price ?? 0);
       const liveStorePrice = Number(prod?.price ?? 0);
@@ -464,7 +467,7 @@ export const VisitorInvoiceSection: React.FC<VisitorInvoiceSectionProps> = ({
           productName: it.product_name || prod?.name || 'کالای نامشخص',
           pack,
           baseUnit,
-          unit: getUnitColumnText(pack, baseUnit),
+          unit: getUnitColumnText(pack, baseUnit, packageType),
           totalQuantity: it.quantity,
           visitorPrice: vPrice,
           totalAmount: lineCalc.total,

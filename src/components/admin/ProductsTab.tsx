@@ -66,6 +66,7 @@ import { BrandOrderModal } from './BrandOrderModal';
 import { ProductOrderModal } from './ProductOrderModal';
 import { MarketTestLikesModal } from './MarketTestLikesModal';
 import { getProductAvailabilityTier } from '../shop/shopUtils';
+import { getPackageFullLabel, getSaleUnitLabel } from '../../utils/orderLine';
 
 interface ProductsTabProps {
   products: Product[];
@@ -156,6 +157,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   const [newProdConsumerPrice, setNewProdConsumerPrice] = useState(0);
   const [newProdStock, setNewProdStock] = useState(0);
   const [newProdUnit, setNewProdUnit] = useState('عدد');
+  const [newProdPackageType, setNewProdPackageType] = useState('');
   const [newProdItemsPerPackage, setNewProdItemsPerPackage] = useState<number | string>('');
   const [newProdImage, setNewProdImage] = useState<string>('');
   const [newProdIsMarketTest, setNewProdIsMarketTest] = useState(false);
@@ -164,6 +166,18 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   const [newProdDiscountStartsAt, setNewProdDiscountStartsAt] = useState('');
   const [newProdDiscountEndsAt, setNewProdDiscountEndsAt] = useState('');
   const [addModalError, setAddModalError] = useState<string | null>(null);
+
+  const packageOptions = useMemo(() => {
+    const baseDefaults = ['کارتن', 'بسته', 'شانه', 'کیسه', 'حلب', 'باکس', 'جعبه', 'دبه', 'طاقه', 'رول', 'پک'];
+    const set = new Set(baseDefaults);
+    (units || []).forEach((u) => {
+      const trimmed = u.trim();
+      if (trimmed && trimmed !== 'عدد' && trimmed !== 'کیلوگرم' && trimmed !== 'گرم' && trimmed !== 'لیتر' && trimmed !== 'سی‌سی') {
+        set.add(trimmed);
+      }
+    });
+    return Array.from(set);
+  }, [units]);
 
   const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -191,6 +205,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   const [editProdConsumerPrice, setEditProdConsumerPrice] = useState(0);
   const [editProdStock, setEditProdStock] = useState(0);
   const [editProdUnit, setEditProdUnit] = useState('عدد');
+  const [editProdPackageType, setEditProdPackageType] = useState('');
   const [editProdItemsPerPackage, setEditProdItemsPerPackage] = useState<number | string>('');
   const [editProdImage, setEditProdImage] = useState('');
   const [editProdIsActive, setEditProdIsActive] = useState(true);
@@ -212,6 +227,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
     setEditProdConsumerPrice(prod.consumer_price || 0);
     setEditProdStock(prod.stock);
     setEditProdUnit(prod.unit || 'عدد');
+    setEditProdPackageType(prod.package_type || '');
     setEditProdItemsPerPackage(prod.items_per_package || '');
     setEditProdImage(prod.image_url || '');
     setEditProdIsActive(prod.is_active !== false);
@@ -267,6 +283,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
           stock: editProdStock,
           unit: editProdUnit,
           items_per_package: Number(editProdItemsPerPackage) > 0 ? Number(editProdItemsPerPackage) : undefined,
+          package_type: editProdPackageType.trim() ? editProdPackageType.trim() : undefined,
           image_url: finalImage,
           is_active: editProdIsActive,
           is_market_test: editProdIsMarketTest,
@@ -718,6 +735,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
       reserved_stock: 0,
       unit: newProdUnit,
       items_per_package: Number(newProdItemsPerPackage) > 0 ? Number(newProdItemsPerPackage) : undefined,
+      package_type: newProdPackageType.trim() ? newProdPackageType.trim() : undefined,
       image_url: newProdImage.trim() || getSampleImage(newProdCat),
       is_active: true,
       is_market_test: newProdIsMarketTest,
@@ -733,6 +751,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
     setNewProdVisitorPrice(0);
     setNewProdConsumerPrice(0);
     setNewProdStock(0);
+    setNewProdPackageType('');
     setNewProdItemsPerPackage('');
     setNewProdImage('');
     setNewProdIsMarketTest(false);
@@ -1792,7 +1811,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                           <span>{product.unit}</span>
                           {product.items_per_package && product.items_per_package > 0 ? (
                             <span className="text-[11px] font-mono text-indigo-400 font-semibold">
-                              ({product.items_per_package.toLocaleString('fa-IR')} عددی)
+                              ({getPackageFullLabel(product.unit, product.items_per_package, product.package_type)})
                             </span>
                           ) : null}
                         </div>
@@ -2179,10 +2198,10 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
               <div className="space-y-3 p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800/80">
                 <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
                   <Warehouse className="w-3.5 h-3.5" />
-                  موجودی و واحد سنجش
+                  موجودی و سیستم واحدها و بسته‌بندی
                 </span>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
                   <UnitSelectPicker
                     selectedUnit={newProdUnit}
                     onSelectUnit={setNewProdUnit}
@@ -2190,14 +2209,33 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
 
                   <div>
                     <label className="block text-slate-300 mb-1 font-medium flex items-center justify-between text-xs">
-                      <span>تعداد در واحد / کارتن</span>
+                      <span>نوع بسته‌بندی مادر</span>
+                      <span className="text-[10px] text-slate-400">اختیاری</span>
+                    </label>
+                    <select
+                      value={newProdPackageType}
+                      onChange={(e) => setNewProdPackageType(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500"
+                    >
+                      <option value="">بدون بسته‌بندی / تکی</option>
+                      {packageOptions.map((pkg) => (
+                        <option key={pkg} value={pkg}>
+                          {pkg}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 mb-1 font-medium flex items-center justify-between text-xs">
+                      <span>مقدار / تعداد در هر بسته</span>
                       <span className="text-[10px] text-slate-400">اختیاری</span>
                     </label>
                     <input
                       type="number"
-                      min="1"
-                      step="1"
-                      placeholder="مثلاً ۲۴ عدد"
+                      min="0.001"
+                      step="any"
+                      placeholder="مثلاً ۲۴ یا ۲.۵"
                       value={newProdItemsPerPackage}
                       onChange={(e) => setNewProdItemsPerPackage(e.target.value)}
                       className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500 font-mono placeholder:text-slate-600"
@@ -2206,7 +2244,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
 
                   <div>
                     <label className="block text-slate-300 mb-1 font-medium text-xs">
-                      موجودی اولیه فیزیکی سردخانه
+                      موجودی اولیه سردخانه
                     </label>
                     <input
                       type="number"
@@ -2222,9 +2260,54 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                   </div>
                 </div>
 
-                <p className="text-[11px] text-slate-400 leading-relaxed bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
-                  💡 <span className="font-semibold text-slate-300">راهنما:</span> برای کالاهای بسته‌ای/کارتنی مانند بستنی، تعداد در هر کارتن (مثلاً ۲۴ عدد) را وارد کنید تا سیستم مبلغ فاکتور مشتری را از ضرب (تعداد کارتن × تعداد بستنی × قیمت) محاسبه کند. برای اقلام کیلویی مانند سوسیس و کالباس این فیلد نیازی به تکمیل ندارد.
-                </p>
+                {/* Live Preview Box */}
+                {(() => {
+                  const packNum = Number(newProdItemsPerPackage) || 1;
+                  const bu = newProdUnit || 'عدد';
+                  const pt = newProdPackageType.trim();
+                  const isPkg = packNum > 1 || Boolean(pt);
+                  const fullLabel = getPackageFullLabel(bu, packNum, pt);
+                  const saleUnit = getSaleUnitLabel(bu, packNum, pt);
+                  const unitPrice = Number(newProdPrice) || 0;
+                  const packPrice = unitPrice * (packNum > 0 ? packNum : 1);
+
+                  return (
+                    <div className="bg-slate-900/90 border border-indigo-500/30 rounded-xl p-3 text-xs space-y-1.5">
+                      <div className="flex items-center justify-between text-indigo-400 font-bold">
+                        <span className="flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                          پیش‌نمایش زنده در کاتالوگ و فاکتور
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-950/80 border border-indigo-500/30 text-indigo-300">
+                          {isPkg ? `واحد خرید: ${saleUnit}` : `واحد خرید: ${bu} (تکی)`}
+                        </span>
+                      </div>
+                      <div className="text-slate-300 leading-relaxed text-[11.5px]">
+                        {isPkg ? (
+                          <>
+                            هر <strong className="text-emerald-400 font-bold">{saleUnit}</strong> شامل <strong className="text-indigo-300 font-bold num-fa">{packNum.toLocaleString('fa-IR')} {bu}</strong> است.
+                            <br />
+                            برچسب بسته: <span className="inline-block px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-200 border border-indigo-500/40 font-bold num-fa mx-1">{fullLabel}</span>
+                            {unitPrice > 0 && (
+                              <span className="text-slate-400">
+                                | قیمت هر {saleUnit}: <strong className="text-emerald-300 font-mono font-bold">{packPrice.toLocaleString('fa-IR')} تومان</strong>
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            فروش و قیمت‌گذاری بر مبنای هر <strong className="text-emerald-400 font-bold">{bu}</strong> به صورت تکی و بدون بسته‌بندی مادر.
+                            {unitPrice > 0 && (
+                              <span className="text-slate-400 mr-2">
+                                | فی: <strong className="text-emerald-300 font-mono font-bold">{unitPrice.toLocaleString('fa-IR')} تومان</strong>
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Section 4: Product Image (Upload File, Image URL or Presets) */}
@@ -2628,7 +2711,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                   موجودی سردخانه، وضعیت عرضه و تست بازار
                 </span>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
                   <UnitSelectPicker
                     selectedUnit={editProdUnit}
                     onSelectUnit={setEditProdUnit}
@@ -2636,14 +2719,33 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
 
                   <div>
                     <label className="block text-slate-300 mb-1 font-medium flex items-center justify-between text-xs">
-                      <span>تعداد در کارتن / بسته</span>
+                      <span>نوع بسته‌بندی مادر</span>
+                      <span className="text-[10px] text-slate-400">اختیاری</span>
+                    </label>
+                    <select
+                      value={editProdPackageType}
+                      onChange={(e) => setEditProdPackageType(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500"
+                    >
+                      <option value="">بدون بسته‌بندی / تکی</option>
+                      {packageOptions.map((pkg) => (
+                        <option key={pkg} value={pkg}>
+                          {pkg}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 mb-1 font-medium flex items-center justify-between text-xs">
+                      <span>مقدار / تعداد در هر بسته</span>
                       <span className="text-[10px] text-slate-400">اختیاری</span>
                     </label>
                     <input
                       type="number"
-                      min="1"
-                      step="1"
-                      placeholder="مثلاً ۲۴ عدد"
+                      min="0.001"
+                      step="any"
+                      placeholder="مثلاً ۲۴ یا ۲.۵"
                       value={editProdItemsPerPackage}
                       onChange={(e) => setEditProdItemsPerPackage(e.target.value)}
                       className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500 font-mono placeholder:text-slate-600"
@@ -2684,9 +2786,54 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                   </div>
                 </div>
 
-                <p className="text-[11px] text-slate-400 leading-relaxed bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
-                  💡 <span className="font-semibold text-slate-300">راهنما:</span> برای کالاهای بسته‌ای/کارتنی مانند بستنی، تعداد در هر کارتن (مثلاً ۲۴ عدد) را وارد کنید تا سیستم مبلغ فاکتور مشتری را از ضرب (تعداد کارتن × تعداد بستنی × قیمت) محاسبه کند. برای اقلام کیلویی مانند سوسیس و کالباس این فیلد نیازی به تکمیل ندارد.
-                </p>
+                {/* Live Preview Box */}
+                {(() => {
+                  const packNum = Number(editProdItemsPerPackage) || 1;
+                  const bu = editProdUnit || 'عدد';
+                  const pt = editProdPackageType.trim();
+                  const isPkg = packNum > 1 || Boolean(pt);
+                  const fullLabel = getPackageFullLabel(bu, packNum, pt);
+                  const saleUnit = getSaleUnitLabel(bu, packNum, pt);
+                  const unitPrice = Number(editProdPrice) || 0;
+                  const packPrice = unitPrice * (packNum > 0 ? packNum : 1);
+
+                  return (
+                    <div className="bg-slate-900/90 border border-indigo-500/30 rounded-xl p-3 text-xs space-y-1.5">
+                      <div className="flex items-center justify-between text-indigo-400 font-bold">
+                        <span className="flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                          پیش‌نمایش زنده در کاتالوگ و فاکتور
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-950/80 border border-indigo-500/30 text-indigo-300">
+                          {isPkg ? `واحد خرید: ${saleUnit}` : `واحد خرید: ${bu} (تکی)`}
+                        </span>
+                      </div>
+                      <div className="text-slate-300 leading-relaxed text-[11.5px]">
+                        {isPkg ? (
+                          <>
+                            هر <strong className="text-emerald-400 font-bold">{saleUnit}</strong> شامل <strong className="text-indigo-300 font-bold num-fa">{packNum.toLocaleString('fa-IR')} {bu}</strong> است.
+                            <br />
+                            برچسب بسته: <span className="inline-block px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-200 border border-indigo-500/40 font-bold num-fa mx-1">{fullLabel}</span>
+                            {unitPrice > 0 && (
+                              <span className="text-slate-400">
+                                | قیمت هر {saleUnit}: <strong className="text-emerald-300 font-mono font-bold">{packPrice.toLocaleString('fa-IR')} تومان</strong>
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            فروش و قیمت‌گذاری بر مبنای هر <strong className="text-emerald-400 font-bold">{bu}</strong> به صورت تکی و بدون بسته‌بندی مادر.
+                            {unitPrice > 0 && (
+                              <span className="text-slate-400 mr-2">
+                                | فی: <strong className="text-emerald-300 font-mono font-bold">{unitPrice.toLocaleString('fa-IR')} تومان</strong>
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Market Test Toggle & Likes Section */}
                 <div className="pt-3 border-t border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-slate-900/50 p-3 rounded-xl border border-slate-800/80">

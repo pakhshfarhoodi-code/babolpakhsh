@@ -796,6 +796,7 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
     const packaged = isPackaged(pack);
     const rawUnit = (item as any).unit || product?.unit || settings.default_unit_name || 'عدد';
     const baseUnit = getBaseUnit(rawUnit, pack);
+    const packageType = (item as any).package_type || product?.package_type;
 
     const qty = Number(item.quantity) || 0;
     const { discountedUnitPrice, total: lineTotal } = computeLine({
@@ -843,7 +844,7 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
                     {qty.toLocaleString('fa-IR')}
                   </span>
                   {packaged && (
-                    <span className="text-[10px] text-slate-500 mr-1 font-normal">{getSaleUnitLabel(rawUnit, pack)}</span>
+                    <span className="text-[10px] text-slate-500 mr-1 font-normal">{getSaleUnitLabel(rawUnit, pack, packageType)}</span>
                   )}
                 </td>
               );
@@ -854,7 +855,7 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
                   key={col.key}
                   className={`${tableRowPaddingClass} text-center num-fa text-slate-700 ${borderClass} font-medium`}
                 >
-                  {getUnitColumnText(pack, baseUnit)}
+                  {getUnitColumnText(pack, baseUnit, packageType)}
                 </td>
               );
 

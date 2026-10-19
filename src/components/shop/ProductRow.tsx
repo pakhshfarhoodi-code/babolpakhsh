@@ -16,6 +16,7 @@ import {
   isPackaged,
   getBaseUnit,
   getSaleUnitLabel,
+  getPackageFullLabel,
 } from '../../utils/orderLine';
 
 interface ProductRowProps {
@@ -183,7 +184,7 @@ export const ProductRow: React.FC<ProductRowProps> = ({
               ) : null}
               {product.items_per_package && product.items_per_package > 0 ? (
                 <span className="shrink-0 whitespace-nowrap px-1.5 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 font-bold border border-indigo-500/30 text-[11px] num-fa">
-                  {getSaleUnitLabel(product.unit, product.items_per_package)} {product.items_per_package.toLocaleString('fa-IR')} عددی
+                  {getPackageFullLabel(product.unit, product.items_per_package, product.package_type)}
                 </span>
               ) : null}
             </div>
@@ -394,11 +395,11 @@ export const ProductRow: React.FC<ProductRowProps> = ({
                       bold
                       className="text-lg sm:text-xl font-black"
                     />
-                    <span className="text-xs text-slate-400">/ هر {product.unit}</span>
+                    <span className="text-xs text-slate-400">/ هر {getSaleUnitLabel(product.unit, product.items_per_package, product.package_type)}</span>
                     {product.items_per_package && product.items_per_package > 0 && (
                       <span className="text-xs text-indigo-300 bg-indigo-500/15 border border-indigo-500/30 px-2 py-0.5 rounded-lg font-bold num-fa inline-flex items-center gap-1">
-                        <span>{product.items_per_package.toLocaleString('fa-IR')} عددی</span>
-                        <span className="text-indigo-400 font-normal">(دانه‌ای <Price value={displayPrice} size="sm" tone="violet" unit="تومان" />)</span>
+                        <span>{getPackageFullLabel(product.unit, product.items_per_package, product.package_type)}</span>
+                        <span className="text-indigo-400 font-normal">(هر {product.unit} <Price value={discountedPrice} size="sm" tone="violet" unit="تومان" />)</span>
                       </span>
                     )}
                   </div>
@@ -417,7 +418,7 @@ export const ProductRow: React.FC<ProductRowProps> = ({
                       />
                       {product.items_per_package && product.items_per_package > 0 && (
                         <div className="text-[10px] text-amber-400/80 num-fa mt-0.5">
-                          (هر عدد: <Price value={product.consumer_price} size="sm" tone="amber" unit="تومان" />)
+                          (هر {product.unit}: <Price value={product.consumer_price} size="sm" tone="amber" unit="تومان" />)
                         </div>
                       )}
                     </div>

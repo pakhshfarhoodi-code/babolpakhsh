@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Order, Product } from '../../types';
 import { formatPrice, roundQty } from './shopUtils';
-import { getPackSize, getBaseUnit, getSaleUnitLabel } from '../../utils/orderLine';
+import { getPackSize, getBaseUnit, getSaleUnitLabel, getPackageFullLabel } from '../../utils/orderLine';
 import { useApp } from '../../context/AppContext';
 import {
   X,
@@ -31,6 +31,7 @@ interface EditableItem {
   quantity: number;
   unit?: string;
   items_per_package?: number;
+  package_type?: string;
 }
 
 export const EditOrderModal: React.FC<EditOrderModalProps> = ({
@@ -54,6 +55,7 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
         quantity: it.quantity,
         unit: it.unit || prod?.unit,
         items_per_package: it.items_per_package || prod?.items_per_package,
+        package_type: it.package_type || prod?.package_type,
       };
     });
   });
@@ -240,7 +242,7 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({
                         })()}
                         <p className="text-[10px] text-slate-400 mt-0.5">
                           قیمت واحد: {formatPrice(it.price)}
-                          {pack > 1 && ` (${getSaleUnitLabel(it.unit, pack)} ${pack} عددی)`}
+                          {pack > 1 && ` (${getPackageFullLabel(it.unit, pack, it.package_type || products.find((p) => p.id === it.productId)?.package_type)})`}
                         </p>
                       </div>
 

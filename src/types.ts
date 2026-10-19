@@ -39,6 +39,7 @@ export interface Product {
   reserved_stock: number;
   unit: string;
   items_per_package?: number; // فیلد اختیاری تعداد (تعداد در کارتن/بسته)
+  package_type?: string; // نوع بسته‌بندی مادر اختیاری (کارتن، بسته، شانه، کیسه، حلب و...)
   image_url: string;
   is_active: boolean;
   is_market_test?: boolean; // قابلیت تست بازار و اعلام به زودی
@@ -148,6 +149,7 @@ export interface OrderItem {
   price: number;
   quantity: number;
   items_per_package?: number;
+  package_type?: string;
   unit?: string;
   discount_percent?: number | null;
   created_at?: string;
@@ -223,6 +225,7 @@ export interface LoadingBillItem {
   visitor_price?: number;
   store_price?: number;
   items_per_package?: number;
+  package_type?: string;
   unit?: string;
   created_at?: string;
 }

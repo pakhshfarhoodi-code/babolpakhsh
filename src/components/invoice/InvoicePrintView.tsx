@@ -67,6 +67,7 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
       productName: string;
       pack: number;
       baseUnit: string;
+      packageType?: string;
       saleUnit: string;
       totalQuantity: number;
       visitorPrice: number;
@@ -80,7 +81,8 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
       const prod = productMap.get(it.product_id) || (it.product_name ? productMap.get(it.product_name.trim().toLowerCase()) : undefined);
       const pack = getPackSize(it.items_per_package || prod?.items_per_package);
       const baseUnit = getBaseUnit(it.unit || prod?.unit, pack);
-      const saleUnit = getSaleUnitLabel(it.unit || prod?.unit, pack);
+      const packageType = it.package_type || prod?.package_type;
+      const saleUnit = getSaleUnitLabel(it.unit || prod?.unit, pack, packageType);
 
       const liveVisitorPrice = Number(prod?.visitor_price ?? 0);
       const liveStorePrice = Number(prod?.price ?? 0);
@@ -121,6 +123,7 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
           productName: it.product_name || prod?.name || 'کالای نامشخص',
           pack,
           baseUnit,
+          packageType,
           saleUnit,
           totalQuantity: it.quantity,
           visitorPrice: vPrice,
@@ -347,7 +350,7 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
                       )}
                     </td>
                     <td className="py-2.5 px-3 text-center text-slate-600 font-medium">
-                      {getUnitColumnText(item.pack, item.baseUnit)}
+                      {getUnitColumnText(item.pack, item.baseUnit, item.packageType)}
                     </td>
                     <td className="py-2.5 px-3 text-left font-bold text-slate-800">
                       {formatPrice(item.visitorPrice)}
@@ -563,6 +566,7 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
                         const prod = productMap.get(it.product_id);
                         const pack = getPackSize(it.items_per_package || prod?.items_per_package);
                         const baseUnit = getBaseUnit(it.unit || prod?.unit, pack);
+                        const packageType = it.package_type || prod?.package_type;
 
                         return (
                           <tr key={it.id || idx} className="hover:bg-slate-50/50">
@@ -571,11 +575,11 @@ export const InvoicePrintView: React.FC<InvoicePrintViewProps> = ({
                             <td className="py-2 px-3 text-center font-bold text-slate-900">
                               <span className="font-mono">{Number(it.quantity).toLocaleString('fa-IR')}</span>
                               {isPackaged(pack) && (
-                                <span className="text-[10px] text-slate-500 font-normal mr-1">{getSaleUnitLabel(it.unit || prod?.unit, pack)}</span>
+                                <span className="text-[10px] text-slate-500 font-normal mr-1">{getSaleUnitLabel(it.unit || prod?.unit, pack, packageType)}</span>
                               )}
                             </td>
                             <td className="py-2 px-3 text-center text-slate-600 font-medium">
-                              {getUnitColumnText(pack, baseUnit)}
+                              {getUnitColumnText(pack, baseUnit, packageType)}
                             </td>
                             <td className="py-2 px-3 text-slate-600 text-[11px]">
                               {it.line_note || '-'}

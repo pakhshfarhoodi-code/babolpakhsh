@@ -29,6 +29,7 @@ export interface CreateOrderPayload {
     price: number;
     quantity: number;
     items_per_package?: number | string | null;
+    package_type?: string;
     unit?: string;
   }[];
 }
@@ -276,6 +277,7 @@ export function useOrders({
             price: i.price,
             quantity: i.quantity,
             items_per_package: getPackSize(i.items_per_package ?? prod?.items_per_package),
+            package_type: i.package_type ?? prod?.package_type,
             unit: i.unit ?? prod?.unit,
           };
         }),
@@ -860,6 +862,7 @@ export function useOrders({
         price: number;
         quantity: number;
         items_per_package?: number | string | null;
+        package_type?: string;
         unit?: string;
       }[]
     ): Promise<{ success: boolean; message: string }> => {
@@ -921,6 +924,7 @@ export function useOrders({
           price: i.price,
           quantity: i.quantity,
           items_per_package: getPackSize(i.items_per_package ?? prod?.items_per_package),
+          package_type: i.package_type ?? prod?.package_type,
           unit: i.unit ?? prod?.unit,
         };
       });
@@ -954,6 +958,7 @@ export function useOrders({
               price: i.price,
               quantity: i.quantity,
               items_per_package: getPackSize(i.items_per_package ?? prod?.items_per_package),
+              package_type: i.package_type ?? prod?.package_type,
               unit: i.unit ?? prod?.unit,
             };
           });
@@ -984,6 +989,7 @@ export function useOrders({
                 price: i.price,
                 quantity: i.quantity,
                 items_per_package: getPackSize(i.items_per_package ?? prod?.items_per_package),
+                package_type: i.package_type ?? prod?.package_type,
                 unit: i.unit ?? prod?.unit,
               };
             });

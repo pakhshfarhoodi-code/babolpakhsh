@@ -25,7 +25,7 @@ import {
   getStoreFounderDiscountUserEnabled,
   setStoreFounderDiscountUserEnabled,
 } from '../../utils/storeDiscount';
-import { getSaleUnitLabel } from '../../utils/orderLine';
+import { getSaleUnitLabel, getPackageFullLabel } from '../../utils/orderLine';
 
 interface CartSheetProps {
   isOpen: boolean;
@@ -264,7 +264,7 @@ export const CartSheet: React.FC<CartSheetProps> = ({
                   <div className="text-[11px] text-slate-400 mt-0.5 space-y-0.5">
                     {multiplier > 1 ? (
                       <div className="flex items-baseline gap-1">
-                        <span>فی هر {getSaleUnitLabel(product.unit, multiplier)}: </span>
+                        <span>فی هر {getSaleUnitLabel(product.unit, multiplier, product.package_type)}: </span>
                         {hasDiscount && (
                           <span className="line-through text-slate-500 font-mono text-[10px]">
                             {formatPrice(originalUnitPrice * multiplier)}
@@ -294,7 +294,7 @@ export const CartSheet: React.FC<CartSheetProps> = ({
                   <Price value={discountedRowTotal} size="sm" tone="success" unit="تومان" bold className="block" />
                   {multiplier > 1 && (
                     <span className="text-[10px] text-indigo-400 num-fa block">
-                      {(quantity * multiplier).toLocaleString('fa-IR')} عدد
+                      {(quantity * multiplier).toLocaleString('fa-IR')} {product.unit}
                     </span>
                   )}
                 </div>
@@ -303,7 +303,7 @@ export const CartSheet: React.FC<CartSheetProps> = ({
               <div className="flex items-center justify-between pt-1 border-t border-slate-800/80">
                 <span className="text-xs text-slate-400 font-medium num-fa">
                   {multiplier > 1
-                    ? `${quantity.toLocaleString('fa-IR')} ${getSaleUnitLabel(product.unit, multiplier)} (${multiplier.toLocaleString('fa-IR')} عددی)`
+                    ? `${quantity.toLocaleString('fa-IR')} ${getSaleUnitLabel(product.unit, multiplier, product.package_type)} (${getPackageFullLabel(product.unit, multiplier, product.package_type)})`
                     : `${quantity.toLocaleString('fa-IR')} ${product.unit}`}
                 </span>
                 <QuantityStepper

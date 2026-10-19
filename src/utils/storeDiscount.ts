@@ -340,3 +340,81 @@ export function getStoreOrderDiscountPlan(args: {
     storeWantsPickup,
   };
 }
+
+
+// ───────────────────────────────────────────────────────────────────────────
+// تخفیف کالا + تخفیف سفارش (تحویل حضوری / ورودی جدید)
+// فرمول یکسان با فاکتور (computeLine در orderLine.ts) و دیتابیس:
+//   قیمت پس از تخفیف کالا = round(قیمت × (100 − درصد کالا) / 100)
+//   قیمت نهایی           = round(قیمت پس از تخفیف کالا × (100 − درصد سفارش) / 100)
+// تخفیف سفارش فقط یکی است (بالاترین؛ در تساوی «حضوری») — مطابق تریگر دیتابیس.
+// تخفیف کالا فقط روی «قیمت خرید فروشگاه» اعمال می‌شود.
+// ───────────────────────────────────────────────────────────────────────────
+type ProductDiscountFields = {
+  discount_percent?: number | null;
+  discount_starts_at?: string | null;
+  discount_ends_at?: string | null;
+};
+
+export interface ProductDiscountState {
+  state: 'none' | 'active' | 'scheduled' | 'expired';
+  percent: number;
+  startsAt?: Date;
+  endsAt?: Date;
+}
+
+export function getProductDiscountState(product: ProductDiscountFields, now: Date = new Date()): ProductDiscountState {
+  const raw = Math.min(100, Math.max(0, Number(product?.discount_percent) || 0));
+  if (raw <= 0) return { state: 'none', percent: 0 };
+  const start = product.discount_starts_at ? new Date(product.discount_starts_at) : undefined;
+  const end = product.discount_ends_at ? new Date(product.discount_ends_at) : undefined;
+  const validStart = start && !isNaN(start.getTime()) ? start : undefined;
+  const validEnd = end && !isNaN(end.getTime()) ? end : undefined;
+  if (validStart && now < validStart) return { state: 'scheduled', percent: raw, startsAt: validStart, endsAt: validEnd };
+  if (validEnd && now > validEnd) return { state: 'expired', percent: raw, startsAt: validStart, endsAt: validEnd };
+  return { state: 'active', percent: raw, startsAt: validStart, endsAt: validEnd };
+}
+
+export interface ProductPriceBreakdown {
+  basePrice: number;          // قیمت پایه‌ی هر واحد
+  productPercent: number;     // تخفیف کالا (فعال)
+  orderPercent: number;       // تخفیف سفارش (حضوری یا ورودی جدید)
+  orderType: 'pickup' | 'founder' | 'none';
+  afterProductPrice: number;  // پس از تخفیف کالا
+  finalPrice: number;         // قیمت نهایی هر واحد
+  totalPercent: number;       // درصد مؤثر کل (نسبت به قیمت پایه)
+  hasDiscount: boolean;
+}
+
+export function getProductPriceBreakdown(
+  basePrice: number,
+  product: ProductDiscountFields,
+  pickupPercent: number = 0,
+  founderPercent: number = 0,
+  now: Date = new Date()
+): ProductPriceBreakdown {
+  const base = Number(basePrice) || 0;
+  const productPercent = getProductDiscountPercent(
+    {
+      discount_percent: Number(product?.discount_percent) || 0,
+      discount_starts_at: product?.discount_starts_at,
+      discount_ends_at: product?.discount_ends_at,
+    },
+    now
+  );
+  const resolved = resolveOrderDiscounts(pickupPercent, founderPercent);
+  const orderPercent = resolved.pickupPercent + resolved.founderPercent;
+  const afterProductPrice = Math.round((base * (100 - productPercent)) / 100);
+  const finalPrice = Math.round((afterProductPrice * (100 - orderPercent)) / 100);
+  const totalPercent = base > 0 ? Number((((base - finalPrice) / base) * 100).toFixed(1)) : 0;
+  return {
+    basePrice: base,
+    productPercent,
+    orderPercent,
+    orderType: resolved.appliedType,
+    afterProductPrice,
+    finalPrice,
+    totalPercent,
+    hasDiscount: finalPrice < base,
+  };
+}

@@ -20,6 +20,8 @@ import {
   calculateTotalDiscountPercent,
   calculateDiscountedPrice,
   getStoreFounderDiscountStatus,
+  getProductPriceBreakdown,
+  resolveOrderDiscounts,
   getStoreFounderDiscountUserEnabled,
   setStoreFounderDiscountUserEnabled,
 } from '../../utils/storeDiscount';
@@ -99,13 +101,10 @@ export const CartSheet: React.FC<CartSheetProps> = ({
   const founderEnabled = founderStatus.isFounderQuotaAvailable && founderUserEnabled;
   const founderPercent = founderEnabled ? founderStatus.founderPercent : 0;
 
-  const totalDiscountPercent = calculateTotalDiscountPercent(
-    pickupEnabled ? pickupPercent : 0,
-    founderPercent,
-    0
-  );
+  const orderPickupPercent = pickupEnabled ? pickupPercent : 0;
 
   // Derive cart items with full product data and discounted pricing
+  // (تخفیف کالا + تخفیف سفارش، با همان فرمول فاکتور)
   const cartEntries = Object.entries(cart)
     .map(([productId, quantity]) => {
       const numQty = Number(quantity);
@@ -113,11 +112,16 @@ export const CartSheet: React.FC<CartSheetProps> = ({
       if (!product || numQty <= 0) return null;
       const multiplier = product.items_per_package && product.items_per_package > 0 ? product.items_per_package : 1;
       const available = Math.round(Math.max(0, product.stock - product.reserved_stock) * 1000) / 1000;
-      
+
+      const bd = getProductPriceBreakdown(product.price, product, orderPickupPercent, founderPercent);
       const originalUnitPrice = product.price;
-      const discountedUnitPrice = calculateDiscountedPrice(originalUnitPrice, totalDiscountPercent);
-      const originalRowTotal = originalUnitPrice * numQty * multiplier;
-      const discountedRowTotal = discountedUnitPrice * numQty * multiplier;
+      const discountedUnitPrice = bd.finalPrice;
+      // گرد کردن هر ردیف دقیقاً مثل فاکتور (computeLine / getOrderPricing)
+      const originalRowTotal = Math.round(numQty * multiplier * originalUnitPrice);
+      const afterProductRowTotal = Math.round(numQty * multiplier * bd.afterProductPrice);
+      const discountedRowTotal = Math.round(numQty * multiplier * discountedUnitPrice);
+      const productDiscountRow = originalRowTotal - afterProductRowTotal;
+      const orderDiscountRow = afterProductRowTotal - discountedRowTotal;
 
       return {
         product,
@@ -130,13 +134,26 @@ export const CartSheet: React.FC<CartSheetProps> = ({
         originalRowTotal,
         discountedRowTotal,
         rowTotal: discountedRowTotal,
+        hasDiscount: bd.hasDiscount,
+        productPercent: bd.productPercent,
+        productDiscountRow,
+        orderDiscountRow,
       };
     })
     .filter((item): item is NonNullable<typeof item> => item !== null);
 
   const originalTotalAmount = cartEntries.reduce((sum, item) => sum + item.originalRowTotal, 0);
   const payableTotalAmount = cartEntries.reduce((sum, item) => sum + item.discountedRowTotal, 0);
+  const productDiscountTotal = cartEntries.reduce((sum, item) => sum + item.productDiscountRow, 0);
+  const orderDiscountTotal = cartEntries.reduce((sum, item) => sum + item.orderDiscountRow, 0);
   const discountAmount = originalTotalAmount - payableTotalAmount;
+  const orderResolved = resolveOrderDiscounts(orderPickupPercent, founderPercent);
+  const orderAppliedPercent = orderResolved.pickupPercent + orderResolved.founderPercent;
+  const orderAppliedLabel = orderResolved.appliedType === 'pickup' ? 'تخفیف تحویل حضوری' : 'تخفیف ورودی جدید';
+  // درصد مؤثر کل تخفیف نسبت به جمع قبل از تخفیف
+  const totalDiscountPercent = originalTotalAmount > 0
+    ? Number(((discountAmount / originalTotalAmount) * 100).toFixed(1))
+    : 0;
   const totalItemsCount = Math.round(cartEntries.reduce((sum, item) => sum + item.quantity, 0) * 1000) / 1000;
 
   // Shared Cart Content Layout
@@ -225,7 +242,7 @@ export const CartSheet: React.FC<CartSheetProps> = ({
             <p className="text-xs font-semibold text-slate-400">سبد خالی است.</p>
           </div>
         ) : (
-          cartEntries.map(({ product, quantity, available, multiplier, originalUnitPrice, discountedUnitPrice, unitCartonPrice, originalRowTotal, discountedRowTotal }) => (
+          cartEntries.map(({ product, quantity, available, multiplier, originalUnitPrice, discountedUnitPrice, unitCartonPrice, originalRowTotal, discountedRowTotal, hasDiscount, productPercent }) => (
             <div
               key={product.id}
               className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-2"
@@ -233,6 +250,11 @@ export const CartSheet: React.FC<CartSheetProps> = ({
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <h4 className="text-xs font-bold text-slate-100 truncate">{product.name}</h4>
+                  {productPercent > 0 && (
+                    <span className="inline-block mt-0.5 text-[10px] font-bold text-white bg-emerald-600 px-1.5 py-0.5 rounded-md num-fa">
+                      تخفیف کالا {productPercent.toLocaleString('fa-IR')}٪
+                    </span>
+                  )}
                   {product.description?.trim() && (
                     <div className="mt-1.5 p-2 rounded-lg bg-amber-950/40 border border-amber-500/30 text-[10.5px] leading-relaxed text-amber-200/90 whitespace-pre-wrap break-words">
                       <span className="font-bold text-amber-300 ml-1">توضیح کالا:</span>
@@ -243,7 +265,7 @@ export const CartSheet: React.FC<CartSheetProps> = ({
                     {multiplier > 1 ? (
                       <div className="flex items-baseline gap-1">
                         <span>فی هر {getSaleUnitLabel(product.unit, multiplier)}: </span>
-                        {totalDiscountPercent > 0 && (
+                        {hasDiscount && (
                           <span className="line-through text-slate-500 font-mono text-[10px]">
                             {formatPrice(originalUnitPrice * multiplier)}
                           </span>
@@ -253,7 +275,7 @@ export const CartSheet: React.FC<CartSheetProps> = ({
                     ) : (
                       <div className="flex items-baseline gap-1">
                         <span>فی: </span>
-                        {totalDiscountPercent > 0 && (
+                        {hasDiscount && (
                           <span className="line-through text-slate-500 font-mono text-[10px]">
                             {formatPrice(originalUnitPrice)}
                           </span>
@@ -264,7 +286,7 @@ export const CartSheet: React.FC<CartSheetProps> = ({
                   </div>
                 </div>
                 <div className="text-left shrink-0">
-                  {totalDiscountPercent > 0 && (
+                  {hasDiscount && (
                     <span className="line-through text-slate-500 font-mono text-[10px] block text-left">
                       {formatPrice(originalRowTotal)}
                     </span>
@@ -343,8 +365,8 @@ export const CartSheet: React.FC<CartSheetProps> = ({
             </div>
           )}
 
-          {/* Discount Breakdown when totalDiscountPercent > 0 */}
-          {totalDiscountPercent > 0 && (
+          {/* Discount breakdown: تخفیف کالاها + تخفیف سفارش + مجموع */}
+          {discountAmount > 0 && (
             <div className="p-2 rounded-xl bg-slate-900 border border-slate-800/80 space-y-1 text-xs">
               <div className="flex items-center justify-between text-slate-400">
                 <span>جمع کل قبل از تخفیف:</span>
@@ -352,14 +374,27 @@ export const CartSheet: React.FC<CartSheetProps> = ({
                   {formatPrice(originalTotalAmount)} تومان
                 </span>
               </div>
-              <div className="flex items-center justify-between text-emerald-400 font-bold">
-                <span className="flex items-center gap-1">
-                  <Percent className="w-3 h-3 text-emerald-400" />
-                  <span>تخفیف ویژه اختصاصی ({totalDiscountPercent}٪):</span>
-                </span>
-                <span className="font-mono font-black">
-                  -{formatPrice(discountAmount)} تومان
-                </span>
+              {productDiscountTotal > 0 && (
+                <div className="flex items-center justify-between text-emerald-400">
+                  <span className="flex items-center gap-1">
+                    <Percent className="w-3 h-3 text-emerald-400" />
+                    <span>تخفیف کالاها:</span>
+                  </span>
+                  <span className="font-mono font-bold">-{formatPrice(productDiscountTotal)} تومان</span>
+                </div>
+              )}
+              {orderDiscountTotal > 0 && (
+                <div className="flex items-center justify-between text-emerald-400">
+                  <span className="flex items-center gap-1">
+                    <Percent className="w-3 h-3 text-emerald-400" />
+                    <span>{orderAppliedLabel} ({orderAppliedPercent.toLocaleString('fa-IR')}٪):</span>
+                  </span>
+                  <span className="font-mono font-bold">-{formatPrice(orderDiscountTotal)} تومان</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between text-emerald-300 font-black border-t border-slate-800 pt-1">
+                <span>مجموع تخفیف ({totalDiscountPercent.toLocaleString('fa-IR')}٪):</span>
+                <span className="font-mono">-{formatPrice(discountAmount)} تومان</span>
               </div>
             </div>
           )}
@@ -367,7 +402,7 @@ export const CartSheet: React.FC<CartSheetProps> = ({
           {/* Summary Row */}
           <div className="flex items-center justify-between text-xs sm:text-sm">
             <span className="font-bold text-slate-200">
-              {totalDiscountPercent > 0 ? 'مبلغ قابل پرداخت:' : 'جمع کل سفارش:'}
+              {discountAmount > 0 ? 'مبلغ قابل پرداخت:' : 'جمع کل سفارش:'}
             </span>
             <Price
               value={payableTotalAmount}

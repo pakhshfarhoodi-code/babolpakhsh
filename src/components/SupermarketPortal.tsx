@@ -13,8 +13,7 @@ import {
 } from './shop/shopUtils';
 import {
   getStorePickupDiscountEnabled,
-  getStoreFounderDiscountStatus,
-} from '../utils/storeDiscount';
+  getStoreFounderDiscountStatus, resolveOrderDiscounts } from '../utils/storeDiscount';
 import {
   Search,
   X,
@@ -283,8 +282,9 @@ export const SupermarketPortal: React.FC = () => {
         supermarketId: currentStore?.id || '',
         visitorId: assignedVisitor?.id || 'direct',
         orderSource: 'supermarket',
-        pickupDiscountPercent: isPickupEnabled ? pickupPercent : 0,
-        founderDiscountPercent: founderPercent,
+        // فقط یکی از «حضوری» یا «ورودی جدید» اعمال می‌شود (همان قانون دیتابیس)
+        pickupDiscountPercent: resolveOrderDiscounts(isPickupEnabled ? pickupPercent : 0, founderPercent).pickupPercent,
+        founderDiscountPercent: resolveOrderDiscounts(isPickupEnabled ? pickupPercent : 0, founderPercent).founderPercent,
         items,
       });
 

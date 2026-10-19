@@ -8,8 +8,7 @@ import { Package, Maximize2, X, Tag, Warehouse, Heart, Clock, Sparkles, Check, I
 import { SafeImage } from '../common/SafeImage';
 import {
   getStorePickupDiscountEnabled,
-  calculateTotalDiscountPercent,
-  calculateDiscountedPrice,
+  getProductPriceBreakdown,
   getStoreFounderDiscountStatus,
 } from '../../utils/storeDiscount';
 import {
@@ -83,13 +82,13 @@ export const ProductRow: React.FC<ProductRowProps> = ({
   const founderEnabled = priceMode === 'store' && founderStatus.isFounderActive;
   const founderPercent = founderEnabled ? founderStatus.founderPercent : 0;
 
-  const totalDiscountPercent = calculateTotalDiscountPercent(
-    pickupEnabled ? pickupPercent : 0,
-    founderPercent,
-    0
-  );
-
-  const discountedPrice = calculateDiscountedPrice(displayPrice, totalDiscountPercent);
+  // تخفیف کالا + تخفیف سفارش (فقط در حالت فروشگاه؛ ویزیتور تخفیفی ندارد)
+  const priceInfo = priceMode === 'store'
+    ? getProductPriceBreakdown(displayPrice, product, pickupEnabled ? pickupPercent : 0, founderPercent)
+    : null;
+  const discountedPrice = priceInfo ? priceInfo.finalPrice : displayPrice;
+  const totalDiscountPercent = priceInfo ? priceInfo.totalPercent : 0;
+  const packMultiplier = product.items_per_package && product.items_per_package > 0 ? product.items_per_package : 1;
 
   const itemLikes = productLikes.filter((pl) => pl.product_id === product.id);
   const hasLiked = itemLikes.some((pl) => pl.supermarket_id === shopInfo.id);
@@ -208,8 +207,13 @@ export const ProductRow: React.FC<ProductRowProps> = ({
                     className="truncate text-[13px] sm:text-[14px]"
                   />
                   <span className="text-[10px] font-bold text-white bg-emerald-600 px-1.5 py-0.5 rounded-md border border-emerald-500 shadow-xs shrink-0">
-                    ({totalDiscountPercent}٪ تخفیف)
+                    ({totalDiscountPercent.toLocaleString('fa-IR')}٪ تخفیف)
                   </span>
+                  {priceInfo && priceInfo.productPercent > 0 && priceInfo.orderPercent > 0 && (
+                    <span className="basis-full text-[10px] text-emerald-300/90 num-fa">
+                      تخفیف کالا {priceInfo.productPercent.toLocaleString('fa-IR')}٪ + {priceInfo.orderType === 'pickup' ? 'تحویل حضوری' : 'ورودی جدید'} {priceInfo.orderPercent.toLocaleString('fa-IR')}٪
+                    </span>
+                  )}
                 </>
               ) : (
                 <Price
@@ -377,8 +381,13 @@ export const ProductRow: React.FC<ProductRowProps> = ({
                     {priceMode === 'visitor' ? 'قیمت خرید ویزیتور:' : 'قیمت خرید فروشگاه:'}
                   </span>
                   <div className="flex items-baseline gap-1.5 flex-wrap">
+                    {totalDiscountPercent > 0 && (
+                      <span className="line-through text-slate-500 text-xs font-mono">
+                        {formatPrice(displayPrice * packMultiplier)}
+                      </span>
+                    )}
                     <Price
-                      value={displayPrice * (product.items_per_package && product.items_per_package > 0 ? product.items_per_package : 1)}
+                      value={discountedPrice * packMultiplier}
                       size="lg"
                       tone={isMarketTest ? 'violet' : 'success'}
                       unit="تومان"

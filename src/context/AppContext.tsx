@@ -195,10 +195,10 @@ interface AppContextType {
   updateSupermarket: (id: string, payload: UpdateSupermarketPayload) => Promise<{ success: boolean; message: string }>;
   deleteSupermarket: (id: string) => Promise<{ success: boolean; message: string }>;
   toggleSupermarketApproval: (id: string, currentStatus: boolean) => Promise<{ success: boolean; message: string; newStatus: boolean }>;
-  resetSupermarketPassword: (id: string, newPassword?: string) => Promise<{ success: boolean; message: string }>;
+  resetSupermarketPassword: (id: string, newPassword?: string) => Promise<{ success: boolean; message: string; temporaryPassword?: string }>;
   updateVisitor: (id: string, payload: UpdateVisitorPayload) => Promise<{ success: boolean; message: string }>;
   deleteVisitor: (id: string) => Promise<{ success: boolean; message: string }>;
-  resetVisitorPassword: (id: string, newPassword?: string) => Promise<{ success: boolean; message: string }>;
+  resetVisitorPassword: (id: string, newPassword?: string) => Promise<{ success: boolean; message: string; temporaryPassword?: string }>;
   createStaffAccount: (payload: CreateStaffAccountPayload) => Promise<CreateStaffAccountResult>;
   resetToDefaults: () => void;
   isOnlineDb: boolean;
@@ -822,25 +822,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [setSupermarkets]);
 
-  // Reset Supermarket Password (defaults to 123456 as requested)
-  const resetSupermarketPassword = useCallback(async (id: string, newPassword: string = '123456'): Promise<{ success: boolean; message: string }> => {
+  // Reset Supermarket Password (supports temporary password generation)
+  const resetSupermarketPassword = useCallback(async (id: string, newPassword?: string): Promise<{ success: boolean; message: string; temporaryPassword?: string }> => {
     try {
       const target = supermarkets.find((s) => s.id === id);
       if (!target) {
         return { success: false, message: 'مشتری مورد نظر یافت نشد.' };
       }
 
-      if (!newPassword || newPassword.trim().length < MIN_PASSWORD_LENGTH) {
-        return { success: false, message: `رمز عبور باید حداقل ${MIN_PASSWORD_LENGTH} کاراکتر باشد.` };
+      if (newPassword && newPassword.trim().length < 8) {
+        return { success: false, message: 'رمز عبور مشخص‌شده باید حداقل ۸ کاراکتر باشد.' };
       }
 
       if (isSupabaseConfigured && supabase) {
+        const payload: { action: string; userId: string; password?: string } = {
+          action: 'reset_password',
+          userId: id,
+        };
+        if (newPassword && newPassword.trim()) {
+          payload.password = newPassword.trim();
+        }
+
         const { data, error } = await supabase.functions.invoke('create-staff-account', {
-          body: {
-            action: 'reset_password',
-            userId: id,
-            password: newPassword,
-          },
+          body: payload,
         });
 
         if (error || data?.success === false) {
@@ -850,11 +854,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             message: errMsg,
           };
         }
+
+        return {
+          success: true,
+          message: data?.message || `رمز عبور فروشگاه «${target.name}» با موفقیت بازنشانی شد.`,
+          temporaryPassword: data?.temporaryPassword,
+        };
       }
 
       return {
         success: true,
-        message: `رمز عبور فروشگاه «${target.name}» با موفقیت به ${newPassword} تغییر یافت.`,
+        message: `رمز عبور فروشگاه «${target.name}» با موفقیت تغییر یافت.`,
+        temporaryPassword: newPassword || 'Farhoodi@2026',
       };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در بازیابی رمز عبور';
@@ -1014,25 +1025,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [setVisitors, setSupermarkets, orders]);
 
-  // Reset Visitor Password (defaults to 123456 as requested)
-  const resetVisitorPassword = useCallback(async (id: string, newPassword: string = '123456'): Promise<{ success: boolean; message: string }> => {
+  // Reset Visitor Password (supports temporary password generation)
+  const resetVisitorPassword = useCallback(async (id: string, newPassword?: string): Promise<{ success: boolean; message: string; temporaryPassword?: string }> => {
     try {
       const target = visitors.find((v) => v.id === id);
       if (!target) {
         return { success: false, message: 'ویزیتور مورد نظر یافت نشد.' };
       }
 
-      if (!newPassword || newPassword.trim().length < MIN_PASSWORD_LENGTH) {
-        return { success: false, message: `رمز عبور باید حداقل ${MIN_PASSWORD_LENGTH} کاراکتر باشد.` };
+      if (newPassword && newPassword.trim().length < 8) {
+        return { success: false, message: 'رمز عبور مشخص‌شده باید حداقل ۸ کاراکتر باشد.' };
       }
 
       if (isSupabaseConfigured && supabase) {
+        const payload: { action: string; userId: string; password?: string } = {
+          action: 'reset_password',
+          userId: id,
+        };
+        if (newPassword && newPassword.trim()) {
+          payload.password = newPassword.trim();
+        }
+
         const { data, error } = await supabase.functions.invoke('create-staff-account', {
-          body: {
-            action: 'reset_password',
-            userId: id,
-            password: newPassword,
-          },
+          body: payload,
         });
 
         if (error || data?.success === false) {
@@ -1042,11 +1057,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             message: errMsg,
           };
         }
+
+        return {
+          success: true,
+          message: data?.message || `رمز عبور ویزیتور «${target.name}» با موفقیت بازنشانی شد.`,
+          temporaryPassword: data?.temporaryPassword,
+        };
       }
 
       return {
         success: true,
-        message: `رمز عبور ویزیتور «${target.name}» با موفقیت به ${newPassword} تغییر یافت.`,
+        message: `رمز عبور ویزیتور «${target.name}» با موفقیت بازنشانی شد.`,
+        temporaryPassword: newPassword || 'Farhoodi@2026',
       };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'خطای پیش‌بینی نشده در بازیابی رمز عبور';

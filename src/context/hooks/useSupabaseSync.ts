@@ -168,6 +168,7 @@ export function useSupabaseSync({
   const dirtyTablesRef = useRef<Set<SyncTable>>(new Set());
   const isFetchingRef = useRef<boolean>(false);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const supermarketVerificationMapRef = useRef<Map<string, string>>(new Map());
 
   // 3. Granular Table Fetch Functions with Explicit Column Projections & 15s Timeout
 
@@ -285,8 +286,9 @@ export function useSupabaseSync({
         visitor_price: isStoreRole ? undefined : (Number(p.visitor_price) || 0),
         is_active: p.is_active ?? true,
         is_market_test: Boolean(p.is_market_test),
-        description: p.description?.trim() ? p.description.trim() : undefined,
-        package_type: p.package_type && String(p.package_type).trim() ? String(p.package_type).trim() : undefined,
+        items_per_package: Number(p.items_per_package) > 0 ? Number(p.items_per_package) : 0,
+        package_type: p.package_type && String(p.package_type).trim() ? String(p.package_type).trim() : '',
+        description: p.description && String(p.description).trim() ? String(p.description).trim() : '',
         discount_percent: p.discount_percent !== undefined && p.discount_percent !== null ? Number(p.discount_percent) || 0 : 0,
         discount_starts_at: p.discount_starts_at || null,
         discount_ends_at: p.discount_ends_at || null,
@@ -377,24 +379,43 @@ export function useSupabaseSync({
       }));
     }
 
+    // 5) Derive customer_type from supermarkets.verification_type === 'bulk_consumer'
+    let verificationMap = supermarketVerificationMapRef.current;
+    if (verificationMap.size === 0) {
+      try {
+        const { data: smTypes } = await supabase.from('supermarkets').select('id, verification_type');
+        if (smTypes) {
+          smTypes.forEach((sm: any) => {
+            supermarketVerificationMapRef.current.set(sm.id, sm.verification_type || 'none');
+          });
+          verificationMap = supermarketVerificationMapRef.current;
+        }
+      } catch {}
+    }
+
     const cleanOrds: Order[] = ordsData
       .filter(
         (o: Order) =>
           Boolean(o.id) &&
           !o.items?.some((it) => LEGACY_MOCK_NAMES.has(it.name?.trim()))
       )
-      .map((o: Order) => ({
-        ...o,
-        supermarket_id: o.supermarket_id || '',
-        supermarket_name: o.supermarket_name || 'فروشگاه نامشخص',
-        assigned_visitor_id: o.assigned_visitor_id || 'direct',
-        visitor_name:
-          o.visitor_name ||
-          (o.assigned_visitor_id && o.assigned_visitor_id !== 'direct'
-            ? 'ویزیتور'
-            : 'خرید مستقیم از پخش مرکزی'),
-        order_channel: getOrderChannel(o),
-      }));
+      .map((o: Order) => {
+        const vType = verificationMap.get(o.supermarket_id);
+        const isBulkConsumer = vType === 'bulk_consumer';
+        return {
+          ...o,
+          customer_type: isBulkConsumer ? 'consumer' : 'store',
+          supermarket_id: o.supermarket_id || '',
+          supermarket_name: o.supermarket_name || 'فروشگاه نامشخص',
+          assigned_visitor_id: o.assigned_visitor_id || 'direct',
+          visitor_name:
+            o.visitor_name ||
+            (o.assigned_visitor_id && o.assigned_visitor_id !== 'direct'
+              ? 'ویزیتور'
+              : 'خرید مستقیم از پخش مرکزی'),
+          order_channel: getOrderChannel(o),
+        };
+      });
 
     const jsonStr = JSON.stringify(cleanOrds);
     if (lastStateJsonRef.current.orders !== jsonStr) {
@@ -515,6 +536,12 @@ export function useSupabaseSync({
     const profileMap = new Map<string, string>(
       (profRes.data || []).map((p: { id: string; username?: string }) => [p.id, p.username || ''])
     );
+
+    (smsRes.data || []).forEach((sm: any) => {
+      if (sm?.id) {
+        supermarketVerificationMapRef.current.set(sm.id, sm.verification_type || 'none');
+      }
+    });
 
     const cleanSms: Supermarket[] = (smsRes.data || []).map((sm: any) => {
       const profUsername = profileMap.get(sm.id);
@@ -1220,4 +1247,6 @@ export function useSupabaseSync({
     window.addEventListener('storage', handleStorageEvent);
     return () => window.removeEventListener('storage', handleStorageEvent);
   }, [setLoadingBills, setOrders, setProducts, setSupermarkets, setVisitors]);
+
+  return { scheduleReload };
 }

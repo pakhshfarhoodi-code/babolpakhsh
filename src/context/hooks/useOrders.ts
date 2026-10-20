@@ -8,7 +8,9 @@ import {
   Visitor,
   Supermarket,
   InventoryTransaction,
+  UserRole,
 } from '../../types';
+import { SyncTable } from './useSupabaseSync';
 import { INITIAL_ORDERS } from '../../data/initialData';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { STORAGE_KEYS, generateUniqueId } from '../utils';
@@ -41,6 +43,9 @@ interface UseOrdersProps {
   visitors: Visitor[];
   selectedVisitorId: string;
   addInventoryTransactions: (txs: InventoryTransaction[]) => void;
+  role?: UserRole;
+  onShowToast?: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
+  scheduleReload?: (tables?: SyncTable[], immediate?: boolean) => void;
 }
 
 export function useOrders({
@@ -50,6 +55,9 @@ export function useOrders({
   visitors,
   selectedVisitorId,
   addInventoryTransactions,
+  role,
+  onShowToast,
+  scheduleReload,
 }: UseOrdersProps) {
   const [orders, setOrders] = useState<Order[]>(() => {
     if (isSupabaseConfigured) return [];
@@ -362,11 +370,21 @@ export function useOrders({
         });
 
         if (error) {
-          return { success: false, message: error.message || 'خطا در ثبت سفارش روی سرور.' };
+          const errMsg = error.message || 'خطا در ثبت سفارش روی سرور.';
+          if (errMsg.includes('قیمت') || errMsg.includes('کاتالوگ')) {
+            scheduleReload?.(['products'], true);
+          }
+          onShowToast?.(errMsg, 'error');
+          return { success: false, message: errMsg };
         }
 
         if (data && (data as any).success === false) {
-          return { success: false, message: (data as any).message || 'خطا در ثبت تراکنشی سفارش روی سرور.' };
+          const errMsg = (data as any).message || 'خطا در ثبت تراکنشی سفارش روی سرور.';
+          if (errMsg.includes('قیمت') || errMsg.includes('کاتالوگ')) {
+            scheduleReload?.(['products'], true);
+          }
+          onShowToast?.(errMsg, 'error');
+          return { success: false, message: errMsg };
         }
 
         // Store-self orders pickup discount application (Visitors orders NEVER get pickup discount)
@@ -376,22 +394,19 @@ export function useOrders({
         newOrder.pickup_discount_percent = finalPickupDiscountPercent;
         newOrder.founder_discount_percent = finalFounderDiscountPercent;
 
-        if (finalPickupDiscountPercent > 0 || finalFounderDiscountPercent > 0) {
-          const updatePayload: Record<string, number> = {};
-          if (finalPickupDiscountPercent > 0) updatePayload.pickup_discount_percent = finalPickupDiscountPercent;
-          if (finalFounderDiscountPercent > 0) updatePayload.founder_discount_percent = finalFounderDiscountPercent;
-          await supabase.from('orders').update(updatePayload).eq('id', newOrder.id);
-        }
-
-        // Read back server-side calculated discounts
+        // Read back server-side calculated total_amount and discounts
+        // (Note: Non-admins cannot update total_amount / discount_* directly; the RPC calculates total_amount)
         const { data: serverOrderData } = await supabase
           .from('orders')
-          .select('pickup_discount_percent, founder_discount_percent, discount_percent, discount_status')
+          .select('total_amount, pickup_discount_percent, founder_discount_percent, discount_percent, discount_status')
           .eq('id', newOrder.id)
           .single();
 
         if (serverOrderData) {
-          newOrder.pickup_discount_percent = serverOrderData.pickup_discount_percent;
+          if (serverOrderData.total_amount != null && !isNaN(Number(serverOrderData.total_amount))) {
+            newOrder.total_amount = Number(serverOrderData.total_amount);
+          }
+          newOrder.pickup_discount_percent = serverOrderData.pickup_discount_percent ?? finalPickupDiscountPercent;
           newOrder.founder_discount_percent = serverOrderData.founder_discount_percent ?? finalFounderDiscountPercent;
           newOrder.discount_percent = serverOrderData.discount_percent;
           newOrder.discount_status = serverOrderData.discount_status;
@@ -431,7 +446,7 @@ export function useOrders({
         order: newOrder,
       };
     },
-    [orders, supermarkets, visitors, products, setProducts, addInventoryTransactions]
+    [orders, supermarkets, visitors, products, setProducts, addInventoryTransactions, scheduleReload, onShowToast]
   );
 
   // Update order status (with reserved stock release on 'undelivered' and stock deduction on 'delivered')
@@ -898,22 +913,6 @@ export function useOrders({
         }
       }
 
-      // Calculate reserved stock delta for each product
-      setProducts((prev) =>
-        prev.map((p) => {
-          const oldQty = oldItems.find((i) => i.product_id === p.id)?.quantity || 0;
-          const newQty = updatedItems.find((i) => i.productId === p.id)?.quantity || 0;
-          const delta = newQty - oldQty;
-          if (delta !== 0) {
-            return {
-              ...p,
-              reserved_stock: Math.max(0, Math.round((p.reserved_stock + delta) * 1000) / 1000),
-            };
-          }
-          return p;
-        })
-      );
-
       const newOrderItems = updatedItems.map((i, idx) => {
         const prod = products.find((p) => p.id === i.productId);
         return {
@@ -941,13 +940,9 @@ export function useOrders({
           ? pricing.discountedSubtotal
           : newOrderItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-      const updatedOrderObj: Order = {
-        ...tempOrderObj,
-        total_amount: newTotalAmount,
-        invoice_revised_at: nowIso,
-      };
+      let finalTotalAmount = newTotalAmount;
 
-      // Supabase sync (Primary: secure RPC edit_store_order; Secondary: direct table update)
+      // Supabase sync (Strictly via secure RPC edit_store_order; direct fallback removed)
       if (isSupabaseConfigured && supabase) {
         try {
           const rpcItems = updatedItems.map((i) => {
@@ -963,50 +958,71 @@ export function useOrders({
             };
           });
 
-          let synced = false;
-          try {
-            const { data: rpcRes, error: rpcErr } = await supabase.rpc('edit_store_order', {
-              p_order_id: orderId,
-              p_items: rpcItems,
-              p_total_amount: newTotalAmount,
-            });
-            if (!rpcErr && (rpcRes?.success !== false)) {
-              synced = true;
+          const { data: rpcRes, error: rpcErr } = await supabase.rpc('edit_store_order', {
+            p_order_id: orderId,
+            p_items: rpcItems,
+            p_total_amount: newTotalAmount,
+          });
+
+          if (rpcErr || (rpcRes && (rpcRes as any).success === false)) {
+            const errMsg = rpcErr?.message || (rpcRes as any)?.message || 'خطا در ویرایش سفارش روی سرور.';
+            if (errMsg.includes('قیمت') || errMsg.includes('کاتالوگ')) {
+              scheduleReload?.(['products'], true);
             }
-          } catch {
-            // RPC not deployed yet, proceed to direct fallback
+            onShowToast?.(errMsg, 'error');
+            return {
+              success: false,
+              message: errMsg,
+            };
           }
 
-          if (!synced) {
-            await supabase.from('order_items').delete().eq('order_id', orderId);
-
-            const itemRows = updatedItems.map((i) => {
-              const prod = products.find((p) => p.id === i.productId);
-              return {
-                order_id: orderId,
-                product_id: i.productId,
-                name: i.name,
-                price: i.price,
-                quantity: i.quantity,
-                items_per_package: getPackSize(i.items_per_package ?? prod?.items_per_package),
-                package_type: i.package_type ?? prod?.package_type,
-                unit: i.unit ?? prod?.unit,
-              };
-            });
-            await supabase.from('order_items').insert(itemRows);
-
-            await supabase
+          if (rpcRes && typeof (rpcRes as any).total_amount === 'number') {
+            finalTotalAmount = (rpcRes as any).total_amount;
+          } else {
+            // Read back updated total_amount from server
+            const { data: serverOrderData } = await supabase
               .from('orders')
-              .update({
-                total_amount: newTotalAmount,
-                invoice_revised_at: nowIso,
-              })
-              .eq('id', orderId);
+              .select('total_amount')
+              .eq('id', orderId)
+              .single();
+            if (serverOrderData && serverOrderData.total_amount != null && !isNaN(Number(serverOrderData.total_amount))) {
+              finalTotalAmount = Number(serverOrderData.total_amount);
+            }
           }
         } catch (err) {
-          console.error('Error updating order on Supabase:', err);
+          const errMsg = err instanceof Error ? err.message : 'خطای ارتباط با سرور در ویرایش سفارش.';
+          if (errMsg.includes('قیمت') || errMsg.includes('کاتالوگ')) {
+            scheduleReload?.(['products'], true);
+          }
+          onShowToast?.(errMsg, 'error');
+          return {
+            success: false,
+            message: errMsg,
+          };
         }
       }
+
+      // ONLY on success (or mock mode): update local reserved stock delta and orders state
+      setProducts((prev) =>
+        prev.map((p) => {
+          const oldQty = oldItems.find((i) => i.product_id === p.id)?.quantity || 0;
+          const newQty = updatedItems.find((i) => i.productId === p.id)?.quantity || 0;
+          const delta = newQty - oldQty;
+          if (delta !== 0) {
+            return {
+              ...p,
+              reserved_stock: Math.max(0, Math.round((p.reserved_stock + delta) * 1000) / 1000),
+            };
+          }
+          return p;
+        })
+      );
+
+      const updatedOrderObj: Order = {
+        ...tempOrderObj,
+        total_amount: finalTotalAmount,
+        invoice_revised_at: nowIso,
+      };
 
       setOrders((prev) => prev.map((o) => (o.id === orderId ? updatedOrderObj : o)));
 
@@ -1015,7 +1031,7 @@ export function useOrders({
         message: `سفارش ${orderId} با موفقیت به‌روزرسانی شد.`,
       };
     },
-    [orders, products, setProducts]
+    [orders, products, setProducts, scheduleReload, onShowToast]
   );
 
   return {

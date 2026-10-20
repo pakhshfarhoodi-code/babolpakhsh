@@ -147,6 +147,12 @@ export const TeamTab: React.FC<TeamTabProps> = ({
   } | null>(null);
   const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [resetPasswordError, setResetPasswordError] = useState<string | null>(null);
+  const [temporaryPasswordModal, setTemporaryPasswordModal] = useState<{
+    personName: string;
+    temporaryPassword: string;
+    username?: string;
+  } | null>(null);
+  const [hasCopiedPassword, setHasCopiedPassword] = useState(false);
 
   const handleConfirmResetPassword = async () => {
     if (!resettingPerson) return;
@@ -154,16 +160,27 @@ export const TeamTab: React.FC<TeamTabProps> = ({
     setResetPasswordError(null);
     try {
       const res = resettingPerson.type === 'supermarket'
-        ? await resetSupermarketPassword(resettingPerson.id, '123456')
-        : await resetVisitorPassword(resettingPerson.id, '123456');
+        ? await resetSupermarketPassword(resettingPerson.id)
+        : await resetVisitorPassword(resettingPerson.id);
 
       if (res.success) {
         const personName = resettingPerson.name;
+        const username = resettingPerson.username;
+        const tempPass = res.temporaryPassword;
         setResettingPerson(null);
-        setToastNotification({
-          type: 'success',
-          message: `رمز عبور «${personName}» با موفقیت به 123456 تغییر یافت.`,
-        });
+        if (tempPass) {
+          setHasCopiedPassword(false);
+          setTemporaryPasswordModal({
+            personName,
+            temporaryPassword: tempPass,
+            username,
+          });
+        } else {
+          setToastNotification({
+            type: 'success',
+            message: `رمز عبور «${personName}» با موفقیت بازنشانی شد.`,
+          });
+        }
       } else {
         setResetPasswordError(res.message || 'خطا در بازنشانی رمز عبور');
       }
@@ -2803,37 +2820,31 @@ export const TeamTab: React.FC<TeamTabProps> = ({
 
       {/* Reset Password Confirmation Modal */}
       {resettingPerson && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-5 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in" dir="rtl">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-5 space-y-4 text-right">
             <div className="flex items-start gap-3.5">
               <div className="w-11 h-11 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30">
                 <KeyRound className="w-5 h-5" />
               </div>
               <div className="space-y-1">
-                <h3 className="text-sm font-bold text-slate-100">بازیابی رمز عبور</h3>
+                <h3 className="text-sm font-bold text-slate-100">تولید رمز عبور موقت و بازنشانی</h3>
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  آیا از تغییر رمز عبور {resettingPerson.type === 'supermarket' ? 'فروشگاه / مشتری' : 'ویزیتور'}{' '}
-                  <strong className="text-white font-bold">«{resettingPerson.name}»</strong> به رمز پیش‌فرض زیر اطمینان دارید؟
+                  آیا از ایجاد رمز عبور موقت برای {resettingPerson.type === 'supermarket' ? 'فروشگاه / مشتری' : 'ویزیتور'}{' '}
+                  <strong className="text-white font-bold">«{resettingPerson.name}»</strong> اطمینان دارید؟
                 </p>
               </div>
             </div>
 
-            {/* New Password Box Display */}
-            <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5 text-center">
-              <span className="text-[11px] text-slate-400 block font-medium">رمز عبور جدید:</span>
-              <div className="font-mono text-base font-black text-amber-400 tracking-wider">
-                123456
-              </div>
+            <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2 text-xs text-slate-300 leading-relaxed">
+              <p>• یک رمز موقت تصادفی و امن ۱۰ کاراکتری به صورت اختصاصی ساخته شده و یک‌بار به شما نمایش داده می‌شود.</p>
+              <p className="text-amber-300/90 font-medium">• کاربر در اولین ورود موظف به تعریف یک رمز عبور جدید خواهد بود.</p>
               {resettingPerson.username && (
-                <div className="text-[11px] text-slate-500 pt-1 border-t border-slate-900">
-                  نام کاربری: <span className="text-slate-300 font-mono font-semibold">{resettingPerson.username}</span>
+                <div className="pt-2 border-t border-slate-800/80 text-[11px] text-slate-400 flex items-center justify-between">
+                  <span>شماره کاربری جهت ورود:</span>
+                  <span className="font-mono text-slate-200 font-semibold">{resettingPerson.username}</span>
                 </div>
               )}
             </div>
-
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              پس از تایید، کاربر می‌تواند با شماره همراه ثبت‌شده خود و رمز عبور <strong className="text-amber-300 font-mono">123456</strong> وارد سامانه شود.
-            </p>
 
             {resetPasswordError && (
               <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-2 text-rose-400 text-xs">
@@ -2863,14 +2874,89 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                 {isResettingPassword ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
-                    <span>در حال تغییر رمز...</span>
+                    <span>در حال تولید رمز موقت...</span>
                   </>
                 ) : (
                   <>
                     <KeyRound className="w-4 h-4 text-slate-950" />
-                    <span>تایید و تغییر رمز به 123456</span>
+                    <span>تولید رمز موقت و بازنشانی</span>
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Temporary Password Display Modal (Shown once to admin) */}
+      {temporaryPasswordModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in" dir="rtl">
+          <div className="bg-slate-900 border border-amber-500/40 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 space-y-4 text-right">
+            <div className="flex items-start gap-3.5">
+              <div className="w-12 h-12 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30">
+                <KeyRound className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-slate-100">رمز عبور موقت ایجاد شد</h3>
+                <p className="text-xs text-amber-300 font-medium">
+                  برای «{temporaryPasswordModal.personName}»
+                </p>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+              <span className="text-xs text-slate-400 block font-medium">رمز عبور موقت جدید:</span>
+              <div className="flex items-center justify-between gap-2 p-3 bg-slate-900 rounded-lg border border-slate-700">
+                <span className="font-mono text-lg font-black text-amber-400 tracking-widest select-all">
+                  {temporaryPasswordModal.temporaryPassword}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(temporaryPasswordModal.temporaryPassword);
+                    setHasCopiedPassword(true);
+                    setTimeout(() => setHasCopiedPassword(false), 2500);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 text-xs font-bold transition border border-amber-500/30 cursor-pointer"
+                >
+                  {hasCopiedPassword ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <span className="text-emerald-300">کپی شد!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>کپی رمز</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {temporaryPasswordModal.username && (
+                <div className="text-xs text-slate-400 pt-1 border-t border-slate-800/80 flex items-center justify-between">
+                  <span>نام کاربری / شماره ورود:</span>
+                  <span className="font-mono text-slate-200 font-semibold">{temporaryPasswordModal.username}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="p-3 bg-amber-950/40 rounded-xl border border-amber-800/50 space-y-1 text-xs text-amber-200/90 leading-relaxed">
+              <p className="font-bold flex items-center gap-1.5 text-amber-300">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                <span>توجه امنیتی:</span>
+              </p>
+              <p>• این رمز موقت فقط همین یک‌بار نمایش داده می‌شود؛ لطفاً آن را کپی کرده و به کاربر تحویل دهید.</p>
+              <p>• کاربر پس از ورود با این رمز، موظف به تغییر اجباری رمز عبور خواهد شد.</p>
+            </div>
+
+            <div className="pt-2 flex items-center justify-end border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setTemporaryPasswordModal(null)}
+                className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition cursor-pointer"
+              >
+                متوجه شدم و بستن
               </button>
             </div>
           </div>

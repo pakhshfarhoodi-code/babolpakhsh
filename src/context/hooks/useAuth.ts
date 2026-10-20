@@ -167,6 +167,88 @@ async function reconcileTelegramSession(): Promise<void> {
   }
 }
 
+export async function linkMessengerAccount(options?: { role?: string; userId?: string }): Promise<void> {
+  if (!supabase) return;
+
+  const tgInitData = getTelegramInitData();
+  if (tgInitData) {
+    try {
+      const { data: linkRes, error: linkErr } = await supabase.functions.invoke('telegram-link', {
+        body: { initData: tgInitData },
+      });
+      if (linkErr) {
+        console.warn('Telegram link failed:', linkErr);
+      } else if (linkRes?.success !== false) {
+        // Step 5: For supermarket role inside Telegram, request write access once per browser session
+        const currentRole =
+          options?.role ||
+          (typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.AUTH_ROLE) : null) ||
+          'supermarket';
+
+        if (currentRole === 'supermarket' && typeof window !== 'undefined' && window.sessionStorage) {
+          const writeKey = options?.userId
+            ? `tg_write_access_${options.userId}`
+            : 'tg_write_access_requested';
+
+          if (!sessionStorage.getItem(writeKey)) {
+            sessionStorage.setItem(writeKey, 'true');
+            try {
+              const tgWebApp = (window as any).Telegram?.WebApp;
+              if (typeof tgWebApp?.requestWriteAccess === 'function') {
+                tgWebApp.requestWriteAccess((granted: boolean) => {
+                  if (!granted) {
+                    console.warn('[Telegram WebApp] requestWriteAccess was not granted.');
+                  }
+                });
+              }
+            } catch (wErr) {
+              console.warn('[Telegram WebApp] requestWriteAccess error:', wErr);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Telegram link failed:', e);
+    }
+
+    try {
+      const { error: contactErr } = await supabase.functions.invoke('telegram-contact', {
+        body: { initData: tgInitData },
+      });
+      if (contactErr) {
+        console.warn('Telegram contact failed:', contactErr);
+      }
+    } catch (e) {
+      console.warn('Telegram contact failed:', e);
+    }
+  }
+
+  const eitaaInitData = getEitaaInitData();
+  if (eitaaInitData) {
+    try {
+      const { error: linkErr } = await supabase.functions.invoke('eitaa-link', {
+        body: { initData: eitaaInitData },
+      });
+      if (linkErr) {
+        console.warn('Eitaa link failed:', linkErr);
+      }
+    } catch (e) {
+      console.warn('Eitaa link failed:', e);
+    }
+
+    try {
+      const { error: contactErr } = await supabase.functions.invoke('eitaa-contact', {
+        body: { initData: eitaaInitData },
+      });
+      if (contactErr) {
+        console.warn('Eitaa contact failed:', contactErr);
+      }
+    } catch (e) {
+      console.warn('Eitaa contact failed:', e);
+    }
+  }
+}
+
 export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }: UseAuthProps) {
   // Check if there is any plausible existing session in localStorage or Eitaa
   const hasPossibleSession = useMemo(() => {
@@ -361,17 +443,15 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
 
           if (userRole === 'visitor') {
             setSelectedVisitorIdState(prof.id);
-            setMustChangePassword(false);
           } else if (userRole === 'supermarket') {
             setSelectedSupermarketIdState(prof.id);
             recordStoreFirstLogin();
-            if (isSupabaseConfigured && supabase) {
-              supabase.auth.getSession().then(({ data: { session: s } }) => {
-                setMustChangePassword(Boolean(s?.user?.user_metadata?.must_change_password === true));
-              }).catch(() => {});
-            }
-          } else {
-            setMustChangePassword(false);
+          }
+
+          if (isSupabaseConfigured && supabase) {
+            supabase.auth.getSession().then(({ data: { session: s } }) => {
+              setMustChangePassword(Boolean(s?.user?.user_metadata?.must_change_password === true));
+            }).catch(() => {});
           }
 
           return { success: true };
@@ -419,12 +499,23 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
           const isSupermarket = session.user.user_metadata?.role === 'supermarket';
           if (isSupermarket) {
             recordStoreFirstLogin();
-            setMustChangePassword(Boolean(session.user.user_metadata?.must_change_password === true));
-          } else {
-            setMustChangePassword(false);
           }
+          setMustChangePassword(Boolean(session.user.user_metadata?.must_change_password === true));
           if (lastProfileFetchedUserIdRef.current !== session.user.id) {
             await syncUserProfile(session.user.id);
+          }
+
+          // Link messenger accounts once per user ID per browser session if opened within a messenger
+          const hasInitData = Boolean(getTelegramInitData() || getEitaaInitData());
+          if (hasInitData && typeof window !== 'undefined' && window.sessionStorage) {
+            const messengerSessionKey = `messenger_session_linked_${session.user.id}`;
+            if (!sessionStorage.getItem(messengerSessionKey)) {
+              sessionStorage.setItem(messengerSessionKey, 'true');
+              linkMessengerAccount({
+                userId: session.user.id,
+                role: isSupermarket ? 'supermarket' : undefined,
+              });
+            }
           }
         }
       } catch (err) {
@@ -451,10 +542,8 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
         const isSupermarket = session.user.user_metadata?.role === 'supermarket';
         if (isSupermarket) {
           recordStoreFirstLogin();
-          setMustChangePassword(Boolean(session.user.user_metadata?.must_change_password === true));
-        } else {
-          setMustChangePassword(false);
         }
+        setMustChangePassword(Boolean(session.user.user_metadata?.must_change_password === true));
         const userId = session.user.id;
         // Do not re-fetch if this user ID is already processed
         if (lastProfileFetchedUserIdRef.current !== userId) {
@@ -635,10 +724,8 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
           const isSupermarket = authData.user.user_metadata?.role === 'supermarket';
           if (isSupermarket) {
             recordStoreFirstLogin();
-            setMustChangePassword(Boolean(authData.user.user_metadata?.must_change_password === true));
-          } else {
-            setMustChangePassword(false);
           }
+          setMustChangePassword(Boolean(authData.user.user_metadata?.must_change_password === true));
         }
 
         // 3. Read profile through unified single-source syncUserProfile (no duplicate queries)
@@ -655,25 +742,11 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
           recordStoreFirstLogin();
         }
 
-        const eitaaInitDataForLink = getEitaaInitData();
-        if (eitaaInitDataForLink && supabase) {
-          supabase.functions
-            .invoke('eitaa-link', { body: { initData: eitaaInitDataForLink } })
-            .catch((e) => console.warn('Eitaa link failed:', e));
-          supabase.functions
-            .invoke('eitaa-contact', { body: { initData: eitaaInitDataForLink } })
-            .catch((e) => console.warn('Eitaa contact failed:', e));
-        }
-
-        const telegramInitDataForLink = getTelegramInitData();
-        if (telegramInitDataForLink && supabase) {
-          supabase.functions
-            .invoke('telegram-link', { body: { initData: telegramInitDataForLink } })
-            .catch((e) => console.warn('Telegram link failed:', e));
-          supabase.functions
-            .invoke('telegram-contact', { body: { initData: telegramInitDataForLink } })
-            .catch((e) => console.warn('Telegram contact failed:', e));
-        }
+        // Link messenger accounts (Telegram / Eitaa)
+        linkMessengerAccount({
+          userId: authData.user.id,
+          role: authData.user.user_metadata?.role,
+        });
 
         return { success: true };
       } catch (err: unknown) {
@@ -965,22 +1038,11 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
           }
         }
 
-        // Send registration notification to admin via Edge Function (non-blocking)
-        supabase.functions
-          .invoke('notify-admin', {
-            body: {
-              type: 'store_registration',
-              store: {
-                id: storeId,
-                name: trimmedName,
-                owner: trimmedOwner,
-                phone: cleanPhone,
-                address: trimmedAddress,
-                registration_source: 'website_direct',
-              },
-            },
-          })
-          .catch(() => {});
+        // Link messenger accounts (Telegram / Eitaa) while session is active
+        linkMessengerAccount({
+          userId: storeId,
+          role: 'supermarket',
+        });
 
         const newSupermarket: Supermarket = {
           id: storeId || generateUniqueId('sm'),

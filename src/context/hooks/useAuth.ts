@@ -446,6 +446,20 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
           } else if (userRole === 'supermarket') {
             setSelectedSupermarketIdState(prof.id);
             recordStoreFirstLogin();
+            try {
+              const campaignSrc = typeof window !== 'undefined' ? localStorage.getItem('campaign_src') || 'direct' : 'direct';
+              if (supabase) {
+                (async () => {
+                  try {
+                    const { error } = await supabase
+                      .from('supermarkets')
+                      .update({ registration_source: campaignSrc })
+                      .eq('id', prof.id);
+                    if (error) console.warn('[campaign_tracking] sync profile update notice:', error.message);
+                  } catch {}
+                })();
+              }
+            } catch {}
           }
 
           if (isSupabaseConfigured && supabase) {
@@ -737,9 +751,23 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
           };
         }
 
-        // Ensure recordStoreFirstLogin is triggered for supermarket logins
-        if (authData.user.user_metadata?.role === 'supermarket') {
+        // Ensure recordStoreFirstLogin is triggered for supermarket logins and update campaign source
+        if (authData.user.user_metadata?.role === 'supermarket' || allowedRoles?.includes('supermarket')) {
           recordStoreFirstLogin();
+          try {
+            const campaignSrc = typeof window !== 'undefined' ? localStorage.getItem('campaign_src') || 'direct' : 'direct';
+            if (supabase) {
+              (async () => {
+                try {
+                  const { error } = await supabase
+                    .from('supermarkets')
+                    .update({ registration_source: campaignSrc })
+                    .eq('id', authData.user.id);
+                  if (error) console.warn('[campaign_tracking] store update error:', error.message);
+                } catch {}
+              })();
+            }
+          } catch {}
         }
 
         // Link messenger accounts (Telegram / Eitaa)
@@ -1058,7 +1086,7 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
           verified_at: null,
           verified_by: null,
           verification_note: null,
-          registration_source: 'self_register',
+          registration_source: (typeof window !== 'undefined' ? localStorage.getItem('campaign_src') : null) || 'direct',
           created_at: new Date().toISOString(),
           latitude: typeof latitude === 'number' ? latitude : null,
           longitude: typeof longitude === 'number' ? longitude : null,

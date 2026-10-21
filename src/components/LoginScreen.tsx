@@ -79,6 +79,55 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     return null;
   });
 
+  // Track traffic campaign source on initial load
+  const hasTrackedCampaignRef = React.useRef(false);
+  useEffect(() => {
+    if (hasTrackedCampaignRef.current) return;
+    hasTrackedCampaignRef.current = true;
+
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const rawSrc = searchParams.get('src');
+      let determinedSource = 'direct';
+
+      if (rawSrc) {
+        const clean = rawSrc.trim().toLowerCase();
+        if (clean === 'sms') {
+          determinedSource = 'sms';
+        } else if (clean === 'eitaa') {
+          determinedSource = 'eitaa';
+        } else if (clean === 'telegram') {
+          determinedSource = 'telegram';
+        } else {
+          determinedSource = 'direct';
+        }
+      } else {
+        determinedSource = 'direct';
+      }
+
+      // Store in LocalStorage with key 'campaign_src'
+      localStorage.setItem('campaign_src', determinedSource);
+
+      // Insert click row into campaign_clicks
+      if (supabase) {
+        (async () => {
+          try {
+            const { error } = await supabase
+              .from('campaign_clicks')
+              .insert([{ source: determinedSource }]);
+            if (error) {
+              console.warn('[campaign_clicks] insert notice:', error.message);
+            }
+          } catch (err) {
+            console.warn('[campaign_clicks] exception:', err);
+          }
+        })();
+      }
+    } catch (e) {
+      console.warn('Traffic tracking notice:', e);
+    }
+  }, []);
+
   // Fetch real registered stores count and campaign capacity on mount
   useEffect(() => {
     let isMounted = true;
@@ -237,6 +286,22 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         setIsSubmitting(false);
         onLoginComplete?.();
       } else {
+        // Update registration_source for supermarket login
+        if (activeTab === 'supermarket' && supabase) {
+          try {
+            const campaignSrc = localStorage.getItem('campaign_src') || 'direct';
+            const { data: userData } = await supabase.auth.getUser();
+            const storeId = userData?.user?.id;
+            if (storeId) {
+              await supabase
+                .from('supermarkets')
+                .update({ registration_source: campaignSrc })
+                .eq('id', storeId);
+            }
+          } catch (updateErr) {
+            console.warn('Supermarket registration_source update notice:', updateErr);
+          }
+        }
         setIsLoggingIn(true);
       }
     } catch (err: unknown) {

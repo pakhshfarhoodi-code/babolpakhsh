@@ -21,6 +21,35 @@ function constantTimeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
+// Helper: Format current time in Asia/Tehran timezone with YYYY/MM/DD HH:mm format
+function formatTehranDateTime(date: Date = new Date()): string {
+  try {
+    const formatter = new Intl.DateTimeFormat('fa-IR-u-nu-latn', {
+      timeZone: 'Asia/Tehran',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+    const parts = formatter.formatToParts(date);
+    const m: Record<string, string> = {};
+    for (const p of parts) {
+      m[p.type] = p.value;
+    }
+    const year = m.year || '';
+    const month = (m.month || '').padStart(2, '0');
+    const day = (m.day || '').padStart(2, '0');
+    const hour = (m.hour || '').padStart(2, '0');
+    const minute = (m.minute || '').padStart(2, '0');
+    return `${year}/${month}/${day} ${hour}:${minute}`;
+  } catch (err) {
+    console.warn('Error formatting Tehran time:', err);
+    return date.toISOString().replace('T', ' ').substring(0, 16);
+  }
+}
+
 interface OrderLineItem {
   name?: string;
   quantity: number;
@@ -184,25 +213,57 @@ Deno.serve(async (req: Request) => {
 
     // Resolve Eitaa credentials from env or app_settings
     let eitaaToken = Deno.env.get('EITAA_BOT_TOKEN') || Deno.env.get('EITAAYAR_TOKEN') || '';
-    if (adminClient && !eitaaToken) {
+    let eitaaChatId = Deno.env.get('EITAA_ADMIN_CHAT_ID') || '';
+
+    if (adminClient && (!eitaaToken || !eitaaChatId)) {
       try {
         const { data: settings } = await adminClient
           .from('app_settings')
           .select('key, value')
-          .in('key', ['bot_notifications', 'eitaa_bot_token', 'eitaayar_token']);
+          .in('key', ['bot_notifications', 'eitaa_bot_token', 'eitaayar_token', 'eitaa_admin_chat_id']);
 
         if (settings && Array.isArray(settings)) {
           for (const s of settings) {
             if (s.key === 'bot_notifications' && typeof s.value === 'object' && s.value !== null) {
               eitaaToken = eitaaToken || s.value.eitaa_bot_token || s.value.eitaayar_token || '';
+              eitaaChatId = eitaaChatId || s.value.eitaa_admin_chat_id || '';
             }
             if (s.key === 'eitaa_bot_token' || s.key === 'eitaayar_token') {
               eitaaToken = eitaaToken || String(s.value);
             }
+            if (s.key === 'eitaa_admin_chat_id') {
+              eitaaChatId = eitaaChatId || String(s.value);
+            }
           }
         }
       } catch (e) {
-        console.warn('Failed to load eitaa bot token from app_settings:', e);
+        console.warn('Failed to load eitaa credentials from app_settings:', e);
+      }
+    }
+
+    // Resolve all admin recipient chat IDs: role IN ('admin', 'superadmin')
+    const adminChatIds = new Set<string>();
+    if (eitaaChatId) {
+      adminChatIds.add(String(eitaaChatId).trim());
+    }
+
+    if (adminClient) {
+      try {
+        const { data: adminProfiles } = await adminClient
+          .from('profiles')
+          .select('id, name, role, eitaa_chat_id')
+          .in('role', ['admin', 'superadmin'])
+          .not('eitaa_chat_id', 'is', null);
+
+        if (adminProfiles && Array.isArray(adminProfiles)) {
+          for (const p of adminProfiles) {
+            if (p.eitaa_chat_id) {
+              adminChatIds.add(String(p.eitaa_chat_id).trim());
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Could not query admin eitaa_chat_id from profiles:', e);
       }
     }
 
@@ -210,11 +271,12 @@ Deno.serve(async (req: Request) => {
     const validTypes = ['INSERT', 'STORE_WELCOME', 'STORE_APPROVED', 'STORE_REJECTED'];
     if (!validTypes.includes(type)) {
       return new Response(
-        JSON.stringify({ success: true, skipped: 'unknown_type' }),
+        JSON.stringify({ ok: true, success: true, skipped: 'unknown_type' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    // Direct store notification types: STORE_WELCOME, STORE_APPROVED, STORE_REJECTED
     if (type === 'STORE_WELCOME' || type === 'STORE_APPROVED' || type === 'STORE_REJECTED') {
       const record = body.record || body.store || body;
       const storeId = record.id;
@@ -248,7 +310,7 @@ Deno.serve(async (req: Request) => {
 
       if (!targetUserId) {
         return new Response(
-          JSON.stringify({ success: true, skipped: 'no_link' }),
+          JSON.stringify({ ok: true, success: true, skipped: 'no_link' }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -256,12 +318,12 @@ Deno.serve(async (req: Request) => {
       let text = '';
       if (type === 'STORE_WELCOME') {
         if (approvalStatus === 'pending') {
-          text = `✅ ثبتنام شما در بارفروش با موفقیت انجام شد.\n\nفروشگاه: ${name}\nوضعیت: در انتظار تأیید مدیریت\nپس از بررسی، نتیجه از همینجا به شما اطلاع داده میشود.`;
+          text = `✅ حساب فروشگاه ${name} در بارفروش به این پیامرسان متصل شد.\nوضعیت: در انتظار تأیید مدیریت؛ پس از بررسی نتیجه از همینجا به شما اطلاع داده میشود.`;
         } else {
-          text = `✅ ثبتنام شما در بارفروش با موفقیت انجام شد.\n\nفروشگاه: ${name}\nهم‌اکنون میتوانید سفارش ثبت کنید.`;
+          text = `✅ حساب فروشگاه ${name} در بارفروش فعال و به این پیامرسان متصل شد.\nاز این پس تأیید سفارشها و اعلانها از همینجا برایتان ارسال میشود. هماکنون میتوانید سفارش ثبت کنید.`;
         }
       } else if (type === 'STORE_APPROVED') {
-        text = `🎉 ثبتنام فروشگاه ${name} تأیید شد. هم‌اکنون میتوانید در بارفروش سفارش ثبت کنید.`;
+        text = `🎉 ثبتنام فروشگاه ${name} تأیید شد. هماکنون میتوانید در بارفروش سفارش ثبت کنید.`;
       } else if (type === 'STORE_REJECTED') {
         text = `❌ متأسفانه ثبتنام فروشگاه ${name} تأیید نشد.`;
         if (approvalNote) {
@@ -306,6 +368,7 @@ Deno.serve(async (req: Request) => {
 
         return new Response(
           JSON.stringify({
+            ok: true,
             success: isOk,
             message: isOk ? 'پیام وضعیت فروشگاه ایتا ارسال شد.' : 'خطا در ارسال پیام ایتا',
             result: eitaaJson,
@@ -315,196 +378,249 @@ Deno.serve(async (req: Request) => {
       } catch (err) {
         console.error('Eitaa store status fetch error:', err);
         return new Response(
-          JSON.stringify({ success: true, error: String(err) }),
+          JSON.stringify({ ok: true, success: true, error: String(err) }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
     }
 
-    // Previous INSERT logic (unchanged)
+    // Path INSERT: Event A (Store registration/first login to Admins) OR Event B (Order)
+    const rawRecord = body.record || body.store || body;
+    const isOrderEvent =
+      Boolean(body.order) ||
+      Boolean(body.order_id) ||
+      Boolean(rawRecord.order_id) ||
+      (Boolean(rawRecord.id) && Boolean(rawRecord.supermarket_id) && rawRecord.total_amount !== undefined);
+
+    if (!isOrderEvent) {
+      // 1) Store registration or first-login event -> notify Admins
+      const name = rawRecord.name || rawRecord.store_name || 'فروشگاه جدید';
+      const owner = rawRecord.owner || rawRecord.owner_name || 'ثبت نشده';
+      const phone = rawRecord.phone || rawRecord.mobile || 'بدون شماره';
+      const address = rawRecord.address || 'ثبت نشده';
+      const regSource = rawRecord.registration_source || 'مستقیم از وب‌سایت';
+
+      let adminMsg = '';
+
+      if (rawRecord.registration_source === 'imported_activated') {
+        // Query visitor name if available
+        let visitorName = rawRecord.visitor_name || '';
+        if (!visitorName && rawRecord.assigned_visitor_id && adminClient) {
+          try {
+            const { data: vProf } = await adminClient
+              .from('profiles')
+              .select('name')
+              .eq('id', rawRecord.assigned_visitor_id)
+              .maybeSingle();
+            if (vProf?.name) visitorName = vProf.name;
+          } catch (e) {
+            console.warn('Failed to query visitor profile:', e);
+          }
+        }
+        if (!visitorName && rawRecord.id && adminClient) {
+          try {
+            const { data: smRec } = await adminClient
+              .from('supermarkets')
+              .select('assigned_visitor_id, visitor_name')
+              .eq('id', rawRecord.id)
+              .maybeSingle();
+            if (smRec?.visitor_name) {
+              visitorName = smRec.visitor_name;
+            } else if (smRec?.assigned_visitor_id) {
+              const { data: vProf } = await adminClient
+                .from('profiles')
+                .select('name')
+                .eq('id', smRec.assigned_visitor_id)
+                .maybeSingle();
+              if (vProf?.name) visitorName = vProf.name;
+            }
+          } catch (e) {
+            console.warn('Failed to query supermarket visitor:', e);
+          }
+        }
+        if (!visitorName) {
+          visitorName = 'تعیین‌نشده';
+        }
+
+        const tehranTime = formatTehranDateTime(new Date());
+        adminMsg = `🔓 فروشگاه اکسلی برای اولین بار وارد سامانه شد\n\nنام فروشگاه: ${name}\nمالک: ${owner}\nموبایل: ${phone}\nآدرس: ${address}\nویزیتور: ${visitorName}\nزمان ورود: ${tehranTime}`;
+      } else {
+        // Default new store registration message
+        adminMsg = `🛒 ثبت‌نام فروشگاه جدید در سامانه پخش فرهودی\n\nنام فروشگاه: ${name}\nمدیر / صاحب فروشگاه: ${owner}\nشماره همراه: ${phone}\nآدرس: ${address}\nمبدأ ثبت‌نام: ${regSource}\nزمان ثبت: ${new Date().toLocaleTimeString('fa-IR')}`;
+      }
+
+      if (!eitaaToken || adminChatIds.size === 0) {
+        console.warn('Eitaa token or admin recipients not configured');
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            success: true,
+            message: 'Webhook processed, but Eitaa bot or admin chat_id is not configured',
+            recipientsCount: adminChatIds.size,
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const eitaaUrl = eitaaToken.startsWith('bot')
+        ? `https://eitaayar.ir/api/${eitaaToken}/sendMessage`
+        : `https://eitaayar.ir/api/v1/${eitaaToken}/sendMessage`;
+
+      const results: any[] = [];
+      for (const chatId of adminChatIds) {
+        try {
+          const eitaaRes = await fetch(eitaaUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chatId,
+              text: adminMsg,
+            }),
+          });
+
+          let eitaaJson: any = null;
+          try {
+            eitaaJson = await eitaaRes.json();
+          } catch (parseErr) {
+            console.error('Failed to parse Eitaayar response as JSON in admin broadcast:', parseErr);
+            eitaaJson = { ok: false, error: 'Invalid JSON response from Eitaayar' };
+          }
+
+          const isOk = Boolean(eitaaJson && eitaaJson.ok === true);
+          results.push({ chat_id: chatId, ok: isOk, response: eitaaJson });
+        } catch (err) {
+          console.error(`Eitaa admin send error for ${chatId}:`, err);
+          results.push({ chat_id: chatId, ok: false, error: String(err) });
+        }
+      }
+
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          success: true,
+          message: 'اعلان ادمین ایتا با موفقیت ارسال شد.',
+          results,
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Path INSERT: Event B: Order Confirmation
+    let orderData = body.order || body.record || body;
+    const orderId = orderData.id || orderData.order_id || body.order_id;
+    let supermarketId = orderData.supermarket_id;
+
+    let items: OrderLineItem[] = [];
+    let s = {
+      name: orderData.supermarket_name || 'فروشگاه شما',
+      owner: 'مدیر محترم',
+      phone: '',
+      address: '',
+      verification_type: '',
+    };
+
     let storeTargetChatId =
       body.chat_id ||
       body.eitaa_chat_id ||
       body.target_chat_id ||
       '';
 
-    let messageText = '';
+    if (adminClient && orderId) {
+      try {
+        const { data: oRec } = await adminClient
+          .from('orders')
+          .select(
+            'id, supermarket_id, supermarket_name, assigned_visitor_id, visitor_name, status, total_amount, order_source, order_channel, order_date, pickup_discount_percent, founder_discount_percent, discount_percent, discount_status'
+          )
+          .eq('id', orderId)
+          .maybeSingle();
 
-    const isSupermarketEvent =
-      body.table === 'supermarkets' ||
-      body.type === 'store_registration' ||
-      Boolean(body.store) ||
-      (Boolean(body.name) && !body.order_id && !body.order && !body.table);
-
-    if (isSupermarketEvent) {
-      const rawStore = body.store || body.record || body;
-      const storeId = rawStore.id;
-
-      let s = {
-        name: rawStore.name || rawStore.store_name || 'فروشگاه شما',
-        owner: rawStore.owner || rawStore.owner_name || 'مدیر محترم',
-        phone: rawStore.phone || rawStore.mobile || '',
-        address: rawStore.address || '',
-      };
-
-      if (adminClient && storeId) {
-        try {
-          const { data: dbStore } = await adminClient
-            .from('supermarkets')
-            .select('id, name, owner, phone, address, eitaa_chat_id')
-            .eq('id', storeId)
-            .maybeSingle();
-
-          if (dbStore) {
-            s.name = dbStore.name || s.name;
-            s.owner = dbStore.owner || s.owner;
-            s.phone = dbStore.phone || s.phone;
-            s.address = dbStore.address || s.address;
-            if (!storeTargetChatId && dbStore.eitaa_chat_id) {
-              storeTargetChatId = dbStore.eitaa_chat_id;
-            }
-          }
-        } catch (e) {
-          console.warn('Could not query store details from supermarkets:', e);
+        if (oRec) {
+          orderData = { ...oRec, ...orderData };
+          supermarketId = oRec.supermarket_id || supermarketId;
         }
-
-        if (!storeTargetChatId) {
-          try {
-            const { data: prof } = await adminClient
-              .from('profiles')
-              .select('id, eitaa_chat_id')
-              .eq('id', storeId)
-              .maybeSingle();
-            if (prof?.eitaa_chat_id) {
-              storeTargetChatId = prof.eitaa_chat_id;
-            }
-          } catch (e) {
-            console.warn('Could not query store eitaa_chat_id from profiles:', e);
-          }
-        }
+      } catch (err) {
+        console.warn('Failed to query order for store notification:', err);
       }
 
-      messageText = `
-🎉 سلام جناب/سرکار ${s.owner} عزیز
+      try {
+        const { data: oItems } = await adminClient
+          .from('order_items')
+          .select('name, quantity, price, items_per_package, unit, discount_percent')
+          .eq('order_id', orderId);
 
-به سامانه پخش مواد غذایی و پروتئینی فرهودی خوش آمدید!
-اطلاعات ثبت‌نام فروشگاه «${s.name}» با موفقیت دریافت و در سیستم ثبت گردید.
-
-📞 شماره همراه: ${s.phone}
-📍 آدرس: ${s.address || 'ثبت نشده'}
-
-سفارشات، فاکتورها و وضعیت بارگیری از این طریق به اطلاع شما خواهد رسید.
-`.trim();
-    } else {
-      let orderData = body.order || body.record || body;
-      const orderId = orderData.id || orderData.order_id || body.order_id;
-      let supermarketId = orderData.supermarket_id;
-
-      let items: OrderLineItem[] = [];
-      let s = {
-        name: orderData.supermarket_name || 'فروشگاه شما',
-        owner: 'مدیر محترم',
-        phone: '',
-        address: '',
-        verification_type: '',
-      };
-
-      if (adminClient && orderId) {
-        try {
-          const { data: oRec } = await adminClient
-            .from('orders')
-            .select(
-              'id, supermarket_id, supermarket_name, assigned_visitor_id, visitor_name, status, total_amount, order_source, order_channel, order_date, pickup_discount_percent, founder_discount_percent, discount_percent, discount_status'
-            )
-            .eq('id', orderId)
-            .maybeSingle();
-
-          if (oRec) {
-            orderData = { ...oRec, ...orderData };
-            supermarketId = oRec.supermarket_id || supermarketId;
-          }
-        } catch (err) {
-          console.warn('Failed to query order for store notification:', err);
+        if (oItems && Array.isArray(oItems)) {
+          items = oItems;
         }
+      } catch (err) {
+        console.warn('Failed to query order_items for store notification:', err);
+      }
+    }
 
-        try {
-          const { data: oItems } = await adminClient
-            .from('order_items')
-            .select('name, quantity, price, items_per_package, unit, discount_percent')
-            .eq('order_id', orderId);
+    if (items.length === 0 && Array.isArray(orderData.items)) {
+      items = orderData.items;
+    }
 
-          if (oItems && Array.isArray(oItems)) {
-            items = oItems;
+    if (adminClient && supermarketId) {
+      try {
+        const { data: dbStore } = await adminClient
+          .from('supermarkets')
+          .select('id, name, owner, phone, address, verification_type, eitaa_chat_id')
+          .eq('id', supermarketId)
+          .maybeSingle();
+
+        if (dbStore) {
+          s.name = dbStore.name || s.name;
+          s.owner = dbStore.owner || s.owner;
+          s.phone = dbStore.phone || s.phone;
+          s.address = dbStore.address || s.address;
+          s.verification_type = dbStore.verification_type || '';
+          if (!storeTargetChatId && dbStore.eitaa_chat_id) {
+            storeTargetChatId = dbStore.eitaa_chat_id;
           }
-        } catch (err) {
-          console.warn('Failed to query order_items for store notification:', err);
         }
+      } catch (err) {
+        console.warn('Failed to fetch supermarket in eitaa-notify-store:', err);
       }
 
-      if (items.length === 0 && Array.isArray(orderData.items)) {
-        items = orderData.items;
-      }
-
-      if (adminClient && supermarketId) {
+      if (!storeTargetChatId) {
         try {
-          const { data: dbStore } = await adminClient
-            .from('supermarkets')
-            .select('id, name, owner, phone, address, verification_type, eitaa_chat_id')
+          const { data: prof } = await adminClient
+            .from('profiles')
+            .select('id, eitaa_chat_id')
             .eq('id', supermarketId)
             .maybeSingle();
-
-          if (dbStore) {
-            s.name = dbStore.name || s.name;
-            s.owner = dbStore.owner || s.owner;
-            s.phone = dbStore.phone || s.phone;
-            s.address = dbStore.address || s.address;
-            s.verification_type = dbStore.verification_type || '';
-            if (!storeTargetChatId && dbStore.eitaa_chat_id) {
-              storeTargetChatId = dbStore.eitaa_chat_id;
-            }
+          if (prof?.eitaa_chat_id) {
+            storeTargetChatId = prof.eitaa_chat_id;
           }
-        } catch (err) {
-          console.warn('Failed to fetch supermarket in eitaa-notify-store:', err);
-        }
-
-        if (!storeTargetChatId) {
-          try {
-            const { data: prof } = await adminClient
-              .from('profiles')
-              .select('id, eitaa_chat_id')
-              .eq('id', supermarketId)
-              .maybeSingle();
-            if (prof?.eitaa_chat_id) {
-              storeTargetChatId = prof.eitaa_chat_id;
-            }
-          } catch (e) {
-            console.warn('Could not query profile eitaa_chat_id:', e);
-          }
+        } catch (e) {
+          console.warn('Could not query profile eitaa_chat_id:', e);
         }
       }
+    }
 
-      const isConsumer = s.verification_type === 'bulk_consumer';
-      const orderDate = orderData.order_date
-        ? new Date(orderData.order_date).toLocaleTimeString('fa-IR')
-        : new Date().toLocaleTimeString('fa-IR');
+    const isConsumer = s.verification_type === 'bulk_consumer';
+    const orderDate = orderData.order_date
+      ? new Date(orderData.order_date).toLocaleTimeString('fa-IR')
+      : new Date().toLocaleTimeString('fa-IR');
 
-      const fin = computeOrderFinancials(orderData, items, isConsumer);
+    const fin = computeOrderFinancials(orderData, items, isConsumer);
 
-      let itemsListText = '';
-      if (items.length > 0) {
-        const itemRows = items.map((it, idx) => {
-          const qty = Number(it.quantity) || 0;
-          const u = it.unit || 'عدد';
-          const p = Number(it.items_per_package) > 1 ? Number(it.items_per_package) : 1;
-          const unitPr = p > 1 ? Math.round(Number(it.price || 0) / p) : Number(it.price || 0);
-          return `${idx + 1}. ${it.name || 'کالا'}: ${qty.toLocaleString('fa-IR')} ${u} (${unitPr.toLocaleString('fa-IR')} تومان)`;
-        });
-        itemsListText = `\n📦 اقلام ثبت‌شده:\n${itemRows.join('\n')}\n`;
-      }
+    let itemsListText = '';
+    if (items.length > 0) {
+      const itemRows = items.map((it, idx) => {
+        const qty = Number(it.quantity) || 0;
+        const u = it.unit || 'عدد';
+        const p = Number(it.items_per_package) > 1 ? Number(it.items_per_package) : 1;
+        const unitPr = p > 1 ? Math.round(Number(it.price || 0) / p) : Number(it.price || 0);
+        return `${idx + 1}. ${it.name || 'کالا'}: ${qty.toLocaleString('fa-IR')} ${u} (${unitPr.toLocaleString('fa-IR')} تومان)`;
+      });
+      itemsListText = `\n📦 اقلام ثبت‌شده:\n${itemRows.join('\n')}\n`;
+    }
 
-      const financialBlock = buildEitaaFinancialBlock(fin);
+    const financialBlock = buildEitaaFinancialBlock(fin);
 
-      messageText = `
+    const messageText = `
 🛒 سفارش شما با موفقیت ثبت شد
 
 جناب/سرکار ${s.owner} (فروشگاه ${s.name})
@@ -516,7 +632,6 @@ ${financialBlock}
 
 از حسن انتخاب و اعتماد شما سپاسگزاریم.
 `.trim();
-    }
 
     if (!eitaaToken) {
       return new Response(
@@ -529,6 +644,7 @@ ${financialBlock}
       console.warn('Store has no linked eitaa_chat_id; skipped message delivery');
       return new Response(
         JSON.stringify({
+          ok: true,
           success: true,
           message: 'فروشگاه حساب ایتا متصل ندارد، اعلان ایتا ارسال نشد.',
           skipped: true,
@@ -565,6 +681,7 @@ ${financialBlock}
 
     return new Response(
       JSON.stringify({
+        ok: true,
         success: isOk,
         message: isOk ? 'نوتیفیکیشن ایتا فروشگاه با موفقیت ارسال شد.' : 'خطا در ارسال پیام به ایتا',
         result: eitaaJson,

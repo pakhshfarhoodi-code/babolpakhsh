@@ -50,6 +50,10 @@ import { formatPersianDate } from '../../utils/dateUtils';
 import { normalizePhone, isValidMobile, MIN_PASSWORD_LENGTH } from '../../context/utils';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 
+export function isPendingExcelStore(shop: Supermarket): boolean {
+  return Boolean(shop.import_batch && shop.import_batch.trim() !== '' && !shop.activated_at);
+}
+
 interface TeamTabProps {
   visitors: Visitor[];
   supermarkets: Supermarket[];
@@ -88,6 +92,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
   const [selectedVisitorFilter, setSelectedVisitorFilter] = useState<string | null>(null);
   const [storeSearchTerm, setStoreSearchTerm] = useState('');
   const [storeStatusFilter, setStoreStatusFilter] = useState<'all' | 'active' | 'inactive' | 'pending'>(initialStoreStatusFilter || 'all');
+  const [customerGroupTab, setCustomerGroupTab] = useState<'self' | 'excel'>('self');
 
   // Visitor Financial Account States
   const [selectedVisitorForLedger, setSelectedVisitorForLedger] = useState<string | null>(null);
@@ -915,13 +920,39 @@ export const TeamTab: React.FC<TeamTabProps> = ({
     }
   };
 
+  const excelStores = useMemo(
+    () => supermarkets.filter(isPendingExcelStore),
+    [supermarkets]
+  );
+  const registeredStores = useMemo(
+    () => supermarkets.filter((s) => !isPendingExcelStore(s)),
+    [supermarkets]
+  );
+
+  const currentGroupStores = useMemo(
+    () => (customerGroupTab === 'excel' ? excelStores : registeredStores),
+    [customerGroupTab, excelStores, registeredStores]
+  );
+
   const pendingStoresCount = useMemo(() => {
-    return supermarkets.filter((s) => s.approval_status === 'pending').length;
-  }, [supermarkets]);
+    return currentGroupStores.filter((s) => s.approval_status === 'pending').length;
+  }, [currentGroupStores]);
+
+  const activeStoresCount = useMemo(() => {
+    return currentGroupStores.filter(
+      (s) => s.is_active !== false && s.approval_status !== 'pending' && s.approval_status !== 'rejected'
+    ).length;
+  }, [currentGroupStores]);
+
+  const inactiveStoresCount = useMemo(() => {
+    return currentGroupStores.filter(
+      (s) => s.is_active === false || s.approval_status === 'rejected'
+    ).length;
+  }, [currentGroupStores]);
 
   // Filtered supermarkets based on visitor click, search term, and approval status
   const filteredSupermarkets = useMemo(() => {
-    const filtered = supermarkets.filter((shop) => {
+    const filtered = currentGroupStores.filter((shop) => {
       if (selectedVisitorFilter) {
         if (selectedVisitorFilter === 'direct') {
           if (shop.assigned_visitor_id && shop.assigned_visitor_id !== 'direct') {
@@ -961,7 +992,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
       if (timeA !== timeB) return timeB - timeA;
       return b.id.localeCompare(a.id);
     });
-  }, [supermarkets, selectedVisitorFilter, storeStatusFilter, storeSearchTerm]);
+  }, [currentGroupStores, selectedVisitorFilter, storeStatusFilter, storeSearchTerm]);
 
   // شماره‌گذاری ترتیبی و پویا برای تمام فروشگاه‌های ثبت‌نامی (مشتریان)
   // ۱. بر اساس تاریخ ثبت نام مرتب می‌شوند (قدیمی‌ترین = مشتری شماره ۱، موارد بعدی یکی‌یکی اضافه می‌شوند)
@@ -1351,10 +1382,10 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                   <h3 className="text-sm font-bold text-slate-100">فهرست سوپرمارکت‌های طرف قرارداد</h3>
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
                     <span className="text-xs font-bold text-amber-300 bg-amber-950/70 border border-amber-800/60 px-2.5 py-0.5 rounded-lg shadow-xs">
-                      مجموع مشتریان: {supermarkets.length} فروشگاه
+                      مجموع مشتریان: {currentGroupStores.length} فروشگاه
                     </span>
                     <span className="text-xs text-slate-400">
-                      (نمایش {filteredSupermarkets.length} از {supermarkets.length})
+                      (نمایش {filteredSupermarkets.length} از {currentGroupStores.length})
                     </span>
                   </div>
                 </div>
@@ -1386,8 +1417,36 @@ export const TeamTab: React.FC<TeamTabProps> = ({
               </div>
             </div>
 
+            {/* Customer Group Switcher: Registered vs Excel */}
+            <div className="flex items-center gap-1.5 mt-3 p-1 rounded-xl bg-slate-950 border border-slate-800 text-xs">
+              <button
+                type="button"
+                onClick={() => setCustomerGroupTab('self')}
+                className={`flex-1 py-1.5 px-3 rounded-lg font-bold transition cursor-pointer text-center flex items-center justify-center gap-1.5 ${
+                  customerGroupTab === 'self'
+                    ? 'bg-slate-800 text-slate-100 shadow-xs border border-slate-700'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                }`}
+              >
+                <span>ثبت‌نامی ({registeredStores.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCustomerGroupTab('excel')}
+                className={`flex-1 py-1.5 px-3 rounded-lg font-bold transition cursor-pointer text-center flex items-center justify-center gap-1.5 ${
+                  customerGroupTab === 'excel'
+                    ? 'bg-emerald-950/70 text-emerald-300 shadow-xs border border-emerald-600/50'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                }`}
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+                <span>اکسلی ({excelStores.length})</span>
+              </button>
+            </div>
+
             {/* Status Filter Tabs */}
-            <div className="flex items-center gap-1.5 mt-3 p-1 rounded-xl bg-slate-950 border border-slate-800 text-xs overflow-x-auto">
+            <div className="flex items-center gap-1.5 mt-2.5 p-1 rounded-xl bg-slate-950 border border-slate-800 text-xs overflow-x-auto">
               {/* If pendingStoresCount > 0: Put pending chip first and highlighted */}
               {pendingStoresCount > 0 && (
                 <button
@@ -1413,7 +1472,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                همه ({supermarkets.length})
+                همه ({currentGroupStores.length})
               </button>
 
               <button
@@ -1425,7 +1484,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                دسترسی فعال ({supermarkets.filter((s) => s.is_active !== false && s.approval_status !== 'pending' && s.approval_status !== 'rejected').length})
+                دسترسی فعال ({activeStoresCount})
               </button>
 
               <button
@@ -1437,7 +1496,7 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                غیرفعال ({supermarkets.filter((s) => s.is_active === false || s.approval_status === 'rejected').length})
+                غیرفعال ({inactiveStoresCount})
               </button>
 
               {/* If pendingStoresCount === 0: Show pending chip in normal position */}
@@ -1490,7 +1549,9 @@ export const TeamTab: React.FC<TeamTabProps> = ({
             <div className="space-y-3 mt-3 max-h-[500px] overflow-y-auto pr-1">
               {filteredSupermarkets.length === 0 ? (
                 <div className="py-12 text-center text-slate-500 text-xs">
-                  فروشگاهی مطابق با فیلتر یافت نشد.
+                  {customerGroupTab === 'excel'
+                    ? 'مشتری اکسلیِ منتظر ورود وجود ندارد'
+                    : 'فروشگاهی مطابق با فیلتر یافت نشد.'}
                 </div>
               ) : (
                 filteredSupermarkets.map((shop) => {

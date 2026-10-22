@@ -258,6 +258,7 @@ Deno.serve(async (req: Request) => {
           is_active: true,
           approval_status: 'approved',
           registration_source: batchTag,
+          import_batch: batchTag,
           created_at: new Date().toISOString(),
         });
 

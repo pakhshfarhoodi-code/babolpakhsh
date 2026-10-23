@@ -1,3 +1,5 @@
+import { lazy, ComponentType, LazyExoticComponent } from 'react';
+
 /**
  * بعد از هر دیپلوی، نام فایل‌های chunk (مثل EditOrderModal-xxxx.js) عوض می‌شود.
  * اگر یک تب قدیمی هنوز باز باشد و chunk قدیمی را بخواهد، مرورگر خطای
@@ -24,4 +26,36 @@ export function reloadOnceForNewDeploy(): boolean {
   }
   window.location.reload();
   return true;
+}
+
+/**
+ * تلاش مجدد برای اجرای یک تابع ایمپورت پرومیس‌محور تا ۳ بار با تأخیرهای ۸۰۰ms و ۱۵۰۰ms
+ */
+export async function retryImport<T>(
+  importer: () => Promise<T>,
+  retries = 3,
+  delays: number[] = [800, 1500]
+): Promise<T> {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await importer();
+    } catch (err) {
+      attempt++;
+      if (attempt >= retries) {
+        throw err;
+      }
+      const delay = delays[attempt - 1] ?? delays[delays.length - 1];
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+}
+
+/**
+ * بارگذاری lazy کامپوننت با حداکثر ۳ بار تلاش مجدد هنگام بروز خطای بارگذاری
+ */
+export function lazyWithRetry<T extends ComponentType<any>>(
+  factory: () => Promise<{ default: T }>
+): LazyExoticComponent<T> {
+  return lazy(() => retryImport(factory, 3, [800, 1500]));
 }

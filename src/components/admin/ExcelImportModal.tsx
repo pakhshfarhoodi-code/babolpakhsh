@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
-import * as XLSX from 'xlsx';
 import { Product, Category } from '../../types';
 import { useApp } from '../../context/AppContext';
+import { retryImport } from '../../lib/chunkReload';
 import {
   Upload,
   FileSpreadsheet,
@@ -89,7 +89,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     imageUrlCol: '',
   });
 
-  const { addCategory } = useApp();
+  const { addCategory, showToast } = useApp();
 
   // Manual fallback and bulk assignment controls
   const [defaultCategoryId, setDefaultCategoryId] = useState<string>(() => categories[0]?.id || '');
@@ -225,13 +225,25 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     };
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setFileName(file.name);
     setErrorMessage(null);
     setIsProcessing(true);
+
+    let XLSX: typeof import('xlsx');
+    try {
+      XLSX = await retryImport(() => import('xlsx'));
+    } catch (importErr) {
+      console.error('Failed to load xlsx:', importErr);
+      const msg = 'بارگذاری ماژول اکسل ناموفق بود، اینترنت را بررسی و دوباره تلاش کنید';
+      showToast(msg, 'error');
+      setErrorMessage(msg);
+      setIsProcessing(false);
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = (evt) => {
@@ -508,7 +520,16 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     }
   };
 
-  const downloadSampleTemplate = () => {
+  const downloadSampleTemplate = async () => {
+    let XLSX: typeof import('xlsx');
+    try {
+      XLSX = await retryImport(() => import('xlsx'));
+    } catch (importErr) {
+      console.error('Failed to load xlsx:', importErr);
+      showToast('بارگذاری ماژول اکسل ناموفق بود، اینترنت را بررسی و دوباره تلاش کنید', 'error');
+      return;
+    }
+
     const sampleData = [
       {
         'کد کالا': 'prod-101',

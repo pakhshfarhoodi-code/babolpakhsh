@@ -1,5 +1,5 @@
 // Babol Pakhsh Service Worker - Database-First & Fast Deploy
-const CACHE_VERSION = 'farhoodi-b2b-v7-newlogo';
+const CACHE_VERSION = 'farhoodi-b2b-v8-chunk-fix';
 const CACHE_NAME = `babolpakhsh-${CACHE_VERSION}`;
 
 const STATIC_ASSETS = [
@@ -56,17 +56,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  const isCodeOrDocRequest =
-    event.request.mode === 'navigate' ||
-    url.pathname.endsWith('.html') ||
+  // 1. Script (.js, .mjs) and Style (.css) assets: Network-First with EXACT cache fallback ONLY.
+  // CRITICAL: NEVER fallback to index.html for code/style chunks to prevent syntax errors when chunks fail.
+  const isScriptOrStyle =
     url.pathname.endsWith('.js') ||
     url.pathname.endsWith('.mjs') ||
-    url.pathname.endsWith('.css') ||
-    url.pathname === '/' ||
-    url.pathname.endsWith('/');
+    url.pathname.endsWith('.css');
 
-  if (isCodeOrDocRequest) {
-    // Network-First with cache fallback for HTML, JS and CSS to ensure instant updates on deployment
+  if (isScriptOrStyle) {
     event.respondWith(
       fetch(event.request)
         .then((networkResponse) => {
@@ -76,27 +73,52 @@ self.addEventListener('fetch', (event) => {
           }
           return networkResponse;
         })
-        .catch(() => {
-          return caches.match(event.request).then((cached) => {
-            return cached || caches.match('./index.html') || caches.match('/');
-          });
+        .catch(async () => {
+          const cached = await caches.match(event.request);
+          if (cached) {
+            return cached;
+          }
+          return Response.error();
         })
     );
-  } else {
-    // Cache-First with network fallback for fonts, static icons, and images
+    return;
+  }
+
+  // 2. Navigation requests: Network-First with fallback to index.html ONLY for navigation mode
+  if (event.request.mode === 'navigate') {
     event.respondWith(
-      caches.match(event.request).then((cachedResponse) => {
-        if (cachedResponse) {
-          return cachedResponse;
-        }
-        return fetch(event.request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200 && event.request.url.startsWith('http')) {
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
             const clone = networkResponse.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
           }
           return networkResponse;
-        });
-      })
+        })
+        .catch(async () => {
+          const cached = await caches.match(event.request);
+          if (cached) return cached;
+          const fallbackIndex = (await caches.match('./index.html')) || (await caches.match('/'));
+          if (fallbackIndex) return fallbackIndex;
+          return Response.error();
+        })
     );
+    return;
   }
+
+  // 3. Cache-First with network fallback for fonts, static icons, and images
+  event.respondWith(
+    caches.match(event.request).then((cachedResponse) => {
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+      return fetch(event.request).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200 && event.request.url.startsWith('http')) {
+          const clone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        }
+        return networkResponse;
+      });
+    })
+  );
 });

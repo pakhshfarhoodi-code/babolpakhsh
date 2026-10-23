@@ -1,16 +1,17 @@
-import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useApp } from './context/AppContext';
 import { Header } from './components/Header';
 import type { AdminTabKey } from './components/AdminPanel';
 import { LoginScreen } from './components/LoginScreen';
 import { UserRole } from './types';
 import { getMessengerScope } from './lib/messengerScope';
+import { lazyWithRetry } from './lib/chunkReload';
 import appLogo from './assets/images/farhoodi_b2b_logo.webp';
 
-const AdminPanel = lazy(() => import('./components/AdminPanel').then((m) => ({ default: m.AdminPanel })));
-const VisitorPortal = lazy(() => import('./components/VisitorPortal').then((m) => ({ default: m.VisitorPortal })));
-const SupermarketPortal = lazy(() => import('./components/SupermarketPortal').then((m) => ({ default: m.SupermarketPortal })));
-const WarehousePanel = lazy(() => import('./components/WarehousePanel').then((m) => ({ default: m.WarehousePanel })));
+const AdminPanel = lazyWithRetry(() => import('./components/AdminPanel').then((m) => ({ default: m.AdminPanel })));
+const VisitorPortal = lazyWithRetry(() => import('./components/VisitorPortal').then((m) => ({ default: m.VisitorPortal })));
+const SupermarketPortal = lazyWithRetry(() => import('./components/SupermarketPortal').then((m) => ({ default: m.SupermarketPortal })));
+const WarehousePanel = lazyWithRetry(() => import('./components/WarehousePanel').then((m) => ({ default: m.WarehousePanel })));
 import { ForcePasswordChangeModal } from './components/ForcePasswordChangeModal';
 import { AlertTriangle, RefreshCw, Loader2 } from 'lucide-react';
 

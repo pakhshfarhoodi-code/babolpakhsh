@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import * as XLSX from 'xlsx';
 import { Visitor } from '../../types';
 import { useApp } from '../../context/AppContext';
+import { retryImport } from '../../lib/chunkReload';
 import { supabase, isSupabaseConfigured, getFunctionErrorMessage } from '../../lib/supabase';
 import { normalizeDigits, normalizePhone, isValidMobile } from '../../context/utils';
 import { getTehranDateParts } from '../../utils/dateUtils';
@@ -202,9 +202,18 @@ const ExcelStoreImportModalInner: React.FC<Omit<ExcelStoreImportModalProps, 'isO
   }, [allResults, hasDownloadedExport]);
 
   // File Upload and Parsing Handler
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    let XLSX: typeof import('xlsx');
+    try {
+      XLSX = await retryImport(() => import('xlsx'));
+    } catch (importErr) {
+      console.error('Failed to load xlsx:', importErr);
+      showToast('بارگذاری ماژول اکسل ناموفق بود، اینترنت را بررسی و دوباره تلاش کنید', 'error');
+      return;
+    }
 
     setFileName(file.name);
     const reader = new FileReader();
@@ -553,13 +562,22 @@ const ExcelStoreImportModalInner: React.FC<Omit<ExcelStoreImportModalProps, 'isO
   };
 
   // Excel Downloads
-  const handleDownloadExcel = (onlyFailed = false) => {
+  const handleDownloadExcel = async (onlyFailed = false) => {
     const rowsToExport = onlyFailed
       ? allResults.filter((r) => r.status !== 'created')
       : allResults;
 
     if (rowsToExport.length === 0) {
       showToast('ردیفی برای خروجی اکسل یافت نشد.', 'info');
+      return;
+    }
+
+    let XLSX: typeof import('xlsx');
+    try {
+      XLSX = await retryImport(() => import('xlsx'));
+    } catch (importErr) {
+      console.error('Failed to load xlsx:', importErr);
+      showToast('بارگذاری ماژول اکسل ناموفق بود، اینترنت را بررسی و دوباره تلاش کنید', 'error');
       return;
     }
 

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import * as XLSX from 'xlsx';
 import { Product, Category } from '../../types';
-import { Download, FileSpreadsheet, Filter, Check, X, Layers, Tag } from 'lucide-react';
+import { Download, FileSpreadsheet, Filter, Check, X, Layers, Tag, Loader2 } from 'lucide-react';
+import { useApp } from '../../context/AppContext';
+import { retryImport } from '../../lib/chunkReload';
 
 interface ExcelExportModalProps {
   isOpen: boolean;
@@ -18,11 +19,13 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
   categories,
   brands,
 }) => {
+  const { showToast } = useApp();
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedBrand, setSelectedBrand] = useState<string>('all');
   const [includeStock, setIncludeStock] = useState<boolean>(true);
   const [includeVisitorPrice, setIncludeVisitorPrice] = useState<boolean>(true);
   const [includeImage, setIncludeImage] = useState<boolean>(true);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
 
   if (!isOpen) return null;
 
@@ -32,63 +35,81 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
     return true;
   });
 
-  const handleExport = () => {
-    const exportRows = filteredProducts.map((p) => {
-      const cat = categories.find((c) => c.id === p.category_id);
-      const row: Record<string, any> = {
-        'کد کالا': p.id,
-        'نام کالا': p.name,
-        'برند': p.brand || 'متفرقه',
-        'دسته‌بندی': cat?.name || 'عمومی',
-      };
-
-      if (includeVisitorPrice) {
-        row['قیمت خرید ویزیتور (تومان)'] = p.visitor_price ?? 0;
-      }
-
-      row['قیمت خرید فروشگاه (تومان)'] = p.price;
-      row['قیمت مصرف‌کننده (تومان)'] = p.consumer_price && p.consumer_price > 0 ? p.consumer_price : '';
-
-      if (includeStock) {
-        row['موجودی کل انبار'] = p.stock;
-        row['موجودی رزرو شده'] = p.reserved_stock;
-        row['موجودی آزاد قابل فروش'] = Math.round(Math.max(0, p.stock - p.reserved_stock) * 1000) / 1000;
-      }
-
-      row['واحد شمارش'] = p.unit;
-      row['تعداد در کارتن/بسته'] = p.items_per_package && p.items_per_package > 0 ? p.items_per_package : '';
-      if (includeImage) {
-        row['لینک مستقیم تصویر کالا'] = p.image_url || '';
-      }
-      row['وضعیت کالا'] = p.is_active ? 'فعال' : 'غیرفعال';
-
-      return row;
-    });
-
-    const ws = XLSX.utils.json_to_sheet(exportRows);
-    const wb = XLSX.utils.book_new();
-
-    let sheetName = 'کاتالوگ کالاها';
-    if (selectedCategory !== 'all') {
-      const cat = categories.find((c) => c.id === selectedCategory);
-      if (cat) sheetName = cat.name.slice(0, 25);
-    } else if (selectedBrand !== 'all') {
-      sheetName = selectedBrand.slice(0, 25);
+  const handleExport = async () => {
+    setIsExporting(true);
+    let XLSX: typeof import('xlsx');
+    try {
+      XLSX = await retryImport(() => import('xlsx'));
+    } catch (err) {
+      console.error('Failed to load xlsx:', err);
+      showToast('بارگذاری ماژول اکسل ناموفق بود، اینترنت را بررسی و دوباره تلاش کنید', 'error');
+      setIsExporting(false);
+      return;
     }
 
-    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    try {
+      const exportRows = filteredProducts.map((p) => {
+        const cat = categories.find((c) => c.id === p.category_id);
+        const row: Record<string, any> = {
+          'کد کالا': p.id,
+          'نام کالا': p.name,
+          'برند': p.brand || 'متفرقه',
+          'دسته‌بندی': cat?.name || 'عمومی',
+        };
 
-    const dateStr = new Intl.DateTimeFormat('fa-IR-u-nu-latn', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    })
-      .format(new Date())
-      .replace(/[\/\\]/g, '-');
+        if (includeVisitorPrice) {
+          row['قیمت خرید ویزیتور (تومان)'] = p.visitor_price ?? 0;
+        }
 
-    const fileName = `گزارش_کالاهای_بارفروش_فرهودی_${sheetName}_${dateStr}.xlsx`;
-    XLSX.writeFile(wb, fileName);
-    onClose();
+        row['قیمت خرید فروشگاه (تومان)'] = p.price;
+        row['قیمت مصرف‌کننده (تومان)'] = p.consumer_price && p.consumer_price > 0 ? p.consumer_price : '';
+
+        if (includeStock) {
+          row['موجودی کل انبار'] = p.stock;
+          row['موجودی رزرو شده'] = p.reserved_stock;
+          row['موجودی آزاد قابل فروش'] = Math.round(Math.max(0, p.stock - p.reserved_stock) * 1000) / 1000;
+        }
+
+        row['واحد شمارش'] = p.unit;
+        row['تعداد در کارتن/بسته'] = p.items_per_package && p.items_per_package > 0 ? p.items_per_package : '';
+        if (includeImage) {
+          row['لینک مستقیم تصویر کالا'] = p.image_url || '';
+        }
+        row['وضعیت کالا'] = p.is_active ? 'فعال' : 'غیرفعال';
+
+        return row;
+      });
+
+      const ws = XLSX.utils.json_to_sheet(exportRows);
+      const wb = XLSX.utils.book_new();
+
+      let sheetName = 'کاتالوگ کالاها';
+      if (selectedCategory !== 'all') {
+        const cat = categories.find((c) => c.id === selectedCategory);
+        if (cat) sheetName = cat.name.slice(0, 25);
+      } else if (selectedBrand !== 'all') {
+        sheetName = selectedBrand.slice(0, 25);
+      }
+
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+
+      const dateStr = new Intl.DateTimeFormat('fa-IR-u-nu-latn', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      })
+        .format(new Date())
+        .replace(/[\/\\]/g, '-');
+
+      const fileName = `گزارش_کالاهای_بارفروش_فرهودی_${sheetName}_${dateStr}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+      onClose();
+    } catch (exportErr) {
+      console.error('Error generating excel:', exportErr);
+      showToast('خطا در تولید فایل اکسل.', 'error');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -220,12 +241,16 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
           </button>
           <button
             type="button"
-            disabled={filteredProducts.length === 0}
+            disabled={filteredProducts.length === 0 || isExporting}
             onClick={handleExport}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-bold transition cursor-pointer shadow-lg shadow-blue-600/30"
           >
-            <FileSpreadsheet className="w-4 h-4" />
-            <span>دانلود فایل اکسل</span>
+            {isExporting ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="w-4 h-4" />
+            )}
+            <span>{isExporting ? 'در حال دریافت...' : 'دانلود فایل اکسل'}</span>
           </button>
         </div>
       </div>

@@ -7,6 +7,8 @@ import { CartSheet } from './shop/CartSheet';
 import { OrderCard } from './shop/OrderCard';
 import { OrderInvoiceModal } from './invoice/OrderInvoiceModal';
 import { EditOrderModal } from './shop/EditOrderModal';
+import { RewardsTab } from './shop/RewardsTab';
+import { supabase } from '../lib/supabase';
 import {
   buildCartFromOrder,
   clampQuantity,
@@ -25,6 +27,7 @@ import {
   ShoppingBag,
   CheckCircle2,
   Package,
+  Gift,
   Layers,
   ArrowLeft,
   RotateCcw,
@@ -81,8 +84,32 @@ export const SupermarketPortal: React.FC = () => {
     (v) => v.id === currentStore?.assigned_visitor_id
   );
 
-  // Tabs: 'catalog' (default) | 'orders'
-  const [activeTab, setActiveTab] = useState<'catalog' | 'orders'>('catalog');
+  // Check if current customer is a store (not a consumer)
+  const isStoreCustomer = useMemo(() => {
+    return (
+      currentStore?.verification_type !== 'bulk_consumer' &&
+      (currentStore as any)?.customer_type !== 'consumer'
+    );
+  }, [currentStore]);
+
+  // Check if loyalty program is enabled globally
+  const [loyaltyEnabled, setLoyaltyEnabled] = useState(false);
+
+  useEffect(() => {
+    if (!supabase) return;
+    let cancelled = false;
+    supabase.rpc('get_loyalty_settings').then(({ data, error }) => {
+      if (!cancelled && !error && data && data.enabled) {
+        setLoyaltyEnabled(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Tabs: 'catalog' (default) | 'orders' | 'rewards'
+  const [activeTab, setActiveTab] = useState<'catalog' | 'orders' | 'rewards'>('catalog');
 
   // Mobile cart sheet state
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
@@ -472,10 +499,25 @@ export const SupermarketPortal: React.FC = () => {
             </span>
           )}
         </button>
+
+        {loyaltyEnabled && isStoreCustomer && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('rewards')}
+            className={`h-9 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              activeTab === 'rewards'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Gift className="w-3.5 h-3.5" />
+            <span>جوایز</span>
+          </button>
+        )}
       </div>
 
       {/* Main Tab Content */}
-      {activeTab === 'catalog' ? (
+      {activeTab === 'catalog' && (
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_360px] gap-3 items-start">
           {/* Products Column */}
           <div className="min-w-0">
@@ -506,7 +548,9 @@ export const SupermarketPortal: React.FC = () => {
             />
           </div>
         </div>
-      ) : (
+      )}
+
+      {activeTab === 'orders' && (
         /* 8. My Orders Tab */
         <div className="space-y-3 max-w-2xl mx-auto">
           {storeOrders.length === 0 ? (
@@ -544,6 +588,12 @@ export const SupermarketPortal: React.FC = () => {
               />
             ))
           )}
+        </div>
+      )}
+
+      {activeTab === 'rewards' && (
+        <div className="max-w-4xl mx-auto">
+          <RewardsTab onNavigateToCatalog={() => setActiveTab('catalog')} />
         </div>
       )}
 

@@ -921,19 +921,21 @@ export function useSupabaseSync({
     scheduleReloadRef.current = scheduleReload;
   }, [scheduleReload]);
 
-  // Immediate products fetch when role switches to staff (admin, warehouse, visitor)
-  const lastObservedRoleRef = useRef<string | undefined>(role);
+  // Immediate products fetch for staff (admin, warehouse, visitor) upon role detection at startup and on role switch
+  const staffProductsFetchedForRoleRef = useRef<string | null>(null);
   useEffect(() => {
-    if (lastObservedRoleRef.current !== role) {
-      const prev = lastObservedRoleRef.current;
-      lastObservedRoleRef.current = role;
-      if (role && role !== 'supermarket' && prev !== role) {
-        scheduleReload(['products'], true);
-        // دریافت فوری قیمت‌های کامل (قیمت خرید ویزیتور) بدون انتظار برای کند‌ترین جدول‌ها
-        void fetchProducts().catch(() => {});
+    if (role && role !== 'supermarket') {
+      if (staffProductsFetchedForRoleRef.current !== role) {
+        staffProductsFetchedForRoleRef.current = role;
+        // دریافت فوری قیمت‌های کامل کالاها (شامل قیمت خرید ویزیتور) در شروع برنامه و جدا از بقیه جدول‌ها
+        void fetchProducts().catch((err) => {
+          console.warn('Immediate staff products fetch warning:', err);
+        });
       }
+    } else {
+      staffProductsFetchedForRoleRef.current = null;
     }
-  }, [role, scheduleReload, fetchProducts]);
+  }, [role, fetchProducts]);
 
   // 6. User Login/Logout Lifecycle Listener (Requirement 1)
   useEffect(() => {
@@ -951,6 +953,9 @@ export function useSupabaseSync({
           retryAttemptRef.current = 0;
           setFetchError?.(null);
           purgeOperationalLocalStorage();
+          if (role && role !== 'supermarket') {
+            void fetchProducts().catch(() => {});
+          }
           scheduleReload(ALL_SYNC_TABLES, true);
         }
       } else {
@@ -971,6 +976,9 @@ export function useSupabaseSync({
           retryAttemptRef.current = 0;
           setFetchError?.(null);
           purgeOperationalLocalStorage();
+          if (role && role !== 'supermarket') {
+            void fetchProducts().catch(() => {});
+          }
           scheduleReload(ALL_SYNC_TABLES, true);
         }
       } else if (event === 'SIGNED_OUT' || !session) {

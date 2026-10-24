@@ -1684,10 +1684,19 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                           </div>
                         ) : (
                           <div className="flex items-center gap-1.5">
-                            <span className="font-bold font-mono text-blue-400">
-                              {visitorPriceLoaded ? formatPrice(visitorPrice) : '…'}
-                            </span>
-                            <span className="text-[11px] text-slate-500">تومان</span>
+                            {visitorPriceLoaded ? (
+                              <>
+                                <span className="font-bold font-mono text-blue-400">
+                                  {formatPrice(visitorPrice)}
+                                </span>
+                                <span className="text-[11px] text-slate-500">تومان</span>
+                              </>
+                            ) : (
+                              <div
+                                className="h-4 w-14 rounded-md bg-slate-800 animate-pulse"
+                                title="در حال بارگذاری قیمت ویزیتور..."
+                              />
+                            )}
                           </div>
                         )}
                       </td>

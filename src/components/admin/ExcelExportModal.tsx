@@ -35,7 +35,17 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
     return true;
   });
 
+  const isVisitorPriceLoading =
+    includeVisitorPrice &&
+    (products.some((p) => p.visitor_price === undefined) ||
+      filteredProducts.some((p) => p.visitor_price === undefined));
+
   const handleExport = async () => {
+    if (isVisitorPriceLoading) {
+      showToast('قیمت‌های ویزیتور هنوز در حال دریافت هستند. لطفاً شکیبا باشید.', 'warning');
+      return;
+    }
+
     setIsExporting(true);
     let XLSX: typeof import('xlsx');
     try {
@@ -58,7 +68,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
         };
 
         if (includeVisitorPrice) {
-          row['قیمت خرید ویزیتور (تومان)'] = p.visitor_price ?? 0;
+          row['قیمت خرید ویزیتور (تومان)'] = p.visitor_price !== undefined ? p.visitor_price : '';
         }
 
         row['قیمت خرید فروشگاه (تومان)'] = p.price;
@@ -223,6 +233,14 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
             </label>
           </div>
 
+          {/* Visitor Price Loading Notice */}
+          {isVisitorPriceLoading && (
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 flex items-center gap-2 animate-pulse">
+              <Loader2 className="w-4 h-4 animate-spin text-amber-400 shrink-0" />
+              <span>در حال دریافت قیمت‌ها… لطفاً شکیبا باشید.</span>
+            </div>
+          )}
+
           {/* Info Banner */}
           <div className="p-3 rounded-xl bg-blue-950/40 border border-blue-800/60 text-xs text-blue-200 flex items-center justify-between">
             <span>تعداد کالاهای منتخب جهت استخراج:</span>
@@ -241,16 +259,22 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
           </button>
           <button
             type="button"
-            disabled={filteredProducts.length === 0 || isExporting}
+            disabled={filteredProducts.length === 0 || isExporting || isVisitorPriceLoading}
             onClick={handleExport}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-bold transition cursor-pointer shadow-lg shadow-blue-600/30"
           >
-            {isExporting ? (
+            {isExporting || isVisitorPriceLoading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <FileSpreadsheet className="w-4 h-4" />
             )}
-            <span>{isExporting ? 'در حال دریافت...' : 'دانلود فایل اکسل'}</span>
+            <span>
+              {isExporting
+                ? 'در حال دریافت...'
+                : isVisitorPriceLoading
+                ? 'در حال دریافت قیمت‌ها…'
+                : 'دانلود فایل اکسل'}
+            </span>
           </button>
         </div>
       </div>

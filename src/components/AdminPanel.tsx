@@ -5,6 +5,7 @@ import { OrdersTab } from './admin/OrdersTab';
 import { LoadingBillsTab } from './admin/LoadingBillsTab';
 import { ProductsTab } from './admin/ProductsTab';
 import { TeamTab } from './admin/TeamTab';
+import { LoyaltyTab } from './admin/LoyaltyTab';
 import { ReportsTab } from './admin/ReportsTab';
 import { InvoiceSettingsTab } from './admin/InvoiceSettingsTab';
 import { FinancialAccountsTab } from './admin/FinancialAccountsTab';
@@ -14,6 +15,7 @@ import {
   AlertTriangle,
   ShoppingBag,
   Tag,
+  Gift,
   Users,
   BarChart3,
   Pencil,
@@ -34,6 +36,7 @@ export type AdminTabKey =
   | 'overview'
   | 'orders'
   | 'products'
+  | 'loyalty'
   | 'team'
   | 'financial_accounts'
   | 'reports'
@@ -183,6 +186,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       icon: Tag,
       badge: products.length,
       badgeColor: 'bg-slate-800 text-slate-300 font-semibold',
+      activeStyle:
+        'bg-blue-600 text-white shadow-md shadow-blue-600/30 border-blue-500 font-bold',
+      inactiveHover: 'hover:text-blue-300 hover:bg-slate-900',
+    },
+    {
+      id: 'loyalty' as const,
+      label: 'باشگاه و جوایز',
+      icon: Gift,
+      badge: null,
+      badgeColor: '',
       activeStyle:
         'bg-blue-600 text-white shadow-md shadow-blue-600/30 border-blue-500 font-bold',
       inactiveHover: 'hover:text-blue-300 hover:bg-slate-900',
@@ -433,6 +446,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             setCatBrandFeedback(null);
           }}
         />
+      )}
+
+      {/* Tab: Loyalty (باشگاه و جوایز) */}
+      {activeTab === 'loyalty' && (
+        <LoyaltyTab />
       )}
 
       {/* Tab 4: Team */}

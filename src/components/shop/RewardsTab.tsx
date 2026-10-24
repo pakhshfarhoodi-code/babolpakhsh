@@ -23,7 +23,7 @@ import {
 export interface LoyaltyHistoryItem {
   id: string;
   points: number;
-  kind: 'earn' | 'reverse' | 'redeem' | 'refund' | 'adjust' | string;
+  kind: 'earn' | 'bonus' | 'reverse' | 'redeem' | 'refund' | 'adjust' | string;
   order_id?: string | null;
   note?: string | null;
   created_at: string;
@@ -100,6 +100,8 @@ function getHistoryKindLabel(kind: string): string {
   switch (kind) {
     case 'earn':
       return 'کسب امتیاز سفارش';
+    case 'bonus':
+      return 'پاداش عضویت';
     case 'reverse':
       return 'برگشت امتیاز';
     case 'redeem':

@@ -48,6 +48,7 @@ export interface LoyaltySettings {
   value_small: number;
   value_large: number;
   show_names: boolean;
+  welcome_bonus?: number;
 }
 
 export interface ProductPointRow {
@@ -105,6 +106,7 @@ const DEFAULT_SETTINGS: LoyaltySettings = {
   value_small: 200000,
   value_large: 5000000,
   show_names: true,
+  welcome_bonus: 0,
 };
 
 function parseRpcError(err: any, fallback: string): string {
@@ -220,6 +222,7 @@ export const LoyaltyTab: React.FC = () => {
           value_small: Number(data.value_small ?? DEFAULT_SETTINGS.value_small),
           value_large: Number(data.value_large ?? DEFAULT_SETTINGS.value_large),
           show_names: Boolean(data.show_names ?? DEFAULT_SETTINGS.show_names),
+          welcome_bonus: Number(data.welcome_bonus ?? DEFAULT_SETTINGS.welcome_bonus ?? 0),
         });
       }
     } catch (err) {
@@ -1023,6 +1026,10 @@ export const LoyaltyTab: React.FC = () => {
                   <strong className="text-white font-bold ml-1">۶. لیدربرد:</strong>{' '}
                   رتبه‌ی فروشگاه‌ها بر اساس امتیازِ کسب‌شده است، نه موجودی؛ خرج کردن امتیاز رتبه را کم نمی‌کند.
                 </p>
+                <p>
+                  <strong className="text-white font-bold ml-1">۷. پاداش عضویت:</strong>{' '}
+                  هر فروشگاه جدید یک بار امتیاز هدیه می‌گیرد (مقدارش در همین تب تنظیم می‌شود).
+                </p>
               </div>
             )}
           </div>
@@ -1145,6 +1152,27 @@ export const LoyaltyTab: React.FC = () => {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 pt-2">
+                    {/* welcome_bonus */}
+                    <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-2">
+                      <label className="text-xs font-bold text-slate-200 block">
+                        پاداش عضویت (امتیاز)
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          value={settings.welcome_bonus ?? 0}
+                          onChange={(e) =>
+                            setSettings((s) => ({ ...s, welcome_bonus: Math.max(0, Number(e.target.value)) }))
+                          }
+                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-hidden focus:border-blue-500"
+                        />
+                        <span className="absolute left-3 top-2.5 text-xs text-slate-400">امتیاز</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        به هر فروشگاه جدید یک بار این مقدار امتیاز داده می‌شود: ثبت‌نام مستقیم هنگام ثبت‌نام، و فروشگاه‌های اکسلی هنگام اولین ورود. صفر یعنی غیرفعال.
+                      </p>
+                    </div>
+
                     {/* toman_per_point */}
                     <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-2">
                       <label className="text-xs font-bold text-slate-200 block">

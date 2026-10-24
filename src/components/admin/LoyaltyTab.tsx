@@ -1342,9 +1342,9 @@ export const LoyaltyTab: React.FC = () => {
                       {/* Top Header & Status */}
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div className="flex items-center gap-3">
-                          {reward.image_url ? (
+                          {reward.image_url || linkedProduct?.image_url ? (
                             <img
-                              src={reward.image_url}
+                              src={reward.image_url || linkedProduct?.image_url || ''}
                               alt={reward.title}
                               className="w-14 h-14 rounded-xl object-cover border border-slate-800 shrink-0"
                               onError={(e) => {
@@ -1506,20 +1506,6 @@ export const LoyaltyTab: React.FC = () => {
                     />
                   </div>
 
-                  {/* Image URL */}
-                  <div>
-                    <label className="text-xs font-bold text-slate-300 block mb-1">آدرس تصویر (URL)</label>
-                    <input
-                      type="text"
-                      placeholder="https://..."
-                      value={editingRewardModal.image_url || ''}
-                      onChange={(e) =>
-                        setEditingRewardModal((prev) => ({ ...prev, image_url: e.target.value }))
-                      }
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-hidden focus:border-blue-500 text-left font-mono"
-                    />
-                  </div>
-
                   {/* Linked Product & Quantity */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="sm:col-span-2">
@@ -1543,6 +1529,8 @@ export const LoyaltyTab: React.FC = () => {
                             product_id: pid,
                             consumer_value: autoConsumerVal,
                             title: prev?.title || prod?.name || '',
+                            // Keep image_url null/empty unless already explicitly set by admin
+                            image_url: prev?.image_url || '',
                           }));
                         }}
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs sm:text-sm text-white focus:outline-hidden focus:border-blue-500"
@@ -1581,6 +1569,95 @@ export const LoyaltyTab: React.FC = () => {
                       />
                     </div>
                   </div>
+
+                  {/* Reward Image with Live Store Preview & Fallback */}
+                  {(() => {
+                    const selectedProd = products.find((p) => p.id === editingRewardModal.product_id);
+                    const customImg = (editingRewardModal.image_url || '').trim();
+                    const catalogImg = (selectedProd?.image_url || '').trim();
+                    const effectiveImg = customImg || catalogImg;
+                    const isCustom = Boolean(customImg);
+
+                    return (
+                      <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3.5 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-slate-300">
+                            تصویر جایزه
+                          </label>
+                          {isCustom ? (
+                            <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-400 border border-blue-500/30">
+                              تصویر اختصاصی
+                            </span>
+                          ) : catalogImg ? (
+                            <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                              از کاتالوگ
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-slate-500 font-medium">
+                              بدون تصویر (آیکون پیش‌فرض)
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Live Preview */}
+                        <div className="flex items-center gap-3">
+                          <div className="w-16 h-16 rounded-xl bg-slate-900 border border-slate-800 overflow-hidden flex items-center justify-center shrink-0">
+                            {effectiveImg ? (
+                              <img
+                                src={effectiveImg}
+                                alt="پیش‌نمایش تصویر جایزه"
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLElement).style.display = 'none';
+                                }}
+                              />
+                            ) : (
+                              <Gift className="w-8 h-8 text-amber-400/80 stroke-1" />
+                            )}
+                          </div>
+                          <div className="text-xs text-slate-400 space-y-0.5">
+                            <span className="text-white font-medium block">تصویری که فروشگاه می‌بیند</span>
+                            <span className="text-[11px] text-slate-500 block leading-relaxed">
+                              {isCustom
+                                ? 'تصویر اختصاصی وارد شده نمایش داده می‌شود.'
+                                : catalogImg
+                                ? 'تصویر کاتالوگ کالای مرتبط نمایش داده می‌شود.'
+                                : 'در صورت عدم بارگذاری تصویر، آیکون هدیه نمایش داده می‌شود.'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Custom URL Input & Reset Button */}
+                        <div className="space-y-1.5 pt-1">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] font-bold text-slate-300">
+                              آدرس تصویر اختصاصی جایزه (اختیاری)
+                            </label>
+                            {isCustom && catalogImg && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setEditingRewardModal((prev) => ({ ...prev, image_url: '' }))
+                                }
+                                className="text-[11px] text-emerald-400 hover:text-emerald-300 font-medium cursor-pointer underline"
+                              >
+                                بازگشت به تصویر کاتالوگ
+                              </button>
+                            )}
+                          </div>
+                          <input
+                            type="text"
+                            placeholder="https://... (در صورت خالی بودن، تصویر کاتالوگ استفاده می‌شود)"
+                            value={editingRewardModal.image_url || ''}
+                            onChange={(e) =>
+                              setEditingRewardModal((prev) => ({ ...prev, image_url: e.target.value }))
+                            }
+                            className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs sm:text-sm text-white focus:outline-hidden focus:border-blue-500 text-left font-mono placeholder:text-slate-600"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Consumer Value & Points Price with Formula Button */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-950/70 border border-slate-800 p-4 rounded-xl">

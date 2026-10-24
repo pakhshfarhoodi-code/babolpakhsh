@@ -42,6 +42,7 @@ export interface MyLoyaltyData {
   balance: number;
   earned_total: number;
   earned_30d: number;
+  unseen_bonus?: number;
   history: LoyaltyHistoryItem[];
   redemptions: LoyaltyRedemptionItem[];
   settings?: any;
@@ -78,6 +79,7 @@ export interface LeaderboardData {
     gap_to_next: number;
   } | null;
   total: number;
+  disabled?: boolean;
 }
 
 interface RewardsTabProps {
@@ -149,22 +151,29 @@ export const RewardsTab: React.FC<RewardsTabProps> = ({ onNavigateToCatalog }) =
   }, []);
 
   // Fetch Loyalty Data & Rewards
-  const fetchMyLoyalty = useCallback(async () => {
+  const fetchLeaderboard = useCallback(async (period: 'month' | 'all') => {
     if (!supabase) return;
+    setLoadingLeaderboard(true);
     try {
-      const { data, error } = await supabase.rpc('get_my_loyalty');
+      const { data, error } = await supabase.rpc('get_loyalty_leaderboard', {
+        p_period: period,
+      });
       if (!error && data) {
-        setLoyaltyData({
-          balance: Number(data.balance ?? 0),
-          earned_total: Number(data.earned_total ?? 0),
-          earned_30d: Number(data.earned_30d ?? 0),
-          history: Array.isArray(data.history) ? data.history : [],
-          redemptions: Array.isArray(data.redemptions) ? data.redemptions : [],
-          settings: data.settings || {},
-        });
+        if (data.disabled === true) {
+          setLeaderboardData({ top: [], me: null, total: 0, disabled: true });
+        } else {
+          setLeaderboardData({
+            top: Array.isArray(data.top) ? data.top : [],
+            me: data.me ?? null,
+            total: Number(data.total || 0),
+            disabled: Boolean(data.disabled),
+          });
+        }
       }
     } catch {
       // ignore
+    } finally {
+      setLoadingLeaderboard(false);
     }
   }, []);
 
@@ -187,25 +196,27 @@ export const RewardsTab: React.FC<RewardsTabProps> = ({ onNavigateToCatalog }) =
     }
   }, []);
 
-  const fetchLeaderboard = useCallback(async (period: 'month' | 'all') => {
-    if (!supabase) return;
-    setLoadingLeaderboard(true);
+  const fetchMyLoyalty = useCallback(async () => {
+    if (!supabase) return null;
     try {
-      const { data, error } = await supabase.rpc('get_loyalty_leaderboard', {
-        p_period: period,
-      });
+      const { data, error } = await supabase.rpc('get_my_loyalty');
       if (!error && data) {
-        setLeaderboardData({
-          top: Array.isArray(data.top) ? data.top : [],
-          me: data.me ?? null,
-          total: Number(data.total || 0),
+        const settingsObj = data.settings || {};
+        setLoyaltyData({
+          balance: Number(data.balance ?? 0),
+          earned_total: Number(data.earned_total ?? 0),
+          earned_30d: Number(data.earned_30d ?? 0),
+          unseen_bonus: Number(data.unseen_bonus ?? 0),
+          history: Array.isArray(data.history) ? data.history : [],
+          redemptions: Array.isArray(data.redemptions) ? data.redemptions : [],
+          settings: settingsObj,
         });
+        return settingsObj;
       }
     } catch {
       // ignore
-    } finally {
-      setLoadingLeaderboard(false);
     }
+    return null;
   }, []);
 
   // Initial load
@@ -213,7 +224,10 @@ export const RewardsTab: React.FC<RewardsTabProps> = ({ onNavigateToCatalog }) =
     let isMounted = true;
     const loadAll = async () => {
       setLoadingInitial(true);
-      await Promise.all([fetchMyLoyalty(), fetchRewards(), fetchLeaderboard(leaderboardPeriod)]);
+      const [settingsObj] = await Promise.all([fetchMyLoyalty(), fetchRewards()]);
+      if (isMounted && settingsObj?.leaderboard_enabled !== false) {
+        await fetchLeaderboard(leaderboardPeriod);
+      }
       if (isMounted) {
         setLoadingInitial(false);
       }
@@ -227,7 +241,9 @@ export const RewardsTab: React.FC<RewardsTabProps> = ({ onNavigateToCatalog }) =
   // When period changes
   const handlePeriodChange = (period: 'month' | 'all') => {
     setLeaderboardPeriod(period);
-    fetchLeaderboard(period);
+    if (loyaltyData?.settings?.leaderboard_enabled !== false) {
+      fetchLeaderboard(period);
+    }
   };
 
   const balance = Number(loyaltyData?.balance ?? 0);
@@ -296,31 +312,37 @@ export const RewardsTab: React.FC<RewardsTabProps> = ({ onNavigateToCatalog }) =
       {/* 1. TOP CARD: POINTS BALANCE (Rich Dark Emerald with bright text) */}
       {/* ============================================================== */}
       <div className="space-y-2.5">
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-800 via-emerald-900 to-slate-950 border border-emerald-600/30 p-5 sm:p-6 shadow-lg text-white">
-          {/* Header */}
-          <div className="flex items-center gap-2 mb-2">
-            <span className="p-1.5 rounded-xl bg-amber-400/20 text-amber-300 border border-amber-400/30">
-              <Coins className="w-5 h-5 text-amber-300" />
-            </span>
-            <span className="text-xs sm:text-sm font-bold text-white">امتیاز شما</span>
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-emerald-500 via-emerald-600 to-emerald-700 border border-emerald-400/30 p-3.5 sm:p-4.5 shadow-md shadow-emerald-600/20 text-white flex items-center justify-between gap-3">
+          {/* Right side (RTL Start): Icon, Title, Subtitle, 30d info */}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="p-1.5 rounded-xl bg-white/20 text-amber-300 border border-white/30 backdrop-blur-xs shrink-0">
+                <Coins className="w-4 h-4 text-amber-300" />
+              </span>
+              <div className="min-w-0">
+                <h3 className="text-xs sm:text-sm font-bold text-white leading-tight">امتیاز شما</h3>
+                <span className="text-[10px] text-emerald-100 font-medium block">امتیاز وفاداری</span>
+              </div>
+            </div>
+
+            <p className="text-[11px] sm:text-xs text-emerald-100 font-medium mt-1">
+              ۳۰ روز اخیر:{' '}
+              <span className="text-white font-bold font-mono">
+                {earned30d.toLocaleString('fa-IR')}
+              </span>{' '}
+              امتیاز کسب کرده‌اید
+            </p>
           </div>
 
-          {/* Big Bold Balance */}
-          <div className="flex items-baseline gap-2 my-2">
-            <span className="text-4xl sm:text-5xl font-black text-amber-300 font-mono tracking-tight drop-shadow-sm">
-              {balance.toLocaleString('fa-IR')}
-            </span>
-            <span className="text-xs sm:text-sm font-bold text-amber-200">امتیاز وفاداری</span>
+          {/* Left side (RTL End): Big Balance display vertically centered */}
+          <div className="flex flex-col items-end justify-center shrink-0">
+            <div className="flex items-baseline gap-1">
+              <span className="text-2xl sm:text-3xl md:text-4xl font-black text-amber-300 font-mono tracking-tight drop-shadow-xs">
+                {balance.toLocaleString('fa-IR')}
+              </span>
+              <span className="text-[10px] sm:text-xs font-bold text-amber-200">امتیاز</span>
+            </div>
           </div>
-
-          {/* 30 Days Earned Text */}
-          <p className="text-xs sm:text-sm text-emerald-100 font-medium pt-1">
-            ۳۰ روز اخیر:{' '}
-            <span className="text-white font-bold font-mono text-sm">
-              {earned30d.toLocaleString('fa-IR')}
-            </span>{' '}
-            امتیاز کسب کرده‌اید
-          </p>
         </div>
 
         {/* Small explanatory info banner underneath card (not overlapping) */}
@@ -635,139 +657,141 @@ export const RewardsTab: React.FC<RewardsTabProps> = ({ onNavigateToCatalog }) =
       </div>
 
       {/* ============================================================== */}
-      {/* 5. LEADERBOARD (LIGHT THEME)                                   */}
+      {/* 5. LEADERBOARD (LIGHT THEME) - Conditioned on leaderboard_enabled */}
       {/* ============================================================== */}
-      <div className="space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Trophy className="w-5 h-5 text-amber-500" />
-            <h3 className="text-sm sm:text-base font-black text-slate-900">جدول برترین فروشگاه‌ها (لیدربرد)</h3>
-          </div>
-
-          {/* Period Toggle */}
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 self-start sm:self-auto">
-            <button
-              type="button"
-              onClick={() => handlePeriodChange('month')}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                leaderboardPeriod === 'month'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              ۳۰ روز اخیر
-            </button>
-            <button
-              type="button"
-              onClick={() => handlePeriodChange('all')}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                leaderboardPeriod === 'all'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              کل دوره
-            </button>
-          </div>
-        </div>
-
-        {loadingLeaderboard ? (
-          <div className="bg-white border border-slate-200 rounded-2xl py-8 flex items-center justify-center gap-2 text-xs text-slate-500 shadow-xs">
-            <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
-            <span>در حال دریافت رتبه‌بندی...</span>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {/* Top 10 List */}
-            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100 shadow-xs">
-              {leaderboardData && leaderboardData.top.length > 0 ? (
-                leaderboardData.top.map((row) => {
-                  const isTop1 = row.rank === 1;
-                  const isTop2 = row.rank === 2;
-                  const isTop3 = row.rank === 3;
-
-                  return (
-                    <div
-                      key={row.rank}
-                      className={`p-3 sm:p-3.5 flex items-center justify-between gap-3 text-xs sm:text-sm transition ${
-                        row.is_me
-                          ? 'bg-emerald-50/80 border-r-4 border-r-emerald-500'
-                          : 'hover:bg-slate-50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        {/* Rank Badge / Medal */}
-                        <div className="w-7 h-7 flex items-center justify-center font-mono font-bold text-xs shrink-0">
-                          {isTop1 ? (
-                            <span className="text-xl" title="رتبه ۱ - طلا">🥇</span>
-                          ) : isTop2 ? (
-                            <span className="text-xl" title="رتبه ۲ - نقره">🥈</span>
-                          ) : isTop3 ? (
-                            <span className="text-xl" title="رتبه ۳ - برنز">🥉</span>
-                          ) : (
-                            <span className="text-slate-500 font-bold">{row.rank.toLocaleString('fa-IR')}</span>
-                          )}
-                        </div>
-
-                        {/* Name */}
-                        <div className="flex items-center gap-2">
-                          <span className={`font-bold ${row.is_me ? 'text-emerald-950 font-black' : 'text-slate-800'}`}>
-                            {row.name}
-                          </span>
-                          {row.is_me && (
-                            <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-1.5 py-0.2 rounded-md border border-emerald-300">
-                              فروشگاه شما
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Points */}
-                      <div className="font-mono font-bold text-amber-700 text-xs sm:text-sm">
-                        {row.points.toLocaleString('fa-IR')}
-                        <span className="text-[10px] text-slate-500 mr-1 font-normal">امتیاز</span>
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="p-6 text-center text-xs text-slate-500">
-                  اطلاعاتی برای این دوره ثبت نشده است.
-                </div>
-              )}
+      {loyaltyData?.settings?.leaderboard_enabled !== false && leaderboardData?.disabled !== true && (
+        <div className="space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-amber-500" />
+              <h3 className="text-sm sm:text-base font-black text-slate-900">جدول برترین فروشگاه‌ها (لیدربرد)</h3>
             </div>
 
-            {/* If store is NOT in top 10 */}
-            {leaderboardData && leaderboardData.me && !leaderboardData.top.some((t) => t.is_me) && (
-              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 text-xs sm:text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs text-emerald-950">
-                <div className="flex items-center gap-2">
-                  <span className="text-emerald-800 font-bold">رتبه‌ی شما:</span>
-                  <span className="font-mono font-black text-emerald-950 text-sm">
-                    {leaderboardData.me.rank.toLocaleString('fa-IR')}
-                  </span>
-                  <span className="text-emerald-700">از {leaderboardData.total.toLocaleString('fa-IR')} فروشگاه</span>
-                </div>
-                {leaderboardData.me.gap_to_next > 0 && (
-                  <div className="text-emerald-900 font-medium">
-                    فقط{' '}
-                    <span className="font-mono font-bold text-amber-700 text-sm">
-                      {leaderboardData.me.gap_to_next.toLocaleString('fa-IR')}
-                    </span>{' '}
-                    امتیاز تا رتبه‌ی بالاتر
+            {/* Period Toggle */}
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => handlePeriodChange('month')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  leaderboardPeriod === 'month'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                ۳۰ روز اخیر
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePeriodChange('all')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  leaderboardPeriod === 'all'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                کل دوره
+              </button>
+            </div>
+          </div>
+
+          {loadingLeaderboard ? (
+            <div className="bg-white border border-slate-200 rounded-2xl py-8 flex items-center justify-center gap-2 text-xs text-slate-500 shadow-xs">
+              <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+              <span>در حال دریافت رتبه‌بندی...</span>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {/* Top 10 List */}
+              <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100 shadow-xs">
+                {leaderboardData && leaderboardData.top.length > 0 ? (
+                  leaderboardData.top.map((row) => {
+                    const isTop1 = row.rank === 1;
+                    const isTop2 = row.rank === 2;
+                    const isTop3 = row.rank === 3;
+
+                    return (
+                      <div
+                        key={row.rank}
+                        className={`p-3 sm:p-3.5 flex items-center justify-between gap-3 text-xs sm:text-sm transition ${
+                          row.is_me
+                            ? 'bg-emerald-50/80 border-r-4 border-r-emerald-500'
+                            : 'hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          {/* Rank Badge / Medal */}
+                          <div className="w-7 h-7 flex items-center justify-center font-mono font-bold text-xs shrink-0">
+                            {isTop1 ? (
+                              <span className="text-xl" title="رتبه ۱ - طلا">🥇</span>
+                            ) : isTop2 ? (
+                              <span className="text-xl" title="رتبه ۲ - نقره">🥈</span>
+                            ) : isTop3 ? (
+                              <span className="text-xl" title="رتبه ۳ - برنز">🥉</span>
+                            ) : (
+                              <span className="text-slate-500 font-bold">{row.rank.toLocaleString('fa-IR')}</span>
+                            )}
+                          </div>
+
+                          {/* Name */}
+                          <div className="flex items-center gap-2">
+                            <span className={`font-bold ${row.is_me ? 'text-emerald-950 font-black' : 'text-slate-800'}`}>
+                              {row.name}
+                            </span>
+                            {row.is_me && (
+                              <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-1.5 py-0.2 rounded-md border border-emerald-300">
+                                فروشگاه شما
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Points */}
+                        <div className="font-mono font-bold text-amber-700 text-xs sm:text-sm">
+                          {row.points.toLocaleString('fa-IR')}
+                          <span className="text-[10px] text-slate-500 mr-1 font-normal">امتیاز</span>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="p-6 text-center text-xs text-slate-500">
+                    اطلاعاتی برای این دوره ثبت نشده است.
                   </div>
                 )}
               </div>
-            )}
 
-            {/* If me is null */}
-            {leaderboardData && leaderboardData.me === null && (
-              <div className="bg-white border border-slate-200 rounded-2xl p-4 text-center text-xs text-slate-500 shadow-xs">
-                با اولین سفارش تحویل‌شده وارد لیدربرد می‌شوید.
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+              {/* If store is NOT in top 10 */}
+              {leaderboardData && leaderboardData.me && !leaderboardData.top.some((t) => t.is_me) && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 text-xs sm:text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs text-emerald-950">
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-800 font-bold">رتبه‌ی شما:</span>
+                    <span className="font-mono font-black text-emerald-950 text-sm">
+                      {leaderboardData.me.rank.toLocaleString('fa-IR')}
+                    </span>
+                    <span className="text-emerald-700">از {leaderboardData.total.toLocaleString('fa-IR')} فروشگاه</span>
+                  </div>
+                  {leaderboardData.me.gap_to_next > 0 && (
+                    <div className="text-emerald-900 font-medium">
+                      فقط{' '}
+                      <span className="font-mono font-bold text-amber-700 text-sm">
+                        {leaderboardData.me.gap_to_next.toLocaleString('fa-IR')}
+                      </span>{' '}
+                      امتیاز تا رتبه‌ی بالاتر
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* If me is null */}
+              {leaderboardData && leaderboardData.me === null && (
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 text-center text-xs text-slate-500 shadow-xs">
+                  با اولین سفارش تحویل‌شده وارد لیدربرد می‌شوید.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ============================================================== */}
       {/* 6. POINTS HISTORY (COLLAPSIBLE / ACCORDION - LIGHT THEME)      */}

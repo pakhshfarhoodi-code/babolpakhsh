@@ -49,6 +49,7 @@ export interface LoyaltySettings {
   value_large: number;
   show_names: boolean;
   welcome_bonus?: number;
+  leaderboard_enabled?: boolean;
 }
 
 export interface ProductPointRow {
@@ -107,6 +108,7 @@ const DEFAULT_SETTINGS: LoyaltySettings = {
   value_large: 5000000,
   show_names: true,
   welcome_bonus: 0,
+  leaderboard_enabled: true,
 };
 
 function parseRpcError(err: any, fallback: string): string {
@@ -223,6 +225,7 @@ export const LoyaltyTab: React.FC = () => {
           value_large: Number(data.value_large ?? DEFAULT_SETTINGS.value_large),
           show_names: Boolean(data.show_names ?? DEFAULT_SETTINGS.show_names),
           welcome_bonus: Number(data.welcome_bonus ?? DEFAULT_SETTINGS.welcome_bonus ?? 0),
+          leaderboard_enabled: data.leaderboard_enabled !== undefined ? Boolean(data.leaderboard_enabled) : true,
         });
       }
     } catch (err) {
@@ -1024,7 +1027,7 @@ export const LoyaltyTab: React.FC = () => {
                 </p>
                 <p>
                   <strong className="text-white font-bold ml-1">۶. لیدربرد:</strong>{' '}
-                  رتبه‌ی فروشگاه‌ها بر اساس امتیازِ کسب‌شده است، نه موجودی؛ خرج کردن امتیاز رتبه را کم نمی‌کند.
+                  رتبه‌ی فروشگاه‌ها بر اساس امتیازِ کسب‌شده است، نه موجودی؛ خرج کردن امتیاز رتبه را کم نمی‌کند. با کلید «نمایش لیدربرد» می‌توانید آن را برای فروشگاه‌ها پنهان کنید (مثلاً وقتی تعداد کاربران کم است).
                 </p>
                 <p>
                   <strong className="text-white font-bold ml-1">۷. پاداش عضویت:</strong>{' '}
@@ -1065,7 +1068,7 @@ export const LoyaltyTab: React.FC = () => {
             ) : (
               <div className="space-y-8">
                 {/* Switches Section */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   {/* Switch 1: Enabled */}
                   <div
                     onClick={() => setSettings((s) => ({ ...s, enabled: !s.enabled }))}
@@ -1132,6 +1135,35 @@ export const LoyaltyTab: React.FC = () => {
                     <div
                       className={`w-12 h-6 flex items-center rounded-full p-1 transition duration-300 ${
                         settings.show_names ? 'bg-blue-600 justify-end' : 'bg-slate-700 justify-start'
+                      }`}
+                    >
+                      <div className="bg-white w-4 h-4 rounded-full shadow-md" />
+                    </div>
+                  </div>
+
+                  {/* Switch 4: Leaderboard Enabled */}
+                  <div
+                    onClick={() =>
+                      setSettings((s) => ({
+                        ...s,
+                        leaderboard_enabled: s.leaderboard_enabled === undefined ? false : !s.leaderboard_enabled,
+                      }))
+                    }
+                    className={`p-4 rounded-xl border transition cursor-pointer select-none flex items-center justify-between ${
+                      settings.leaderboard_enabled !== false
+                        ? 'bg-blue-950/20 border-blue-500/40'
+                        : 'bg-slate-950/50 border-slate-800 opacity-70'
+                    }`}
+                  >
+                    <div>
+                      <span className="font-bold text-sm block text-white">نمایش لیدربرد به فروشگاه‌ها</span>
+                      <span className="text-xs text-slate-400 mt-0.5 block leading-normal">
+                        اگر خاموش باشد، بخش لیدربرد در پنل فروشگاه‌ها دیده نمی‌شود. امتیازها همچنان ثبت می‌شوند و بعداً با روشن کردن دوباره، رتبه‌ها نمایش داده می‌شود. ادمین همیشه می‌تواند لیدربرد را ببیند.
+                      </span>
+                    </div>
+                    <div
+                      className={`w-12 h-6 flex items-center rounded-full p-1 transition duration-300 ${
+                        settings.leaderboard_enabled !== false ? 'bg-blue-600 justify-end' : 'bg-slate-700 justify-start'
                       }`}
                     >
                       <div className="bg-white w-4 h-4 rounded-full shadow-md" />

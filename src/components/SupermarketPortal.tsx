@@ -108,6 +108,51 @@ export const SupermarketPortal: React.FC = () => {
     };
   }, []);
 
+  // Welcome Bonus Modal State & Ref
+  const [welcomeBonusPoints, setWelcomeBonusPoints] = useState<number | null>(null);
+  const hasCheckedWelcomeBonusRef = useRef(false);
+
+  const handleMarkBonusSeen = useCallback(async () => {
+    if (!supabase) return;
+    try {
+      await supabase.rpc('mark_loyalty_bonus_seen');
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!supabase || !isStoreCustomer || hasCheckedWelcomeBonusRef.current) return;
+
+    let isMounted = true;
+
+    const checkBonus = async () => {
+      try {
+        const { data: settingsData, error: settingsErr } = await supabase.rpc('get_loyalty_settings');
+        if (settingsErr || !settingsData || !settingsData.enabled) return;
+
+        const { data: loyaltyData, error: loyaltyErr } = await supabase.rpc('get_my_loyalty');
+        if (loyaltyErr || !loyaltyData) return;
+
+        const unseen = Number(loyaltyData.unseen_bonus || 0);
+        if (isMounted && unseen > 0) {
+          hasCheckedWelcomeBonusRef.current = true;
+          setWelcomeBonusPoints(unseen);
+          // Mark as seen immediately when popup opens
+          handleMarkBonusSeen();
+        }
+      } catch {
+        // ignore errors
+      }
+    };
+
+    checkBonus();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isStoreCustomer, handleMarkBonusSeen]);
+
   // Tabs: 'catalog' (default) | 'orders' | 'rewards'
   const [activeTab, setActiveTab] = useState<'catalog' | 'orders' | 'rewards'>('catalog');
 
@@ -636,6 +681,53 @@ export const SupermarketPortal: React.FC = () => {
         products={products}
         onSaveSuccess={refreshData}
       />
+
+      {/* Welcome Bonus Modal (Light Theme) */}
+      {welcomeBonusPoints !== null && welcomeBonusPoints > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 max-w-sm sm:max-w-md w-full space-y-4 shadow-2xl text-right text-slate-900 animate-in zoom-in-95">
+            <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200 text-amber-500 flex items-center justify-center mx-auto shadow-xs">
+              <Gift className="w-8 h-8" />
+            </div>
+
+            <div className="text-center space-y-2">
+              <h3 className="text-base sm:text-lg font-bold text-slate-900">خوش آمدید!</h3>
+              <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                <span className="font-mono font-bold text-amber-600">
+                  {welcomeBonusPoints.toLocaleString('fa-IR')}
+                </span>{' '}
+                امتیاز پاداش دریافت کردید. در قسمت جوایز می‌توانید ببینید و با افزایش امتیازات خود جوایز را تهیه کنید.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('rewards');
+                  setWelcomeBonusPoints(null);
+                  handleMarkBonusSeen();
+                }}
+                className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition cursor-pointer"
+              >
+                <Gift className="w-4 h-4" />
+                <span>مشاهده‌ی جوایز</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setWelcomeBonusPoints(null);
+                  handleMarkBonusSeen();
+                }}
+                className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs sm:text-sm transition cursor-pointer"
+              >
+                بعداً
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

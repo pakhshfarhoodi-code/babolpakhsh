@@ -713,10 +713,11 @@ export const LoyaltyTab: React.FC = () => {
     }
   }, [activeSubTab, fetchSettings, fetchProductPoints, fetchRewards, fetchRedemptions, fetchBalances]);
 
-  // Also prefetch redemptions on initial mount so badge count works immediately
+  // Also prefetch redemptions and rewards on initial mount so badge counts work immediately
   useEffect(() => {
     fetchRedemptions();
-  }, [fetchRedemptions]);
+    fetchRewards();
+  }, [fetchRedemptions, fetchRewards]);
 
   // Filtered products list
   const filteredProducts = useMemo(() => {

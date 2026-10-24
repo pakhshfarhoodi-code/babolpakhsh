@@ -337,7 +337,7 @@ export const RewardsTab: React.FC<RewardsTabProps> = ({ onNavigateToCatalog }) =
           {/* Left side (RTL End): Big Balance display vertically centered */}
           <div className="flex flex-col items-end justify-center shrink-0">
             <div className="flex items-baseline gap-1">
-              <span className="text-2xl sm:text-3xl md:text-4xl font-black text-amber-300 font-mono tracking-tight drop-shadow-xs">
+              <span className="text-2xl sm:text-3xl md:text-4xl font-black text-white font-mono tracking-tight drop-shadow-[0_1.5px_3px_rgba(0,0,0,0.25)]">
                 {balance.toLocaleString('fa-IR')}
               </span>
               <span className="text-[10px] sm:text-xs font-bold text-amber-200">امتیاز</span>

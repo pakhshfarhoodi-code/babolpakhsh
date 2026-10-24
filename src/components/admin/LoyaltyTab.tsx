@@ -68,6 +68,7 @@ export interface LoyaltyReward {
   per_store_monthly_limit?: number | null;
   sort_order: number;
   is_active: boolean;
+  quantity_label?: string | null;
 }
 
 export interface LoyaltyRedemption {
@@ -409,6 +410,10 @@ export const LoyaltyTab: React.FC = () => {
           : null,
         sort_order: Number(editingRewardModal.sort_order || 0),
         is_active: editingRewardModal.is_active ?? true,
+        quantity_label:
+          editingRewardModal.quantity_label && editingRewardModal.quantity_label.trim()
+            ? editingRewardModal.quantity_label.trim()
+            : null,
       };
 
       if (editingRewardModal.id) {
@@ -1342,8 +1347,9 @@ export const LoyaltyTab: React.FC = () => {
                   points_price: 100,
                   stock: null,
                   per_store_monthly_limit: null,
-                  sort_order: rewards.length + 1,
+                  sort_order: (rewards.length + 1) * 10,
                   is_active: true,
+                  quantity_label: '',
                 });
               }}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 cursor-pointer transition shadow-md shadow-blue-600/20"
@@ -1396,7 +1402,14 @@ export const LoyaltyTab: React.FC = () => {
                             </div>
                           )}
                           <div>
-                            <h4 className="text-sm font-bold text-white line-clamp-1">{reward.title}</h4>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <h4 className="text-sm font-bold text-white line-clamp-1">{reward.title}</h4>
+                              {reward.quantity_label && (
+                                <span className="px-1.5 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 text-[10px] font-bold num-fa">
+                                  {reward.quantity_label}
+                                </span>
+                              )}
+                            </div>
                             {linkedProduct && (
                               <span className="text-[11px] text-blue-400 block line-clamp-1">
                                 کالا: {linkedProduct.name}
@@ -1585,6 +1598,24 @@ export const LoyaltyTab: React.FC = () => {
                             const pack = Math.max(1, prod.items_per_package || 1);
                             autoConsumerVal = cPrice * pack * qty;
                           }
+
+                          // Auto-suggest quantity label only when creating a new reward and only if label field is currently empty
+                          let autoLabel = editingRewardModal.quantity_label || '';
+                          const isNewReward = !editingRewardModal.id;
+                          const isLabelEmpty = !autoLabel || !autoLabel.trim();
+                          if (isNewReward && isLabelEmpty && prod) {
+                            const packSize = prod.items_per_package && prod.items_per_package > 1 ? prod.items_per_package : 1;
+                            if (packSize > 1) {
+                              if (qty === 1) {
+                                autoLabel = `۱ بسته ${packSize.toLocaleString('fa-IR')} عددی`;
+                              } else {
+                                autoLabel = `${qty.toLocaleString('fa-IR')} بسته ${packSize.toLocaleString('fa-IR')} عددی`;
+                              }
+                            } else {
+                              autoLabel = `${qty.toLocaleString('fa-IR')} عدد`;
+                            }
+                          }
+
                           setEditingRewardModal((prev) => ({
                             ...prev,
                             product_id: pid,
@@ -1592,6 +1623,7 @@ export const LoyaltyTab: React.FC = () => {
                             title: prev?.title || prod?.name || '',
                             // Keep image_url null/empty unless already explicitly set by admin
                             image_url: prev?.image_url || '',
+                            quantity_label: autoLabel,
                           }));
                         }}
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs sm:text-sm text-white focus:outline-hidden focus:border-blue-500"
@@ -1629,6 +1661,25 @@ export const LoyaltyTab: React.FC = () => {
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white font-mono text-center focus:outline-hidden focus:border-blue-500"
                       />
                     </div>
+                  </div>
+
+                  {/* Quantity Label on Card */}
+                  <div>
+                    <label className="text-xs font-bold text-slate-300 block mb-1">
+                      برچسب تعداد روی کارت (اختیاری)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="۱ بسته ۶ عددی"
+                      value={editingRewardModal.quantity_label || ''}
+                      onChange={(e) =>
+                        setEditingRewardModal((prev) => ({ ...prev, quantity_label: e.target.value }))
+                      }
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-hidden focus:border-blue-500"
+                    />
+                    <span className="text-[11px] text-slate-500 mt-1 block">
+                      این متن روی عکس جایزه در پنل فروشگاه نشان داده می‌شود. خالی بگذارید تا نمایش داده نشود.
+                    </span>
                   </div>
 
                   {/* Reward Image with Live Store Preview & Fallback */}

@@ -60,6 +60,7 @@ export interface StoreRewardItem {
   per_store_monthly_limit?: number | null;
   sort_order?: number;
   created_at?: string;
+  quantity_label?: string | null;
 }
 
 export interface LeaderboardRow {
@@ -171,7 +172,7 @@ export const RewardsTab: React.FC<RewardsTabProps> = ({ onNavigateToCatalog }) =
       // SECURITY: Only query allowed columns (no purchase price, no visitor price, no cost)
       const { data, error } = await supabase
         .from('loyalty_rewards')
-        .select('id, product_id, title, description, image_url, quantity, consumer_value, points_price, stock, per_store_monthly_limit, sort_order, created_at')
+        .select('id, product_id, title, description, image_url, quantity, consumer_value, points_price, stock, per_store_monthly_limit, sort_order, created_at, quantity_label')
         .eq('is_active', true)
         .order('sort_order', { ascending: true })
         .order('created_at', { ascending: true });
@@ -378,8 +379,13 @@ export const RewardsTab: React.FC<RewardsTabProps> = ({ onNavigateToCatalog }) =
                       : 'border-slate-200/90'
                   }`}
                 >
-                  {/* Badges on card */}
-                  <div className="absolute top-2 left-2 z-10 flex flex-col gap-1 items-start">
+                  {/* Badges on card top-right */}
+                  <div className="absolute top-2 right-2 z-10 flex flex-col gap-1 items-end pointer-events-none">
+                    {reward.per_store_monthly_limit && (
+                      <div className="bg-slate-800 text-white text-[9px] sm:text-[10px] font-medium px-2 py-0.5 rounded-full shadow-xs">
+                        سقف {reward.per_store_monthly_limit.toLocaleString('fa-IR')} بار در ماه
+                      </div>
+                    )}
                     {isOutOfStock ? (
                       <div className="bg-rose-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-xs">
                         تمام شد
@@ -391,12 +397,6 @@ export const RewardsTab: React.FC<RewardsTabProps> = ({ onNavigateToCatalog }) =
                       </div>
                     ) : null}
                   </div>
-
-                  {reward.per_store_monthly_limit && (
-                    <div className="absolute top-2 right-2 z-10 bg-slate-800 text-white text-[9px] sm:text-[10px] font-medium px-2 py-0.5 rounded-full shadow-xs">
-                      سقف {reward.per_store_monthly_limit.toLocaleString('fa-IR')} بار در ماه
-                    </div>
-                  )}
 
                   <div>
                     {/* Big Square Image */}
@@ -416,6 +416,13 @@ export const RewardsTab: React.FC<RewardsTabProps> = ({ onNavigateToCatalog }) =
                           <Gift className="w-10 h-10 sm:w-12 sm:h-12 stroke-1" />
                         </div>
                       )}
+
+                      {/* Quantity Label Badge on top-left of image */}
+                      {reward.quantity_label && reward.quantity_label.trim() ? (
+                        <span className="absolute top-2 left-2 z-10 px-1.5 py-0.5 rounded-md bg-slate-900/90 bg-indigo-500/15 text-indigo-300 font-bold border border-indigo-500/30 text-[11px] num-fa shadow-xs backdrop-blur-xs">
+                          {reward.quantity_label.trim()}
+                        </span>
+                      ) : null}
                     </div>
 
                     {/* Title */}

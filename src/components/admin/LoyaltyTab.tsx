@@ -136,6 +136,8 @@ export const LoyaltyTab: React.FC = () => {
   const [loadingPoints, setLoadingPoints] = useState(false);
   const [savingPoints, setSavingPoints] = useState(false);
   const [recalculatingPoints, setRecalculatingPoints] = useState(false);
+  const [resettingPoints, setResettingPoints] = useState(false);
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [productSearch, setProductSearch] = useState('');
   const [productCategoryFilter, setProductCategoryFilter] = useState<string>('all');
   const [showOnlyUnsetPoints, setShowOnlyUnsetPoints] = useState(false);
@@ -272,6 +274,41 @@ export const LoyaltyTab: React.FC = () => {
       showToast('خطای شبکه در محاسبه خودکار', 'error');
     } finally {
       setRecalculatingPoints(false);
+    }
+  };
+
+  // Reset Product Points to Auto Mode using supabase.rpc('admin_reset_product_points')
+  const handleResetProductPoints = async (p_ids: string[] | null) => {
+    if (!supabase) return;
+
+    if (p_ids === null) {
+      if (!window.confirm('امتیاز همه‌ی کالاهایی که دستی تنظیم شده با قیمت فعلی بازنویسی می‌شود')) {
+        return;
+      }
+    } else if (p_ids.length === 0) {
+      showToast('هیچ کالایی انتخاب نشده است', 'info');
+      return;
+    }
+
+    setResettingPoints(true);
+    try {
+      const { data, error } = await supabase.rpc('admin_reset_product_points', { p_ids });
+      if (error) {
+        showToast(parseRpcError(error, 'خطا در بازنشانی امتیاز کالاها'), 'error');
+      } else {
+        const count = typeof data === 'number' ? data : 0;
+        showToast(`امتیاز ${count.toLocaleString('fa-IR')} کالا به حالت خودکار بازگردانده شد`, 'success');
+        if (p_ids) {
+          setSelectedProductIds((prev) => prev.filter((id) => !p_ids.includes(id)));
+        } else {
+          setSelectedProductIds([]);
+        }
+        await fetchProductPoints();
+      }
+    } catch (err) {
+      showToast('خطای شبکه در بازنشانی امتیاز کالاها', 'error');
+    } finally {
+      setResettingPoints(false);
     }
   };
 
@@ -1164,7 +1201,41 @@ export const LoyaltyTab: React.FC = () => {
             </div>
 
             {/* Action Buttons */}
-            <div className="flex items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* Batch Reset Selected */}
+              {selectedProductIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => handleResetProductPoints(selectedProductIds)}
+                  disabled={resettingPoints || loadingPoints}
+                  className="px-3.5 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition disabled:opacity-50"
+                >
+                  {resettingPoints ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+                  ) : (
+                    <RotateCcw className="w-4 h-4 text-amber-400" />
+                  )}
+                  <span>
+                    ریست انتخاب‌شده‌ها به خودکار ({selectedProductIds.length.toLocaleString('fa-IR')})
+                  </span>
+                </button>
+              )}
+
+              {/* Reset All Manual Items */}
+              <button
+                type="button"
+                onClick={() => handleResetProductPoints(null)}
+                disabled={resettingPoints || loadingPoints}
+                className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition disabled:opacity-50"
+              >
+                {resettingPoints ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+                ) : (
+                  <RotateCcw className="w-4 h-4 text-amber-400" />
+                )}
+                <span>ریست همه‌ی دستی‌ها</span>
+              </button>
+
               <button
                 type="button"
                 onClick={handleRecalculateProductPoints}
@@ -1205,6 +1276,26 @@ export const LoyaltyTab: React.FC = () => {
                 <table className="w-full text-right border-collapse text-xs sm:text-sm">
                   <thead>
                     <tr className="bg-slate-950/70 border-b border-slate-800 text-slate-400">
+                      <th className="py-3 px-3 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          checked={
+                            filteredProducts.length > 0 &&
+                            filteredProducts.every((p) => selectedProductIds.includes(p.id))
+                          }
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              const allIds = filteredProducts.map((p) => p.id);
+                              setSelectedProductIds(Array.from(new Set([...selectedProductIds, ...allIds])));
+                            } else {
+                              const filteredSet = new Set(filteredProducts.map((p) => p.id));
+                              setSelectedProductIds(selectedProductIds.filter((id) => !filteredSet.has(id)));
+                            }
+                          }}
+                          className="rounded border-slate-700 bg-slate-950 text-blue-600 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                          title="انتخاب همه"
+                        />
+                      </th>
                       <th className="py-3 px-4 font-semibold">ردیف</th>
                       <th className="py-3 px-4 font-semibold">نام کالا</th>
                       <th className="py-3 px-4 font-semibold">دسته‌بندی</th>
@@ -1232,6 +1323,20 @@ export const LoyaltyTab: React.FC = () => {
                             hasNoPoints ? 'bg-amber-950/15' : isEdited ? 'bg-blue-950/20' : ''
                           }`}
                         >
+                          <td className="py-3 px-3 text-center">
+                            <input
+                              type="checkbox"
+                              checked={selectedProductIds.includes(p.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedProductIds((prev) => [...prev, p.id]);
+                                } else {
+                                  setSelectedProductIds((prev) => prev.filter((id) => id !== p.id));
+                                }
+                              }}
+                              className="rounded border-slate-700 bg-slate-950 text-blue-600 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                            />
+                          </td>
                           <td className="py-3 px-4 text-slate-400 font-mono text-xs">
                             {(idx + 1).toLocaleString('fa-IR')}
                           </td>
@@ -1291,21 +1396,36 @@ export const LoyaltyTab: React.FC = () => {
                             </div>
                           </td>
                           <td className="py-3 px-4">
-                            {hasNoPoints ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                                <AlertTriangle className="w-3 h-3" />
-                                <span>بدون امتیاز</span>
-                              </span>
-                            ) : isManual ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                                <Check className="w-3 h-3" />
-                                <span>تنظیم دستی</span>
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
-                                <span>خودکار</span>
-                              </span>
-                            )}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {hasNoPoints ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                  <AlertTriangle className="w-3 h-3" />
+                                  <span>بدون امتیاز</span>
+                                </span>
+                              ) : isManual ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                  <Check className="w-3 h-3" />
+                                  <span>تنظیم دستی</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                                  <span>خودکار</span>
+                                </span>
+                              )}
+
+                              {isManual && (
+                                <button
+                                  type="button"
+                                  disabled={resettingPoints || loadingPoints}
+                                  onClick={() => handleResetProductPoints([p.id])}
+                                  title="بازگشت به خودکار"
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition cursor-pointer disabled:opacity-50"
+                                >
+                                  <RotateCcw className="w-3 h-3 text-amber-400 shrink-0" />
+                                  <span>بازگشت به خودکار</span>
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );

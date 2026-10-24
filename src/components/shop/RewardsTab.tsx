@@ -7,6 +7,7 @@ import {
   Award,
   Sparkles,
   Coins,
+  Check,
   CheckCircle2,
   Clock,
   XCircle,
@@ -57,6 +58,8 @@ export interface StoreRewardItem {
   points_price: number;
   stock?: number | null;
   per_store_monthly_limit?: number | null;
+  sort_order?: number;
+  created_at?: string;
 }
 
 export interface LeaderboardRow {
@@ -168,9 +171,10 @@ export const RewardsTab: React.FC<RewardsTabProps> = ({ onNavigateToCatalog }) =
       // SECURITY: Only query allowed columns (no purchase price, no visitor price, no cost)
       const { data, error } = await supabase
         .from('loyalty_rewards')
-        .select('id, product_id, title, description, image_url, quantity, consumer_value, points_price, stock, per_store_monthly_limit')
+        .select('id, product_id, title, description, image_url, quantity, consumer_value, points_price, stock, per_store_monthly_limit, sort_order, created_at')
         .eq('is_active', true)
-        .order('sort_order', { ascending: true });
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true });
 
       if (!error && data) {
         setRewards(data as StoreRewardItem[]);
@@ -225,32 +229,6 @@ export const RewardsTab: React.FC<RewardsTabProps> = ({ onNavigateToCatalog }) =
 
   const balance = Number(loyaltyData?.balance ?? 0);
   const earned30d = Number(loyaltyData?.earned_30d ?? 0);
-
-  // Sort rewards:
-  // 1) First those that can be redeemed right now (balance >= points_price && in stock)
-  // 2) Then the rest based on closest to being redeemed (least remaining points)
-  const sortedRewards = useMemo(() => {
-    const list = [...rewards];
-    return list.sort((a, b) => {
-      const aInStock = a.stock === null || a.stock === undefined || a.stock > 0;
-      const bInStock = b.stock === null || b.stock === undefined || b.stock > 0;
-
-      const aCanRedeem = balance >= a.points_price && aInStock;
-      const bCanRedeem = balance >= b.points_price && bInStock;
-
-      if (aCanRedeem && !bCanRedeem) return -1;
-      if (!aCanRedeem && bCanRedeem) return 1;
-
-      if (aCanRedeem && bCanRedeem) {
-        return a.points_price - b.points_price;
-      }
-
-      // Neither can redeem: sort by gap (remaining points) ascending
-      const aGap = Math.max(0, a.points_price - balance);
-      const bGap = Math.max(0, b.points_price - balance);
-      return aGap - bGap;
-    });
-  }, [rewards, balance]);
 
   // Handle Redeem Confirmation
   const handleConfirmRedeem = async () => {
@@ -377,7 +355,7 @@ export const RewardsTab: React.FC<RewardsTabProps> = ({ onNavigateToCatalog }) =
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4">
-            {sortedRewards.map((reward) => {
+            {rewards.map((reward) => {
               const inStock = reward.stock === null || reward.stock === undefined || reward.stock > 0;
               const isOutOfStock = reward.stock === 0;
               const canRedeem = balance >= reward.points_price && inStock;
@@ -400,15 +378,22 @@ export const RewardsTab: React.FC<RewardsTabProps> = ({ onNavigateToCatalog }) =
                       : 'border-slate-200/90'
                   }`}
                 >
-                  {/* Stock or Limit Badge */}
-                  {isOutOfStock && (
-                    <div className="absolute top-2 left-2 z-10 bg-rose-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-xs">
-                      تمام شد
-                    </div>
-                  )}
+                  {/* Badges on card */}
+                  <div className="absolute top-2 left-2 z-10 flex flex-col gap-1 items-start">
+                    {isOutOfStock ? (
+                      <div className="bg-rose-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-xs">
+                        تمام شد
+                      </div>
+                    ) : canRedeem ? (
+                      <div className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-xs flex items-center gap-1">
+                        <Check className="w-3 h-3 stroke-[2.5]" />
+                        <span>قابل دریافت</span>
+                      </div>
+                    ) : null}
+                  </div>
 
-                  {reward.per_store_monthly_limit && !isOutOfStock && (
-                    <div className="absolute top-2 left-2 z-10 bg-slate-800 text-white text-[9px] sm:text-[10px] font-medium px-2 py-0.5 rounded-full shadow-xs">
+                  {reward.per_store_monthly_limit && (
+                    <div className="absolute top-2 right-2 z-10 bg-slate-800 text-white text-[9px] sm:text-[10px] font-medium px-2 py-0.5 rounded-full shadow-xs">
                       سقف {reward.per_store_monthly_limit.toLocaleString('fa-IR')} بار در ماه
                     </div>
                   )}

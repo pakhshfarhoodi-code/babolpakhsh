@@ -29,6 +29,8 @@ import {
   Percent,
   Sparkles,
   ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
   FileText,
   DollarSign,
   Package,
@@ -322,7 +324,7 @@ export const LoyaltyTab: React.FC = () => {
         .from('loyalty_rewards')
         .select('*')
         .order('sort_order', { ascending: true })
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: true });
 
       if (error) {
         showToast(parseRpcError(error, 'خطا در بارگذاری فهرست جوایز'), 'error');
@@ -335,6 +337,43 @@ export const LoyaltyTab: React.FC = () => {
       setLoadingRewards(false);
     }
   }, [showToast]);
+
+  const [reorderingRewards, setReorderingRewards] = useState(false);
+
+  // Move reward up or down and re-normalize sort_order to 10, 20, 30, ...
+  const handleMoveReward = async (currentIndex: number, direction: 'up' | 'down') => {
+    if (reorderingRewards) return;
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= rewards.length) return;
+
+    const newRewards = [...rewards];
+    const temp = newRewards[currentIndex];
+    newRewards[currentIndex] = newRewards[targetIndex];
+    newRewards[targetIndex] = temp;
+
+    // Re-normalize sort_order to 10, 20, 30, ...
+    const updatedItems = newRewards.map((item, idx) => ({
+      ...item,
+      sort_order: (idx + 1) * 10,
+    }));
+
+    setRewards(updatedItems);
+
+    if (!supabase) return;
+    setReorderingRewards(true);
+    try {
+      const updatePromises = updatedItems.map((item) =>
+        supabase!.from('loyalty_rewards').update({ sort_order: item.sort_order }).eq('id', item.id)
+      );
+      await Promise.all(updatePromises);
+      showToast('ترتیب نمایش جوایز به‌روزرسانی شد', 'success');
+    } catch {
+      showToast('خطا در به‌روزرسانی ترتیب جوایز', 'error');
+      await fetchRewards();
+    } finally {
+      setReorderingRewards(false);
+    }
+  };
 
   // Save Reward (Insert or Update)
   const handleSaveReward = async () => {
@@ -1328,7 +1367,7 @@ export const LoyaltyTab: React.FC = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {rewards.map((reward) => {
+              {rewards.map((reward, idx) => {
                 const linkedProduct = products.find((p) => p.id === reward.product_id);
 
                 return (
@@ -1423,16 +1462,38 @@ export const LoyaltyTab: React.FC = () => {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex items-center justify-between pt-3 border-t border-slate-800/70">
-                      <span className="text-[11px] text-slate-500 font-mono">
-                        ترتیب: {(reward.sort_order || 0).toLocaleString('fa-IR')}
-                      </span>
+                    <div className="flex items-center justify-between pt-3 border-t border-slate-800/70 gap-2">
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          disabled={idx === 0 || reorderingRewards}
+                          onClick={() => handleMoveReward(idx, 'up')}
+                          title="انتقال به بالا"
+                          aria-label="انتقال به بالا"
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-slate-300 hover:text-white transition cursor-pointer"
+                        >
+                          <ArrowUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={idx === rewards.length - 1 || reorderingRewards}
+                          onClick={() => handleMoveReward(idx, 'down')}
+                          title="انتقال به پایین"
+                          aria-label="انتقال به پایین"
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-slate-300 hover:text-white transition cursor-pointer"
+                        >
+                          <ArrowDown className="w-3.5 h-3.5" />
+                        </button>
+                        <span className="text-[11px] text-slate-500 font-mono mr-1">
+                          ترتیب: {(reward.sort_order || 0).toLocaleString('fa-IR')}
+                        </span>
+                      </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         <button
                           type="button"
                           onClick={() => setEditingRewardModal(reward)}
-                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-blue-400 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                          className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-blue-400 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                           <span>ویرایش</span>
@@ -1444,9 +1505,9 @@ export const LoyaltyTab: React.FC = () => {
                           className="p-1.5 bg-slate-800 hover:bg-red-500/20 text-red-400 rounded-lg text-xs transition cursor-pointer"
                         >
                           {deletingRewardId === reward.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
                           ) : (
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           )}
                         </button>
                       </div>

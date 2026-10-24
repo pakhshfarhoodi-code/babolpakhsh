@@ -36,6 +36,7 @@ import {
   Package,
   Layers,
   ChevronDown,
+  Info,
 } from 'lucide-react';
 
 export interface LoyaltySettings {
@@ -129,6 +130,26 @@ export const LoyaltyTab: React.FC = () => {
   const [settings, setSettings] = useState<LoyaltySettings>(DEFAULT_SETTINGS);
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [isGuideOpen, setIsGuideOpen] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('loyalty_admin_guide_open');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const toggleGuide = () => {
+    setIsGuideOpen((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('loyalty_admin_guide_open', String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
 
   // SubTab 2: Product Points
   const [productPointsMap, setProductPointsMap] = useState<Record<string, { points: number; is_manual: boolean }>>({});
@@ -254,20 +275,17 @@ export const LoyaltyTab: React.FC = () => {
     }
   }, [showToast]);
 
-  // Recalculate Product Points Automatically
+  // Fill unset product points automatically
   const handleRecalculateProductPoints = async () => {
-    if (!window.confirm('امتیاز کالاهایی که دستی تنظیم نکرده‌اید بازنویسی می‌شود. آیا ادامه می‌دهید؟')) {
-      return;
-    }
     if (!supabase) return;
     setRecalculatingPoints(true);
     try {
       const { data, error } = await supabase.rpc('admin_recalc_product_points');
       if (error) {
-        showToast(parseRpcError(error, 'خطا در محاسبه خودکار امتیاز کالاها'), 'error');
+        showToast(parseRpcError(error, 'خطا در محاسبه امتیاز کالاها'), 'error');
       } else {
         const count = typeof data === 'number' ? data : 0;
-        showToast(`محاسبه خودکار انجام شد (${count.toLocaleString('fa-IR')} کالا به‌روز شدند)`, 'success');
+        showToast(`${count.toLocaleString('fa-IR')} کالا امتیاز گرفتند`, 'success');
         await fetchProductPoints();
       }
     } catch (err) {
@@ -742,14 +760,43 @@ export const LoyaltyTab: React.FC = () => {
     return list;
   }, [balances, storeSearch, storeSortBy]);
 
+  // Dynamic live effective rate: median of (price * items_per_package) / points for all products with points > 0
+  const effectiveTomanPerPoint = useMemo(() => {
+    const rValues: number[] = [];
+    products.forEach((p) => {
+      const info = productPointsMap[p.id];
+      const pts = info?.points ?? 0;
+      if (pts > 0) {
+        const pack = Math.max(1, p.items_per_package || 1);
+        const storePrice = p.price;
+        const r = (storePrice * pack) / pts;
+        if (r > 0 && isFinite(r)) {
+          rValues.push(r);
+        }
+      }
+    });
+
+    if (rValues.length === 0) {
+      return settings.toman_per_point > 0 ? settings.toman_per_point : 1000;
+    }
+
+    rValues.sort((a, b) => a - b);
+    const mid = Math.floor(rValues.length / 2);
+    if (rValues.length % 2 !== 0) {
+      return rValues[mid];
+    } else {
+      return (rValues[mid - 1] + rValues[mid]) / 2;
+    }
+  }, [products, productPointsMap, settings.toman_per_point]);
+
   // Formula-based suggested points calculation for a reward
   const calculateSuggestedPoints = (consumerVal: number): number => {
     const V = Math.max(0, consumerVal);
-    const { rate_small, rate_large, value_small, value_large, toman_per_point } = settings;
+    const { rate_small, rate_large, value_small, value_large } = settings;
     const denominator = Math.max(1, value_large - value_small);
     const clampedRatio = Math.max(0, Math.min(1, (V - value_small) / denominator));
     const r = rate_small + (rate_large - rate_small) * clampedRatio; // percent
-    const tpp = toman_per_point > 0 ? toman_per_point : 1000;
+    const tpp = effectiveTomanPerPoint > 0 ? effectiveTomanPerPoint : 1000;
     const rawPoints = V / ((r / 100) * tpp);
     return Math.max(5, Math.round(rawPoints / 5) * 5);
   };
@@ -759,7 +806,7 @@ export const LoyaltyTab: React.FC = () => {
     if (!editingRewardModal) return null;
     const V = Number(editingRewardModal.consumer_value || 0);
     const pts = Number(editingRewardModal.points_price || 0);
-    const tpp = settings.toman_per_point > 0 ? settings.toman_per_point : 1000;
+    const tpp = effectiveTomanPerPoint > 0 ? effectiveTomanPerPoint : 1000;
 
     let storeReturnPercent: number | null = null;
     if (pts > 0 && tpp > 0) {
@@ -787,7 +834,7 @@ export const LoyaltyTab: React.FC = () => {
       distributorCostPercent,
       isOutOfRange,
     };
-  }, [editingRewardModal, settings, products]);
+  }, [editingRewardModal, settings, products, effectiveTomanPerPoint]);
 
   return (
     <div className="space-y-6 text-slate-100">
@@ -921,6 +968,65 @@ export const LoyaltyTab: React.FC = () => {
       {/* ============================================================== */}
       {activeSubTab === 'settings' && (
         <div className="space-y-6">
+          {/* Admin Guide Collapsible Box */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+            <div
+              onClick={toggleGuide}
+              className="p-4 sm:p-5 flex items-center justify-between cursor-pointer select-none bg-slate-950/40 hover:bg-slate-950/70 transition"
+            >
+              <div className="flex items-center gap-2.5">
+                <Info className="w-5 h-5 text-blue-400 shrink-0" />
+                <h4 className="text-sm sm:text-base font-bold text-white">
+                  روند کار باشگاه (برای ادمین)
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleGuide();
+                }}
+                className="p-1 text-slate-400 hover:text-white transition cursor-pointer"
+                aria-label="تغییر وضعیت راهنما"
+              >
+                <ChevronDown
+                  className={`w-5 h-5 transition-transform duration-200 ${
+                    isGuideOpen ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+            </div>
+
+            {isGuideOpen && (
+              <div className="p-4 sm:p-5 border-t border-slate-800/80 bg-slate-950/60 text-xs sm:text-sm text-slate-300 space-y-3.5 leading-relaxed">
+                <p>
+                  <strong className="text-white font-bold ml-1">۱. امتیازگیری:</strong>{' '}
+                  هر کالا یک امتیاز ثابت برای هر واحد سفارش (کارتن/بسته) دارد. وقتی سفارش فروشگاه «تحویل شد»، امتیاز تعداد خریدش خودکار به حسابش اضافه می‌شود؛ اگر سفارش برگردد، همان امتیاز کم می‌شود. امتیاز کالاها را در بخش «امتیاز کالاها» می‌بینید و می‌توانید تغییر دهید.
+                </p>
+                <p>
+                  <strong className="text-white font-bold ml-1">۲. امتیاز ثابت می‌ماند:</strong>{' '}
+                  امتیاز هر کالا با تغییر قیمت عوض نمی‌شود، پس تورم روی امتیازگیری اثر ندارد. فقط اگر قیمت یک کالا خیلی بیشتر از بقیه رشد کرد، همان کالا را با «بازگشت به خودکار» دوباره حساب کنید. کالای جدید خودکار امتیاز می‌گیرد.
+                </p>
+                <p>
+                  <strong className="text-white font-bold ml-1">۳. جایزه‌ها:</strong>{' '}
+                  در بخش «جوایز» کالایی را انتخاب می‌کنید، می‌نویسید چند امتیاز لازم است، و فروشگاه‌ها در پنل خودشان می‌بینند و درخواست می‌دهند. قیمت امتیازی جایزه را همیشه خودتان می‌نویسید و ثابت می‌ماند.
+                </p>
+                <p>
+                  <strong className="text-white font-bold ml-1">۴. نشانگر درصد بازگشت:</strong>{' '}
+                  در فرم جایزه می‌بینید آن جایزه چند درصد خرید مشتری را به او برمی‌گرداند (کوچک‌ترها حدود ۱.۵٪ و بزرگ‌ترها حدود ۲٪)؛ این فقط راهنماست و هزینه‌ی واقعی شما را هم کنارش می‌بینید.
+                </p>
+                <p>
+                  <strong className="text-white font-bold ml-1">۵. تحویل جایزه:</strong>{' '}
+                  درخواست‌ها در بخش «درخواست‌ها» می‌آید. هدیه را همراه سفارش بعدی تحویل دهید و «تحویل شد» را بزنید؛ اگر نشد، «لغو» امتیاز را برمی‌گرداند.
+                </p>
+                <p>
+                  <strong className="text-white font-bold ml-1">۶. لیدربرد:</strong>{' '}
+                  رتبه‌ی فروشگاه‌ها بر اساس امتیازِ کسب‌شده است، نه موجودی؛ خرج کردن امتیاز رتبه را کم نمی‌کند.
+                </p>
+              </div>
+            )}
+          </div>
+
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-sm">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-6">
               <div>
@@ -963,9 +1069,9 @@ export const LoyaltyTab: React.FC = () => {
                     }`}
                   >
                     <div>
-                      <span className="font-bold text-sm block text-white">فعال بودن باشگاه</span>
-                      <span className="text-xs text-slate-400 mt-0.5 block">
-                        امکان کسب امتیاز هنگام ثبت و تحویل سفارش‌ها
+                      <span className="font-bold text-sm block text-white">باشگاه فعال باشد</span>
+                      <span className="text-xs text-slate-400 mt-0.5 block leading-normal">
+                        با خاموش کردن، تب جوایز از پنل فروشگاه‌ها پنهان می‌شود و امتیاز جدید ثبت نمی‌شود.
                       </span>
                     </div>
                     <div
@@ -987,9 +1093,9 @@ export const LoyaltyTab: React.FC = () => {
                     }`}
                   >
                     <div>
-                      <span className="font-bold text-sm block text-white">امکان دریافت جایزه</span>
-                      <span className="text-xs text-slate-400 mt-0.5 block">
-                        اجازه ثبت درخواست خرج امتیاز برای مشتریان
+                      <span className="font-bold text-sm block text-white">دریافت جایزه فعال باشد</span>
+                      <span className="text-xs text-slate-400 mt-0.5 block leading-normal">
+                        با خاموش کردن، فروشگاه‌ها همچنان امتیازشان را می‌بینند ولی نمی‌توانند جایزه بگیرند.
                       </span>
                     </div>
                     <div
@@ -1011,9 +1117,9 @@ export const LoyaltyTab: React.FC = () => {
                     }`}
                   >
                     <div>
-                      <span className="font-bold text-sm block text-white">نمایش نام فروشگاه‌ها</span>
-                      <span className="text-xs text-slate-400 mt-0.5 block">
-                        نمایش نام کامل در لیدربرد و رتبه‌بندی عمومی
+                      <span className="font-bold text-sm block text-white">نمایش نام فروشگاه‌ها در لیدربرد</span>
+                      <span className="text-xs text-slate-400 mt-0.5 block leading-normal">
+                        اگر خاموش باشد، به‌جای نام فروشگاه، «فروشگاه [رتبه]» نشان داده می‌شود (هر فروشگاه نام خودش را می‌بیند).
                       </span>
                     </div>
                     <div
@@ -1028,16 +1134,21 @@ export const LoyaltyTab: React.FC = () => {
 
                 {/* Numeric Settings */}
                 <div className="space-y-4">
-                  <h4 className="text-sm font-bold text-slate-300 flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-amber-400" />
-                    <span>پارامترهای محاسباتی و نرخ پاداش</span>
-                  </h4>
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-bold text-slate-300 flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-amber-400" />
+                      <span>پارامترهای محاسباتی و نرخ پاداش</span>
+                    </h4>
+                    <p className="text-xs text-slate-400 bg-slate-950/80 border border-slate-800 p-3 rounded-xl leading-relaxed">
+                      این بخش فقط پیشنهاد قیمت امتیازی جایزه و نشانگر درصد بازگشت را تعیین می‌کند و روی امتیازهایی که فروشگاه‌ها تاکنون گرفته‌اند اثری ندارد. قیمت هر جایزه را در بخش «جوایز» همیشه می‌توانید دستی بنویسید.
+                    </p>
+                  </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 pt-2">
                     {/* toman_per_point */}
                     <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-2">
                       <label className="text-xs font-bold text-slate-200 block">
-                        ارزش ریالی مبنا (toman_per_point)
+                        ارزش مبنای هر امتیاز (تومان خرید)
                       </label>
                       <div className="relative">
                         <input
@@ -1051,14 +1162,14 @@ export const LoyaltyTab: React.FC = () => {
                         <span className="absolute left-3 top-2.5 text-xs text-slate-400">تومان</span>
                       </div>
                       <p className="text-[11px] text-slate-400 leading-relaxed">
-                        تومان به‌ازای هر امتیاز – فقط برای پیشنهاد خودکار و محاسبات پایه ارزش‌گذاری
+                        فقط برای تعیین امتیاز اولیه کالاهای جدید و پیشنهاد قیمت جایزه است (امتیاز = قیمت یک واحد سفارش ÷ این عدد). به امتیازی که فروشگاه‌ها می‌گیرند ربطی ندارد و با تغییر قیمت‌ها لازم نیست آن را عوض کنید.
                       </p>
                     </div>
 
                     {/* rate_small */}
                     <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-2">
                       <label className="text-xs font-bold text-slate-200 block">
-                        درصد پاداش جوایز کوچک (rate_small)
+                        درصد پاداش جایزه‌ی کوچک
                       </label>
                       <div className="relative">
                         <input
@@ -1073,14 +1184,14 @@ export const LoyaltyTab: React.FC = () => {
                         <span className="absolute left-3 top-2.5 text-xs text-slate-400">درصد %</span>
                       </div>
                       <p className="text-[11px] text-slate-400 leading-relaxed">
-                        درصد بازگشت ارزش برای جوایز با ارزش ریالی پایین (پیش‌فرض: ۱.۵٪)
+                        جایزه‌های کوچک این درصد از خرید مشتری را به او برمی‌گردانند (مثلاً ۱.۵ یعنی برای هر ۱۰۰ تومان خرید، ۱.۵ تومان ارزش جایزه). کسی که زود امتیازش را خرج کند همین مقدار را می‌گیرد.
                       </p>
                     </div>
 
                     {/* rate_large */}
                     <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-2">
                       <label className="text-xs font-bold text-slate-200 block">
-                        درصد پاداش جوایز بزرگ (rate_large)
+                        درصد پاداش جایزه‌ی بزرگ
                       </label>
                       <div className="relative">
                         <input
@@ -1095,14 +1206,14 @@ export const LoyaltyTab: React.FC = () => {
                         <span className="absolute left-3 top-2.5 text-xs text-slate-400">درصد %</span>
                       </div>
                       <p className="text-[11px] text-slate-400 leading-relaxed">
-                        درصد بازگشت ارزش برای جوایز با ارزش ریالی بالا (پیش‌فرض: ۳.۵٪)
+                        جایزه‌های بزرگ این درصد را برمی‌گردانند (مثلاً ۲). باید بیشتر از جایزه‌ی کوچک باشد تا صبر کردن برای جایزه‌ی بزرگتر بصرفد.
                       </p>
                     </div>
 
                     {/* value_small */}
                     <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-2">
                       <label className="text-xs font-bold text-slate-200 block">
-                        کف ارزش ریالی جایزه (value_small)
+                        حد جایزه‌ی «کوچک» (تومان)
                       </label>
                       <div className="relative">
                         <input
@@ -1116,14 +1227,14 @@ export const LoyaltyTab: React.FC = () => {
                         <span className="absolute left-3 top-2.5 text-xs text-slate-400">تومان</span>
                       </div>
                       <p className="text-[11px] text-slate-400 leading-relaxed">
-                        آستانه پایین ارزش جایزه برای اعمال کمترین نرخ بازگشت (مثلاً ۲۰۰ هزار تومان)
+                        جایزه‌ای که ارزش مصرف‌کننده‌اش این عدد یا کمتر باشد «کوچک» حساب می‌شود و با درصد پاداش کوچک پیشنهاد می‌شود. مثال: ۲۰۰٬۰۰۰
                       </p>
                     </div>
 
                     {/* value_large */}
                     <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-2">
                       <label className="text-xs font-bold text-slate-200 block">
-                        سقف ارزش ریالی جایزه (value_large)
+                        حد جایزه‌ی «بزرگ» (تومان)
                       </label>
                       <div className="relative">
                         <input
@@ -1137,7 +1248,7 @@ export const LoyaltyTab: React.FC = () => {
                         <span className="absolute left-3 top-2.5 text-xs text-slate-400">تومان</span>
                       </div>
                       <p className="text-[11px] text-slate-400 leading-relaxed">
-                        آستانه بالای ارزش جایزه برای اعمال بیشترین نرخ بازگشت (مثلاً ۵ میلیون تومان)
+                        جایزه‌ای که ارزشش این عدد یا بیشتر باشد «بزرگ» حساب می‌شود و با درصد پاداش بزرگ پیشنهاد می‌شود. جایزه‌های بین این دو حد، درصدی بین کوچک و بزرگ می‌گیرند. مثال: ۵٬۰۰۰٬۰۰۰
                       </p>
                     </div>
                   </div>
@@ -1236,15 +1347,20 @@ export const LoyaltyTab: React.FC = () => {
                 <span>ریست همه‌ی دستی‌ها</span>
               </button>
 
-              <button
-                type="button"
-                onClick={handleRecalculateProductPoints}
-                disabled={recalculatingPoints || loadingPoints}
-                className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition border border-slate-700"
-              >
-                {recalculatingPoints ? <Loader2 className="w-4 h-4 animate-spin text-amber-400" /> : <Sparkles className="w-4 h-4 text-amber-400" />}
-                <span>محاسبه خودکار از قیمت فعلی</span>
-              </button>
+              <div className="flex flex-col items-start gap-1">
+                <button
+                  type="button"
+                  onClick={handleRecalculateProductPoints}
+                  disabled={recalculatingPoints || loadingPoints}
+                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition border border-slate-700"
+                >
+                  {recalculatingPoints ? <Loader2 className="w-4 h-4 animate-spin text-amber-400" /> : <Sparkles className="w-4 h-4 text-amber-400" />}
+                  <span>پر کردن امتیاز کالاهای بدون امتیاز</span>
+                </button>
+                <span className="text-[10.5px] text-slate-400 max-w-xs leading-normal">
+                  امتیاز کالاهای دارای امتیاز تغییر نمی‌کند. برای بازحساب یک کالای مشخص از دکمه‌ی «بازگشت به خودکار» همان ردیف استفاده کنید.
+                </span>
+              </div>
 
               <button
                 type="button"
@@ -1670,6 +1786,11 @@ export const LoyaltyTab: React.FC = () => {
                 </div>
 
                 <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+                  {/* Current Effective Rate Notice */}
+                  <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5 text-xs text-amber-300 font-medium flex items-center justify-between">
+                    <span>نرخ فعلی: هر امتیاز ≈ {Math.round(effectiveTomanPerPoint).toLocaleString('fa-IR')} تومان خرید</span>
+                  </div>
+
                   {/* Title */}
                   <div>
                     <label className="text-xs font-bold text-slate-300 block mb-1">
@@ -1951,6 +2072,23 @@ export const LoyaltyTab: React.FC = () => {
                         {(editingRewardModal.points_price || 0).toLocaleString('fa-IR')} امتیاز
                       </span>
                     </div>
+
+                    {(() => {
+                      const V = Number(editingRewardModal.consumer_value || 0);
+                      const { rate_small, rate_large, value_small, value_large } = settings;
+                      const rewardTierLabel = V <= value_small ? 'کوچک' : V >= value_large ? 'بزرگ' : 'متوسط';
+                      const denominator = Math.max(1, value_large - value_small);
+                      const clampedRatio = Math.max(0, Math.min(1, (V - value_small) / denominator));
+                      const suggestedRate = rate_small + (rate_large - rate_small) * clampedRatio;
+
+                      return (
+                        <div className="sm:col-span-2 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-xs text-amber-300 font-medium">
+                          <span>
+                            جایزه‌ی {rewardTierLabel} — نرخ پیشنهادی {suggestedRate.toLocaleString('fa-IR', { maximumFractionDigits: 2 })}٪
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Live Indicators for Admin */}

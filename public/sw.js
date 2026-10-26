@@ -1,5 +1,5 @@
 // Babol Pakhsh Service Worker - Database-First & Fast Deploy
-const CACHE_VERSION = 'farhoodi-b2b-v9-chunk-fix';
+const CACHE_VERSION = 'farhoodi-b2b-v10-chunk-fix';
 const CACHE_NAME = `babolpakhsh-${CACHE_VERSION}`;
 
 const STATIC_ASSETS = [
@@ -48,6 +48,7 @@ self.addEventListener('fetch', (event) => {
   if (
     url.hostname.includes('supabase.co') ||
     url.hostname === 'api.barfrooshan.ir' ||
+    url.hostname === 'app.barfrooshan.ir' ||
     url.pathname.includes('/rest/v1') ||
     url.pathname.includes('/auth/v1') ||
     url.pathname.includes('/realtime/v1') ||

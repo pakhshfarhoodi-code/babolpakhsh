@@ -28,6 +28,9 @@ import {
   Filter,
   Eye,
   Info,
+  BookmarkPlus,
+  Trash2,
+  Sparkles,
 } from 'lucide-react';
 
 interface ExcelStoreImportModalProps {
@@ -65,10 +68,47 @@ export interface ProcessedStoreRow {
   resultMessage?: string;
 }
 
+export interface SmsTemplateItem {
+  id: string;
+  title: string;
+  text: string;
+  isSystem?: boolean;
+}
+
+export const STORAGE_LAST_SMS_TEMPLATE = 'barfroosh_last_sms_template';
+export const STORAGE_SMS_TEMPLATES = 'barfroosh_sms_templates';
+export const STORAGE_LAST_SMS_LINK = 'barfroosh_last_sms_link';
+
+export const DEFAULT_SMS_TEMPLATES: SmsTemplateItem[] = [
+  {
+    id: 'default_standard',
+    title: 'استاندارد بارفروش (پیش‌فرض)',
+    text: '{owner} عزیز، فروشگاه {name} به بارفروش دعوت شد. ورود: {link} نام کاربری: {phone} رمز: {password}',
+    isSystem: true,
+  },
+  {
+    id: 'default_short',
+    title: 'کوتاه (۱ پیامک)',
+    text: '{name} عزیز، پنل بارفروش شما فعال شد. ورود: {link} کاربری: {phone} رمز: {password}',
+    isSystem: true,
+  },
+  {
+    id: 'default_formal',
+    title: 'رسمی و اداری',
+    text: 'جناب آقای/سرکار خانم {owner}؛ پنل سفارش‌گیری {name} در سامانه بارفروش آماده بهره‌برداری است. نشانی: {link} کلمه عبور: {password}',
+    isSystem: true,
+  },
+  {
+    id: 'default_welcome_bonus',
+    title: 'دعوت همراه با پاداش عضویت',
+    text: '{owner} عزیز، حساب فروشگاه {name} در بارفروش فعال شد. همراه با پاداش عضویت باشگاه مشتریان! ورود: {link} کاربری: {phone} رمز: {password}',
+    isSystem: true,
+  },
+];
+
 const BATCH_SIZE = 40;
 const DEFAULT_LINK = 'https://Barfroosh.ir';
-const DEFAULT_TEMPLATE =
-  '{owner} عزیز، فروشگاه {name} به بارفروش دعوت شد. ورود: {link} نام کاربری: {phone} رمز: {password}';
+const DEFAULT_TEMPLATE = DEFAULT_SMS_TEMPLATES[0].text;
 
 // Helper to extract first valid Iranian mobile number from a string/cell
 export function extractFirstValidMobile(value: any): string | null {
@@ -163,8 +203,59 @@ const ExcelStoreImportModalInner: React.FC<Omit<ExcelStoreImportModalProps, 'isO
     return `import-${new Date().toISOString().slice(0, 10)}`;
   });
   const [selectedVisitorId, setSelectedVisitorId] = useState<string>(''); // '' = مستقیم (Direct)
-  const [linkUrl, setLinkUrl] = useState<string>(DEFAULT_LINK);
-  const [messageTemplate, setMessageTemplate] = useState<string>(DEFAULT_TEMPLATE);
+
+  // Link & Message Template with localStorage persistence
+  const [linkUrl, setLinkUrl] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_LAST_SMS_LINK);
+      if (saved && saved.trim()) return saved.trim();
+    } catch {
+      // ignore
+    }
+    return DEFAULT_LINK;
+  });
+
+  const [smsTemplates, setSmsTemplates] = useState<SmsTemplateItem[]>(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_SMS_TEMPLATES);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const custom = parsed.filter((t: any) => !t.isSystem);
+          return [...DEFAULT_SMS_TEMPLATES, ...custom];
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_SMS_TEMPLATES;
+  });
+
+  const [messageTemplate, setMessageTemplate] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_LAST_SMS_TEMPLATE);
+      if (saved && saved.trim()) return saved;
+    } catch {
+      // ignore
+    }
+    return DEFAULT_TEMPLATE;
+  });
+
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_LAST_SMS_TEMPLATE);
+      if (saved) {
+        const match = DEFAULT_SMS_TEMPLATES.find((t) => t.text.trim() === saved.trim());
+        if (match) return match.id;
+      }
+    } catch {
+      // ignore
+    }
+    return 'default_standard';
+  });
+
+  const [isAddingNewTemplate, setIsAddingNewTemplate] = useState<boolean>(false);
+  const [newTemplateTitle, setNewTemplateTitle] = useState<string>('');
 
   // Sanitized rows (computed from rawRows and mapping)
   const [processedRows, setProcessedRows] = useState<ProcessedStoreRow[]>([]);
@@ -399,9 +490,91 @@ const ExcelStoreImportModalInner: React.FC<Omit<ExcelStoreImportModalProps, 'isO
   // Persian SMS Segment Calculation: 70 chars per part
   const smsSegments = Math.ceil(previewMessageText.length / 70) || 1;
 
+  // Template & Link persistence handlers
+  const handleTemplateChange = (newVal: string) => {
+    setMessageTemplate(newVal);
+    try {
+      localStorage.setItem(STORAGE_LAST_SMS_TEMPLATE, newVal);
+    } catch {
+      // ignore
+    }
+    const match = smsTemplates.find((t) => t.text.trim() === newVal.trim());
+    setSelectedTemplateId(match ? match.id : 'custom');
+  };
+
+  const handleLinkChange = (newVal: string) => {
+    setLinkUrl(newVal);
+    try {
+      localStorage.setItem(STORAGE_LAST_SMS_LINK, newVal);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleSelectTemplate = (templateId: string) => {
+    setSelectedTemplateId(templateId);
+    if (templateId === 'custom') return;
+    const found = smsTemplates.find((t) => t.id === templateId);
+    if (found) {
+      setMessageTemplate(found.text);
+      try {
+        localStorage.setItem(STORAGE_LAST_SMS_TEMPLATE, found.text);
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  const handleSaveAsNewTemplate = () => {
+    const trimmedTitle = newTemplateTitle.trim();
+    if (!trimmedTitle) {
+      showToast('لطفاً عنوان قالب را وارد کنید.', 'error');
+      return;
+    }
+    if (!messageTemplate.trim()) {
+      showToast('متن قالب نمی‌تواند خالی باشد.', 'error');
+      return;
+    }
+    const newId = `custom_${Date.now()}`;
+    const newTpl: SmsTemplateItem = {
+      id: newId,
+      title: trimmedTitle,
+      text: messageTemplate,
+      isSystem: false,
+    };
+    const updated = [...smsTemplates, newTpl];
+    setSmsTemplates(updated);
+    setSelectedTemplateId(newId);
+    try {
+      const customOnly = updated.filter((t) => !t.isSystem);
+      localStorage.setItem(STORAGE_SMS_TEMPLATES, JSON.stringify(customOnly));
+      localStorage.setItem(STORAGE_LAST_SMS_TEMPLATE, messageTemplate);
+    } catch {
+      // ignore
+    }
+    setNewTemplateTitle('');
+    setIsAddingNewTemplate(false);
+    showToast(`قالب «${trimmedTitle}» با موفقیت ذخیره شد.`, 'success');
+  };
+
+  const handleDeleteTemplate = (templateId: string) => {
+    const tplToDelete = smsTemplates.find((t) => t.id === templateId);
+    if (!tplToDelete || tplToDelete.isSystem) return;
+    const updated = smsTemplates.filter((t) => t.id !== templateId);
+    setSmsTemplates(updated);
+    try {
+      const customOnly = updated.filter((t) => !t.isSystem);
+      localStorage.setItem(STORAGE_SMS_TEMPLATES, JSON.stringify(customOnly));
+    } catch {
+      // ignore
+    }
+    setSelectedTemplateId('custom');
+    showToast(`قالب «${tplToDelete.title}» حذف شد.`, 'info');
+  };
+
   // Insert Variable helper into message textarea
   const insertVariable = (variable: string) => {
-    setMessageTemplate((prev) => prev + variable);
+    handleTemplateChange(messageTemplate + variable);
   };
 
   // Execution: Start Import
@@ -937,40 +1110,146 @@ const ExcelStoreImportModalInner: React.FC<Omit<ExcelStoreImportModalProps, 'isO
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <span className="font-bold text-xs text-slate-200 flex items-center gap-1.5">
                   <MessageSquare className="w-4 h-4 text-emerald-400" />
-                  قالب پیام دعوت (جهت ثبت در خروجی اکسل):
+                  قالب پیام دعوت (جهت ثبت در خروجی اکسل و پیامک):
                 </span>
                 <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
                   <span>لینک ورود:</span>
                   <input
                     type="text"
                     value={linkUrl}
-                    onChange={(e) => setLinkUrl(e.target.value)}
-                    className="bg-slate-900 border border-slate-750 rounded-lg px-2 py-0.5 text-slate-200 text-xs font-mono w-40 text-left focus:border-emerald-500 focus:outline-none"
+                    onChange={(e) => handleLinkChange(e.target.value)}
+                    className="bg-slate-900 border border-slate-750 rounded-lg px-2 py-0.5 text-slate-200 text-xs font-mono w-44 text-left focus:border-emerald-500 focus:outline-none"
+                    placeholder="https://Barfroosh.ir"
                   />
                 </div>
               </div>
 
+              {/* Template Selector & Presets Toolbar */}
+              <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2 flex-1 min-w-[240px]">
+                    <span className="text-[11px] text-slate-300 font-medium whitespace-nowrap flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      انتخاب قالب آماده:
+                    </span>
+                    <select
+                      value={selectedTemplateId}
+                      onChange={(e) => handleSelectTemplate(e.target.value)}
+                      className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-slate-100 text-xs focus:border-emerald-500 focus:outline-none"
+                    >
+                      <optgroup label="قالب‌های پیش‌فرض سامانه">
+                        {smsTemplates
+                          .filter((t) => t.isSystem)
+                          .map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.title}
+                            </option>
+                          ))}
+                      </optgroup>
+                      {smsTemplates.some((t) => !t.isSystem) && (
+                        <optgroup label="قالب‌های اختصاصی شما">
+                          {smsTemplates
+                            .filter((t) => !t.isSystem)
+                            .map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.title}
+                              </option>
+                            ))}
+                        </optgroup>
+                      )}
+                      <option value="custom">متن دستی / ویرایش‌شده</option>
+                    </select>
+
+                    {/* Delete Custom Template button */}
+                    {selectedTemplateId !== 'custom' &&
+                      !smsTemplates.find((t) => t.id === selectedTemplateId)?.isSystem && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteTemplate(selectedTemplateId)}
+                          title="حذف این قالب اختصاصی"
+                          className="p-1 rounded-lg text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition border border-rose-500/30 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                  </div>
+
+                  {/* Add New Template Toggle */}
+                  {!isAddingNewTemplate && (
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingNewTemplate(true)}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-750 text-slate-200 text-[11px] font-medium flex items-center gap-1 transition border border-slate-700 cursor-pointer"
+                    >
+                      <BookmarkPlus className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>ذخیره به عنوان قالب جدید</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Inline Form to Save as New Template */}
+                {isAddingNewTemplate && (
+                  <div className="flex items-center gap-2 pt-2 border-t border-slate-800 animate-in fade-in">
+                    <input
+                      type="text"
+                      value={newTemplateTitle}
+                      onChange={(e) => setNewTemplateTitle(e.target.value)}
+                      placeholder="عنوان قالب جدید (مثال: پیامک جشنواره پاییزه)..."
+                      className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-slate-100 text-xs focus:border-emerald-500 focus:outline-none"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSaveAsNewTemplate();
+                      }}
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSaveAsNewTemplate}
+                      className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition cursor-pointer"
+                    >
+                      ذخیره قالب
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddingNewTemplate(false);
+                        setNewTemplateTitle('');
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition cursor-pointer"
+                    >
+                      انصراف
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {/* Variable Insertion Chips */}
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[10px] text-slate-400">افزودن متغیر:</span>
+                <span className="text-[10px] text-slate-400 font-medium">افزودن متغیر به متن:</span>
                 {['{name}', '{owner}', '{phone}', '{password}', '{link}'].map((v) => (
                   <button
                     key={v}
                     type="button"
                     onClick={() => insertVariable(v)}
-                    className="px-2 py-0.5 rounded-lg bg-slate-850 hover:bg-slate-750 text-slate-300 text-[10px] font-mono cursor-pointer transition border border-slate-750"
+                    className="px-2 py-0.5 rounded-lg bg-slate-850 hover:bg-slate-750 text-emerald-300 text-[10px] font-mono cursor-pointer transition border border-slate-750"
                   >
                     {v}
                   </button>
                 ))}
               </div>
 
-              <textarea
-                value={messageTemplate}
-                onChange={(e) => setMessageTemplate(e.target.value)}
-                rows={2}
-                className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-slate-100 text-xs focus:border-emerald-500 focus:outline-none leading-relaxed resize-none"
-              />
+              <div className="space-y-1">
+                <textarea
+                  value={messageTemplate}
+                  onChange={(e) => handleTemplateChange(e.target.value)}
+                  rows={2}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-slate-100 text-xs focus:border-emerald-500 focus:outline-none leading-relaxed resize-none"
+                  placeholder="متن پیامک دعوت را وارد کنید..."
+                />
+                <p className="text-[10px] text-slate-400 flex items-center gap-1">
+                  <Check className="w-3 h-3 text-emerald-400" />
+                  <span>آخرین متن ویرایش‌شده به‌صورت خودکار ذخیره شده و در باز و بسته کردن پنجره حفظ خواهد شد.</span>
+                </p>
+              </div>
 
               {/* Live Preview Box */}
               <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-850 space-y-1.5">

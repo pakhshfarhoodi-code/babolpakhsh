@@ -94,7 +94,11 @@ export const TeamTab: React.FC<TeamTabProps> = ({
   const [storeStatusFilter, setStoreStatusFilter] = useState<'all' | 'active' | 'inactive' | 'pending'>(initialStoreStatusFilter || 'all');
   const [customerGroupTab, setCustomerGroupTab] = useState<'self' | 'excel'>('self');
 
-  // Visitor Financial Account States
+  // Customer selection & bulk actions state
+  const [selectedStoreIds, setSelectedStoreIds] = useState<string[]>([]);
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [bulkDeleteProgress, setBulkDeleteProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
   const [selectedVisitorForLedger, setSelectedVisitorForLedger] = useState<string | null>(null);
   const [activatingVisitorId, setActivatingVisitorId] = useState<string | null>(null);
   const [activatingCreditLimit, setActivatingCreditLimit] = useState<number | ''>(50000000);
@@ -557,6 +561,75 @@ export const TeamTab: React.FC<TeamTabProps> = ({
       });
     } finally {
       setIsDeletingSupermarket(false);
+    }
+  };
+
+  // Toggle selection for a single supermarket
+  const handleToggleSelectStore = (storeId: string) => {
+    setSelectedStoreIds((prev) =>
+      prev.includes(storeId) ? prev.filter((id) => id !== storeId) : [...prev, storeId]
+    );
+  };
+
+  // Toggle selection for all currently filtered supermarkets
+  const handleToggleSelectAllStores = () => {
+    if (filteredSupermarkets.length === 0) return;
+    const allFilteredIds = filteredSupermarkets.map((s) => s.id);
+    const isAllSelected = allFilteredIds.every((id) => selectedStoreIds.includes(id));
+    if (isAllSelected) {
+      const filteredSet = new Set(allFilteredIds);
+      setSelectedStoreIds((prev) => prev.filter((id) => !filteredSet.has(id)));
+    } else {
+      const next = new Set(selectedStoreIds);
+      allFilteredIds.forEach((id) => next.add(id));
+      setSelectedStoreIds(Array.from(next));
+    }
+  };
+
+  // Clear all selections
+  const handleClearStoreSelection = () => {
+    setSelectedStoreIds([]);
+  };
+
+  // Bulk Delete Execution
+  const handleBulkDeleteStoresConfirm = async () => {
+    if (selectedStoreIds.length === 0) return;
+    setIsBulkDeleting(true);
+    setBulkDeleteProgress({ current: 0, total: selectedStoreIds.length });
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < selectedStoreIds.length; i++) {
+      const id = selectedStoreIds[i];
+      setBulkDeleteProgress({ current: i + 1, total: selectedStoreIds.length });
+      try {
+        const res = await deleteSupermarket(id);
+        if (res.success) {
+          successCount++;
+        } else {
+          failCount++;
+        }
+      } catch {
+        failCount++;
+      }
+    }
+
+    setIsBulkDeleting(false);
+    setIsBulkDeleteModalOpen(false);
+    setSelectedStoreIds([]);
+
+    if (successCount > 0) {
+      setToastNotification({
+        type: 'success',
+        message: `${successCount.toLocaleString('fa-IR')} فروشگاه با موفقیت حذف گردید.` + (failCount > 0 ? ` (${failCount.toLocaleString('fa-IR')} مورد با خطا مواجه شد)` : ''),
+      });
+      refreshData();
+    } else if (failCount > 0) {
+      setToastNotification({
+        type: 'error',
+        message: `خطا در حذف ${failCount.toLocaleString('fa-IR')} فروشگاه انتخاب‌شده.`,
+      });
     }
   };
 
@@ -1545,6 +1618,73 @@ export const TeamTab: React.FC<TeamTabProps> = ({
               />
             </div>
 
+            {/* Bulk Selection Bar */}
+            {filteredSupermarkets.length > 0 && (
+              <div className="mt-3 p-2.5 rounded-xl bg-slate-950 border border-slate-800/80 flex items-center justify-between gap-2 flex-wrap text-xs">
+                <div className="flex items-center gap-2">
+                  {(() => {
+                    const isAllFilteredSelected =
+                      filteredSupermarkets.length > 0 &&
+                      filteredSupermarkets.every((s) => selectedStoreIds.includes(s.id));
+                    return (
+                      <button
+                        type="button"
+                        onClick={handleToggleSelectAllStores}
+                        className="flex items-center gap-1.5 text-slate-300 hover:text-white font-medium cursor-pointer transition select-none"
+                      >
+                        <div
+                          className={`w-4 h-4 rounded flex items-center justify-center border transition ${
+                            isAllFilteredSelected
+                              ? 'bg-blue-600 border-blue-500 text-white'
+                              : selectedStoreIds.some((id) => filteredSupermarkets.some((s) => s.id === id))
+                              ? 'bg-blue-600/30 border-blue-500 text-blue-300'
+                              : 'border-slate-600 bg-slate-900'
+                          }`}
+                        >
+                          {isAllFilteredSelected ? (
+                            <Check className="w-3 h-3 stroke-[3]" />
+                          ) : selectedStoreIds.some((id) => filteredSupermarkets.some((s) => s.id === id)) ? (
+                            <span className="w-2 h-0.5 bg-blue-300 rounded" />
+                          ) : null}
+                        </div>
+                        <span>
+                          {isAllFilteredSelected ? 'لغو انتخاب همه' : `انتخاب همه (${filteredSupermarkets.length.toLocaleString('fa-IR')})`}
+                        </span>
+                      </button>
+                    );
+                  })()}
+
+                  {selectedStoreIds.length > 0 && (
+                    <span className="text-[11px] font-bold text-blue-400 bg-blue-950/60 border border-blue-800/60 px-2 py-0.5 rounded-md">
+                      {selectedStoreIds.length.toLocaleString('fa-IR')} فروشگاه انتخاب شده
+                    </span>
+                  )}
+                </div>
+
+                {selectedStoreIds.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsBulkDeleteModalOpen(true)}
+                      className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-bold text-xs transition cursor-pointer shadow-xs shadow-rose-600/30"
+                      title="حذف گروهی فروشگاه‌های انتخاب‌شده"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>حذف انتخاب‌شده‌ها ({selectedStoreIds.length.toLocaleString('fa-IR')})</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleClearStoreSelection}
+                      className="px-2 py-1 rounded-lg text-slate-400 hover:text-slate-200 text-[11px] transition cursor-pointer"
+                    >
+                      پاک کردن انتخاب
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Supermarket Cards List */}
             <div className="space-y-3 mt-3 max-h-[500px] overflow-y-auto pr-1">
               {filteredSupermarkets.length === 0 ? (
@@ -1564,40 +1704,34 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                   const noteText = (adminNotesMap[shop.id] ?? shop.admin_note ?? '').trim();
                   const hasNote = Boolean(noteText);
                   const isNoteExpanded = Boolean(expandedStoreNotes[shop.id]);
+                  const isSelected = selectedStoreIds.includes(shop.id);
 
                   return (
                     <div
                       key={shop.id}
                       className={`p-3.5 rounded-xl border space-y-2 text-xs transition ${
-                        !isApproved
+                        isSelected
+                          ? 'bg-blue-950/30 border-blue-500/60 shadow-md ring-1 ring-blue-500/30'
+                          : !isApproved
                           ? 'bg-amber-950/20 border-amber-500/40 shadow-sm'
                           : 'bg-slate-950 border-slate-800/80 hover:border-slate-700'
                       }`}
                     >
-                      {/* Top row: Name with Approval Tick Checkbox + Phone */}
+                      {/* Top row: Name with Selection Checkbox + Phone */}
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0">
-                          {/* Approval Checkbox on Name */}
+                          {/* Real Selection Checkbox */}
                           <button
                             type="button"
-                            disabled={isTogglingThis}
-                            onClick={() => handleToggleApproval(shop)}
-                            title={
-                              isApproved
-                                ? 'کلیک کنید تا دسترسی فروشگاه غیرفعال شود'
-                                : 'کلیک کنید تا دسترسی فروشگاه تایید و فعال شود'
-                            }
+                            onClick={() => handleToggleSelectStore(shop.id)}
+                            title={isSelected ? 'لغو انتخاب این فروشگاه' : 'انتخاب این فروشگاه برای عملیات گروهی'}
                             className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 border transition cursor-pointer ${
-                              isApproved
-                                ? 'bg-emerald-600 border-emerald-500 text-white shadow-xs hover:bg-emerald-500'
-                                : 'bg-slate-900 border-amber-500/80 text-amber-400 hover:bg-amber-500/20 animate-pulse'
-                            } ${isTogglingThis ? 'opacity-50 cursor-wait' : ''}`}
+                              isSelected
+                                ? 'bg-blue-600 border-blue-500 text-white shadow-xs hover:bg-blue-500'
+                                : 'bg-slate-900 border-slate-700 hover:border-slate-500 text-transparent'
+                            }`}
                           >
-                            {isTogglingThis ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Check className={`w-3.5 h-3.5 stroke-[3] ${isApproved ? 'opacity-100' : 'opacity-40'}`} />
-                            )}
+                            <Check className={`w-3.5 h-3.5 stroke-[3] ${isSelected ? 'opacity-100' : 'opacity-0'}`} />
                           </button>
 
                           <div className="min-w-0">
@@ -2639,6 +2773,102 @@ export const TeamTab: React.FC<TeamTabProps> = ({
                   <>
                     <Trash2 className="w-4 h-4" />
                     <span>تایید و حذف</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Supermarkets Confirmation Modal */}
+      {isBulkDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl p-5 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/15 text-rose-400 flex items-center justify-center shrink-0 border border-rose-500/30">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-slate-100">
+                  حذف گروهی {selectedStoreIds.length.toLocaleString('fa-IR')} فروشگاه / مشتری
+                </h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  آیا از حذف {selectedStoreIds.length.toLocaleString('fa-IR')} فروشگاه انتخاب‌شده اطمینان دارید؟
+                </p>
+                <p className="text-[11px] text-rose-400/90 pt-1">
+                  این عملیات غیرقابل بازگشت است و حساب کاربری این مشتریان حذف خواهد شد. سوابق فاکتورهای پیشین در سیستم حفظ می‌شود.
+                </p>
+              </div>
+            </div>
+
+            {/* List preview of selected stores */}
+            <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs space-y-2 max-h-48 overflow-y-auto">
+              <span className="text-[11px] font-bold text-slate-400 block mb-1">
+                فروشگاه‌های انتخاب‌شده برای حذف:
+              </span>
+              <div className="space-y-1">
+                {selectedStoreIds.map((id) => {
+                  const store = supermarkets.find((s) => s.id === id);
+                  if (!store) return null;
+                  return (
+                    <div key={id} className="flex items-center justify-between py-1 px-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 text-[11px]">
+                      <span className="font-bold text-white">{store.name}</span>
+                      <span className="text-slate-400">{store.owner} ({store.phone})</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Progress indicator during bulk deletion */}
+            {isBulkDeleting && (
+              <div className="p-3 rounded-xl bg-blue-950/40 border border-blue-800/50 text-xs space-y-2">
+                <div className="flex items-center justify-between text-blue-300 font-bold">
+                  <span className="flex items-center gap-1.5">
+                    <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
+                    <span>در حال حذف مشتریان...</span>
+                  </span>
+                  <span className="font-mono">
+                    {bulkDeleteProgress.current.toLocaleString('fa-IR')} از {bulkDeleteProgress.total.toLocaleString('fa-IR')}
+                  </span>
+                </div>
+                <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className="bg-blue-500 h-1.5 transition-all duration-200"
+                    style={{
+                      width: `${(bulkDeleteProgress.current / Math.max(1, bulkDeleteProgress.total)) * 100}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                disabled={isBulkDeleting}
+                onClick={() => setIsBulkDeleteModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition cursor-pointer disabled:opacity-50"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                disabled={isBulkDeleting}
+                onClick={handleBulkDeleteStoresConfirm}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 disabled:opacity-50 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-lg shadow-rose-600/30 cursor-pointer"
+              >
+                {isBulkDeleting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>در حال حذف...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>بله، حذف قطعی {selectedStoreIds.length.toLocaleString('fa-IR')} فروشگاه</span>
                   </>
                 )}
               </button>

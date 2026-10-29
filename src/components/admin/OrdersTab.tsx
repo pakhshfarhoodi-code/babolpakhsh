@@ -29,6 +29,7 @@ import {
   RotateCcw,
   Navigation,
   Edit2,
+  Loader2,
 } from 'lucide-react';
 import { isToday, isWithinDays, formatPrice, formatOrderDate } from './helpers';
 import { getTehranDateParts } from '../../utils/dateUtils';
@@ -113,6 +114,15 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
   // Delete modal state
   const [deleteConfirmOrder, setDeleteConfirmOrder] = useState<Order | null>(null);
   const [isDeletingOrder, setIsDeletingOrder] = useState(false);
+
+  // Multi-selection & Bulk Delete states
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [bulkDeleteProgress, setBulkDeleteProgress] = useState<{ current: number; total: number }>({
+    current: 0,
+    total: 0,
+  });
 
   // Assignment Modal state (Supports direct assignment to visitor or central office)
   const [assignModalOrder, setAssignModalOrder] = useState<Order | null>(null);
@@ -405,6 +415,93 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
 
     return list;
   }, [filteredOrders, sortField, sortDirection, getCalculatedOrderTotal]);
+
+  // Keep selectedOrderIds in sync when orders list changes
+  useEffect(() => {
+    if (selectedOrderIds.length > 0) {
+      const existingSet = new Set(orders.map((o) => o.id));
+      setSelectedOrderIds((prev) => prev.filter((id) => existingSet.has(id)));
+    }
+  }, [orders]);
+
+  // Toggle selection for single order
+  const handleToggleSelectOrder = (orderId: string) => {
+    setSelectedOrderIds((prev) =>
+      prev.includes(orderId) ? prev.filter((id) => id !== orderId) : [...prev, orderId]
+    );
+  };
+
+  // Toggle selection for all visible/sorted orders
+  const isAllFilteredSelected = useMemo(() => {
+    if (sortedOrders.length === 0) return false;
+    return sortedOrders.every((o) => selectedOrderIds.includes(o.id));
+  }, [sortedOrders, selectedOrderIds]);
+
+  const isSomeFilteredSelected = useMemo(() => {
+    if (isAllFilteredSelected) return false;
+    return sortedOrders.some((o) => selectedOrderIds.includes(o.id));
+  }, [sortedOrders, selectedOrderIds, isAllFilteredSelected]);
+
+  const handleToggleSelectAllOrders = () => {
+    if (sortedOrders.length === 0) return;
+    const allFilteredIds = sortedOrders.map((o) => o.id);
+    if (isAllFilteredSelected) {
+      const filteredSet = new Set(allFilteredIds);
+      setSelectedOrderIds((prev) => prev.filter((id) => !filteredSet.has(id)));
+    } else {
+      const next = new Set(selectedOrderIds);
+      allFilteredIds.forEach((id) => next.add(id));
+      setSelectedOrderIds(Array.from(next));
+    }
+  };
+
+  const handleClearOrderSelection = () => {
+    setSelectedOrderIds([]);
+  };
+
+  // Bulk Delete Orders Execution
+  const handleBulkDeleteOrdersConfirm = async () => {
+    if (selectedOrderIds.length === 0 || !onDeleteOrder) return;
+    setIsBulkDeleting(true);
+    setBulkDeleteProgress({ current: 0, total: selectedOrderIds.length });
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < selectedOrderIds.length; i++) {
+      const id = selectedOrderIds[i];
+      setBulkDeleteProgress({ current: i + 1, total: selectedOrderIds.length });
+      try {
+        const res = await onDeleteOrder(id);
+        if (res && res.success) {
+          successCount++;
+        } else {
+          failCount++;
+        }
+      } catch {
+        failCount++;
+      }
+    }
+
+    setIsBulkDeleting(false);
+    setIsBulkDeleteModalOpen(false);
+    setSelectedOrderIds([]);
+
+    if (successCount > 0) {
+      setFeedbackToast({
+        type: 'success',
+        message: `${successCount.toLocaleString('fa-IR')} سفارش با موفقیت حذف و مقادیر اقلام به موجودی آزاد انبار بازگردانده شد.` + (failCount > 0 ? ` (${failCount.toLocaleString('fa-IR')} مورد با خطا مواجه شد)` : ''),
+      });
+      setTimeout(() => setFeedbackToast(null), 4000);
+      refreshData();
+    } else if (failCount > 0) {
+      setFeedbackToast({
+        type: 'error',
+        message: `خطا در حذف ${failCount.toLocaleString('fa-IR')} سفارش انتخاب‌شده.`,
+      });
+      setTimeout(() => setFeedbackToast(null), 4000);
+    }
+  };
 
   const handleOpenOverride = (order: Order, target: OrderStatus) => {
     setOverrideModalOrder(order);
@@ -836,6 +933,43 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
         </div>
       </div>
 
+      {/* Bulk Selection Bar */}
+      {selectedOrderIds.length > 0 && (
+        <div className="p-3 bg-blue-950/40 border border-blue-500/40 rounded-2xl flex items-center justify-between flex-wrap gap-3 animate-in fade-in">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-blue-500/20 text-blue-300 border border-blue-500/30 font-bold text-xs">
+              <Check className="w-3.5 h-3.5 text-blue-400 stroke-[3]" />
+              <span>{selectedOrderIds.length.toLocaleString('fa-IR')} سفارش انتخاب شد</span>
+            </div>
+            <button
+              type="button"
+              onClick={handleToggleSelectAllOrders}
+              className="text-xs text-blue-400 hover:text-blue-300 font-medium underline cursor-pointer"
+            >
+              {isAllFilteredSelected ? 'لغو انتخاب همه' : 'انتخاب همه موارد این لیست'}
+            </button>
+            <button
+              type="button"
+              onClick={handleClearOrderSelection}
+              className="text-xs text-slate-400 hover:text-slate-200 transition cursor-pointer"
+            >
+              پاک کردن انتخاب‌ها
+            </button>
+          </div>
+
+          {onDeleteOrder && (
+            <button
+              type="button"
+              onClick={() => setIsBulkDeleteModalOpen(true)}
+              className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition shadow-md shadow-rose-600/30 flex items-center gap-1.5 cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>حذف سفارش‌های انتخاب‌شده ({selectedOrderIds.length.toLocaleString('fa-IR')})</span>
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Orders Count and Table / Cards */}
       <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-sm">
         <div className="p-4 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2">
@@ -877,6 +1011,26 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
             <table className="w-full text-right text-xs">
               <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800">
                 <tr>
+                  <th className="py-3 px-3 w-10 text-center select-none">
+                    <button
+                      type="button"
+                      onClick={handleToggleSelectAllOrders}
+                      className={`w-4.5 h-4.5 rounded-md border flex items-center justify-center transition cursor-pointer mx-auto ${
+                        isAllFilteredSelected
+                          ? 'bg-blue-600 border-blue-500 text-white shadow-xs'
+                          : isSomeFilteredSelected
+                          ? 'bg-blue-600/30 border-blue-500 text-blue-300'
+                          : 'bg-slate-900 border-slate-700 hover:border-slate-500'
+                      }`}
+                      title={isAllFilteredSelected ? 'لغو انتخاب همه' : 'انتخاب همه سفارشات این لیست'}
+                    >
+                      {isAllFilteredSelected ? (
+                        <Check className="w-3 h-3 stroke-[3]" />
+                      ) : isSomeFilteredSelected ? (
+                        <div className="w-2 h-0.5 bg-blue-300 rounded" />
+                      ) : null}
+                    </button>
+                  </th>
                   {renderSortTh('id', 'کد سفارش')}
                   {renderSortTh('supermarket_name', 'سوپرمارکت مقصد')}
                   {renderSortTh('visitor_name', 'کانال توزیع (ویزیتور)')}
@@ -888,6 +1042,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
               </thead>
               <tbody className="divide-y divide-slate-800/60">
                 {sortedOrders.map((order) => {
+                  const isSelected = selectedOrderIds.includes(order.id);
                   const orderChannel = getOrderChannel(order);
                   const isDirect = orderChannel === 'store_direct';
 
@@ -944,9 +1099,27 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                     <tr
                       key={order.id}
                       className={`hover:bg-slate-800/35 transition ${
-                        isDirect ? 'bg-amber-500/[0.02]' : ''
+                        isSelected
+                          ? 'bg-blue-600/10'
+                          : isDirect
+                          ? 'bg-amber-500/[0.02]'
+                          : ''
                       }`}
                     >
+                      <td className="py-3 px-3 text-center whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleSelectOrder(order.id)}
+                          className={`w-4.5 h-4.5 rounded-md border flex items-center justify-center transition cursor-pointer mx-auto ${
+                            isSelected
+                              ? 'bg-blue-600 border-blue-500 text-white shadow-xs'
+                              : 'bg-slate-950 border-slate-700 hover:border-slate-500'
+                          }`}
+                          title={isSelected ? 'لغو انتخاب سفارش' : 'انتخاب جهت حذف دسته‌جمعی'}
+                        >
+                          {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                        </button>
+                      </td>
                       <td className="py-3 px-4 whitespace-nowrap">
                         <span className="font-bold text-blue-400 font-mono text-xs">{order.id}</span>
                       </td>
@@ -1303,6 +1476,125 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>{isDeletingOrder ? 'در حال حذف...' : 'تایید و حذف فاکتور'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Orders Confirmation Modal */}
+      {isBulkDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-in fade-in select-none" dir="rtl">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg shadow-2xl p-5 sm:p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-400 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-100">
+                    حذف دسته‌جمعی سفارشات
+                  </h3>
+                  <p className="text-xs text-rose-400 font-medium">
+                    {selectedOrderIds.length.toLocaleString('fa-IR')} سفارش انتخاب شده جهت حذف
+                  </p>
+                </div>
+              </div>
+              {!isBulkDeleting && (
+                <button
+                  type="button"
+                  onClick={() => setIsBulkDeleteModalOpen(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-rose-950/30 border border-rose-800/40 text-xs text-rose-300 space-y-1.5">
+              <p className="font-semibold flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>هشدار مهم حذف دسته‌جمعی:</span>
+              </p>
+              <p className="text-slate-300 leading-relaxed text-[11px] pr-5">
+                با حذف این {selectedOrderIds.length.toLocaleString('fa-IR')} سفارش، فاکتورهای مربوطه باطل شده و اقلام رزروشده آن‌ها بلافاصله به موجودی آزاد انبار بازگردانده می‌شوند. این عملیات غیرقابل بازگشت است.
+              </p>
+            </div>
+
+            {/* List preview of selected orders */}
+            <div className="space-y-1.5">
+              <span className="text-[11px] text-slate-400 font-medium">فهرست سفارش‌های انتخاب‌شده:</span>
+              <div className="max-h-48 overflow-y-auto bg-slate-950/80 rounded-2xl border border-slate-800 p-2 space-y-1 divide-y divide-slate-800/50">
+                {orders
+                  .filter((o) => selectedOrderIds.includes(o.id))
+                  .map((o) => (
+                    <div key={o.id} className="pt-1.5 first:pt-0 flex items-center justify-between text-xs py-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-blue-400">{o.id}</span>
+                        <span className="text-slate-200 font-medium truncate max-w-[160px]">{o.supermarket_name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-emerald-400 text-[11px]">
+                          {formatPrice(getCalculatedOrderTotal(o))} تومان
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          {formatOrderDate(o.order_date)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+
+            {/* Progress indicator during deletion */}
+            {isBulkDeleting && (
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center justify-between text-xs text-slate-300">
+                  <span className="flex items-center gap-1.5">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-400" />
+                    <span>در حال حذف سفارش‌ها و آزادسازی موجودی انبار...</span>
+                  </span>
+                  <span className="font-mono text-slate-400">
+                    {bulkDeleteProgress.current} از {bulkDeleteProgress.total}
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-rose-500 transition-all duration-200"
+                    style={{
+                      width: `${(bulkDeleteProgress.current / Math.max(1, bulkDeleteProgress.total)) * 100}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                disabled={isBulkDeleting}
+                onClick={() => setIsBulkDeleteModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 text-xs font-semibold transition cursor-pointer"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                disabled={isBulkDeleting}
+                onClick={handleBulkDeleteOrdersConfirm}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white text-xs font-bold transition shadow-lg shadow-rose-600/30 cursor-pointer flex items-center gap-1.5"
+              >
+                {isBulkDeleting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>در حال حذف ({bulkDeleteProgress.current}/{bulkDeleteProgress.total})...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>تأیید و حذف ({selectedOrderIds.length.toLocaleString('fa-IR')} سفارش)</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

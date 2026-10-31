@@ -553,6 +553,11 @@ export const RewardsTab: React.FC<RewardsTabProps> = ({ onNavigateToCatalog }) =
               </div>
             </div>
 
+            <div className="bg-emerald-50 border border-emerald-200/90 rounded-xl p-2.5 flex items-center justify-center gap-2 text-xs text-emerald-900 font-medium text-center">
+              <Gift className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>هدایا همراه با سفارش بعدی شما ارسال می‌شوند.</span>
+            </div>
+
             <div className="space-y-2 pt-1">
               <button
                 type="button"
@@ -587,15 +592,9 @@ export const RewardsTab: React.FC<RewardsTabProps> = ({ onNavigateToCatalog }) =
       {/* 4. MY REDEMPTIONS (LIGHT THEME)                                */}
       {/* ============================================================== */}
       <div className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <Package className="w-5 h-5 text-blue-600" />
-            <h3 className="text-sm sm:text-base font-black text-slate-900">درخواست‌های من</h3>
-          </div>
-          <span className="text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200/90 rounded-xl px-2.5 py-1 flex items-center gap-1.5 font-medium shadow-2xs">
-            <Gift className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-            <span>هدایا همراه با سفارش بعدی شما ارسال می‌شوند.</span>
-          </span>
+        <div className="flex items-center gap-2">
+          <Package className="w-5 h-5 text-blue-600" />
+          <h3 className="text-sm sm:text-base font-black text-slate-900">درخواست‌های من</h3>
         </div>
 
         {(!loyaltyData?.redemptions || loyaltyData.redemptions.length === 0) ? (

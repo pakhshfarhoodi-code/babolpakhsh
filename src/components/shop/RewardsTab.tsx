@@ -311,46 +311,36 @@ export const RewardsTab: React.FC<RewardsTabProps> = ({ onNavigateToCatalog }) =
       {/* ============================================================== */}
       {/* 1. TOP CARD: POINTS BALANCE (Rich Dark Emerald with bright text) */}
       {/* ============================================================== */}
-      <div className="space-y-2.5">
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-emerald-500 via-emerald-600 to-emerald-700 border border-emerald-400/30 p-3.5 sm:p-4.5 shadow-md shadow-emerald-600/20 text-white flex items-center justify-between gap-3">
-          {/* Right side (RTL Start): Icon, Title, Subtitle, 30d info */}
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="p-1.5 rounded-xl bg-white/20 text-amber-300 border border-white/30 backdrop-blur-xs shrink-0">
-                <Coins className="w-4 h-4 text-amber-300" />
-              </span>
-              <div className="min-w-0">
-                <h3 className="text-xs sm:text-sm font-bold text-white leading-tight">امتیاز شما</h3>
-                <span className="text-[10px] text-emerald-100 font-medium block">امتیاز وفاداری</span>
-              </div>
-            </div>
-
-            <p className="text-[11px] sm:text-xs text-emerald-100 font-medium mt-1">
-              ۳۰ روز اخیر:{' '}
-              <span className="text-white font-bold font-mono">
-                {earned30d.toLocaleString('fa-IR')}
-              </span>{' '}
-              امتیاز کسب کرده‌اید
-            </p>
-          </div>
-
-          {/* Left side (RTL End): Big Balance display vertically centered */}
-          <div className="flex flex-col items-end justify-center shrink-0">
-            <div className="flex items-baseline gap-1">
-              <span className="text-2xl sm:text-3xl md:text-4xl font-black text-white font-mono tracking-tight drop-shadow-[0_1.5px_3px_rgba(0,0,0,0.25)]">
-                {balance.toLocaleString('fa-IR')}
-              </span>
-              <span className="text-[10px] sm:text-xs font-bold text-amber-200">امتیاز</span>
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-emerald-500 via-emerald-600 to-emerald-700 border border-emerald-400/30 p-3.5 sm:p-4.5 shadow-md shadow-emerald-600/20 text-white flex items-center justify-between gap-3">
+        {/* Right side (RTL Start): Icon, Title, Subtitle, 30d info */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="p-1.5 rounded-xl bg-white/20 text-amber-300 border border-white/30 backdrop-blur-xs shrink-0">
+              <Coins className="w-4 h-4 text-amber-300" />
+            </span>
+            <div className="min-w-0">
+              <h3 className="text-xs sm:text-sm font-bold text-white leading-tight">امتیاز شما</h3>
+              <span className="text-[10px] text-emerald-100 font-medium block">امتیاز وفاداری</span>
             </div>
           </div>
+
+          <p className="text-[11px] sm:text-xs text-emerald-100 font-medium mt-1">
+            ۳۰ روز اخیر:{' '}
+            <span className="text-white font-bold font-mono">
+              {earned30d.toLocaleString('fa-IR')}
+            </span>{' '}
+            امتیاز کسب کرده‌اید
+          </p>
         </div>
 
-        {/* Small explanatory info banner underneath card (not overlapping) */}
-        <div className="bg-emerald-50/90 border border-emerald-200/90 rounded-2xl p-3 flex items-center gap-2.5 text-xs text-emerald-900 shadow-2xs">
-          <Gift className="w-4 h-4 text-emerald-700 shrink-0" />
-          <span className="leading-relaxed">
-            <strong className="font-bold">پاداش سفارش‌های تحویل‌شده:</strong> با تحویل هر سفارش امتیاز بگیرید و آن را با جوایز ارزنده مبادله کنید. هدایا همراه با سفارش بعدی شما ارسال می‌شوند.
-          </span>
+        {/* Left side (RTL End): Big Balance display vertically centered */}
+        <div className="flex flex-col items-end justify-center shrink-0">
+          <div className="flex items-baseline gap-1">
+            <span className="text-2xl sm:text-3xl md:text-4xl font-black text-white font-mono tracking-tight drop-shadow-[0_1.5px_3px_rgba(0,0,0,0.25)]">
+              {balance.toLocaleString('fa-IR')}
+            </span>
+            <span className="text-[10px] sm:text-xs font-bold text-amber-200">امتیاز</span>
+          </div>
         </div>
       </div>
 
@@ -597,9 +587,15 @@ export const RewardsTab: React.FC<RewardsTabProps> = ({ onNavigateToCatalog }) =
       {/* 4. MY REDEMPTIONS (LIGHT THEME)                                */}
       {/* ============================================================== */}
       <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Package className="w-5 h-5 text-blue-600" />
-          <h3 className="text-sm sm:text-base font-black text-slate-900">درخواست‌های من</h3>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Package className="w-5 h-5 text-blue-600" />
+            <h3 className="text-sm sm:text-base font-black text-slate-900">درخواست‌های من</h3>
+          </div>
+          <span className="text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200/90 rounded-xl px-2.5 py-1 flex items-center gap-1.5 font-medium shadow-2xs">
+            <Gift className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            <span>هدایا همراه با سفارش بعدی شما ارسال می‌شوند.</span>
+          </span>
         </div>
 
         {(!loyaltyData?.redemptions || loyaltyData.redemptions.length === 0) ? (

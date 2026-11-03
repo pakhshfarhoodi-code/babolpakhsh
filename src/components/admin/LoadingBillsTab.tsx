@@ -731,35 +731,35 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
     switch (status) {
       case 'pending':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-950/80 text-amber-300 border border-amber-600/40 animate-pulse">
-            <Clock className="w-3.5 h-3.5" />
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30 animate-pulse">
+            <Clock className="w-3.5 h-3.5 text-amber-400" />
             <span>منتظر بررسی ادمین</span>
           </span>
         );
       case 'approved':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-950/80 text-blue-300 border border-blue-600/40">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-500/15 text-blue-400 border border-blue-500/30">
             <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" />
             <span>تایید شده (قیمت‌ها قفل)</span>
           </span>
         );
       case 'loaded':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-600/40">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
             <Truck className="w-3.5 h-3.5 text-emerald-400" />
             <span>خروج از انبار انجام شده</span>
           </span>
         );
       case 'draft':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-500/15 text-slate-400 border border-slate-500/30">
             <FileText className="w-3.5 h-3.5 text-slate-400" />
             <span>پیش‌نویس ویزیتور</span>
           </span>
         );
       case 'cancelled':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-950/80 text-rose-300 border border-rose-600/40">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30">
             <Ban className="w-3.5 h-3.5 text-rose-400" />
             <span>لغو شده</span>
           </span>
@@ -1066,7 +1066,7 @@ export const LoadingBillsTab: React.FC<LoadingBillsTabProps> = ({
                   <h3 className="text-base sm:text-lg font-black text-slate-100">
                     فاکتور بارگیری {activeBill.visitor_name}
                   </h3>
-                  <span className="px-2.5 py-0.5 rounded-lg bg-blue-950 text-blue-300 border border-blue-600/40 font-mono font-bold text-xs">
+                  <span className="px-2.5 py-0.5 rounded-lg bg-slate-950 text-blue-400 border border-slate-800 font-mono font-bold text-xs">
                     {formatUnifiedBillNumber(activeBill.id, activeBill.invoice_no, activeBill.visitor_id)}
                   </span>
                   {renderStatusBadge(activeBill.status)}

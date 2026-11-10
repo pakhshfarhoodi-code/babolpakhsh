@@ -3,7 +3,11 @@ import { Supermarket, Visitor } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { MIN_PASSWORD_LENGTH, normalizePhone } from '../../context/utils';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
-import { LocationPickerModal } from '../LocationPickerModal';
+import { lazyWithRetry } from '../../lib/chunkReload';
+
+const LocationPickerModal = lazyWithRetry(() =>
+  import('../LocationPickerModal').then((m) => ({ default: m.LocationPickerModal }))
+);
 import {
   X,
   Store,
@@ -721,12 +725,14 @@ export const StoreProfileSheet: React.FC<StoreProfileSheetProps> = ({
         </button>
       </div>
 
-      <LocationPickerModal
-        isOpen={isLocationModalOpen}
-        initial={location}
-        onConfirm={(lat, lng) => setLocation({ lat, lng })}
-        onClose={() => setIsLocationModalOpen(false)}
-      />
+      <React.Suspense fallback={null}>
+        <LocationPickerModal
+          isOpen={isLocationModalOpen}
+          initial={location}
+          onConfirm={(lat, lng) => setLocation({ lat, lng })}
+          onClose={() => setIsLocationModalOpen(false)}
+        />
+      </React.Suspense>
     </div>
   );
 };

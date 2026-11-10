@@ -16,7 +16,11 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { normalizePhone, isValidMobile, MIN_PASSWORD_LENGTH } from '../context/utils';
-import { LocationPickerModal } from './LocationPickerModal';
+import { lazyWithRetry } from '../lib/chunkReload';
+
+const LocationPickerModal = lazyWithRetry(() =>
+  import('./LocationPickerModal').then((m) => ({ default: m.LocationPickerModal }))
+);
 
 interface SupermarketRegisterModalProps {
   isOpen: boolean;
@@ -416,12 +420,14 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
         </form>
       </div>
 
-      <LocationPickerModal
-        isOpen={isLocationModalOpen}
-        initial={location}
-        onConfirm={(lat, lng) => setLocation({ lat, lng })}
-        onClose={() => setIsLocationModalOpen(false)}
-      />
+      <React.Suspense fallback={null}>
+        <LocationPickerModal
+          isOpen={isLocationModalOpen}
+          initial={location}
+          onConfirm={(lat, lng) => setLocation({ lat, lng })}
+          onClose={() => setIsLocationModalOpen(false)}
+        />
+      </React.Suspense>
     </div>
   );
 };

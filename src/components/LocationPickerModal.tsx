@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import type * as LeafletType from 'leaflet';
 import { MapPin, X, Check, AlertCircle, Loader2 } from 'lucide-react';
 
 interface LocationPickerModalProps {
@@ -20,11 +19,12 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
   onClose,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
-  const mapInstanceRef = useRef<L.Map | null>(null);
+  const mapInstanceRef = useRef<LeafletType.Map | null>(null);
 
   const [geoError, setGeoError] = useState<string | null>(null);
   const [geoSuccessMsg, setGeoSuccessMsg] = useState<string | null>(null);
   const [isLocating, setIsLocating] = useState(false);
+  const [isMapLoading, setIsMapLoading] = useState(true);
 
   useEffect(() => {
     if (!isOpen) {
@@ -35,39 +35,61 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
       setGeoError(null);
       setGeoSuccessMsg(null);
       setIsLocating(false);
+      setIsMapLoading(true);
       return;
     }
 
-    if (!mapContainerRef.current) return;
+    let isCancelled = false;
+    setIsMapLoading(true);
 
-    const initialCenter: [number, number] =
-      initial && typeof initial.lat === 'number' && typeof initial.lng === 'number'
-        ? [initial.lat, initial.lng]
-        : DEFAULT_CENTER;
+    // Dynamically import leaflet and its styles only when modal opens
+    Promise.all([
+      import('leaflet'),
+      import('leaflet/dist/leaflet.css'),
+    ])
+      .then(([leafletModule]) => {
+        if (isCancelled || !mapContainerRef.current) return;
+        const L = (leafletModule.default || leafletModule) as typeof LeafletType;
 
-    const initialZoom = initial ? 16 : DEFAULT_ZOOM;
+        const initialCenter: [number, number] =
+          initial && typeof initial.lat === 'number' && typeof initial.lng === 'number'
+            ? [initial.lat, initial.lng]
+            : DEFAULT_CENTER;
 
-    const map = L.map(mapContainerRef.current, {
-      center: initialCenter,
-      zoom: initialZoom,
-      zoomControl: false,
-    });
+        const initialZoom = initial ? 16 : DEFAULT_ZOOM;
 
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    }).addTo(map);
+        const map = L.map(mapContainerRef.current, {
+          center: initialCenter,
+          zoom: initialZoom,
+          zoomControl: false,
+        });
 
-    L.control.zoom({ position: 'bottomleft' }).addTo(map);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19,
+          attribution: '&copy; OpenStreetMap contributors',
+        }).addTo(map);
 
-    mapInstanceRef.current = map;
+        L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
-    const timer = setTimeout(() => {
-      map.invalidateSize();
-    }, 200);
+        mapInstanceRef.current = map;
+        setIsMapLoading(false);
+
+        setTimeout(() => {
+          if (!isCancelled && mapInstanceRef.current) {
+            mapInstanceRef.current.invalidateSize();
+          }
+        }, 200);
+      })
+      .catch((err) => {
+        console.error('Failed to load leaflet map dynamically:', err);
+        if (!isCancelled) {
+          setIsMapLoading(false);
+          setGeoError('بارگذاری نقشه با مشکل مواجه شد. لطفاً اتصال اینترنت خود را بررسی کنید.');
+        }
+      });
 
     return () => {
-      clearTimeout(timer);
+      isCancelled = true;
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
@@ -218,6 +240,13 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
       {/* Map Area with Fixed Center Pin */}
       <div className="relative flex-1 w-full h-full bg-slate-950 overflow-hidden">
         <div ref={mapContainerRef} className="w-full h-full z-0" />
+
+        {isMapLoading && (
+          <div className="absolute inset-0 z-20 bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-center gap-3">
+            <Loader2 className="w-8 h-8 animate-spin text-amber-400" />
+            <p className="text-xs text-slate-300 font-medium">در حال بارگذاری نقشه...</p>
+          </div>
+        )}
 
         {/* Center Pin Indicator */}
         <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-[500]">

@@ -3,22 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <script defer src="https://developer.eitaa.com/eitaa-web-app.js"></script>
     <title>بارفروش | شبکه پخش عمده فرهودی</title>
     <meta name="description" content="بارفروش | شبکه پخش عمده فرهودی — سامانه یکپارچه مدیریت سفارشات سوپرمارکت، پورتال ویزیتورها و انبارداری" />
     <meta property="og:title" content="بارفروش | شبکه پخش عمده فرهودی" />
     <meta property="og:description" content="بارفروش | شبکه پخش عمده فرهودی — سامانه یکپارچه مدیریت سفارشات سوپرمارکت، پورتال ویزیتورها و انبارداری" />
-    <link rel="manifest" href="/manifest.json?v=7" />
-    <link rel="icon" type="image/png" href="/favicon-v2.png?v=7" />
-    <link rel="alternate icon" type="image/webp" href="/favicon.webp?v=7" />
+    <link rel="manifest" href="./manifest.json?v=7" />
+    <link rel="icon" type="image/png" href="./favicon-v2.png?v=7" />
+    <link rel="alternate icon" type="image/webp" href="./favicon.webp?v=7" />
     <meta name="theme-color" content="#f1f5f9" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="بارفروش" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon-v2.png?v=7" />
-
-    <!-- Preload primary Vazirmatn variable font to eliminate layout shift -->
-    <link rel="preload" href="/fonts/Vazirmatn-Variable.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="apple-touch-icon" href="./apple-touch-icon-v2.png?v=7" />
 
     <!-- Instant Inline Theme Initializer (Prevents Theme Flash Before CSS Load) -->
     <script>
@@ -53,8 +49,51 @@
     </script>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <!-- Fallback container: if React fails to mount within 10s or network drops, shows friendly retry prompt -->
+    <div id="root">
+      <div id="pre-mount-loader" style="min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #0b1329; color: #f1f5f9; font-family: system-ui, -apple-system, sans-serif; direction: rtl; padding: 1.5rem; text-align: center;">
+        <div style="width: 64px; height: 64px; border-radius: 18px; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(51, 65, 85, 0.6); display: flex; align-items: center; justify-content: center; margin-bottom: 1.25rem; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);">
+          <span style="font-size: 26px; font-weight: 900; color: #38bdf8;">بـ</span>
+        </div>
+        <div id="pre-mount-spinner" style="width: 30px; height: 30px; border: 3px solid rgba(56, 189, 248, 0.2); border-top-color: #38bdf8; border-radius: 50%; animation: pre-mount-spin 0.8s linear infinite; margin-bottom: 1.25rem;"></div>
+        <div id="pre-mount-title" style="font-size: 15px; font-weight: 700; margin-bottom: 0.5rem; color: #f8fafc;">بارفروش | شبکه پخش عمده فرهودی</div>
+        <p id="pre-mount-desc" style="font-size: 12px; color: #94a3b8; max-width: 320px; line-height: 1.6; margin: 0 0 1rem 0;">در حال بارگذاری سامانه…</p>
+        <div id="pre-mount-actions" style="display: none; flex-direction: column; gap: 0.6rem; width: 100%; max-width: 280px; margin-top: 0.5rem;">
+          <button type="button" onclick="window.location.reload();" style="padding: 11px 16px; background: #2563eb; color: #ffffff; border: none; border-radius: 12px; font-size: 13px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);">تلاش مجدد</button>
+        </div>
+      </div>
+      <style>
+        @keyframes pre-mount-spin { to { transform: rotate(360deg); } }
+      </style>
+      <script>
+        (function() {
+          function showWeakConnection() {
+            var root = document.getElementById('root');
+            if (!root || root.dataset.mounted === 'true') return;
+            var spinner = document.getElementById('pre-mount-spinner');
+            var title = document.getElementById('pre-mount-title');
+            var desc = document.getElementById('pre-mount-desc');
+            var actions = document.getElementById('pre-mount-actions');
+            if (spinner) spinner.style.display = 'none';
+            if (title) title.innerHTML = 'اتصال اینترنت ضعیف است';
+            if (desc) desc.innerHTML = 'دریافت فایل‌های سامانه با اختلال یا کندی شبکه مواجه شد. لطفاً اتصال اینترنت خود را بررسی نموده و دوباره تلاش فرمایید.';
+            if (actions) actions.style.display = 'flex';
+          }
+
+          // 10-second watchdog: if root is not mounted within 10s, show "اتصال اینترنت ضعیف است"
+          setTimeout(showWeakConnection, 10000);
+
+          // Catch network transport drops (NS_ERROR_NET_PARTIAL_TRANSFER / fetch failures)
+          window.addEventListener('error', function(e) {
+            var target = e && e.target;
+            if (target && (target.tagName === 'SCRIPT' || target.tagName === 'LINK')) {
+              showWeakConnection();
+            }
+          }, true);
+        })();
+      </script>
+    </div>
+    <script type="module" src="./src/main.tsx"></script>
   </body>
 </html>
 

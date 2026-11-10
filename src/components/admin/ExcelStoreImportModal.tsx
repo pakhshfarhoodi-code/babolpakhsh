@@ -107,7 +107,7 @@ export const DEFAULT_SMS_TEMPLATES: SmsTemplateItem[] = [
 ];
 
 const BATCH_SIZE = 40;
-const DEFAULT_LINK = 'https://Barfroosh.ir';
+const DEFAULT_LINK = 'https://barfroosh.ir';
 const DEFAULT_TEMPLATE = DEFAULT_SMS_TEMPLATES[0].text;
 
 // Helper to extract first valid Iranian mobile number from a string/cell
@@ -1119,7 +1119,7 @@ const ExcelStoreImportModalInner: React.FC<Omit<ExcelStoreImportModalProps, 'isO
                     value={linkUrl}
                     onChange={(e) => handleLinkChange(e.target.value)}
                     className="bg-slate-900 border border-slate-750 rounded-lg px-2 py-0.5 text-slate-200 text-xs font-mono w-44 text-left focus:border-emerald-500 focus:outline-none"
-                    placeholder="https://Barfroosh.ir"
+                    placeholder="https://barfroosh.ir"
                   />
                 </div>
               </div>

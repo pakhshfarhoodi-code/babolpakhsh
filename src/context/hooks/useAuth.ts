@@ -493,47 +493,55 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
       return;
     }
 
-    // 1. Initial session check on mount (restoreSession)
+    // 1. Initial session check on mount (restoreSession) with 9s maximum safety timeout
     (async () => {
       try {
-        await reconcileEitaaSession();
-        await reconcileTelegramSession();
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError || !session?.user) {
-          lastProfileFetchedUserIdRef.current = null;
-          setIsLoggedInState(false);
-          setMustChangePassword(false);
-          setAuthProfile(null);
-          localStorage.setItem(STORAGE_KEYS.AUTH_LOGGED_IN, 'false');
-          localStorage.removeItem(STORAGE_KEYS.AUTH_ROLE);
-          localStorage.removeItem(STORAGE_KEYS.AUTH_VISITOR_ID);
-          localStorage.removeItem(STORAGE_KEYS.AUTH_SUPERMARKET_ID);
-          localStorage.removeItem('alborz_auth_profile');
-        } else if (session?.user) {
-          const isSupermarket = session.user.user_metadata?.role === 'supermarket';
-          if (isSupermarket) {
-            recordStoreFirstLogin();
-          }
-          setMustChangePassword(Boolean(session.user.user_metadata?.must_change_password === true));
-          if (lastProfileFetchedUserIdRef.current !== session.user.id) {
-            await syncUserProfile(session.user.id);
-          }
+        const restoreOperation = (async () => {
+          await reconcileEitaaSession();
+          await reconcileTelegramSession();
+          const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+          if (sessionError || !session?.user) {
+            lastProfileFetchedUserIdRef.current = null;
+            setIsLoggedInState(false);
+            setMustChangePassword(false);
+            setAuthProfile(null);
+            localStorage.setItem(STORAGE_KEYS.AUTH_LOGGED_IN, 'false');
+            localStorage.removeItem(STORAGE_KEYS.AUTH_ROLE);
+            localStorage.removeItem(STORAGE_KEYS.AUTH_VISITOR_ID);
+            localStorage.removeItem(STORAGE_KEYS.AUTH_SUPERMARKET_ID);
+            localStorage.removeItem('alborz_auth_profile');
+          } else if (session?.user) {
+            const isSupermarket = session.user.user_metadata?.role === 'supermarket';
+            if (isSupermarket) {
+              recordStoreFirstLogin();
+            }
+            setMustChangePassword(Boolean(session.user.user_metadata?.must_change_password === true));
+            if (lastProfileFetchedUserIdRef.current !== session.user.id) {
+              await syncUserProfile(session.user.id);
+            }
 
-          // Link messenger accounts once per user ID per browser session if opened within a messenger
-          const hasInitData = Boolean(getTelegramInitData() || getEitaaInitData());
-          if (hasInitData && typeof window !== 'undefined' && window.sessionStorage) {
-            const messengerSessionKey = `messenger_session_linked_${session.user.id}`;
-            if (!sessionStorage.getItem(messengerSessionKey)) {
-              sessionStorage.setItem(messengerSessionKey, 'true');
-              linkMessengerAccount({
-                userId: session.user.id,
-                role: isSupermarket ? 'supermarket' : undefined,
-              });
+            // Link messenger accounts once per user ID per browser session if opened within a messenger
+            const hasInitData = Boolean(getTelegramInitData() || getEitaaInitData());
+            if (hasInitData && typeof window !== 'undefined' && window.sessionStorage) {
+              const messengerSessionKey = `messenger_session_linked_${session.user.id}`;
+              if (!sessionStorage.getItem(messengerSessionKey)) {
+                sessionStorage.setItem(messengerSessionKey, 'true');
+                linkMessengerAccount({
+                  userId: session.user.id,
+                  role: isSupermarket ? 'supermarket' : undefined,
+                });
+              }
             }
           }
-        }
+        })();
+
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Auth restore timed out')), 8000)
+        );
+
+        await Promise.race([restoreOperation, timeoutPromise]);
       } catch (err) {
-        console.warn('Initial session restore error:', err);
+        console.warn('Initial session restore notice:', err);
       } finally {
         setAuthReady(true);
       }

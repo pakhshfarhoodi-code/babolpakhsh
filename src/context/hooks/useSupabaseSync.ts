@@ -81,12 +81,12 @@ export function formatSyncError(err: unknown): string {
 }
 
 /**
- * Promise wrapper enforcing a strict 15-second timeout on any network/database request.
+ * Promise wrapper enforcing a strict 8-second timeout on any network/database request.
  */
 function withTimeout<T>(
   promise: PromiseLike<T>,
-  timeoutMs = 15000,
-  errorMsg = 'مهلت زمانی درخواست (۱۵ ثانیه) به پایان رسید'
+  timeoutMs = 8000,
+  errorMsg = 'مهلت زمانی درخواست (۸ ثانیه) به پایان رسید'
 ): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {

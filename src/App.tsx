@@ -125,13 +125,23 @@ export const App: React.FC = () => {
 
   const effectivePath = isLoggedIn ? expectedPath : currentPath;
 
-  // 1. Initial Startup Splash Screen (Point 2: shown until authReady is true)
+  const [authDelayWarning, setAuthDelayWarning] = useState(false);
+
+  useEffect(() => {
+    if (authReady) return;
+    const timer = setTimeout(() => {
+      setAuthDelayWarning(true);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [authReady]);
+
+  // 1. Initial Startup Splash Screen (shown until authReady is true)
   if (!authReady) {
     return (
       <div className={`min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-200 ${
         theme === 'light' ? 'bg-slate-100 text-slate-900' : 'bg-slate-950 text-slate-100'
       }`}>
-        <div className="flex flex-col items-center gap-4 animate-in fade-in duration-300">
+        <div className="flex flex-col items-center gap-4 animate-in fade-in duration-300 max-w-sm text-center">
           <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden shadow-xl border border-slate-700/40 bg-slate-900 flex items-center justify-center p-2">
             <img src={currentLogo} alt="بارفروش" className="w-full h-full object-contain" />
           </div>
@@ -139,6 +149,22 @@ export const App: React.FC = () => {
             <Loader2 className={`w-5 h-5 animate-spin ${theme === 'light' ? 'text-blue-600' : 'text-blue-400'}`} />
             <span className="text-xs font-semibold opacity-80">در حال راه‌اندازی سامانه...</span>
           </div>
+
+          {authDelayWarning && (
+            <div className="flex flex-col items-center gap-2 mt-2 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-300 text-xs animate-in fade-in duration-200">
+              <span className="leading-relaxed">
+                ارتباط با سرور به دلیل اختلال اینترنت با تأخیر مواجه شده است.
+              </span>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="mt-1 px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm active:scale-95"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>بارگذاری مجدد</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );

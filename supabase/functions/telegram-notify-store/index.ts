@@ -359,7 +359,7 @@ Deno.serve(async (req: Request) => {
             [
               {
                 text: '🛒 باز کردن بارفروش',
-                web_app: { url: 'https://Barfroosh.ir' },
+                web_app: { url: 'https://barfroosh.ir' },
               },
             ],
           ],

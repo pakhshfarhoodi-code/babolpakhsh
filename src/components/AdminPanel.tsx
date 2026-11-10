@@ -1,14 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, Suspense } from 'react';
 import { useApp } from '../context/AppContext';
-import { OverviewTab } from './admin/OverviewTab';
-import { OrdersTab } from './admin/OrdersTab';
-import { LoadingBillsTab } from './admin/LoadingBillsTab';
-import { ProductsTab } from './admin/ProductsTab';
-import { TeamTab } from './admin/TeamTab';
-import { LoyaltyTab } from './admin/LoyaltyTab';
-import { ReportsTab } from './admin/ReportsTab';
-import { InvoiceSettingsTab } from './admin/InvoiceSettingsTab';
-import { FinancialAccountsTab } from './admin/FinancialAccountsTab';
+import { lazyWithRetry } from '../lib/chunkReload';
 import { LOW_STOCK_THRESHOLD, isStoreInactiveFor30Days } from './admin/helpers';
 import {
   Building2,
@@ -27,10 +19,28 @@ import {
   Wallet,
   Settings,
   Send,
+  Loader2,
 } from 'lucide-react';
-import { AdminProfileModal } from './AdminProfileModal';
-import { AdminSettingsModal } from './admin/AdminSettingsModal';
-import { BroadcastModal } from './admin/BroadcastModal';
+
+const OverviewTab = lazyWithRetry(() => import('./admin/OverviewTab').then((m) => ({ default: m.OverviewTab })));
+const OrdersTab = lazyWithRetry(() => import('./admin/OrdersTab').then((m) => ({ default: m.OrdersTab })));
+const LoadingBillsTab = lazyWithRetry(() => import('./admin/LoadingBillsTab').then((m) => ({ default: m.LoadingBillsTab })));
+const ProductsTab = lazyWithRetry(() => import('./admin/ProductsTab').then((m) => ({ default: m.ProductsTab })));
+const TeamTab = lazyWithRetry(() => import('./admin/TeamTab').then((m) => ({ default: m.TeamTab })));
+const LoyaltyTab = lazyWithRetry(() => import('./admin/LoyaltyTab').then((m) => ({ default: m.LoyaltyTab })));
+const ReportsTab = lazyWithRetry(() => import('./admin/ReportsTab').then((m) => ({ default: m.ReportsTab })));
+const InvoiceSettingsTab = lazyWithRetry(() => import('./admin/InvoiceSettingsTab').then((m) => ({ default: m.InvoiceSettingsTab })));
+const FinancialAccountsTab = lazyWithRetry(() => import('./admin/FinancialAccountsTab').then((m) => ({ default: m.FinancialAccountsTab })));
+const AdminProfileModal = lazyWithRetry(() => import('./AdminProfileModal').then((m) => ({ default: m.AdminProfileModal })));
+const AdminSettingsModal = lazyWithRetry(() => import('./admin/AdminSettingsModal').then((m) => ({ default: m.AdminSettingsModal })));
+const BroadcastModal = lazyWithRetry(() => import('./admin/BroadcastModal').then((m) => ({ default: m.BroadcastModal })));
+
+const AdminTabSkeleton: React.FC = () => (
+  <div className="w-full py-16 flex flex-col items-center justify-center gap-3">
+    <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+    <span className="text-xs text-slate-400 font-medium">در حال بارگذاری اطلاعات این بخش…</span>
+  </div>
+);
 
 export type AdminTabKey =
   | 'overview'
@@ -319,8 +329,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       </div>
 
-      {/* Tab 1: Overview */}
-      {activeTab === 'overview' && (
+      {/* Tab Content Container with Suspense */}
+      <Suspense fallback={<AdminTabSkeleton />}>
+        {/* Tab 1: Overview */}
+        {activeTab === 'overview' && (
         <OverviewTab
           orders={orders}
           products={products}
@@ -534,6 +546,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
         </div>
       )}
+      </Suspense>
 
       {/* Modal for Editing Category */}
       {editingCategoryModal && (
@@ -683,28 +696,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       )}
 
-      {/* Admin Profile Modal */}
-      {isAdminProfileModalOpen && (
-        <AdminProfileModal
-          isOpen={isAdminProfileModalOpen}
-          onClose={() => setIsAdminProfileModalOpen(false)}
-          initialEditMode={true}
-        />
-      )}
+      {/* Suspense wrapper for lazy modals */}
+      <Suspense fallback={null}>
+        {/* Admin Profile Modal */}
+        {isAdminProfileModalOpen && (
+          <AdminProfileModal
+            isOpen={isAdminProfileModalOpen}
+            onClose={() => setIsAdminProfileModalOpen(false)}
+            initialEditMode={true}
+          />
+        )}
 
-      {/* Admin Global Settings Modal (تخفیف ۳ درصدی، تایید انبار و...) */}
-      <AdminSettingsModal
-        isOpen={isAdminSettingsModalOpen}
-        onClose={() => setIsAdminSettingsModalOpen(false)}
-      />
-
-      {/* Broadcast Message to Eitaa & Telegram Modal (Admin Only) */}
-      {currentUser?.role === 'admin' && (
-        <BroadcastModal
-          isOpen={isBroadcastModalOpen}
-          onClose={() => setIsBroadcastModalOpen(false)}
+        {/* Admin Global Settings Modal (تخفیف ۳ درصدی، تایید انبار و...) */}
+        <AdminSettingsModal
+          isOpen={isAdminSettingsModalOpen}
+          onClose={() => setIsAdminSettingsModalOpen(false)}
         />
-      )}
+
+        {/* Broadcast Message to Eitaa & Telegram Modal (Admin Only) */}
+        {currentUser?.role === 'admin' && (
+          <BroadcastModal
+            isOpen={isBroadcastModalOpen}
+            onClose={() => setIsBroadcastModalOpen(false)}
+          />
+        )}
+      </Suspense>
     </div>
   );
 };

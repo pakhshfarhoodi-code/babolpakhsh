@@ -7,6 +7,7 @@
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
+  unicode-range: U+0600-06FF, U+FB50-FDFF, U+FE70-FEFF, U+0030-0039, U+06F0-06F9, U+0660-0669, U+0020-002F, U+003A-0040, U+005B-0060, U+007B-007E;
 }
 
 @font-face {
@@ -15,6 +16,7 @@
   font-weight: 400;
   font-style: normal;
   font-display: swap;
+  unicode-range: U+0600-06FF, U+FB50-FDFF, U+FE70-FEFF, U+0030-0039, U+06F0-06F9, U+0660-0669, U+0020-002F, U+003A-0040, U+005B-0060, U+007B-007E;
 }
 
 @font-face {
@@ -23,6 +25,7 @@
   font-weight: 700;
   font-style: normal;
   font-display: swap;
+  unicode-range: U+0600-06FF, U+FB50-FDFF, U+FE70-FEFF, U+0030-0039, U+06F0-06F9, U+0660-0669, U+0020-002F, U+003A-0040, U+005B-0060, U+007B-007E;
 }
 
 @layer base {

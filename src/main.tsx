@@ -29,13 +29,47 @@ if ('serviceWorker' in navigator) {
   }
 }
 
-const eitaaApp = (window as any).Eitaa?.WebApp;
-if (eitaaApp) {
-  eitaaApp.ready();
-  eitaaApp.expand();
+function loadEitaaSdkIfInsideEitaa(): Promise<void> {
+  if (typeof window === 'undefined') return Promise.resolve();
+  if ((window as any).Eitaa?.WebApp) {
+    try {
+      (window as any).Eitaa.WebApp.ready();
+      (window as any).Eitaa.WebApp.expand();
+    } catch {}
+    return Promise.resolve();
+  }
+
+  const ua = navigator.userAgent || '';
+  const search = window.location.search || '';
+  const hash = window.location.hash || '';
+  const isEitaa = /eitaa/i.test(ua) || /eitaa/i.test(search) || /eitaa/i.test(hash);
+
+  if (!isEitaa) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    const script = document.createElement('script');
+    script.src = 'https://developer.eitaa.com/eitaa-web-app.js';
+    script.async = true;
+    script.onload = () => {
+      try {
+        const app = (window as any).Eitaa?.WebApp;
+        if (app) {
+          app.ready();
+          app.expand();
+        }
+      } catch {}
+      resolve();
+    };
+    script.onerror = () => {
+      resolve();
+    };
+    document.head.appendChild(script);
+  });
 }
 
 async function bootstrap() {
+  loadEitaaSdkIfInsideEitaa().catch(() => {});
+
   const scope = getMessengerScope();
   if (scope.startsWith('tg-')) {
     try {
@@ -62,6 +96,7 @@ async function bootstrap() {
 
   const rootElement = document.getElementById('root');
   if (rootElement) {
+    rootElement.dataset.mounted = 'true';
     ReactDOM.createRoot(rootElement).render(
       <React.StrictMode>
         <ErrorBoundary>

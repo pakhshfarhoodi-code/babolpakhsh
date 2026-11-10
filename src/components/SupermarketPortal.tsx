@@ -5,10 +5,16 @@ import { ProductCatalog } from './shop/ProductCatalog';
 import { CartBar } from './shop/CartBar';
 import { CartSheet } from './shop/CartSheet';
 import { OrderCard } from './shop/OrderCard';
-import { OrderInvoiceModal } from './invoice/OrderInvoiceModal';
-import { EditOrderModal } from './shop/EditOrderModal';
 import { RewardsTab } from './shop/RewardsTab';
 import { supabase } from '../lib/supabase';
+import { lazyWithRetry } from '../lib/chunkReload';
+
+const OrderInvoiceModal = lazyWithRetry(() =>
+  import('./invoice/OrderInvoiceModal').then((m) => ({ default: m.OrderInvoiceModal }))
+);
+const EditOrderModal = lazyWithRetry(() =>
+  import('./shop/EditOrderModal').then((m) => ({ default: m.EditOrderModal }))
+);
 import {
   buildCartFromOrder,
   clampQuantity,
@@ -664,23 +670,26 @@ export const SupermarketPortal: React.FC = () => {
         onExceedLimit={handleExceedLimit}
       />
 
-      {/* Official B2B Order Invoice Modal with PDF & Print */}
-      <OrderInvoiceModal
-        isOpen={!!selectedInvoiceOrder}
-        onClose={() => setSelectedInvoiceOrder(null)}
-        order={selectedInvoiceOrder}
-        supermarket={currentStore}
-        visitor={assignedVisitor}
-      />
+      {/* Suspense-wrapped Modals */}
+      <React.Suspense fallback={null}>
+        {/* Official B2B Order Invoice Modal with PDF & Print */}
+        <OrderInvoiceModal
+          isOpen={!!selectedInvoiceOrder}
+          onClose={() => setSelectedInvoiceOrder(null)}
+          order={selectedInvoiceOrder}
+          supermarket={currentStore}
+          visitor={assignedVisitor}
+        />
 
-      {/* Supermarket Order Edit Modal */}
-      <EditOrderModal
-        isOpen={!!editingOrder}
-        onClose={() => setEditingOrder(null)}
-        order={editingOrder}
-        products={products}
-        onSaveSuccess={refreshData}
-      />
+        {/* Supermarket Order Edit Modal */}
+        <EditOrderModal
+          isOpen={!!editingOrder}
+          onClose={() => setEditingOrder(null)}
+          order={editingOrder}
+          products={products}
+          onSaveSuccess={refreshData}
+        />
+      </React.Suspense>
 
       {/* Welcome Bonus Modal (Light Theme) */}
       {welcomeBonusPoints !== null && welcomeBonusPoints > 0 && (

@@ -1,9 +1,7 @@
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
-
 /**
  * Exports a DOM element as a high quality PDF file with native OS save prompt
  * Supports File System Access API (Desktop Save As dialog) and Web Share API (Mobile Save to Files)
+ * Dynamically imports html2canvas and jspdf on-demand to keep initial app bundles light
  */
 export async function exportElementToPdf(
   element: HTMLElement,
@@ -11,6 +9,13 @@ export async function exportElementToPdf(
   paperSize: 'A4' | 'A5' = 'A4'
 ): Promise<boolean> {
   try {
+    // Dynamically load html2canvas and jspdf only when PDF export is requested
+    const [html2canvasModule, jspdfModule] = await Promise.all([
+      import('html2canvas'),
+      import('jspdf'),
+    ]);
+    const html2canvas = (html2canvasModule.default || html2canvasModule) as any;
+    const jsPDF = ((jspdfModule as any).default || (jspdfModule as any).jsPDF || jspdfModule) as any;
     // 1. Ensure all images are loaded (with 1s timeout to prevent hanging)
     const images = Array.from(element.querySelectorAll('img'));
     await Promise.all(

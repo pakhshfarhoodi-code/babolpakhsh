@@ -1,5 +1,5 @@
 // Babol Pakhsh Service Worker - Database-First & Fast Deploy
-const CACHE_VERSION = 'farhoodi-b2b-v11-chunk-fix';
+const CACHE_VERSION = 'farhoodi-b2b-v13-clean-direct';
 const CACHE_NAME = `babolpakhsh-${CACHE_VERSION}`;
 
 const STATIC_ASSETS = [
@@ -44,12 +44,9 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url);
 
-  // CRITICAL: Never intercept or cache Supabase database, realtime, or auth requests
+  // CRITICAL: Never intercept or cache Supabase database, realtime, or auth requests (direct or custom)
   if (
     url.hostname.includes('supabase.co') ||
-    url.hostname === 'api.barfrooshan.ir' ||
-    url.hostname === 'app.barfrooshan.ir' ||
-    url.hostname === 'app2.barfrooshan.ir' ||
     url.pathname.includes('/rest/v1') ||
     url.pathname.includes('/auth/v1') ||
     url.pathname.includes('/realtime/v1') ||

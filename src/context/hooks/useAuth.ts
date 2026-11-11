@@ -94,7 +94,7 @@ async function reconcileEitaaSession(): Promise<void> {
         .eq('id', session.user.id)
         .maybeSingle();
       const role = profRow?.role;
-      if (role === 'admin' || role === 'visitor' || role === 'warehouse') {
+      if (role === 'admin' || role === 'superadmin' || role === 'visitor' || role === 'warehouse') {
         const { data: cRes, error: cErr } = await supabase.functions.invoke('eitaa-contact', {
           body: { initData, mode: 'verify' },
         });
@@ -145,7 +145,7 @@ async function reconcileTelegramSession(): Promise<void> {
         .eq('id', session.user.id)
         .maybeSingle();
       const role = profRow?.role;
-      if (role === 'admin' || role === 'visitor' || role === 'warehouse') {
+      if (role === 'admin' || role === 'superadmin' || role === 'visitor' || role === 'warehouse') {
         // نشست کادر حفظ میشود؛ فقط اگر حساب تلگرام با حساب ثبتشدهی او نمیخواند، خارج میشود
         const { data: cRes, error: cErr } = await supabase.functions.invoke('telegram-contact', {
           body: { initData, mode: 'verify' },
@@ -528,7 +528,7 @@ export function useAuth({ visitors, setVisitors, supermarkets, setSupermarkets }
                 sessionStorage.setItem(messengerSessionKey, 'true');
                 linkMessengerAccount({
                   userId: session.user.id,
-                  role: isSupermarket ? 'supermarket' : undefined,
+                  role: session.user.user_metadata?.role || (isSupermarket ? 'supermarket' : undefined),
                 });
               }
             }

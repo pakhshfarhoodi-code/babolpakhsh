@@ -214,29 +214,48 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Resolve all admin recipient chat IDs: role IN ('admin', 'superadmin')
+    // Resolve all admin recipient chat IDs from eitaa_links for profiles with role in ('admin', 'superadmin')
     const adminChatIds = new Set<string>();
-    if (eitaaChatId) {
-      adminChatIds.add(String(eitaaChatId).trim());
-    }
 
     if (adminClient) {
       try {
-        const { data: adminProfiles } = await adminClient
+        const { data: adminProfiles, error: profErr } = await adminClient
           .from('profiles')
-          .select('id, name, role, eitaa_chat_id')
-          .in('role', ['admin', 'superadmin'])
-          .not('eitaa_chat_id', 'is', null);
+          .select('id')
+          .in('role', ['admin', 'superadmin']);
 
-        if (adminProfiles && Array.isArray(adminProfiles)) {
-          for (const p of adminProfiles) {
-            if (p.eitaa_chat_id) {
-              adminChatIds.add(String(p.eitaa_chat_id).trim());
+        if (profErr) {
+          console.warn('Could not query admin profiles for eitaa notification:', profErr);
+        } else if (adminProfiles && adminProfiles.length > 0) {
+          const adminProfileIds = adminProfiles.map((p: any) => String(p.id));
+          const { data: links, error: linkErr } = await adminClient
+            .from('eitaa_links')
+            .select('profile_id, eitaa_user_id')
+            .in('profile_id', adminProfileIds);
+
+          if (linkErr) {
+            console.warn('Could not query eitaa_links for admin profiles:', linkErr);
+          } else if (links && Array.isArray(links)) {
+            for (const l of links) {
+              if (l.eitaa_user_id) {
+                const cleanId = String(l.eitaa_user_id).trim();
+                if (cleanId) {
+                  adminChatIds.add(cleanId);
+                }
+              }
             }
           }
         }
       } catch (e) {
-        console.warn('Could not query admin eitaa_chat_id from profiles:', e);
+        console.warn('Failed to query admin eitaa_links:', e);
+      }
+    }
+
+    // Fallbacks: EITAA_ADMIN_CHAT_ID secret or app_settings eitaa_admin_chat_id
+    if (eitaaChatId) {
+      const fallbackId = String(eitaaChatId).trim();
+      if (fallbackId) {
+        adminChatIds.add(fallbackId);
       }
     }
 

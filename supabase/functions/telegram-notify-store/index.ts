@@ -245,29 +245,48 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Resolve all admin recipient chat IDs: role IN ('admin', 'superadmin')
+    // Resolve all admin recipient chat IDs from telegram_links for profiles with role in ('admin', 'superadmin')
     const adminChatIds = new Set<string>();
-    if (tgChatId) {
-      adminChatIds.add(String(tgChatId).trim());
-    }
 
     if (adminClient) {
       try {
-        const { data: adminProfiles } = await adminClient
+        const { data: adminProfiles, error: profErr } = await adminClient
           .from('profiles')
-          .select('id, name, role, telegram_chat_id')
-          .in('role', ['admin', 'superadmin'])
-          .not('telegram_chat_id', 'is', null);
+          .select('id')
+          .in('role', ['admin', 'superadmin']);
 
-        if (adminProfiles && Array.isArray(adminProfiles)) {
-          for (const p of adminProfiles) {
-            if (p.telegram_chat_id) {
-              adminChatIds.add(String(p.telegram_chat_id).trim());
+        if (profErr) {
+          console.warn('Could not query admin profiles for telegram notification:', profErr);
+        } else if (adminProfiles && adminProfiles.length > 0) {
+          const adminProfileIds = adminProfiles.map((p: any) => String(p.id));
+          const { data: links, error: linkErr } = await adminClient
+            .from('telegram_links')
+            .select('profile_id, telegram_user_id')
+            .in('profile_id', adminProfileIds);
+
+          if (linkErr) {
+            console.warn('Could not query telegram_links for admin profiles:', linkErr);
+          } else if (links && Array.isArray(links)) {
+            for (const l of links) {
+              if (l.telegram_user_id) {
+                const cleanId = String(l.telegram_user_id).trim();
+                if (cleanId) {
+                  adminChatIds.add(cleanId);
+                }
+              }
             }
           }
         }
       } catch (e) {
-        console.warn('Could not query admin telegram_chat_id from profiles:', e);
+        console.warn('Failed to query admin telegram_links:', e);
+      }
+    }
+
+    // Fallbacks: TELEGRAM_ADMIN_CHAT_ID secret or app_settings telegram_admin_chat_id
+    if (tgChatId) {
+      const fallbackId = String(tgChatId).trim();
+      if (fallbackId) {
+        adminChatIds.add(fallbackId);
       }
     }
 
@@ -521,8 +540,9 @@ Deno.serve(async (req: Request) => {
 
     let storeTargetChatId =
       body.chat_id ||
-      body.telegram_chat_id ||
       body.target_chat_id ||
+      body.telegram_user_id ||
+      body.telegram_chat_id ||
       '';
 
     if (adminClient && orderId) {
@@ -565,7 +585,7 @@ Deno.serve(async (req: Request) => {
       try {
         const { data: dbStore } = await adminClient
           .from('supermarkets')
-          .select('id, name, owner, phone, address, verification_type, telegram_chat_id')
+          .select('id, name, owner, phone, address, verification_type')
           .eq('id', supermarketId)
           .maybeSingle();
 
@@ -575,9 +595,6 @@ Deno.serve(async (req: Request) => {
           s.phone = dbStore.phone || s.phone;
           s.address = dbStore.address || s.address;
           s.verification_type = dbStore.verification_type || '';
-          if (!storeTargetChatId && dbStore.telegram_chat_id) {
-            storeTargetChatId = dbStore.telegram_chat_id;
-          }
         }
       } catch (err) {
         console.warn('Failed to fetch supermarket in telegram-notify-store:', err);
@@ -585,16 +602,17 @@ Deno.serve(async (req: Request) => {
 
       if (!storeTargetChatId) {
         try {
-          const { data: prof } = await adminClient
-            .from('profiles')
-            .select('id, telegram_chat_id')
-            .eq('id', supermarketId)
+          const { data: linkRec } = await adminClient
+            .from('telegram_links')
+            .select('telegram_user_id')
+            .eq('profile_id', supermarketId)
             .maybeSingle();
-          if (prof?.telegram_chat_id) {
-            storeTargetChatId = prof.telegram_chat_id;
+
+          if (linkRec?.telegram_user_id) {
+            storeTargetChatId = String(linkRec.telegram_user_id).trim();
           }
         } catch (e) {
-          console.warn('Could not query profile telegram_chat_id:', e);
+          console.warn('Failed to query supermarket telegram_links:', e);
         }
       }
     }
@@ -641,7 +659,7 @@ ${financialBlock}
     }
 
     if (!storeTargetChatId) {
-      console.warn('Store has no linked telegram_chat_id; skipped message delivery');
+      console.warn('Store has no linked telegram_links (telegram_user_id); skipped message delivery');
       return new Response(
         JSON.stringify({
           ok: true,

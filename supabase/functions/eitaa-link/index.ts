@@ -18,6 +18,9 @@ function getCorsHeaders(req: Request) {
   };
 }
 
+// نقش‌های مجاز جهت اتصال حساب ایتا: تمام نقش‌های کلیدی سامانه
+const ALLOWED_ROLES = ['admin', 'superadmin', 'visitor', 'warehouse', 'supermarket'];
+
 function extractEitaaUser(initData: any): { id: string | number; username?: string; name?: string } | null {
   try {
     if (!initData) return null;
@@ -39,6 +42,54 @@ function extractEitaaUser(initData: any): { id: string | number; username?: stri
     }
   } catch {}
   return null;
+}
+
+/**
+ * تأیید امضای داده‌های دریافتی از ایتا (در صورت ارسال پارامتر hash و پیکربندی توکن بات)
+ */
+async function verifyEitaaSignature(initData: string, botToken: string): Promise<boolean> {
+  try {
+    if (!initData || !botToken || typeof initData !== 'string') return true;
+    const params = new URLSearchParams(initData);
+    const hash = params.get('hash');
+    if (!hash) return true; // در صورتی که کلاینت ایتا هنوز هش امضا نفرستاده باشد، فرآیند مسدود نشود
+
+    const dataCheckArr: string[] = [];
+    for (const [key, val] of params.entries()) {
+      if (key !== 'hash') {
+        dataCheckArr.push(`${key}=${val}`);
+      }
+    }
+    dataCheckArr.sort();
+    const dataCheckString = dataCheckArr.join('\n');
+
+    const enc = new TextEncoder();
+    const secretKeyMaterial = await crypto.subtle.importKey(
+      'raw',
+      enc.encode('WebAppData'),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    const secretKeyBytes = await crypto.subtle.sign('HMAC', secretKeyMaterial, enc.encode(botToken));
+
+    const hmacKey = await crypto.subtle.importKey(
+      'raw',
+      secretKeyBytes,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    const calculatedSigBytes = await crypto.subtle.sign('HMAC', hmacKey, enc.encode(dataCheckString));
+    const calculatedHash = Array.from(new Uint8Array(calculatedSigBytes))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+
+    return calculatedHash.toLowerCase() === hash.toLowerCase();
+  } catch (err) {
+    console.warn('Eitaa signature verification error:', err);
+    return true;
+  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -89,7 +140,7 @@ Deno.serve(async (req: Request) => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    // Handle Unlink
+    // عملیات قطع اتصال (Unlink)
     if (action === 'unlink') {
       const { error: delErr } = await adminClient
         .from('eitaa_links')
@@ -110,7 +161,55 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Handle Link
+    // بررسی نقش کاربر: تمام نقش‌های admin، superadmin، visitor، warehouse و supermarket مجاز به اتصال هستند
+    const { data: userProfile } = await adminClient
+      .from('profiles')
+      .select('id, role')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    const currentRole = userProfile?.role || user.user_metadata?.role;
+    if (!currentRole || !ALLOWED_ROLES.includes(currentRole)) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'forbidden_role',
+          message: 'نقش کاربری شما مجاز به اتصال به پیام‌رسان ایتا نیست.',
+        }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // تأیید امضای داده‌های ورودی ایتا (در صورت ارسال امضا و تنظیم بودن توکن)
+    let eitaaToken = Deno.env.get('EITAA_BOT_TOKEN') || Deno.env.get('EITAAYAR_TOKEN') || '';
+    if (!eitaaToken) {
+      try {
+        const { data: sRec } = await adminClient
+          .from('app_settings')
+          .select('value')
+          .in('key', ['eitaa_bot_token', 'eitaayar_token'])
+          .maybeSingle();
+        if (sRec?.value) {
+          eitaaToken = typeof sRec.value === 'string' ? sRec.value.replace(/"/g, '') : String(sRec.value);
+        }
+      } catch {}
+    }
+
+    if (eitaaToken && typeof initData === 'string' && initData.includes('hash=')) {
+      const isSignatureValid = await verifyEitaaSignature(initData, eitaaToken);
+      if (!isSignatureValid) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'invalid_signature',
+            message: 'امضای داده‌های ایتا نامعتبر است.',
+          }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    // استخراج مشخصات حساب کاربری ایتا
     const eitaaUser = extractEitaaUser(initData);
     if (!eitaaUser || eitaaUser.id === undefined || eitaaUser.id === null) {
       return new Response(
@@ -121,7 +220,7 @@ Deno.serve(async (req: Request) => {
 
     const eitaaUserId = String(eitaaUser.id).trim();
 
-    // 1. بررسی شرط عدم اتصال همزمان یک حساب ایتا به دو پروفایل مختلف
+    // ۱. بررسی شرط عدم اتصال همزمان یک حساب ایتا به دو پروفایل مختلف
     const { data: existingLink, error: queryErr } = await adminClient
       .from('eitaa_links')
       .select('profile_id, eitaa_user_id')
@@ -144,7 +243,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // 2. درج یا به‌روزرسانی اتصال برای کاربر جاری (پشتیبانی از تمام نقش‌ها: ادمین، سوپرادمین، ویزیتور، انبار، فروشگاه)
+    // ۲. درج یا به‌روزرسانی اتصال برای کاربر جاری (ادمین، سوپرادمین، ویزیتور، انباردار و فروشگاه)
     const { error: upsertErr } = await adminClient
       .from('eitaa_links')
       .upsert(
@@ -170,6 +269,7 @@ Deno.serve(async (req: Request) => {
         message: 'اتصال حساب ایتا با موفقیت انجام شد.',
         profile_id: user.id,
         eitaa_user_id: eitaaUserId,
+        role: currentRole,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

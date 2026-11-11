@@ -18,6 +18,9 @@ function getCorsHeaders(req: Request) {
   };
 }
 
+// نقش‌های مجاز جهت اتصال حساب تلگرام
+const ALLOWED_ROLES = ['admin', 'superadmin', 'visitor', 'warehouse', 'supermarket'];
+
 function extractTelegramUser(initData: string): { id: string | number; username?: string; first_name?: string; last_name?: string } | null {
   try {
     if (!initData || typeof initData !== 'string') return null;
@@ -27,6 +30,56 @@ function extractTelegramUser(initData: string): { id: string | number; username?
     return JSON.parse(userStr);
   } catch {
     return null;
+  }
+}
+
+/**
+ * تأیید امضای داده‌های دریافتی از تلگرام (HMAC-SHA256 بر اساس توکن بات)
+ */
+async function verifyTelegramSignature(initData: string, botToken: string): Promise<boolean> {
+  try {
+    if (!initData || !botToken) return true;
+    const params = new URLSearchParams(initData);
+    const hash = params.get('hash');
+    if (!hash) return false;
+
+    const dataCheckArr: string[] = [];
+    for (const [key, val] of params.entries()) {
+      if (key !== 'hash') {
+        dataCheckArr.push(`${key}=${val}`);
+      }
+    }
+    dataCheckArr.sort();
+    const dataCheckString = dataCheckArr.join('\n');
+
+    const enc = new TextEncoder();
+    // مرحله ۱: تولید کلید مخفی با HMAC روی رشته WebAppData با توکن بات
+    const secretKeyMaterial = await crypto.subtle.importKey(
+      'raw',
+      enc.encode('WebAppData'),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    const secretKeyBytes = await crypto.subtle.sign('HMAC', secretKeyMaterial, enc.encode(botToken));
+
+    // مرحله ۲: محاسبه هش داده‌ها با کلید مخفی
+    const hmacKey = await crypto.subtle.importKey(
+      'raw',
+      secretKeyBytes,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    const calculatedSigBytes = await crypto.subtle.sign('HMAC', hmacKey, enc.encode(dataCheckString));
+    const calculatedHash = Array.from(new Uint8Array(calculatedSigBytes))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+
+    return calculatedHash.toLowerCase() === hash.toLowerCase();
+  } catch (err) {
+    console.warn('Telegram signature verification error:', err);
+    return false;
   }
 }
 
@@ -57,7 +110,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Authenticate the user from JWT
+    // احراز هویت کاربر از طریق JWT
     const userClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
       auth: { autoRefreshToken: false, persistSession: false },
@@ -79,7 +132,7 @@ Deno.serve(async (req: Request) => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    // Handle Unlink
+    // عملیات قطع اتصال (Unlink)
     if (action === 'unlink') {
       const { error: delErr } = await adminClient
         .from('telegram_links')
@@ -100,7 +153,55 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Handle Link
+    // بررسی نقش کاربر: تمام نقش‌های admin، superadmin، visitor، warehouse و supermarket مجاز به اتصال هستند
+    const { data: userProfile } = await adminClient
+      .from('profiles')
+      .select('id, role')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    const currentRole = userProfile?.role || user.user_metadata?.role;
+    if (!currentRole || !ALLOWED_ROLES.includes(currentRole)) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'forbidden_role',
+          message: 'نقش کاربری شما مجاز به اتصال به پیام‌رسان تلگرام نیست.',
+        }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // تأیید امضای داده‌های ورودی تلگرام (در صورت تنظیم توکن بات)
+    let tgBotToken = Deno.env.get('TELEGRAM_BOT_TOKEN') || '';
+    if (!tgBotToken) {
+      try {
+        const { data: sRec } = await adminClient
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'telegram_bot_token')
+          .maybeSingle();
+        if (sRec?.value) {
+          tgBotToken = typeof sRec.value === 'string' ? sRec.value.replace(/"/g, '') : String(sRec.value);
+        }
+      } catch {}
+    }
+
+    if (tgBotToken) {
+      const isSignatureValid = await verifyTelegramSignature(initData, tgBotToken);
+      if (!isSignatureValid) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'invalid_signature',
+            message: 'امضای داده‌های تلگرام نامعتبر است.',
+          }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    // استخراج مشخصات حساب کاربری تلگرام
     const tgUser = extractTelegramUser(initData);
     if (!tgUser || tgUser.id === undefined || tgUser.id === null) {
       return new Response(
@@ -111,7 +212,7 @@ Deno.serve(async (req: Request) => {
 
     const tgUserId = String(tgUser.id).trim();
 
-    // 1. بررسی شرط عدم اتصال همزمان یک حساب تلگرام به دو پروفایل مختلف
+    // ۱. بررسی شرط عدم اتصال همزمان یک حساب تلگرام به دو پروفایل مختلف
     const { data: existingLink, error: queryErr } = await adminClient
       .from('telegram_links')
       .select('profile_id, telegram_user_id')
@@ -123,7 +224,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (existingLink && existingLink.profile_id && String(existingLink.profile_id) !== String(user.id)) {
-      // حساب تلگرام قبلاً به پروفایل دیگری متصل شده است
+      // این حساب تلگرام قبلاً به پروفایل دیگری متصل شده است
       return new Response(
         JSON.stringify({
           success: false,
@@ -135,7 +236,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // 2. درج یا به‌روزرسانی اتصال برای کاربر جاری (پشتیبانی از تمام نقش‌ها: ادمین، سوپرادمین، ویزیتور، انبار، فروشگاه)
+    // ۲. درج یا به‌روزرسانی اتصال برای کاربر جاری (ادمین، سوپرادمین، ویزیتور، انباردار و فروشگاه)
     const { error: upsertErr } = await adminClient
       .from('telegram_links')
       .upsert(
@@ -161,6 +262,7 @@ Deno.serve(async (req: Request) => {
         message: 'اتصال حساب تلگرام با موفقیت انجام شد.',
         profile_id: user.id,
         telegram_user_id: tgUserId,
+        role: currentRole,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

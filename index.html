@@ -75,13 +75,13 @@
             var desc = document.getElementById('pre-mount-desc');
             var actions = document.getElementById('pre-mount-actions');
             if (spinner) spinner.style.display = 'none';
-            if (title) title.innerHTML = 'اتصال اینترنت ضعیف است';
-            if (desc) desc.innerHTML = 'دریافت فایل‌های سامانه با اختلال یا کندی شبکه مواجه شد. لطفاً اتصال اینترنت خود را بررسی نموده و دوباره تلاش فرمایید.';
+            if (title) title.innerHTML = 'ارتباط با سرور برقرار نشد';
+            if (desc) desc.innerHTML = 'ارتباط با سرور برقرار نشد، اینترنت را بررسی کنید و دوباره تلاش کنید';
             if (actions) actions.style.display = 'flex';
           }
 
-          // 10-second watchdog: if root is not mounted within 10s, show "اتصال اینترنت ضعیف است"
-          setTimeout(showWeakConnection, 10000);
+          // 15-second watchdog: if root is not mounted within 15s, show clear Persian retry UI
+          setTimeout(showWeakConnection, 15000);
 
           // Catch network transport drops (NS_ERROR_NET_PARTIAL_TRANSFER / fetch failures)
           window.addEventListener('error', function(e) {

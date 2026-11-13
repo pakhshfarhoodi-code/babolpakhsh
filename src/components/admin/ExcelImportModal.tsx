@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Product, Category } from '../../types';
 import { useApp } from '../../context/AppContext';
-import { retryImport } from '../../lib/chunkReload';
+import { retryImport, CHUNK_LOAD_ERROR_MESSAGE } from '../../lib/chunkReload';
 import {
   Upload,
   FileSpreadsheet,
@@ -151,6 +151,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [xlsxRetryAction, setXlsxRetryAction] = useState<(() => void) | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
@@ -225,22 +226,22 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     };
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const processUploadedFile = async (file: File) => {
     setFileName(file.name);
     setErrorMessage(null);
+    setXlsxRetryAction(null);
     setIsProcessing(true);
 
     let XLSX: typeof import('xlsx');
     try {
-      XLSX = await retryImport(() => import('xlsx'));
+      XLSX = await retryImport(() => import('xlsx'), 3, [1000, 2000, 3500], 15_000);
     } catch (importErr) {
       console.error('Failed to load xlsx:', importErr);
-      const msg = 'بارگذاری ماژول اکسل ناموفق بود، اینترنت را بررسی و دوباره تلاش کنید';
-      showToast(msg, 'error');
-      setErrorMessage(msg);
+      showToast(CHUNK_LOAD_ERROR_MESSAGE, 'error');
+      setErrorMessage(CHUNK_LOAD_ERROR_MESSAGE);
+      setXlsxRetryAction(() => () => {
+        void processUploadedFile(file);
+      });
       setIsProcessing(false);
       return;
     }
@@ -290,6 +291,12 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     };
 
     reader.readAsBinaryString(file);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    void processUploadedFile(file);
   };
 
   // Build Preview from Mapping & Fallback configurations
@@ -521,12 +528,18 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
   };
 
   const downloadSampleTemplate = async () => {
+    setErrorMessage(null);
+    setXlsxRetryAction(null);
     let XLSX: typeof import('xlsx');
     try {
-      XLSX = await retryImport(() => import('xlsx'));
+      XLSX = await retryImport(() => import('xlsx'), 3, [1000, 2000, 3500], 15_000);
     } catch (importErr) {
       console.error('Failed to load xlsx:', importErr);
-      showToast('بارگذاری ماژول اکسل ناموفق بود، اینترنت را بررسی و دوباره تلاش کنید', 'error');
+      showToast(CHUNK_LOAD_ERROR_MESSAGE, 'error');
+      setErrorMessage(CHUNK_LOAD_ERROR_MESSAGE);
+      setXlsxRetryAction(() => () => {
+        void downloadSampleTemplate();
+      });
       return;
     }
 
@@ -647,9 +660,22 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         {/* Body content based on step */}
         <div className="p-4 sm:p-6 overflow-y-auto flex-1">
           {errorMessage && (
-            <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-              <span>{errorMessage}</span>
+            <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between gap-2.5 flex-wrap">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                <span>{errorMessage}</span>
+              </div>
+              {xlsxRetryAction && (
+                <button
+                  type="button"
+                  disabled={isProcessing}
+                  onClick={xlsxRetryAction}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white text-xs font-bold transition cursor-pointer shrink-0"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>تلاش مجدد</span>
+                </button>
+              )}
             </div>
           )}
 

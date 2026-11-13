@@ -1,11 +1,14 @@
-import React, { lazy, ComponentType, LazyExoticComponent } from 'react';
+import React, { lazy, ComponentType, LazyExoticComponent, useState, useMemo } from 'react';
 
 const KEY = 'chunk-reload-at';
 const COOLDOWN_MS = 30_000;
 
+export const CHUNK_LOAD_ERROR_MESSAGE =
+  'ارتباط با سرور برقرار نشد، اینترنت را بررسی کنید و دوباره تلاش کنید';
+
 export function isChunkLoadError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err ?? '');
-  return /dynamically imported module|Importing a module script failed|Failed to fetch dynamically|Loading chunk|ChunkLoadError|NS_ERROR_NET_PARTIAL_TRANSFER|net::ERR_INCOMPLETE_CHUNKED_ENCODING|net::ERR_CONTENT_LENGTH_MISMATCH|Failed to fetch/i.test(
+  return /dynamically imported module|Importing a module script failed|Failed to fetch dynamically|Loading chunk|ChunkLoadError|NS_ERROR_NET_PARTIAL_TRANSFER|net::ERR_INCOMPLETE_CHUNKED_ENCODING|net::ERR_CONTENT_LENGTH_MISMATCH|Failed to fetch|timed out/i.test(
     msg,
   );
 }
@@ -23,24 +26,53 @@ export function reloadOnceForNewDeploy(): boolean {
   return true;
 }
 
+function runWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`Chunk download timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
+
 /**
- * تلاش مجدد برای اجرای یک تابع ایمپورت پرومیس‌محور تا ۳ بار با backoff تصاعدی (۱۰۰۰ms، ۲۰۰۰ms، ۳۵۰۰ms)
+ * تلاش مجدد برای اجرای یک تابع ایمپورت پرومیس‌محور تا ۳ بار با backoff تصاعدی و سقف زمانی کلی ۱۵ ثانیه
  */
 export async function retryImport<T>(
   importer: () => Promise<T>,
   retries = 3,
-  delays: number[] = [1000, 2000, 3500]
+  delays: number[] = [1000, 2000, 3500],
+  totalTimeoutMs = 15_000
 ): Promise<T> {
+  const deadline = Date.now() + totalTimeoutMs;
   let attempt = 0;
+
   while (true) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      throw new Error('Chunk download timed out after 15s');
+    }
+
     try {
-      return await importer();
+      return await runWithTimeout(importer(), remaining);
     } catch (err) {
       attempt++;
-      if (attempt >= retries) {
+      const timeLeftAfterAttempt = deadline - Date.now();
+      if (attempt >= retries || timeLeftAfterAttempt <= 300) {
         throw err;
       }
-      const delay = delays[attempt - 1] ?? delays[delays.length - 1];
+      const rawDelay = delays[attempt - 1] ?? delays[delays.length - 1];
+      const delay = Math.min(rawDelay, Math.max(0, timeLeftAfterAttempt - 200));
       console.warn(`[retryImport] Attempt ${attempt}/${retries} failed. Retrying in ${delay}ms...`, err);
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
@@ -48,58 +80,112 @@ export async function retryImport<T>(
 }
 
 /**
- * بارگذاری lazy کامپوننت با ۳ بار تلاش مجدد خودکار و backoff
- * در صورت شکست نهایی، کامپوننت خطای قابل فهم با دکمه تلاش مجدد نشان می‌دهد نه صفحه سفید
+ * بارگذاری lazy کامپوننت با ۳ بار تلاش مجدد خودکار و سقف زمانی ۱۵ ثانیه
+ * در صورت شکست یا تایم‌اوت، پیام فارسی واضح و دکمه «تلاش مجدد» نشان می‌دهد.
  */
 export function lazyWithRetry<T extends ComponentType<any>>(
   factory: () => Promise<{ default: T }>
 ): LazyExoticComponent<T> {
-  return lazy(() =>
-    retryImport(factory, 3, [1000, 2000, 3500]).catch((err) => {
-      console.error('[lazyWithRetry] All retries failed for chunk:', err);
-      const ChunkFallback: React.FC<any> = () =>
-        React.createElement(
-          'div',
-          {
-            className:
-              'p-6 my-6 bg-slate-900 border border-slate-800 rounded-3xl text-center space-y-4 max-w-md mx-auto shadow-2xl',
-            dir: 'rtl',
-          },
-          React.createElement(
-            'div',
-            {
-              className:
-                'w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center text-xl',
-            },
-            '⚠️'
-          ),
-          React.createElement(
-            'div',
-            { className: 'space-y-1' },
-            React.createElement(
-              'h3',
-              { className: 'text-sm font-bold text-slate-100' },
-              'اتصال اینترنت ضعیف است'
-            ),
-            React.createElement(
-              'p',
-              { className: 'text-xs text-slate-400 leading-relaxed' },
-              'دریافت فایل‌های این بخش با قطعی مواجه شد. لطفاً اتصال اینترنت را بررسی نموده و دوباره تلاش فرمایید.'
-            )
-          ),
-          React.createElement(
-            'button',
-            {
-              type: 'button',
-              onClick: () => window.location.reload(),
-              className:
-                'px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/20 transition cursor-pointer active:scale-95',
-            },
-            'تلاش مجدد'
-          )
-        );
-      return { default: ChunkFallback as unknown as T };
-    })
-  );
+  const RetryableWrapper: React.FC<any> = (props) => {
+    const [retryNonce, setRetryNonce] = useState(0);
+
+    const LazyInner = useMemo(
+      () =>
+        lazy(() =>
+          retryImport(factory, 3, [1000, 2000, 3500], 15_000).catch((err) => {
+            console.error('[lazyWithRetry] Chunk load failed or timed out:', err);
+            const card = React.createElement(
+              'div',
+              {
+                className:
+                  'p-6 my-6 bg-slate-900 border border-slate-800 rounded-3xl text-center space-y-4 max-w-md w-full mx-auto shadow-2xl',
+                dir: 'rtl',
+              },
+              React.createElement(
+                'div',
+                {
+                  className:
+                    'w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center text-xl',
+                },
+                '⚠️'
+              ),
+              React.createElement(
+                'div',
+                { className: 'space-y-1.5' },
+                React.createElement(
+                  'h3',
+                  { className: 'text-sm font-bold text-slate-100 leading-relaxed' },
+                  CHUNK_LOAD_ERROR_MESSAGE
+                )
+              ),
+              React.createElement(
+                'div',
+                { className: 'flex items-center justify-center gap-2 pt-1' },
+                React.createElement(
+                  'button',
+                  {
+                    type: 'button',
+                    onClick: () => setRetryNonce((n) => n + 1),
+                    className:
+                      'px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/20 transition cursor-pointer active:scale-95',
+                  },
+                  'تلاش مجدد'
+                ),
+                typeof props?.onClose === 'function'
+                  ? React.createElement(
+                      'button',
+                      {
+                        type: 'button',
+                        onClick: props.onClose,
+                        className:
+                          'px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition cursor-pointer',
+                      },
+                      'بستن'
+                    )
+                  : null
+              )
+            );
+            const ChunkFallback: React.FC<any> = () =>
+              typeof props?.onClose === 'function'
+                ? React.createElement(
+                    'div',
+                    {
+                      className:
+                        'fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm',
+                    },
+                    card
+                  )
+                : card;
+            return { default: ChunkFallback as unknown as T };
+          })
+        ),
+      [retryNonce]
+    );
+
+    return React.createElement(LazyInner, props);
+  };
+
+  return RetryableWrapper as unknown as LazyExoticComponent<T>;
 }
 
+export const ModalSuspenseFallback: React.FC = () =>
+  React.createElement(
+    'div',
+    {
+      className:
+        'fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs',
+      dir: 'rtl',
+    },
+    React.createElement(
+      'div',
+      {
+        className:
+          'px-6 py-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl flex items-center gap-3 text-xs font-bold text-slate-200',
+      },
+      React.createElement('span', {
+        className:
+          'w-5 h-5 rounded-full border-2 border-blue-400/30 border-t-blue-400 animate-spin inline-block',
+      }),
+      'در حال بارگذاری...'
+    )
+  );

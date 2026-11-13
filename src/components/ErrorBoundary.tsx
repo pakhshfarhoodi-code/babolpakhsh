@@ -94,14 +94,14 @@ export class ErrorBoundary extends Component<Props, State> {
       let iconColor = 'text-rose-400 bg-rose-500/10 border-rose-500/30';
 
       if (isChunk) {
-        title = 'اتصال اینترنت ضعیف است یا دانلود فایل قطع شد';
-        description = 'فایل‌های برنامه به دلیل اختلال یا کندی شبکه به طور کامل دریافت نشدند (NS_ERROR_NET_PARTIAL_TRANSFER). با دکمه زیر مجدداً تلاش فرمایید.';
+        title = 'ارتباط با سرور برقرار نشد، اینترنت را بررسی کنید و دوباره تلاش کنید';
+        description = 'دریافت فایل‌های برنامه با اختلال یا کندی شبکه متوقف شد. لطفاً اتصال اینترنت خود را بررسی کرده و دوباره تلاش کنید.';
         badgeLabel = 'خطای دریافت فایل‌ها';
         IconComponent = FileCode2;
         iconColor = 'text-amber-400 bg-amber-500/10 border-amber-500/30';
       } else if (isNetwork) {
-        title = 'اتصال اینترنت ضعیف است';
-        description = 'ارتباط با سرور به دلیل کندی شبکه یا اختلال اینترنت برقرار نشد. لطفاً وضعیت اتصال خود را بررسی کرده و دوباره تلاش کنید.';
+        title = 'ارتباط با سرور برقرار نشد، اینترنت را بررسی کنید و دوباره تلاش کنید';
+        description = 'برقراری ارتباط با سرور بیش از حد طول کشید یا قطع شد. لطفاً وضعیت اینترنت را بررسی کرده و دوباره تلاش کنید.';
         badgeLabel = 'خطای اتصال شبکه';
         IconComponent = WifiOff;
         iconColor = 'text-blue-400 bg-blue-500/10 border-blue-500/30';
@@ -156,7 +156,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm flex items-center justify-center gap-2 transition cursor-pointer shadow-lg shadow-blue-600/20 active:scale-98"
               >
                 <RefreshCw className="w-4 h-4" />
-                <span>بارگذاری مجدد صفحه</span>
+                <span>تلاش مجدد</span>
               </button>
 
               <button

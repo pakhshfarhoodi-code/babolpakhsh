@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Product, Category } from '../../types';
-import { Download, FileSpreadsheet, Filter, Check, X, Layers, Tag, Loader2 } from 'lucide-react';
+import { Download, FileSpreadsheet, Filter, Check, X, Layers, Tag, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { retryImport } from '../../lib/chunkReload';
+import { retryImport, CHUNK_LOAD_ERROR_MESSAGE } from '../../lib/chunkReload';
 
 interface ExcelExportModalProps {
   isOpen: boolean;
@@ -26,6 +26,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
   const [includeVisitorPrice, setIncludeVisitorPrice] = useState<boolean>(true);
   const [includeImage, setIncludeImage] = useState<boolean>(true);
   const [isExporting, setIsExporting] = useState<boolean>(false);
+  const [xlsxLoadError, setXlsxLoadError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -46,13 +47,15 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
       return;
     }
 
+    setXlsxLoadError(null);
     setIsExporting(true);
     let XLSX: typeof import('xlsx');
     try {
-      XLSX = await retryImport(() => import('xlsx'));
+      XLSX = await retryImport(() => import('xlsx'), 3, [1000, 2000, 3500], 15_000);
     } catch (err) {
       console.error('Failed to load xlsx:', err);
-      showToast('بارگذاری ماژول اکسل ناموفق بود، اینترنت را بررسی و دوباره تلاش کنید', 'error');
+      setXlsxLoadError(CHUNK_LOAD_ERROR_MESSAGE);
+      showToast(CHUNK_LOAD_ERROR_MESSAGE, 'error');
       setIsExporting(false);
       return;
     }
@@ -238,6 +241,25 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
             <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 flex items-center gap-2 animate-pulse">
               <Loader2 className="w-4 h-4 animate-spin text-amber-400 shrink-0" />
               <span>در حال دریافت قیمت‌ها… لطفاً شکیبا باشید.</span>
+            </div>
+          )}
+
+          {/* Chunk Load / Network Error Banner */}
+          {xlsxLoadError && (
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between gap-2.5 flex-wrap">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>{xlsxLoadError}</span>
+              </div>
+              <button
+                type="button"
+                disabled={isExporting}
+                onClick={handleExport}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white text-xs font-bold transition cursor-pointer shrink-0"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>تلاش مجدد</span>
+              </button>
             </div>
           )}
 

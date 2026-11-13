@@ -60,8 +60,15 @@ import {
 import { LOW_STOCK_THRESHOLD, formatPrice } from './helpers';
 import { PriceHistoryDrawer } from './PriceHistoryDrawer';
 import { CategorySelectPicker, BrandSelectPicker, UnitSelectPicker } from '../CategoryBrandSelectors';
-import { ExcelImportModal } from './ExcelImportModal';
-import { ExcelExportModal } from './ExcelExportModal';
+import { ExcelImportModal as ExcelImportModalType } from './ExcelImportModal';
+import { lazyWithRetry, ModalSuspenseFallback } from '../../lib/chunkReload';
+
+const ExcelImportModal = lazyWithRetry(() =>
+  import('./ExcelImportModal').then((m) => ({ default: m.ExcelImportModal }))
+) as typeof ExcelImportModalType;
+const ExcelExportModal = lazyWithRetry(() =>
+  import('./ExcelExportModal').then((m) => ({ default: m.ExcelExportModal }))
+);
 import { BrandOrderModal } from './BrandOrderModal';
 import { ProductOrderModal } from './ProductOrderModal';
 import { MarketTestLikesModal } from './MarketTestLikesModal';
@@ -2932,24 +2939,32 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
         </div>
       )}
 
-      {/* Excel Import Modal */}
-      <ExcelImportModal
-        isOpen={isExcelImportOpen}
-        onClose={() => setIsExcelImportOpen(false)}
-        categories={categories}
-        brands={brands}
-        existingProducts={products}
-        onImportConfirm={handleBulkImportConfirm}
-      />
+      {/* Excel Import Modal (Lazy Loaded on Demand) */}
+      {isExcelImportOpen && (
+        <React.Suspense fallback={<ModalSuspenseFallback />}>
+          <ExcelImportModal
+            isOpen={isExcelImportOpen}
+            onClose={() => setIsExcelImportOpen(false)}
+            categories={categories}
+            brands={brands}
+            existingProducts={products}
+            onImportConfirm={handleBulkImportConfirm}
+          />
+        </React.Suspense>
+      )}
 
-      {/* Excel Export Modal */}
-      <ExcelExportModal
-        isOpen={isExcelExportOpen}
-        onClose={() => setIsExcelExportOpen(false)}
-        products={products}
-        categories={categories}
-        brands={brands}
-      />
+      {/* Excel Export Modal (Lazy Loaded on Demand) */}
+      {isExcelExportOpen && (
+        <React.Suspense fallback={<ModalSuspenseFallback />}>
+          <ExcelExportModal
+            isOpen={isExcelExportOpen}
+            onClose={() => setIsExcelExportOpen(false)}
+            products={products}
+            categories={categories}
+            brands={brands}
+          />
+        </React.Suspense>
+      )}
 
       {/* Delete Product Confirmation Modal */}
       {productToDelete && (

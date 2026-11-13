@@ -41,9 +41,17 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 import { getStoreFounderDiscountStatus } from '../../utils/storeDiscount';
-import { LocationPickerModal } from '../LocationPickerModal';
-import { SupermarketRegisterModal } from '../SupermarketRegisterModal';
-import { ExcelStoreImportModal } from './ExcelStoreImportModal';
+import { lazyWithRetry, ModalSuspenseFallback } from '../../lib/chunkReload';
+
+const LocationPickerModal = lazyWithRetry(() =>
+  import('../LocationPickerModal').then((m) => ({ default: m.LocationPickerModal }))
+);
+const SupermarketRegisterModal = lazyWithRetry(() =>
+  import('../SupermarketRegisterModal').then((m) => ({ default: m.SupermarketRegisterModal }))
+);
+const ExcelStoreImportModal = lazyWithRetry(() =>
+  import('./ExcelStoreImportModal').then((m) => ({ default: m.ExcelStoreImportModal }))
+);
 import { AccountLedgerModal } from './AccountLedgerModal';
 import { formatPrice } from './helpers';
 import { formatPersianDate } from '../../utils/dateUtils';
@@ -2202,18 +2210,24 @@ export const TeamTab: React.FC<TeamTabProps> = ({
       </div>
 
       {/* Supermarket Register Modal */}
-      <SupermarketRegisterModal
-        isOpen={isRegisterStoreModalOpen}
-        onClose={() => setIsRegisterStoreModalOpen(false)}
-      />
+      {isRegisterStoreModalOpen && (
+        <React.Suspense fallback={<ModalSuspenseFallback />}>
+          <SupermarketRegisterModal
+            isOpen={isRegisterStoreModalOpen}
+            onClose={() => setIsRegisterStoreModalOpen(false)}
+          />
+        </React.Suspense>
+      )}
 
       {/* Excel Store Import Modal (Admin Only) */}
-      {currentUser?.role === 'admin' && (
-        <ExcelStoreImportModal
-          isOpen={isExcelStoreImportOpen}
-          onClose={() => setIsExcelStoreImportOpen(false)}
-          visitors={visitors}
-        />
+      {currentUser?.role === 'admin' && isExcelStoreImportOpen && (
+        <React.Suspense fallback={<ModalSuspenseFallback />}>
+          <ExcelStoreImportModal
+            isOpen={isExcelStoreImportOpen}
+            onClose={() => setIsExcelStoreImportOpen(false)}
+            visitors={visitors}
+          />
+        </React.Suspense>
       )}
 
       {/* Add Staff Account Modal */}
@@ -2683,16 +2697,20 @@ export const TeamTab: React.FC<TeamTabProps> = ({
       )}
 
       {/* Admin Location Picker Modal for Store Edit */}
-      <LocationPickerModal
-        isOpen={isEditLocationModalOpen}
-        initial={
-          typeof editForm.latitude === 'number' && typeof editForm.longitude === 'number'
-            ? { lat: editForm.latitude, lng: editForm.longitude }
-            : null
-        }
-        onConfirm={(lat, lng) => setEditForm((prev) => ({ ...prev, latitude: lat, longitude: lng }))}
-        onClose={() => setIsEditLocationModalOpen(false)}
-      />
+      {isEditLocationModalOpen && (
+        <React.Suspense fallback={<ModalSuspenseFallback />}>
+          <LocationPickerModal
+            isOpen={isEditLocationModalOpen}
+            initial={
+              typeof editForm.latitude === 'number' && typeof editForm.longitude === 'number'
+                ? { lat: editForm.latitude, lng: editForm.longitude }
+                : null
+            }
+            onConfirm={(lat, lng) => setEditForm((prev) => ({ ...prev, latitude: lat, longitude: lng }))}
+            onClose={() => setIsEditLocationModalOpen(false)}
+          />
+        </React.Suspense>
+      )}
 
       {/* Delete Supermarket Confirmation Modal */}
       {deletingSupermarket && (

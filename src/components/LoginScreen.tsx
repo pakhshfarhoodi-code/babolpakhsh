@@ -23,7 +23,9 @@ import { supabase } from '../lib/supabase';
 import bgHero from '../assets/images/b2b_frozen_food_showcase.webp';
 import appLogo from '../assets/images/farhoodi_b2b_logo.webp';
 
-const SupermarketRegisterModal = React.lazy(() =>
+import { lazyWithRetry, ModalSuspenseFallback } from '../lib/chunkReload';
+
+const SupermarketRegisterModal = lazyWithRetry(() =>
   import('./SupermarketRegisterModal').then((m) => ({ default: m.SupermarketRegisterModal }))
 );
 
@@ -708,7 +710,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
       {/* Supermarket Registration Modal */}
       {isRegisterModalOpen && (
-        <React.Suspense fallback={null}>
+        <React.Suspense fallback={<ModalSuspenseFallback />}>
           <SupermarketRegisterModal
             isOpen={isRegisterModalOpen}
             onClose={() => setIsRegisterModalOpen(false)}

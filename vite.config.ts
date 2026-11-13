@@ -101,8 +101,11 @@ export default defineConfig(() => {
       rollupOptions: {
         output: {
           manualChunks(id: string) {
-            if (id.includes('node_modules')) {
-              // PDF tools: on-demand dynamic import only
+            if (id.includes('vite/preload-helper')) {
+              return 'preload-helper';
+            }
+            if (!id.includes('node_modules')) return;
+            // PDF tools: on-demand dynamic import only
               if (id.includes('/jspdf/') || id.includes('/html2canvas/') || id.includes('@types/html2canvas')) {
                 return 'vendor-pdf';
               }
@@ -132,7 +135,6 @@ export default defineConfig(() => {
               ) {
                 return 'vendor-react-core';
               }
-            }
           },
         },
       },

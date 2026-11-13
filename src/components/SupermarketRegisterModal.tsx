@@ -16,7 +16,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { normalizePhone, isValidMobile, MIN_PASSWORD_LENGTH } from '../context/utils';
-import { lazyWithRetry } from '../lib/chunkReload';
+import { lazyWithRetry, ModalSuspenseFallback } from '../lib/chunkReload';
 
 const LocationPickerModal = lazyWithRetry(() =>
   import('./LocationPickerModal').then((m) => ({ default: m.LocationPickerModal }))
@@ -420,14 +420,16 @@ export const SupermarketRegisterModal: React.FC<SupermarketRegisterModalProps> =
         </form>
       </div>
 
-      <React.Suspense fallback={null}>
-        <LocationPickerModal
-          isOpen={isLocationModalOpen}
-          initial={location}
-          onConfirm={(lat, lng) => setLocation({ lat, lng })}
-          onClose={() => setIsLocationModalOpen(false)}
-        />
-      </React.Suspense>
+      {isLocationModalOpen && (
+        <React.Suspense fallback={<ModalSuspenseFallback />}>
+          <LocationPickerModal
+            isOpen={isLocationModalOpen}
+            initial={location}
+            onConfirm={(lat, lng) => setLocation({ lat, lng })}
+            onClose={() => setIsLocationModalOpen(false)}
+          />
+        </React.Suspense>
+      )}
     </div>
   );
 };

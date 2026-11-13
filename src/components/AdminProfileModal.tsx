@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { AdminProfile } from '../types';
-import { LocationPickerModal } from './LocationPickerModal';
+import { lazyWithRetry, ModalSuspenseFallback } from '../lib/chunkReload';
+
+const LocationPickerModal = lazyWithRetry(() =>
+  import('./LocationPickerModal').then((m) => ({ default: m.LocationPickerModal }))
+);
 import {
   Building2,
   X,
@@ -641,22 +645,24 @@ export const AdminProfileModal: React.FC<AdminProfileModalProps> = ({
       {content}
       {/* Map Picker Modal */}
       {isMapPickerOpen && (
-        <LocationPickerModal
-          isOpen={isMapPickerOpen}
-          onClose={() => setIsMapPickerOpen(false)}
-          initial={{
-            lat: formData.latitude ?? 36.5414,
-            lng: formData.longitude ?? 52.6841,
-          }}
-          onConfirm={(selectedLat, selectedLng) => {
-            setFormData((prev) => ({
-              ...prev,
-              latitude: selectedLat,
-              longitude: selectedLng,
-            }));
-            setIsMapPickerOpen(false);
-          }}
-        />
+        <React.Suspense fallback={<ModalSuspenseFallback />}>
+          <LocationPickerModal
+            isOpen={isMapPickerOpen}
+            onClose={() => setIsMapPickerOpen(false)}
+            initial={{
+              lat: formData.latitude ?? 36.5414,
+              lng: formData.longitude ?? 52.6841,
+            }}
+            onConfirm={(selectedLat, selectedLng) => {
+              setFormData((prev) => ({
+                ...prev,
+                latitude: selectedLat,
+                longitude: selectedLng,
+              }));
+              setIsMapPickerOpen(false);
+            }}
+          />
+        </React.Suspense>
       )}
     </>
   );

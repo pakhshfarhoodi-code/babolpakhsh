@@ -1,7 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { NewOrderModal } from './NewOrderModal';
-import { SupermarketRegisterModal } from './SupermarketRegisterModal';
+import { lazyWithRetry, ModalSuspenseFallback } from '../lib/chunkReload';
+
+const SupermarketRegisterModal = lazyWithRetry(() =>
+  import('./SupermarketRegisterModal').then((m) => ({ default: m.SupermarketRegisterModal }))
+);
 import { TodayTab } from './visitor/TodayTab';
 import { MyLoadTab } from './visitor/MyLoadTab';
 import { CustomersTab } from './visitor/CustomersTab';
@@ -383,11 +387,15 @@ export const VisitorPortal: React.FC = () => {
       />
 
       {/* Register Supermarket Modal */}
-      <SupermarketRegisterModal
-        isOpen={isRegisterStoreModalOpen}
-        onClose={() => setIsRegisterStoreModalOpen(false)}
-        defaultVisitorId={currentVisitor?.id || ''}
-      />
+      {isRegisterStoreModalOpen && (
+        <React.Suspense fallback={<ModalSuspenseFallback />}>
+          <SupermarketRegisterModal
+            isOpen={isRegisterStoreModalOpen}
+            onClose={() => setIsRegisterStoreModalOpen(false)}
+            defaultVisitorId={currentVisitor?.id || ''}
+          />
+        </React.Suspense>
+      )}
 
       {/* Edit Order Modal for Visitor */}
       <EditOrderModal

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Visitor } from '../../types';
 import { useApp } from '../../context/AppContext';
-import { retryImport } from '../../lib/chunkReload';
+import { retryImport, CHUNK_LOAD_ERROR_MESSAGE } from '../../lib/chunkReload';
 import { supabase, isSupabaseConfigured, getFunctionErrorMessage } from '../../lib/supabase';
 import { normalizeDigits, normalizePhone, isValidMobile } from '../../context/utils';
 import { getTehranDateParts } from '../../utils/dateUtils';
@@ -20,6 +20,7 @@ import {
   Pause,
   Play,
   RotateCcw,
+  RefreshCw,
   Store,
   Users,
   MessageSquare,
@@ -277,6 +278,8 @@ const ExcelStoreImportModalInner: React.FC<Omit<ExcelStoreImportModalProps, 'isO
   const [hasDownloadedExport, setHasDownloadedExport] = useState(false);
   const [isClosePromptOpen, setIsClosePromptOpen] = useState(false);
   const [resultFilter, setResultFilter] = useState<'all' | 'created' | 'duplicate' | 'error' | 'invalid'>('all');
+  const [xlsxLoadError, setXlsxLoadError] = useState<string | null>(null);
+  const [xlsxRetryAction, setXlsxRetryAction] = useState<(() => void) | null>(null);
 
   // Prevent accidental tab closing if passwords exist and haven't been exported
   useEffect(() => {
@@ -293,16 +296,20 @@ const ExcelStoreImportModalInner: React.FC<Omit<ExcelStoreImportModalProps, 'isO
   }, [allResults, hasDownloadedExport]);
 
   // File Upload and Parsing Handler
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const processUploadedFile = async (file: File) => {
+    setXlsxLoadError(null);
+    setXlsxRetryAction(null);
 
     let XLSX: typeof import('xlsx');
     try {
-      XLSX = await retryImport(() => import('xlsx'));
+      XLSX = await retryImport(() => import('xlsx'), 3, [1000, 2000, 3500], 15_000);
     } catch (importErr) {
       console.error('Failed to load xlsx:', importErr);
-      showToast('بارگذاری ماژول اکسل ناموفق بود، اینترنت را بررسی و دوباره تلاش کنید', 'error');
+      setXlsxLoadError(CHUNK_LOAD_ERROR_MESSAGE);
+      setXlsxRetryAction(() => () => {
+        void processUploadedFile(file);
+      });
+      showToast(CHUNK_LOAD_ERROR_MESSAGE, 'error');
       return;
     }
 
@@ -384,6 +391,12 @@ const ExcelStoreImportModalInner: React.FC<Omit<ExcelStoreImportModalProps, 'isO
     };
 
     reader.readAsBinaryString(file);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    void processUploadedFile(file);
   };
 
   // Re-process rawRows whenever mapping changes
@@ -745,12 +758,19 @@ const ExcelStoreImportModalInner: React.FC<Omit<ExcelStoreImportModalProps, 'isO
       return;
     }
 
+    setXlsxLoadError(null);
+    setXlsxRetryAction(null);
+
     let XLSX: typeof import('xlsx');
     try {
-      XLSX = await retryImport(() => import('xlsx'));
+      XLSX = await retryImport(() => import('xlsx'), 3, [1000, 2000, 3500], 15_000);
     } catch (importErr) {
       console.error('Failed to load xlsx:', importErr);
-      showToast('بارگذاری ماژول اکسل ناموفق بود، اینترنت را بررسی و دوباره تلاش کنید', 'error');
+      setXlsxLoadError(CHUNK_LOAD_ERROR_MESSAGE);
+      setXlsxRetryAction(() => () => {
+        void handleDownloadExcel(onlyFailed);
+      });
+      showToast(CHUNK_LOAD_ERROR_MESSAGE, 'error');
       return;
     }
 
@@ -852,6 +872,25 @@ const ExcelStoreImportModalInner: React.FC<Omit<ExcelStoreImportModalProps, 'isO
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {xlsxLoadError && (
+          <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between gap-2.5 flex-wrap shrink-0">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+              <span>{xlsxLoadError}</span>
+            </div>
+            {xlsxRetryAction && (
+              <button
+                type="button"
+                onClick={xlsxRetryAction}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition cursor-pointer shrink-0"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>تلاش مجدد</span>
+              </button>
+            )}
+          </div>
+        )}
 
         {/* STEP 1: Upload File */}
         {step === 1 && (

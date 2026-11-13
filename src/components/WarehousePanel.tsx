@@ -19,9 +19,15 @@ import { RestockForm } from './warehouse/RestockForm';
 import { ProductReturnForm } from './warehouse/ProductReturnForm';
 import { LowStockList } from './warehouse/LowStockList';
 import { NewProductModal } from './warehouse/NewProductModal';
-import { ExcelImportModal } from './admin/ExcelImportModal';
-import { ExcelExportModal } from './admin/ExcelExportModal';
+import { lazyWithRetry, ModalSuspenseFallback } from '../lib/chunkReload';
 import { LOW_STOCK_THRESHOLD, formatNumber } from './warehouse/helpers';
+
+const ExcelImportModal = lazyWithRetry(() =>
+  import('./admin/ExcelImportModal').then((m) => ({ default: m.ExcelImportModal }))
+);
+const ExcelExportModal = lazyWithRetry(() =>
+  import('./admin/ExcelExportModal').then((m) => ({ default: m.ExcelExportModal }))
+);
 
 export type WarehouseTabKey = 'pending' | 'history';
 
@@ -361,23 +367,31 @@ export const WarehousePanel: React.FC<WarehousePanelProps> = ({
       />
 
       {/* Modal: Excel Import & Column Matching */}
-      <ExcelImportModal
-        isOpen={isExcelImportOpen}
-        onClose={() => setIsExcelImportOpen(false)}
-        categories={categories}
-        brands={brands}
-        existingProducts={products}
-        onImportConfirm={handleBulkImportConfirm}
-      />
+      {isExcelImportOpen && (
+        <React.Suspense fallback={<ModalSuspenseFallback />}>
+          <ExcelImportModal
+            isOpen={isExcelImportOpen}
+            onClose={() => setIsExcelImportOpen(false)}
+            categories={categories}
+            brands={brands}
+            existingProducts={products}
+            onImportConfirm={handleBulkImportConfirm}
+          />
+        </React.Suspense>
+      )}
 
       {/* Modal: Excel Export with Category & Brand Filters */}
-      <ExcelExportModal
-        isOpen={isExcelExportOpen}
-        onClose={() => setIsExcelExportOpen(false)}
-        products={products}
-        categories={categories}
-        brands={brands}
-      />
+      {isExcelExportOpen && (
+        <React.Suspense fallback={<ModalSuspenseFallback />}>
+          <ExcelExportModal
+            isOpen={isExcelExportOpen}
+            onClose={() => setIsExcelExportOpen(false)}
+            products={products}
+            categories={categories}
+            brands={brands}
+          />
+        </React.Suspense>
+      )}
     </div>
   );
 };

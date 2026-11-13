@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type * as LeafletType from 'leaflet';
-import { MapPin, X, Check, AlertCircle, Loader2 } from 'lucide-react';
+import { MapPin, X, Check, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
+import { retryImport, CHUNK_LOAD_ERROR_MESSAGE } from '../lib/chunkReload';
 
 interface LocationPickerModalProps {
   isOpen: boolean;
@@ -25,6 +26,8 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
   const [geoSuccessMsg, setGeoSuccessMsg] = useState<string | null>(null);
   const [isLocating, setIsLocating] = useState(false);
   const [isMapLoading, setIsMapLoading] = useState(true);
+  const [mapLoadError, setMapLoadError] = useState<string | null>(null);
+  const [mapRetryCount, setMapRetryCount] = useState(0);
 
   useEffect(() => {
     if (!isOpen) {
@@ -36,17 +39,21 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
       setGeoSuccessMsg(null);
       setIsLocating(false);
       setIsMapLoading(true);
+      setMapLoadError(null);
       return;
     }
 
     let isCancelled = false;
     setIsMapLoading(true);
+    setMapLoadError(null);
 
-    // Dynamically import leaflet and its styles only when modal opens
-    Promise.all([
-      import('leaflet'),
-      import('leaflet/dist/leaflet.css'),
-    ])
+    // Dynamically import leaflet and its styles only when modal opens (15s timeout + retry)
+    retryImport(
+      () => Promise.all([import('leaflet'), import('leaflet/dist/leaflet.css')]),
+      3,
+      [1000, 2000, 3500],
+      15_000
+    )
       .then(([leafletModule]) => {
         if (isCancelled || !mapContainerRef.current) return;
         const L = (leafletModule.default || leafletModule) as typeof LeafletType;
@@ -84,7 +91,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
         console.error('Failed to load leaflet map dynamically:', err);
         if (!isCancelled) {
           setIsMapLoading(false);
-          setGeoError('بارگذاری نقشه با مشکل مواجه شد. لطفاً اتصال اینترنت خود را بررسی کنید.');
+          setMapLoadError(CHUNK_LOAD_ERROR_MESSAGE);
         }
       });
 
@@ -95,7 +102,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
         mapInstanceRef.current = null;
       }
     };
-  }, [isOpen, initial]);
+  }, [isOpen, initial, mapRetryCount]);
 
   if (!isOpen) return null;
 
@@ -245,6 +252,25 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
           <div className="absolute inset-0 z-20 bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-center gap-3">
             <Loader2 className="w-8 h-8 animate-spin text-amber-400" />
             <p className="text-xs text-slate-300 font-medium">در حال بارگذاری نقشه...</p>
+          </div>
+        )}
+
+        {mapLoadError && !isMapLoading && (
+          <div className="absolute inset-0 z-30 bg-slate-950/90 backdrop-blur-xs flex flex-col items-center justify-center p-6 text-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-400 flex items-center justify-center">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <p className="text-xs sm:text-sm font-bold text-slate-100 max-w-sm leading-relaxed">
+              {mapLoadError}
+            </p>
+            <button
+              type="button"
+              onClick={() => setMapRetryCount((c) => c + 1)}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold shadow-lg shadow-amber-500/20 transition cursor-pointer active:scale-95"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>تلاش مجدد</span>
+            </button>
           </div>
         )}
 

@@ -1,5 +1,5 @@
 // Babol Pakhsh Service Worker - Database-First & Fast Deploy
-const CACHE_VERSION = 'farhoodi-b2b-v13-clean-direct';
+const CACHE_VERSION = 'farhoodi-b2b-v14-assets-cache-first-__BUILD_TIMESTAMP__';
 const CACHE_NAME = `babolpakhsh-${CACHE_VERSION}`;
 
 const STATIC_ASSETS = [
@@ -58,14 +58,44 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 1. Script (.js, .mjs) and Style (.css) assets: Network-First with EXACT cache fallback ONLY.
-  // CRITICAL: NEVER fallback to index.html for code/style chunks to prevent syntax errors when chunks fail.
-  const isScriptOrStyle =
+  // Never cache sw.js itself
+  if (url.pathname.endsWith('/sw.js')) {
+    return;
+  }
+
+  // 1. Hashed build assets (/assets/*.js, /assets/*.mjs, /assets/*.css):
+  //    Cache-First (filenames include content hashes, so cached responses are always immutable and safe).
+  //    CRITICAL: NEVER fallback to index.html for code/style chunks.
+  const isHashedBuildAsset =
+    /\/assets\/.+\.(js|mjs|css)$/i.test(url.pathname);
+
+  if (isHashedBuildAsset) {
+    event.respondWith(
+      caches.match(event.request).then((cachedResponse) => {
+        if (cachedResponse) {
+          return cachedResponse;
+        }
+        return fetch(event.request)
+          .then((networkResponse) => {
+            if (networkResponse && networkResponse.status === 200) {
+              const clone = networkResponse.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+            }
+            return networkResponse;
+          })
+          .catch(() => Response.error());
+      })
+    );
+    return;
+  }
+
+  // 2. Any other non-hashed script/style outside /assets/: Network-First with exact cache fallback ONLY.
+  const isOtherScriptOrStyle =
     url.pathname.endsWith('.js') ||
     url.pathname.endsWith('.mjs') ||
     url.pathname.endsWith('.css');
 
-  if (isScriptOrStyle) {
+  if (isOtherScriptOrStyle) {
     event.respondWith(
       fetch(event.request)
         .then((networkResponse) => {

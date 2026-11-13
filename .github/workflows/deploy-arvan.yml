@@ -8,7 +8,7 @@ on:
 
 concurrency:
   group: arvan-deploy
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build-and-deploy:
@@ -46,11 +46,27 @@ jobs:
           ENDPOINT: https://s3.ir-central1.arvanstorage.ir   # مطابق آدرس باکت شما
           BUCKET: ${{ secrets.ARVAN_BUCKET }}                # babol-pakhsh
         run: |
-          set -e
+          set -euo pipefail
+          if [ ! -f dist/index.html ]; then
+            echo "Error: dist/index.html does not exist. Build output is missing." >&2
+            exit 1
+          fi
+          if [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then
+            echo "Error: Secret ARVAN_ACCESS_KEY is empty or not configured." >&2
+            exit 1
+          fi
+          if [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+            echo "Error: Secret ARVAN_SECRET_KEY is empty or not configured." >&2
+            exit 1
+          fi
+          if [ -z "${BUCKET:-}" ]; then
+            echo "Error: Secret ARVAN_BUCKET is empty or not configured." >&2
+            exit 1
+          fi
+
           # 1) فایل‌های هش‌دار: کش بلندمدت
           aws s3 sync dist/assets s3://$BUCKET/assets --endpoint-url="$ENDPOINT" \
             --acl public-read --cache-control "public, max-age=31536000, immutable" --no-progress
           # 2) بقیه‌ی فایل‌ها (index.html، sw.js، ...) بدون کش
           aws s3 sync dist s3://$BUCKET --endpoint-url="$ENDPOINT" --exclude "assets/*" \
             --acl public-read --cache-control "public, max-age=0, must-revalidate" --no-progress
- 

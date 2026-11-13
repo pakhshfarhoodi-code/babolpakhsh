@@ -74,7 +74,7 @@ VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
 
 ۳. مشاهده برنامه در مرورگر:
    ```
-   http://localhost:3000
+   http://localhost:3000 
    ```
 
 ---

@@ -53,3 +53,4 @@ jobs:
           # 2) بقیه‌ی فایل‌ها (index.html، sw.js، ...) بدون کش
           aws s3 sync dist s3://$BUCKET --endpoint-url="$ENDPOINT" --exclude "assets/*" \
             --acl public-read --cache-control "public, max-age=0, must-revalidate" --no-progress
+ 

@@ -80,6 +80,11 @@
           var slowFetches = [];
           var downloadTestResults = [];
           var isTestingDownloads = false;
+          var adminDepsStatus = '';
+          var adminDepsSeqResults = [];
+          var adminDepsSeqTotalText = '';
+          var adminDepsConcResults = [];
+          var adminDepsConcTotalText = '';
           var importTestResults = [];
           var isTestingImports = false;
           var failedAssetUrls = {};
@@ -564,16 +569,168 @@
               });
           }
 
+          function findAdminPanelUrl() {
+            var perfJs = getPerfJsUrls();
+            for (var i = 0; i < perfJs.length; i++) {
+              if (/\/AdminPanel-[^/?#]+\.js(\?|#|$)/i.test(perfJs[i]) || /AdminPanel[^/?#]*\.js(\?|#|$)/i.test(perfJs[i])) {
+                return perfJs[i];
+              }
+            }
+            return '';
+          }
+
+          function extractAssetsJsFromText(text, adminPanelUrl) {
+            var urls = [];
+            var seen = {};
+            if (!text) return urls;
+
+            var assetsIdx = adminPanelUrl.indexOf('/assets/');
+            var basePrefix = assetsIdx !== -1
+              ? adminPanelUrl.slice(0, assetsIdx + 1)
+              : (window.location.origin ? (window.location.origin + '/') : '/');
+
+            // Regex specifically captures assets/*.js paths (e.g. inside __vite__mapDeps)
+            var regex = /(?:\.?\/)?assets\/[A-Za-z0-9_.\-\/]+\.js(?:\?[^"'`\s)]*)?/g;
+            var match;
+            while ((match = regex.exec(text)) !== null) {
+              var rawPath = match[0].replace(/^\.?\//, '');
+              var fullUrl = basePrefix + rawPath;
+              if (!seen[fullUrl]) {
+                seen[fullUrl] = true;
+                urls.push(fullUrl);
+              }
+            }
+            return urls;
+          }
+
+          function fetchTextWithTimeout(url, timeoutMs) {
+            var fetcher = originalFetch || window.fetch;
+            if (typeof fetcher !== 'function') {
+              return Promise.reject(new Error('fetch پشتیبانی نمی‌شود'));
+            }
+            var controller = (typeof AbortController === 'function') ? new AbortController() : null;
+            var timedOut = false;
+            var timer = setTimeout(function() {
+              timedOut = true;
+              if (controller) {
+                try { controller.abort(); } catch (e) {}
+              }
+            }, timeoutMs);
+
+            var opts = { cache: 'no-store' };
+            if (controller) opts.signal = controller.signal;
+
+            return fetcher(url, opts).then(function(res) {
+              if (!res.ok) {
+                clearTimeout(timer);
+                throw new Error('HTTP ' + res.status);
+              }
+              return res.text().then(function(txt) {
+                clearTimeout(timer);
+                return txt;
+              });
+            }).catch(function(err) {
+              clearTimeout(timer);
+              if (timedOut) {
+                throw new Error('تایم‌اوت (بیش از ' + Math.round(timeoutMs / 1000) + ' ثانیه)');
+              }
+              throw err;
+            });
+          }
+
+          function runAdminPanelDepsTests() {
+            var adminUrl = findAdminPanelUrl();
+            adminDepsSeqResults = [];
+            adminDepsSeqTotalText = '';
+            adminDepsConcResults = [];
+            adminDepsConcTotalText = '';
+
+            if (!adminUrl) {
+              adminDepsStatus = 'فایل AdminPanel-*.js در performance.getEntriesByType("resource") یافت نشد (ابتدا بخش AdminPanel را باز کنید).';
+              renderPanel();
+              return Promise.resolve();
+            }
+
+            adminDepsStatus = 'در حال دریافت متن ' + extractFileName(adminUrl) + ' و استخراج مسیرهای assets/*.js (__vite__mapDeps)...';
+            renderPanel();
+
+            return fetchTextWithTimeout(adminUrl, 20000).then(function(jsText) {
+              var depUrls = extractAssetsJsFromText(jsText, adminUrl);
+              if (depUrls.length === 0) {
+                adminDepsStatus = 'فایل ' + extractFileName(adminUrl) + ' دریافت شد اما هیچ مسیر assets/*.js در آن یافت نشد.';
+                renderPanel();
+                return;
+              }
+
+              adminDepsStatus = extractFileName(adminUrl) + ' دریافت شد — ' + depUrls.length + ' فایل assets/*.js استخراج گردید. در حال اجرای تست یک‌به‌یک و سپس تست همزمان...';
+
+              adminDepsSeqResults = depUrls.map(function(u) {
+                return {
+                  name: extractFileName(u),
+                  url: u,
+                  status: 'pending',
+                  statusText: 'در صف تست یک‌به‌یک...',
+                  sizeText: '-',
+                  durationText: '-'
+                };
+              });
+              adminDepsConcResults = depUrls.map(function(u) {
+                return {
+                  name: extractFileName(u),
+                  url: u,
+                  status: 'pending',
+                  statusText: 'منتظر پایان تست یک‌به‌یک...',
+                  sizeText: '-',
+                  durationText: '-'
+                };
+              });
+              renderPanel();
+
+              // Test 1: Sequential (یک‌به‌یک)
+              var seqStart = Date.now();
+              var seqChain = Promise.resolve();
+              for (var i = 0; i < adminDepsSeqResults.length; i++) {
+                (function(item) {
+                  seqChain = seqChain.then(function() {
+                    item.statusText = 'در حال دانلود...';
+                    renderPanel();
+                    return testSingleFileDownload(item);
+                  });
+                })(adminDepsSeqResults[i]);
+              }
+
+              return seqChain.then(function() {
+                adminDepsSeqTotalText = formatDuration(Date.now() - seqStart);
+                adminDepsStatus = extractFileName(adminUrl) + ' — تست یک‌به‌یک تمام شد (' + adminDepsSeqTotalText + '). در حال اجرای تست همزمان (Promise.all)...';
+                for (var j = 0; j < adminDepsConcResults.length; j++) {
+                  adminDepsConcResults[j].statusText = 'در حال دانلود همزمان...';
+                }
+                renderPanel();
+
+                // Test 2: Concurrent (Promise.all)
+                var concStart = Date.now();
+                var concJobs = adminDepsConcResults.map(function(item) {
+                  return testSingleFileDownload(item);
+                });
+                function finishConc() {
+                  adminDepsConcTotalText = formatDuration(Date.now() - concStart);
+                  adminDepsStatus = extractFileName(adminUrl) + ' — هر دو تست (یک‌به‌یک و همزمان Promise.all) برای ' + depUrls.length + ' فایل تکمیل شد.';
+                  renderPanel();
+                }
+                return Promise.all(concJobs).then(finishConc, finishConc);
+              });
+            }).catch(function(err) {
+              adminDepsStatus = 'خطا در دریافت یا خواندن ' + extractFileName(adminUrl) + ': ' + (err && err.message ? err.message : stringifyArg(err));
+              renderPanel();
+            });
+          }
+
           function runFilesDownloadTest() {
             if (isTestingDownloads) return;
             var urls = collectTestableAssetUrls();
-            if (urls.length === 0) {
-              downloadTestResults = [];
-              renderPanel();
-              return;
-            }
             isTestingDownloads = true;
             isCollapsed = false;
+
             downloadTestResults = urls.map(function(u) {
               return {
                 name: extractFileName(u),
@@ -589,11 +746,17 @@
             var jobs = downloadTestResults.map(function(item) {
               return testSingleFileDownload(item);
             });
+
+            var baseTestPromise = Promise.all(jobs).then(
+              function() { return runAdminPanelDepsTests(); },
+              function() { return runAdminPanelDepsTests(); }
+            );
+
             function finishAll() {
               isTestingDownloads = false;
               renderPanel();
             }
-            Promise.all(jobs).then(finishAll, finishAll);
+            baseTestPromise.then(finishAll, finishAll);
           }
 
           // 4c. Test dynamic import() for each .js file in performance.getEntriesByType('resource') with 20s timeout
@@ -873,22 +1036,46 @@
             }
 
             var downloadTestHtml = '';
-            if (downloadTestResults.length > 0) {
+            if (downloadTestResults.length > 0 || adminDepsStatus) {
+              function renderDownloadRows(items) {
+                return items.map(function(r) {
+                  var borderCol = r.status === 'ok' ? '#22c55e' : (r.status === 'error' ? '#ef4444' : '#38bdf8');
+                  var statusCol = r.status === 'ok' ? '#86efac' : (r.status === 'error' ? '#fca5a5' : '#7dd3fc');
+                  return (
+                    '<div style="padding:4px 6px;margin-top:4px;background:#0f172a;border-radius:6px;border-right:3px solid ' + borderCol + ';word-break:break-all;font-size:11px;">' +
+                      '<strong style="color:#f8fafc;">' + escapeHtml(r.name) + '</strong> — ' +
+                      '<span style="color:' + statusCol + ';font-weight:bold;">' + escapeHtml(r.statusText) + '</span> | ' +
+                      '<span style="color:#fde68a;">حجم: ' + escapeHtml(r.sizeText) + '</span> | ' +
+                      '<span style="color:#cbd5e1;">زمان: ' + escapeHtml(r.durationText) + '</span>' +
+                    '</div>'
+                  );
+                }).join('');
+              }
+
               downloadTestHtml =
                 '<div style="background:#172033;padding:7px 9px;border-radius:8px;margin-bottom:8px;border:1px solid #0284c7;">' +
-                  '<div style="font-weight:bold;color:#38bdf8;font-size:11px;margin-bottom:4px;">نتیجه تست دانلود فایل‌ها (تایم‌اوت ۲۰ ثانیه — ' + downloadTestResults.length + ' فایل):</div>' +
-                  downloadTestResults.map(function(r) {
-                    var borderCol = r.status === 'ok' ? '#22c55e' : (r.status === 'error' ? '#ef4444' : '#38bdf8');
-                    var statusCol = r.status === 'ok' ? '#86efac' : (r.status === 'error' ? '#fca5a5' : '#7dd3fc');
-                    return (
-                      '<div style="padding:4px 6px;margin-top:4px;background:#0f172a;border-radius:6px;border-right:3px solid ' + borderCol + ';word-break:break-all;font-size:11px;">' +
-                        '<strong style="color:#f8fafc;">' + escapeHtml(r.name) + '</strong> — ' +
-                        '<span style="color:' + statusCol + ';font-weight:bold;">' + escapeHtml(r.statusText) + '</span> | ' +
-                        '<span style="color:#fde68a;">حجم: ' + escapeHtml(r.sizeText) + '</span> | ' +
-                        '<span style="color:#cbd5e1;">زمان: ' + escapeHtml(r.durationText) + '</span>' +
+                  (downloadTestResults.length > 0
+                    ? '<div style="font-weight:bold;color:#38bdf8;font-size:11px;margin-bottom:4px;">نتیجه تست دانلود فایل‌های صفحه (تایم‌اوت ۲۰ ثانیه — ' + downloadTestResults.length + ' فایل):</div>' +
+                      renderDownloadRows(downloadTestResults)
+                    : '') +
+                  (adminDepsStatus
+                    ? '<div style="margin-top:10px;padding-top:8px;border-top:1px solid #334155;">' +
+                        '<div style="font-weight:bold;color:#fbbf24;font-size:11px;margin-bottom:4px;">بررسی وابستگی‌های AdminPanel-*.js (لیست __vite__mapDeps):</div>' +
+                        '<div style="color:#e2e8f0;font-size:11px;margin-bottom:6px;">' + escapeHtml(adminDepsStatus) + '</div>' +
+                        (adminDepsSeqResults.length > 0
+                          ? '<div style="margin-bottom:8px;padding:6px;background:#0b1329;border-radius:7px;border:1px solid #1e293b;">' +
+                              '<div style="font-weight:bold;color:#34d399;font-size:11px;margin-bottom:3px;">تست ۱ — دانلود یک‌به‌یک (Sequential) [' + adminDepsSeqResults.length + ' فایل]' + (adminDepsSeqTotalText ? ' — زمان کل: ' + escapeHtml(adminDepsSeqTotalText) : '') + ':</div>' +
+                              renderDownloadRows(adminDepsSeqResults) +
+                            '</div>'
+                          : '') +
+                        (adminDepsConcResults.length > 0
+                          ? '<div style="padding:6px;background:#0b1329;border-radius:7px;border:1px solid #1e293b;">' +
+                              '<div style="font-weight:bold;color:#a78bfa;font-size:11px;margin-bottom:3px;">تست ۲ — دانلود همزمان (Promise.all) [' + adminDepsConcResults.length + ' فایل]' + (adminDepsConcTotalText ? ' — زمان کل: ' + escapeHtml(adminDepsConcTotalText) : '') + ':</div>' +
+                              renderDownloadRows(adminDepsConcResults) +
+                            '</div>'
+                          : '') +
                       '</div>'
-                    );
-                  }).join('') +
+                    : '') +
                 '</div>';
             }
 

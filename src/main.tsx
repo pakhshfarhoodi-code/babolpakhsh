@@ -15,12 +15,24 @@ window.addEventListener('vite:preloadError', () => {
 });
 
 // Unregister service worker in development to prevent stale assets / blank iframe screens
+const isDebugNoSw =
+  typeof window !== 'undefined' &&
+  ((window as any).__DEBUG_NOSW__ === true ||
+    (() => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        return params.get('debug') === '1' && params.get('nosw') === '1';
+      } catch {
+        return false;
+      }
+    })());
+
 if ('serviceWorker' in navigator) {
-  if (import.meta.env.PROD) {
+  if (import.meta.env.PROD && !isDebugNoSw) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('./sw.js').catch(() => {});
     });
-  } else {
+  } else if (!import.meta.env.PROD) {
     navigator.serviceWorker.getRegistrations().then((registrations) => {
       for (const registration of registrations) {
         registration.unregister();

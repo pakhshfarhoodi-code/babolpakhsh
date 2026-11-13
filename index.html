@@ -61,17 +61,33 @@
           }
           if (!isDebug) return;
 
+          var isNoSw = false;
+          if (typeof URLSearchParams === 'function') {
+            isNoSw = new URLSearchParams(search).get('nosw') === '1';
+          } else {
+            isNoSw = /(?:^|[?&])nosw=1(?:&|$)/.test(search);
+          }
+
+          if (isNoSw) {
+            window.__DEBUG_NOSW__ = true;
+          }
+
           var logs = [];
+          var errorBoundaryErrors = [];
           var assetIssues = [];
           var seenAssetKeys = {};
           var pendingTags = {};
           var slowFetches = [];
           var downloadTestResults = [];
           var isTestingDownloads = false;
+          var importTestResults = [];
+          var isTestingImports = false;
           var failedAssetUrls = {};
           var swStatusText = 'در حال بررسی...';
           var panelRoot = null;
           var isCollapsed = false;
+          var isCapturingConsole = false;
+          var renderScheduled = false;
 
           function pad2(n) {
             return n < 10 ? '0' + n : String(n);
@@ -133,6 +149,9 @@
             }
             if (typeof arg === 'object') {
               try {
+                if (typeof arg.componentStack === 'string') {
+                  return 'componentStack:\n' + arg.componentStack;
+                }
                 return JSON.stringify(arg);
               } catch (e) {
                 return String(arg);
@@ -147,8 +166,17 @@
               type: type,
               message: String(message || '')
             });
-            if (logs.length > 100) logs.length = 100;
-            renderPanel();
+            if (logs.length > 250) logs.length = 250;
+            scheduleRender();
+          }
+
+          function scheduleRender() {
+            if (renderScheduled) return;
+            renderScheduled = true;
+            setTimeout(function() {
+              renderScheduled = false;
+              renderPanel();
+            }, 0);
           }
 
           function addAssetIssue(kind, url, detail) {
@@ -200,20 +228,42 @@
             } catch (e) {}
           });
 
-          // 3. Intercept console.error
-          var originalConsoleError = console.error;
-          console.error = function() {
-            try {
-              var parts = [];
-              for (var i = 0; i < arguments.length; i++) {
-                parts.push(stringifyArg(arguments[i]));
+          // 3. Intercept console.error, console.warn, console.log & detect ErrorBoundary errors
+          function wrapConsoleMethod(methodName) {
+            var originalMethod = console[methodName];
+            console[methodName] = function() {
+              if (!isCapturingConsole) {
+                isCapturingConsole = true;
+                try {
+                  var parts = [];
+                  for (var i = 0; i < arguments.length; i++) {
+                    parts.push(stringifyArg(arguments[i]));
+                  }
+                  var fullMsg = parts.join(' ');
+                  if (methodName === 'error' && fullMsg.indexOf('ErrorBoundary caught an error:') !== -1) {
+                    errorBoundaryErrors.unshift({
+                      time: nowTime(),
+                      message: fullMsg
+                    });
+                    if (errorBoundaryErrors.length > 30) errorBoundaryErrors.length = 30;
+                    addLog('ErrorBoundary', fullMsg);
+                  } else {
+                    addLog('console.' + methodName, fullMsg);
+                  }
+                } catch (e) {
+                } finally {
+                  isCapturingConsole = false;
+                }
               }
-              addLog('console.error', parts.join(' '));
-            } catch (e) {}
-            if (typeof originalConsoleError === 'function') {
-              return originalConsoleError.apply(console, arguments);
-            }
-          };
+              if (typeof originalMethod === 'function') {
+                return originalMethod.apply(console, arguments);
+              }
+            };
+          }
+
+          wrapConsoleMethod('error');
+          wrapConsoleMethod('warn');
+          wrapConsoleMethod('log');
 
           // 3b. Wrap window.fetch and track requests unanswered for > 8 seconds
           var originalFetch = (typeof window.fetch === 'function') ? window.fetch.bind(window) : null;
@@ -250,7 +300,7 @@
                 if (slowEntry) {
                   var elapsed = formatDuration(Date.now() - startedAt);
                   slowEntry.statusText = (isError ? 'خطا پس از ' : 'پاسخ با تأخیر پس از ') + elapsed + (detailText ? ' (' + detailText + ')' : '');
-                  renderPanel();
+                  scheduleRender();
                 }
               }
 
@@ -273,7 +323,7 @@
             };
           }
 
-          // 4. Track slow (>10s) JS/CSS loads via DOM tags + PerformanceObserver
+          // 4. Track slow (>10s) JS/CSS loads via DOM tags + PerformanceObserver + #root status
           function watchElementLoad(el) {
             if (!el || (el.tagName !== 'SCRIPT' && el.tagName !== 'LINK')) return;
             var url = el.src || el.href || '';
@@ -299,13 +349,38 @@
             el.addEventListener('error', clearTagTimer, { once: true });
           }
 
+          var lastRootSignature = '';
+          function getRootStatusText() {
+            var rootEl = document.getElementById('root');
+            if (!rootEl) return '#root در DOM پیدا نشد';
+            var count = rootEl.children ? rootEl.children.length : 0;
+            var mounted = rootEl.dataset && rootEl.dataset.mounted === 'true';
+            var hasPreMount = !!document.getElementById('pre-mount-loader');
+            if (count === 0) {
+              return 'خیر — #root هیچ فرزندی ندارد (۰ فرزند)';
+            }
+            if (mounted && !hasPreMount) {
+              return 'بله — دارد (' + count + ' فرزند | React با موفقیت مانت شده)';
+            }
+            if (hasPreMount) {
+              return 'بله — دارد (' + count + ' فرزند | هنوز لودر اولیه pre-mount فعال است و React جایگزین نشده)';
+            }
+            return 'بله — دارد (' + count + ' فرزند | data-mounted=' + (mounted ? 'true' : 'false') + ')';
+          }
+
           if (typeof MutationObserver === 'function') {
             var domObserver = new MutationObserver(function(mutations) {
+              var shouldCheckRoot = false;
               for (var i = 0; i < mutations.length; i++) {
+                var target = mutations[i].target;
+                if (target && (target.id === 'root' || (panelRoot && !panelRoot.contains(target) && document.getElementById('root') && document.getElementById('root').contains(target)))) {
+                  shouldCheckRoot = true;
+                }
                 var added = mutations[i].addedNodes;
                 for (var j = 0; j < added.length; j++) {
                   var node = added[j];
                   if (node && node.nodeType === 1) {
+                    if (panelRoot && (node === panelRoot || panelRoot.contains(node))) continue;
                     watchElementLoad(node);
                     if (node.querySelectorAll) {
                       var children = node.querySelectorAll('script[src], link[href]');
@@ -316,8 +391,15 @@
                   }
                 }
               }
+              if (shouldCheckRoot) {
+                var sig = getRootStatusText();
+                if (sig !== lastRootSignature) {
+                  lastRootSignature = sig;
+                  scheduleRender();
+                }
+              }
             });
-            domObserver.observe(document.documentElement, { childList: true, subtree: true });
+            domObserver.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-mounted'] });
           }
 
           function inspectPerfEntry(entry) {
@@ -352,7 +434,7 @@
                 for (var i = 0; i < entries.length; i++) {
                   inspectPerfEntry(entries[i]);
                 }
-                renderPanel();
+                scheduleRender();
               });
               perfObs.observe({ type: 'resource', buffered: true });
             } catch (e) {}
@@ -382,6 +464,24 @@
             return list;
           }
 
+          // Collect .js URLs from performance.getEntriesByType('resource')
+          function getPerfJsUrls() {
+            var urls = [];
+            var seen = {};
+            if (typeof performance === 'undefined' || typeof performance.getEntriesByType !== 'function') {
+              return urls;
+            }
+            var entries = performance.getEntriesByType('resource') || [];
+            for (var i = 0; i < entries.length; i++) {
+              var entry = entries[i];
+              if (entry && entry.name && isJsUrl(entry.name) && !seen[entry.name]) {
+                seen[entry.name] = true;
+                urls.push(entry.name);
+              }
+            }
+            return urls;
+          }
+
           // 4b. Test downloading all script / modulepreload / stylesheet + performance .js files (20s timeout)
           function collectTestableAssetUrls() {
             var urls = [];
@@ -407,13 +507,9 @@
               }
             }
 
-            if (typeof performance !== 'undefined' && typeof performance.getEntriesByType === 'function') {
-              var resEntries = performance.getEntriesByType('resource') || [];
-              for (var k = 0; k < resEntries.length; k++) {
-                if (resEntries[k] && isJsUrl(resEntries[k].name)) {
-                  pushUrl(resEntries[k].name);
-                }
-              }
+            var perfJs = getPerfJsUrls();
+            for (var k = 0; k < perfJs.length; k++) {
+              pushUrl(perfJs[k]);
             }
 
             return urls;
@@ -500,6 +596,94 @@
             Promise.all(jobs).then(finishAll, finishAll);
           }
 
+          // 4c. Test dynamic import() for each .js file in performance.getEntriesByType('resource') with 20s timeout
+          function testSingleModuleImport(item) {
+            return new Promise(function(resolve) {
+              var start = Date.now();
+              var settled = false;
+              var timer = setTimeout(function() {
+                if (settled) return;
+                settled = true;
+                item.status = 'stuck';
+                item.statusText = 'گیر کرده (تایم‌اوت بیش از ۲۰ ثانیه)';
+                item.durationText = formatDuration(Date.now() - start);
+                renderPanel();
+                resolve();
+              }, 20000);
+
+              try {
+                import(item.url).then(
+                  function() {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timer);
+                    item.status = 'ok';
+                    item.statusText = 'موفق';
+                    item.durationText = formatDuration(Date.now() - start);
+                    renderPanel();
+                    resolve();
+                  },
+                  function(err) {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timer);
+                    item.status = 'error';
+                    item.statusText = 'خطا: ' + (err && err.message ? err.message : stringifyArg(err));
+                    item.durationText = formatDuration(Date.now() - start);
+                    renderPanel();
+                    resolve();
+                  }
+                );
+              } catch (syncErr) {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                item.status = 'error';
+                item.statusText = 'خطا: ' + (syncErr && syncErr.message ? syncErr.message : stringifyArg(syncErr));
+                item.durationText = formatDuration(Date.now() - start);
+                renderPanel();
+                resolve();
+              }
+            });
+          }
+
+          function runModulesImportTest() {
+            if (isTestingImports) return;
+            var urls = getPerfJsUrls();
+            isCollapsed = false;
+            if (urls.length === 0) {
+              importTestResults = [{
+                name: 'هیچ فایل .js یافت نشد',
+                url: '',
+                status: 'error',
+                statusText: 'موردی در performance.getEntriesByType("resource") وجود ندارد',
+                durationText: '-'
+              }];
+              renderPanel();
+              return;
+            }
+            isTestingImports = true;
+            importTestResults = urls.map(function(u) {
+              return {
+                name: extractFileName(u),
+                url: u,
+                status: 'pending',
+                statusText: 'در حال import()...',
+                durationText: '...'
+              };
+            });
+            renderPanel();
+
+            var jobs = importTestResults.map(function(item) {
+              return testSingleModuleImport(item);
+            });
+            function finishAllImports() {
+              isTestingImports = false;
+              renderPanel();
+            }
+            Promise.all(jobs).then(finishAllImports, finishAllImports);
+          }
+
           // 5. Inspect Service Worker registration status
           function translateSwState(state) {
             if (state === 'activated') return 'فعال (activated)';
@@ -546,6 +730,42 @@
 
           if ('serviceWorker' in navigator) {
             navigator.serviceWorker.addEventListener('controllerchange', refreshSwStatus);
+          }
+
+          // 5b. If nosw=1 is active in ?debug=1 mode: unregister all SWs, clear all caches, and skip registering SW in this load
+          if (isNoSw) {
+            var noSwTasks = [];
+            if ('serviceWorker' in navigator) {
+              try {
+                navigator.serviceWorker.register = function() {
+                  return Promise.resolve();
+                };
+              } catch (e) {}
+              noSwTasks.push(
+                navigator.serviceWorker.getRegistrations().then(function(regs) {
+                  return Promise.all(regs.map(function(r) { return r.unregister(); })).then(function() {
+                    return regs.length;
+                  });
+                }).catch(function() { return 0; })
+              );
+            }
+            if ('caches' in window) {
+              noSwTasks.push(
+                caches.keys().then(function(keys) {
+                  return Promise.all(keys.map(function(k) { return caches.delete(k); })).then(function() {
+                    return keys.length;
+                  });
+                }).catch(function() { return 0; })
+              );
+            }
+            Promise.all(noSwTasks).then(function(results) {
+              var swCount = results[0] || 0;
+              var cacheCount = results[1] || 0;
+              addLog('nosw=1', 'حالت nosw=1 فعال شد: ' + swCount + ' Service Worker لغو ثبت شد، ' + cacheCount + ' کش پاک شد و ثبت SW جدید در این بارگذاری متوقف گردید.');
+              refreshSwStatus();
+            }, function() {
+              refreshSwStatus();
+            });
           }
 
           // 6. Clear caches & unregister all service workers & reload
@@ -599,6 +819,9 @@
             var totalCount = logs.length;
             var ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : 'نامشخص';
             var loadedJsList = getLoadedJsEntries();
+            var readyStateVal = document.readyState || 'نامشخص';
+            var rootStatusVal = getRootStatusText();
+            lastRootSignature = rootStatusVal;
 
             var issuesHtml = '';
             if (assetIssues.length === 0) {
@@ -616,6 +839,22 @@
                   '</div>'
                 );
               }).join('');
+            }
+
+            var errorBoundaryHtml = '';
+            if (errorBoundaryErrors.length > 0) {
+              errorBoundaryHtml =
+                '<div style="background:#450a0a;padding:7px 9px;border-radius:8px;margin-bottom:8px;border:1px solid #ef4444;">' +
+                  '<div style="font-weight:bold;color:#fca5a5;font-size:11px;margin-bottom:4px;">خطاهای گرفته‌شده توسط ErrorBoundary (' + errorBoundaryErrors.length + ' مورد):</div>' +
+                  errorBoundaryErrors.map(function(eb) {
+                    return (
+                      '<div style="padding:4px 6px;margin-top:4px;background:#1f0707;border-radius:6px;border-right:3px solid #ef4444;word-break:break-word;white-space:pre-wrap;">' +
+                        '<div style="color:#fca5a5;font-size:10px;margin-bottom:2px;">[' + escapeHtml(eb.time) + ']</div>' +
+                        '<div style="color:#fecaca;font-size:11px;font-family:monospace;direction:ltr;text-align:left;">' + escapeHtml(eb.message) + '</div>' +
+                      '</div>'
+                    );
+                  }).join('') +
+                '</div>';
             }
 
             var slowFetchHtml = '';
@@ -653,12 +892,31 @@
                 '</div>';
             }
 
+            var importTestHtml = '';
+            if (importTestResults.length > 0) {
+              importTestHtml =
+                '<div style="background:#172033;padding:7px 9px;border-radius:8px;margin-bottom:8px;border:1px solid #8b5cf6;">' +
+                  '<div style="font-weight:bold;color:#c4b5fd;font-size:11px;margin-bottom:4px;">نتیجه تست import() ماژول‌ها (تایم‌اوت ۲۰ ثانیه — ' + importTestResults.length + ' فایل):</div>' +
+                  importTestResults.map(function(r) {
+                    var borderCol = r.status === 'ok' ? '#22c55e' : (r.status === 'stuck' ? '#f59e0b' : (r.status === 'error' ? '#ef4444' : '#a78bfa'));
+                    var statusCol = r.status === 'ok' ? '#86efac' : (r.status === 'stuck' ? '#fde68a' : (r.status === 'error' ? '#fca5a5' : '#ddd6fe'));
+                    return (
+                      '<div style="padding:4px 6px;margin-top:4px;background:#0f172a;border-radius:6px;border-right:3px solid ' + borderCol + ';word-break:break-all;font-size:11px;">' +
+                        '<strong style="color:#f8fafc;">' + escapeHtml(r.name) + '</strong> — ' +
+                        '<span style="color:' + statusCol + ';font-weight:bold;">' + escapeHtml(r.statusText) + '</span> | ' +
+                        '<span style="color:#cbd5e1;">زمان: ' + escapeHtml(r.durationText) + '</span>' +
+                      '</div>'
+                    );
+                  }).join('') +
+                '</div>';
+            }
+
             var logsHtml = '';
             if (logs.length === 0) {
-              logsHtml = '<div style="color:#94a3b8;font-size:11px;padding:6px 0;">تا این لحظه هیچ خطایی در window.onerror، unhandledrejection یا console.error ثبت نشده است.</div>';
+              logsHtml = '<div style="color:#94a3b8;font-size:11px;padding:6px 0;">تا این لحظه هیچ لاگ یا خطایی ثبت نشده است.</div>';
             } else {
               logsHtml = logs.map(function(entry) {
-                var tagBg = entry.type === 'window.onerror'
+                var tagBg = entry.type === 'window.onerror' || entry.type === 'ErrorBoundary'
                   ? '#dc2626'
                   : entry.type === 'unhandledrejection'
                   ? '#ea580c'
@@ -666,14 +924,23 @@
                   ? '#d97706'
                   : entry.type.indexOf('fetch') !== -1
                   ? '#c2410c'
+                  : entry.type === 'console.warn'
+                  ? '#b45309'
+                  : entry.type === 'console.log'
+                  ? '#0369a1'
                   : '#7c3aed';
+                var msgColor = (entry.type === 'console.log')
+                  ? '#e2e8f0'
+                  : (entry.type === 'console.warn')
+                  ? '#fde68a'
+                  : '#fecaca';
                 return (
                   '<div style="padding:5px 7px;margin-bottom:5px;background:#020617;border:1px solid #1e293b;border-radius:6px;word-break:break-word;white-space:pre-wrap;">' +
                     '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap;">' +
                       '<span style="background:' + tagBg + ';color:#ffffff;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:bold;">' + escapeHtml(entry.type) + '</span>' +
                       '<span style="color:#94a3b8;font-size:10px;font-family:monospace;">' + escapeHtml(entry.time) + '</span>' +
                     '</div>' +
-                    '<div style="color:#fecaca;font-size:11px;font-family:monospace;direction:ltr;text-align:left;">' + escapeHtml(entry.message) + '</div>' +
+                    '<div style="color:' + msgColor + ';font-size:11px;font-family:monospace;direction:ltr;text-align:left;">' + escapeHtml(entry.message) + '</div>' +
                   '</div>'
                 );
               }).join('');
@@ -697,12 +964,14 @@
               '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;background:#1e293b;border-bottom:1px solid #334155;flex-wrap:wrap;">' +
                 '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
                   '<strong style="color:#fbbf24;font-size:12px;">ابزار دیباگ موقت (?debug=1)</strong>' +
+                  (isNoSw ? '<span style="background:#991b1b;color:#fecaca;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:bold;">nosw=1 (بدون Service Worker و کش)</span>' : '') +
                   '<span style="background:#334155;color:#f8fafc;padding:1px 7px;border-radius:999px;font-size:11px;">تعداد رخدادها: ' + totalCount + '</span>' +
                   '<span style="background:#334155;color:#fde68a;padding:1px 7px;border-radius:999px;font-size:11px;">فایل‌های مشکل‌دار: ' + assetIssues.length + '</span>' +
                   '<span style="background:#334155;color:#fdba74;padding:1px 7px;border-radius:999px;font-size:11px;">fetch کند: ' + slowFetches.length + '</span>' +
                 '</div>' +
                 '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
                   '<button type="button" id="dbg-test-downloads-btn" ' + (isTestingDownloads ? 'disabled' : '') + ' style="background:#059669;color:#ffffff;border:none;border-radius:7px;padding:5px 10px;font-size:11px;font-weight:bold;cursor:pointer;opacity:' + (isTestingDownloads ? '0.7' : '1') + ';">' + (isTestingDownloads ? 'در حال تست دانلود فایل‌ها...' : 'تست دانلود فایل‌ها') + '</button>' +
+                  '<button type="button" id="dbg-test-imports-btn" ' + (isTestingImports ? 'disabled' : '') + ' style="background:#7c3aed;color:#ffffff;border:none;border-radius:7px;padding:5px 10px;font-size:11px;font-weight:bold;cursor:pointer;opacity:' + (isTestingImports ? '0.7' : '1') + ';">' + (isTestingImports ? 'در حال تست import ماژول‌ها...' : 'تست import ماژول‌ها') + '</button>' +
                   '<button type="button" id="dbg-clear-sw-btn" style="background:#dc2626;color:#ffffff;border:none;border-radius:7px;padding:5px 10px;font-size:11px;font-weight:bold;cursor:pointer;">پاک کردن کش و Service Worker و بارگذاری مجدد</button>' +
                   '<button type="button" id="dbg-refresh-sw-btn" style="background:#334155;color:#e2e8f0;border:none;border-radius:7px;padding:5px 8px;font-size:11px;cursor:pointer;">به‌روزرسانی وضعیت SW</button>' +
                   '<button type="button" id="dbg-clear-logs-btn" style="background:#334155;color:#e2e8f0;border:none;border-radius:7px;padding:5px 8px;font-size:11px;cursor:pointer;">پاک کردن لاگ</button>' +
@@ -713,9 +982,13 @@
                 ? ''
                 : '<div id="dbg-panel-body" style="padding:8px 10px;max-height:45vh;overflow-y:auto;">' +
                     '<div style="background:#1e293b;padding:7px 9px;border-radius:8px;margin-bottom:8px;font-size:11px;">' +
+                      '<div style="margin-bottom:4px;"><strong style="color:#38bdf8;">وضعیت صفحه (document.readyState): </strong><span style="color:#fde68a;font-family:monospace;">' + escapeHtml(readyStateVal) + '</span></div>' +
+                      '<div style="margin-bottom:4px;"><strong style="color:#38bdf8;">وضعیت #root و فرزندان: </strong><span style="color:#e2e8f0;">' + escapeHtml(rootStatusVal) + '</span></div>' +
                       '<div style="margin-bottom:4px;"><strong style="color:#38bdf8;">وضعیت ثبت‌نام Service Worker: </strong><span style="color:#e2e8f0;">' + escapeHtml(swStatusText) + '</span></div>' +
                       '<div style="word-break:break-all;"><strong style="color:#38bdf8;">مشخصات مرورگر (User-Agent): </strong><span style="color:#cbd5e1;font-family:monospace;font-size:10px;direction:ltr;unicode-bidi:embed;">' + escapeHtml(ua) + '</span></div>' +
                     '</div>' +
+                    errorBoundaryHtml +
+                    importTestHtml +
                     downloadTestHtml +
                     '<div style="background:#172033;padding:7px 9px;border-radius:8px;margin-bottom:8px;border:1px solid #334155;">' +
                       '<div style="font-weight:bold;color:#fdba74;font-size:11px;margin-bottom:3px;">درخواست‌های fetch بی‌پاسخ یا کند (بیش از ۸ ثانیه):</div>' +
@@ -726,7 +999,7 @@
                       issuesHtml +
                     '</div>' +
                     '<div style="margin-bottom:8px;">' +
-                      '<div style="font-weight:bold;color:#f87171;font-size:11px;margin-bottom:4px;">لاگ خطاها (window.onerror / unhandledrejection / console.error):</div>' +
+                      '<div style="font-weight:bold;color:#f87171;font-size:11px;margin-bottom:4px;">لاگ کنسول و خطاها (onerror / unhandledrejection / ErrorBoundary / console.error / warn / log):</div>' +
                       logsHtml +
                     '</div>' +
                     '<div style="background:#172033;padding:7px 9px;border-radius:8px;border:1px solid #334155;">' +
@@ -745,6 +1018,10 @@
             if (testDownloadsBtn) {
               testDownloadsBtn.onclick = runFilesDownloadTest;
             }
+            var testImportsBtn = document.getElementById('dbg-test-imports-btn');
+            if (testImportsBtn) {
+              testImportsBtn.onclick = runModulesImportTest;
+            }
             var clearSwBtn = document.getElementById('dbg-clear-sw-btn');
             if (clearSwBtn) {
               clearSwBtn.onclick = function() { clearCacheSwAndReload(clearSwBtn); };
@@ -757,6 +1034,7 @@
             if (clearLogsBtn) {
               clearLogsBtn.onclick = function() {
                 logs = [];
+                errorBoundaryErrors = [];
                 assetIssues = [];
                 slowFetches = [];
                 seenAssetKeys = {};
@@ -771,6 +1049,10 @@
               };
             }
           }
+
+          document.addEventListener('readystatechange', function() {
+            scheduleRender();
+          });
 
           if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', function() {

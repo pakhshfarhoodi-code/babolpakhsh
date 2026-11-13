@@ -65,6 +65,10 @@
           var assetIssues = [];
           var seenAssetKeys = {};
           var pendingTags = {};
+          var slowFetches = [];
+          var downloadTestResults = [];
+          var isTestingDownloads = false;
+          var failedAssetUrls = {};
           var swStatusText = 'در حال بررسی...';
           var panelRoot = null;
           var isCollapsed = false;
@@ -103,6 +107,24 @@
             return /\.(js|mjs|css)(\?|#|$)/i.test(String(url));
           }
 
+          function isJsUrl(url) {
+            if (!url) return false;
+            return /\.js(\?|#|$)/i.test(String(url));
+          }
+
+          function formatDuration(ms) {
+            if (typeof ms !== 'number' || !isFinite(ms)) return 'نامشخص';
+            if (ms < 1000) return Math.round(ms) + ' میلی‌ثانیه';
+            return (ms / 1000).toFixed(2) + ' ثانیه';
+          }
+
+          function formatBytes(bytes) {
+            if (typeof bytes !== 'number' || !isFinite(bytes)) return 'نامشخص';
+            if (bytes < 1024) return bytes + ' بایت';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' کیلوبایت';
+            return (bytes / (1024 * 1024)).toFixed(2) + ' مگابایت';
+          }
+
           function stringifyArg(arg) {
             if (arg === undefined) return 'undefined';
             if (arg === null) return 'null';
@@ -131,6 +153,9 @@
 
           function addAssetIssue(kind, url, detail) {
             var name = extractFileName(url);
+            if (kind === 'failed' && url) {
+              failedAssetUrls[String(url)] = true;
+            }
             var key = kind + '|' + url;
             if (seenAssetKeys[key]) return;
             seenAssetKeys[key] = true;
@@ -189,6 +214,64 @@
               return originalConsoleError.apply(console, arguments);
             }
           };
+
+          // 3b. Wrap window.fetch and track requests unanswered for > 8 seconds
+          var originalFetch = (typeof window.fetch === 'function') ? window.fetch.bind(window) : null;
+          if (originalFetch) {
+            window.fetch = function(input, init) {
+              var reqUrl = '';
+              try {
+                if (typeof input === 'string') {
+                  reqUrl = input;
+                } else if (input && typeof input.url === 'string') {
+                  reqUrl = input.url;
+                } else {
+                  reqUrl = String(input);
+                }
+              } catch (e) {
+                reqUrl = 'آدرس نامشخص';
+              }
+
+              var startedAt = Date.now();
+              var slowEntry = null;
+              var timer = setTimeout(function() {
+                slowEntry = {
+                  time: nowTime(),
+                  url: reqUrl,
+                  statusText: 'بی‌پاسخ (بیش از ۸ ثانیه)'
+                };
+                slowFetches.unshift(slowEntry);
+                if (slowFetches.length > 50) slowFetches.length = 50;
+                addLog('fetch کند (>۸ث)', reqUrl);
+              }, 8000);
+
+              function onDone(isError, detailText) {
+                clearTimeout(timer);
+                if (slowEntry) {
+                  var elapsed = formatDuration(Date.now() - startedAt);
+                  slowEntry.statusText = (isError ? 'خطا پس از ' : 'پاسخ با تأخیر پس از ') + elapsed + (detailText ? ' (' + detailText + ')' : '');
+                  renderPanel();
+                }
+              }
+
+              try {
+                var p = originalFetch(input, init);
+                return p.then(
+                  function(res) {
+                    onDone(false, 'کد ' + (res && typeof res.status === 'number' ? res.status : '?'));
+                    return res;
+                  },
+                  function(err) {
+                    onDone(true, err && err.message ? err.message : 'خطای شبکه');
+                    throw err;
+                  }
+                );
+              } catch (syncErr) {
+                onDone(true, syncErr && syncErr.message ? syncErr.message : 'خطای همگام');
+                throw syncErr;
+              }
+            };
+          }
 
           // 4. Track slow (>10s) JS/CSS loads via DOM tags + PerformanceObserver
           function watchElementLoad(el) {
@@ -269,9 +352,152 @@
                 for (var i = 0; i < entries.length; i++) {
                   inspectPerfEntry(entries[i]);
                 }
+                renderPanel();
               });
               perfObs.observe({ type: 'resource', buffered: true });
             } catch (e) {}
+          }
+
+          // Collect successfully loaded .js files from PerformanceResourceTiming
+          function getLoadedJsEntries() {
+            var list = [];
+            if (typeof performance === 'undefined' || typeof performance.getEntriesByType !== 'function') {
+              return list;
+            }
+            var entries = performance.getEntriesByType('resource') || [];
+            var seen = {};
+            for (var i = 0; i < entries.length; i++) {
+              var entry = entries[i];
+              if (!entry || !entry.name || !isJsUrl(entry.name)) continue;
+              if (failedAssetUrls[entry.name]) continue;
+              if (typeof entry.responseStatus === 'number' && entry.responseStatus >= 400) continue;
+              if (seen[entry.name]) continue;
+              seen[entry.name] = true;
+              list.push({
+                name: extractFileName(entry.name),
+                url: entry.name,
+                duration: entry.duration
+              });
+            }
+            return list;
+          }
+
+          // 4b. Test downloading all script / modulepreload / stylesheet + performance .js files (20s timeout)
+          function collectTestableAssetUrls() {
+            var urls = [];
+            var seen = {};
+            function pushUrl(u) {
+              if (!u) return;
+              var str = String(u);
+              if (seen[str]) return;
+              seen[str] = true;
+              urls.push(str);
+            }
+
+            var scripts = document.querySelectorAll('script[src]');
+            for (var i = 0; i < scripts.length; i++) {
+              pushUrl(scripts[i].src);
+            }
+
+            var links = document.querySelectorAll('link[href]');
+            for (var j = 0; j < links.length; j++) {
+              var rel = (links[j].getAttribute('rel') || links[j].rel || '').toLowerCase();
+              if (rel.indexOf('modulepreload') !== -1 || rel.indexOf('stylesheet') !== -1) {
+                pushUrl(links[j].href);
+              }
+            }
+
+            if (typeof performance !== 'undefined' && typeof performance.getEntriesByType === 'function') {
+              var resEntries = performance.getEntriesByType('resource') || [];
+              for (var k = 0; k < resEntries.length; k++) {
+                if (resEntries[k] && isJsUrl(resEntries[k].name)) {
+                  pushUrl(resEntries[k].name);
+                }
+              }
+            }
+
+            return urls;
+          }
+
+          function testSingleFileDownload(item) {
+            var start = Date.now();
+            var fetcher = originalFetch || window.fetch;
+            if (typeof fetcher !== 'function') {
+              item.status = 'error';
+              item.statusText = 'fetch پشتیبانی نمی‌شود';
+              item.durationText = '-';
+              item.sizeText = '-';
+              renderPanel();
+              return Promise.resolve();
+            }
+
+            var controller = (typeof AbortController === 'function') ? new AbortController() : null;
+            var timedOut = false;
+            var timeoutId = setTimeout(function() {
+              timedOut = true;
+              if (controller) {
+                try { controller.abort(); } catch (e) {}
+              }
+            }, 20000);
+
+            var fetchOptions = { cache: 'no-store' };
+            if (controller) fetchOptions.signal = controller.signal;
+
+            return fetcher(item.url, fetchOptions)
+              .then(function(res) {
+                return res.arrayBuffer().then(function(buf) {
+                  clearTimeout(timeoutId);
+                  var elapsed = Date.now() - start;
+                  item.status = res.ok ? 'ok' : 'error';
+                  item.statusText = 'HTTP ' + res.status + (res.ok ? ' (موفق)' : ' (خطا)');
+                  item.sizeText = formatBytes(buf ? buf.byteLength : 0);
+                  item.durationText = formatDuration(elapsed);
+                  renderPanel();
+                });
+              })
+              .catch(function(err) {
+                clearTimeout(timeoutId);
+                var elapsed = Date.now() - start;
+                item.status = 'error';
+                item.statusText = timedOut
+                  ? 'تایم‌اوت (بیش از ۲۰ ثانیه)'
+                  : 'خطا: ' + (err && err.message ? err.message : 'نامشخص');
+                item.sizeText = '۰ بایت';
+                item.durationText = formatDuration(elapsed);
+                renderPanel();
+              });
+          }
+
+          function runFilesDownloadTest() {
+            if (isTestingDownloads) return;
+            var urls = collectTestableAssetUrls();
+            if (urls.length === 0) {
+              downloadTestResults = [];
+              renderPanel();
+              return;
+            }
+            isTestingDownloads = true;
+            isCollapsed = false;
+            downloadTestResults = urls.map(function(u) {
+              return {
+                name: extractFileName(u),
+                url: u,
+                status: 'pending',
+                statusText: 'در حال دانلود...',
+                sizeText: '...',
+                durationText: '...'
+              };
+            });
+            renderPanel();
+
+            var jobs = downloadTestResults.map(function(item) {
+              return testSingleFileDownload(item);
+            });
+            function finishAll() {
+              isTestingDownloads = false;
+              renderPanel();
+            }
+            Promise.all(jobs).then(finishAll, finishAll);
           }
 
           // 5. Inspect Service Worker registration status
@@ -367,8 +593,12 @@
             ensurePanelMounted();
             if (!panelRoot) return;
 
+            var prevBodyEl = document.getElementById('dbg-panel-body');
+            var prevScrollTop = prevBodyEl ? prevBodyEl.scrollTop : 0;
+
             var totalCount = logs.length;
             var ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : 'نامشخص';
+            var loadedJsList = getLoadedJsEntries();
 
             var issuesHtml = '';
             if (assetIssues.length === 0) {
@@ -388,6 +618,41 @@
               }).join('');
             }
 
+            var slowFetchHtml = '';
+            if (slowFetches.length === 0) {
+              slowFetchHtml = '<div style="color:#86efac;font-size:11px;">تا این لحظه هیچ درخواست fetch بیش از ۸ ثانیه بدون پاسخ نمانده است.</div>';
+            } else {
+              slowFetchHtml = slowFetches.map(function(f) {
+                return (
+                  '<div style="padding:4px 6px;margin-top:4px;background:#1e293b;border-radius:6px;border-right:3px solid #fb923c;word-break:break-all;">' +
+                    '<span style="color:#fdba74;font-weight:bold;font-size:11px;">' + escapeHtml(f.statusText) + '</span> ' +
+                    '<span style="color:#94a3b8;font-size:10px;">[' + escapeHtml(f.time) + ']</span>' +
+                    '<div style="color:#e2e8f0;font-size:10px;font-family:monospace;direction:ltr;text-align:left;margin-top:2px;">' + escapeHtml(f.url) + '</div>' +
+                  '</div>'
+                );
+              }).join('');
+            }
+
+            var downloadTestHtml = '';
+            if (downloadTestResults.length > 0) {
+              downloadTestHtml =
+                '<div style="background:#172033;padding:7px 9px;border-radius:8px;margin-bottom:8px;border:1px solid #0284c7;">' +
+                  '<div style="font-weight:bold;color:#38bdf8;font-size:11px;margin-bottom:4px;">نتیجه تست دانلود فایل‌ها (تایم‌اوت ۲۰ ثانیه — ' + downloadTestResults.length + ' فایل):</div>' +
+                  downloadTestResults.map(function(r) {
+                    var borderCol = r.status === 'ok' ? '#22c55e' : (r.status === 'error' ? '#ef4444' : '#38bdf8');
+                    var statusCol = r.status === 'ok' ? '#86efac' : (r.status === 'error' ? '#fca5a5' : '#7dd3fc');
+                    return (
+                      '<div style="padding:4px 6px;margin-top:4px;background:#0f172a;border-radius:6px;border-right:3px solid ' + borderCol + ';word-break:break-all;font-size:11px;">' +
+                        '<strong style="color:#f8fafc;">' + escapeHtml(r.name) + '</strong> — ' +
+                        '<span style="color:' + statusCol + ';font-weight:bold;">' + escapeHtml(r.statusText) + '</span> | ' +
+                        '<span style="color:#fde68a;">حجم: ' + escapeHtml(r.sizeText) + '</span> | ' +
+                        '<span style="color:#cbd5e1;">زمان: ' + escapeHtml(r.durationText) + '</span>' +
+                      '</div>'
+                    );
+                  }).join('') +
+                '</div>';
+            }
+
             var logsHtml = '';
             if (logs.length === 0) {
               logsHtml = '<div style="color:#94a3b8;font-size:11px;padding:6px 0;">تا این لحظه هیچ خطایی در window.onerror، unhandledrejection یا console.error ثبت نشده است.</div>';
@@ -399,6 +664,8 @@
                   ? '#ea580c'
                   : entry.type === 'فایل JS/CSS'
                   ? '#d97706'
+                  : entry.type.indexOf('fetch') !== -1
+                  ? '#c2410c'
                   : '#7c3aed';
                 return (
                   '<div style="padding:5px 7px;margin-bottom:5px;background:#020617;border:1px solid #1e293b;border-radius:6px;word-break:break-word;white-space:pre-wrap;">' +
@@ -412,14 +679,30 @@
               }).join('');
             }
 
+            var loadedJsHtml = '';
+            if (loadedJsList.length === 0) {
+              loadedJsHtml = '<div style="color:#94a3b8;font-size:11px;">هنوز فایل .js ثبت‌شده‌ای در PerformanceResourceTiming وجود ندارد.</div>';
+            } else {
+              loadedJsHtml = loadedJsList.map(function(item) {
+                return (
+                  '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 6px;margin-top:3px;background:#0f172a;border-radius:5px;font-size:11px;">' +
+                    '<span style="color:#86efac;font-family:monospace;direction:ltr;word-break:break-all;">' + escapeHtml(item.name) + '</span>' +
+                    '<span style="color:#cbd5e1;white-space:nowrap;font-size:10px;">' + escapeHtml(formatDuration(item.duration)) + '</span>' +
+                  '</div>'
+                );
+              }).join('');
+            }
+
             panelRoot.innerHTML =
               '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;background:#1e293b;border-bottom:1px solid #334155;flex-wrap:wrap;">' +
                 '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
                   '<strong style="color:#fbbf24;font-size:12px;">ابزار دیباگ موقت (?debug=1)</strong>' +
                   '<span style="background:#334155;color:#f8fafc;padding:1px 7px;border-radius:999px;font-size:11px;">تعداد رخدادها: ' + totalCount + '</span>' +
                   '<span style="background:#334155;color:#fde68a;padding:1px 7px;border-radius:999px;font-size:11px;">فایل‌های مشکل‌دار: ' + assetIssues.length + '</span>' +
+                  '<span style="background:#334155;color:#fdba74;padding:1px 7px;border-radius:999px;font-size:11px;">fetch کند: ' + slowFetches.length + '</span>' +
                 '</div>' +
                 '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
+                  '<button type="button" id="dbg-test-downloads-btn" ' + (isTestingDownloads ? 'disabled' : '') + ' style="background:#059669;color:#ffffff;border:none;border-radius:7px;padding:5px 10px;font-size:11px;font-weight:bold;cursor:pointer;opacity:' + (isTestingDownloads ? '0.7' : '1') + ';">' + (isTestingDownloads ? 'در حال تست دانلود فایل‌ها...' : 'تست دانلود فایل‌ها') + '</button>' +
                   '<button type="button" id="dbg-clear-sw-btn" style="background:#dc2626;color:#ffffff;border:none;border-radius:7px;padding:5px 10px;font-size:11px;font-weight:bold;cursor:pointer;">پاک کردن کش و Service Worker و بارگذاری مجدد</button>' +
                   '<button type="button" id="dbg-refresh-sw-btn" style="background:#334155;color:#e2e8f0;border:none;border-radius:7px;padding:5px 8px;font-size:11px;cursor:pointer;">به‌روزرسانی وضعیت SW</button>' +
                   '<button type="button" id="dbg-clear-logs-btn" style="background:#334155;color:#e2e8f0;border:none;border-radius:7px;padding:5px 8px;font-size:11px;cursor:pointer;">پاک کردن لاگ</button>' +
@@ -428,22 +711,40 @@
               '</div>' +
               (isCollapsed
                 ? ''
-                : '<div style="padding:8px 10px;max-height:42vh;overflow-y:auto;">' +
+                : '<div id="dbg-panel-body" style="padding:8px 10px;max-height:45vh;overflow-y:auto;">' +
                     '<div style="background:#1e293b;padding:7px 9px;border-radius:8px;margin-bottom:8px;font-size:11px;">' +
                       '<div style="margin-bottom:4px;"><strong style="color:#38bdf8;">وضعیت ثبت‌نام Service Worker: </strong><span style="color:#e2e8f0;">' + escapeHtml(swStatusText) + '</span></div>' +
                       '<div style="word-break:break-all;"><strong style="color:#38bdf8;">مشخصات مرورگر (User-Agent): </strong><span style="color:#cbd5e1;font-family:monospace;font-size:10px;direction:ltr;unicode-bidi:embed;">' + escapeHtml(ua) + '</span></div>' +
+                    '</div>' +
+                    downloadTestHtml +
+                    '<div style="background:#172033;padding:7px 9px;border-radius:8px;margin-bottom:8px;border:1px solid #334155;">' +
+                      '<div style="font-weight:bold;color:#fdba74;font-size:11px;margin-bottom:3px;">درخواست‌های fetch بی‌پاسخ یا کند (بیش از ۸ ثانیه):</div>' +
+                      slowFetchHtml +
                     '</div>' +
                     '<div style="background:#172033;padding:7px 9px;border-radius:8px;margin-bottom:8px;border:1px solid #334155;">' +
                       '<div style="font-weight:bold;color:#fbbf24;font-size:11px;margin-bottom:3px;">فایل‌های JS/CSS ناموفق یا کند (بیش از ۱۰ ثانیه):</div>' +
                       issuesHtml +
                     '</div>' +
-                    '<div>' +
+                    '<div style="margin-bottom:8px;">' +
                       '<div style="font-weight:bold;color:#f87171;font-size:11px;margin-bottom:4px;">لاگ خطاها (window.onerror / unhandledrejection / console.error):</div>' +
                       logsHtml +
+                    '</div>' +
+                    '<div style="background:#172033;padding:7px 9px;border-radius:8px;border:1px solid #334155;">' +
+                      '<div style="font-weight:bold;color:#4ade80;font-size:11px;margin-bottom:3px;">فایل‌های .js بارگذاری‌شده با موفقیت تا این لحظه (' + loadedJsList.length + ' مورد):</div>' +
+                      loadedJsHtml +
                     '</div>' +
                   '</div>'
               );
 
+            var newBodyEl = document.getElementById('dbg-panel-body');
+            if (newBodyEl && prevScrollTop > 0) {
+              newBodyEl.scrollTop = prevScrollTop;
+            }
+
+            var testDownloadsBtn = document.getElementById('dbg-test-downloads-btn');
+            if (testDownloadsBtn) {
+              testDownloadsBtn.onclick = runFilesDownloadTest;
+            }
             var clearSwBtn = document.getElementById('dbg-clear-sw-btn');
             if (clearSwBtn) {
               clearSwBtn.onclick = function() { clearCacheSwAndReload(clearSwBtn); };
@@ -457,6 +758,7 @@
               clearLogsBtn.onclick = function() {
                 logs = [];
                 assetIssues = [];
+                slowFetches = [];
                 seenAssetKeys = {};
                 renderPanel();
               };
@@ -480,7 +782,10 @@
             refreshSwStatus();
           }
           window.addEventListener('load', function() {
-            setTimeout(refreshSwStatus, 1000);
+            setTimeout(function() {
+              refreshSwStatus();
+              renderPanel();
+            }, 1000);
           });
         } catch (e) {}
       })();

@@ -1012,5 +1012,15 @@ export const DEFAULT_ADMIN_PROFILE: AdminProfile = {
   description: '',
 };
 
-
-
+export interface LoyaltyRedemption {
+  id: string;
+  supermarket_id: string;
+  reward_id?: string | null;
+  reward_title: string;
+  reward_qty: number;
+  points_spent: number;
+  status: 'pending' | 'delivered' | 'cancelled';
+  note?: string | null;
+  created_at: string;
+  delivered_at?: string | null;
+}

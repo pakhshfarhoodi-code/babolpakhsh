@@ -1,5 +1,7 @@
-import React, { useState, useMemo, Suspense } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, Suspense } from 'react';
 import { useApp } from '../context/AppContext';
+import { supabase } from '../lib/supabase';
+import { LoyaltyRedemption } from '../types';
 import { lazyWithRetry } from '../lib/chunkReload';
 import { LOW_STOCK_THRESHOLD, isStoreInactiveFor30Days } from './admin/helpers';
 import {
@@ -126,12 +128,62 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     return loadingBills.filter((b) => b.status === 'pending').length;
   }, [loadingBills]);
 
+  const [pendingRedemptions, setPendingRedemptions] = useState<LoyaltyRedemption[]>([]);
+  const [loadingPendingRedemptions, setLoadingPendingRedemptions] = useState(false);
+
+  const fetchPendingRedemptions = useCallback(async () => {
+    if (!supabase) return;
+    setLoadingPendingRedemptions(true);
+    try {
+      const { data, error } = await supabase
+        .from('loyalty_redemptions')
+        .select('*')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+      if (!error && Array.isArray(data)) {
+        setPendingRedemptions(data as LoyaltyRedemption[]);
+      }
+    } catch {
+      // ignore transient network errors on background badge refresh
+    } finally {
+      setLoadingPendingRedemptions(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPendingRedemptions();
+  }, [fetchPendingRedemptions]);
+
+  useEffect(() => {
+    if (activeTab === 'overview' || activeTab === 'loyalty') {
+      fetchPendingRedemptions();
+    }
+  }, [activeTab, fetchPendingRedemptions]);
+
+  useEffect(() => {
+    if (!supabase) return;
+    const channel = supabase
+      .channel('admin-loyalty-redemptions-pending')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'loyalty_redemptions' },
+        () => {
+          fetchPendingRedemptions();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchPendingRedemptions]);
+
   const actionItemsCount = useMemo(() => {
     const delegatedCount = orders.filter((o) => o.status === 'delegated').length;
     const lowStockCount = products.filter((p) => (Math.round((p.stock - p.reserved_stock) * 1000) / 1000) < LOW_STOCK_THRESHOLD).length;
     const inactiveStoresCount = supermarkets.filter((s) => s.is_active !== false && isStoreInactiveFor30Days(s.id, orders)).length;
-    return delegatedCount + lowStockCount + inactiveStoresCount + pendingBillsCount + pendingStoresCount;
-  }, [orders, products, supermarkets, pendingBillsCount, pendingStoresCount]);
+    return delegatedCount + lowStockCount + inactiveStoresCount + pendingBillsCount + pendingStoresCount + pendingRedemptions.length;
+  }, [orders, products, supermarkets, pendingBillsCount, pendingStoresCount, pendingRedemptions.length]);
 
   // Tab Navigation Handlers from Overview Cards
   const handleNavigateToOrders = (statusFilter = 'all') => {
@@ -167,6 +219,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setSelectedFinancialProfileId(profileId);
     setFinancialNavKey((k) => k + 1);
     setActiveTab('financial_accounts');
+  };
+
+  const [loyaltySubTabHint, setLoyaltySubTabHint] = useState<'settings' | 'products' | 'rewards' | 'redemptions' | 'stores'>('settings');
+  const [loyaltyNavKey, setLoyaltyNavKey] = useState(0);
+
+  const handleNavigateToLoyaltyRedemptions = () => {
+    setLoyaltySubTabHint('redemptions');
+    setLoyaltyNavKey((k) => k + 1);
+    setActiveTab('loyalty');
   };
 
   const navItems = [
@@ -267,6 +328,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               onClick={() => {
                 if (item.id === 'orders') setOrdersStatusFilterHint('all');
                 if (item.id === 'products') setProductsFilterHint('all');
+                if (item.id === 'loyalty') setLoyaltySubTabHint('settings');
                 setActiveTab(item.id);
               }}
               className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 cursor-pointer shrink-0 ${
@@ -310,6 +372,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   {pendingStoresCount}
                 </span>
               )}
+              {item.id === 'loyalty' && pendingRedemptions.length > 0 && (
+                <span
+                  className="px-1.5 py-0.2 rounded-full font-black text-[11px] bg-amber-400 text-slate-950 font-mono shadow-sm animate-pulse"
+                  title={`${pendingRedemptions.length} درخواست جایزه در انتظار تایید`}
+                >
+                  {pendingRedemptions.length}
+                </span>
+              )}
             </button>
           );
         })}
@@ -338,10 +408,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           products={products}
           supermarkets={supermarkets}
           loadingBills={loadingBills}
+          pendingRedemptions={pendingRedemptions}
+          loadingPendingRedemptions={loadingPendingRedemptions}
           onNavigateToOrders={handleNavigateToOrders}
           onNavigateToProducts={handleNavigateToProducts}
           onNavigateToTeam={handleNavigateToTeam}
           onNavigateToLoadingBills={handleNavigateToLoadingBills}
+          onNavigateToLoyaltyRedemptions={handleNavigateToLoyaltyRedemptions}
         />
       )}
 
@@ -462,7 +535,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
       {/* Tab: Loyalty (باشگاه و جوایز) */}
       {activeTab === 'loyalty' && (
-        <LoyaltyTab />
+        <LoyaltyTab
+          key={loyaltyNavKey}
+          initialSubTab={loyaltySubTabHint}
+          onRedemptionsChanged={fetchPendingRedemptions}
+        />
       )}
 
       {/* Tab 4: Team */}

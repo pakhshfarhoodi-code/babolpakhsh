@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Order, Product, Supermarket, LoadingBill } from '../../types';
+import { Order, Product, Supermarket, LoadingBill, LoyaltyRedemption } from '../../types';
 import {
   AlertTriangle,
   ArrowRightLeft,
@@ -9,12 +9,11 @@ import {
   TrendingUp,
   ShoppingBag,
   Users,
-  CheckCircle2,
   UserCheck,
-  Truck,
   Clock,
-  FileCheck,
   FileText,
+  Gift,
+  User,
 } from 'lucide-react';
 import {
   LOW_STOCK_THRESHOLD,
@@ -23,16 +22,20 @@ import {
   formatPrice,
 } from './helpers';
 import { getBillAgeInfo } from './LoadingBillsTab';
+import { formatPersianDate } from '../../utils/dateUtils';
 
 interface OverviewTabProps {
   orders: Order[];
   products: Product[];
   supermarkets: Supermarket[];
   loadingBills?: LoadingBill[];
+  pendingRedemptions?: LoyaltyRedemption[];
+  loadingPendingRedemptions?: boolean;
   onNavigateToOrders: (statusFilter?: string) => void;
   onNavigateToProducts: (filterType?: 'lowStock') => void;
   onNavigateToTeam: (statusFilter?: string) => void;
   onNavigateToLoadingBills?: (statusFilter?: string) => void;
+  onNavigateToLoyaltyRedemptions?: () => void;
 }
 
 export const OverviewTab: React.FC<OverviewTabProps> = ({
@@ -40,10 +43,13 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   products,
   supermarkets,
   loadingBills = [],
+  pendingRedemptions = [],
+  loadingPendingRedemptions = false,
   onNavigateToOrders,
   onNavigateToProducts,
   onNavigateToTeam,
   onNavigateToLoadingBills,
+  onNavigateToLoyaltyRedemptions,
 }) => {
   // 1. Action Items
   // A. Delegated orders
@@ -112,12 +118,20 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
     [supermarkets]
   );
 
+  // Lookup map for supermarket details in reward requests
+  const supermarketById = useMemo(() => {
+    const map = new Map<string, Supermarket>();
+    supermarkets.forEach((s) => map.set(s.id, s));
+    return map;
+  }, [supermarkets]);
+
   const totalActionItems =
     delegatedOrders.length +
     lowStockProducts.length +
     inactiveStores.length +
     pendingBills.length +
-    pendingApprovalStores.length;
+    pendingApprovalStores.length +
+    pendingRedemptions.length;
 
   return (
     <div className="space-y-6">
@@ -218,6 +232,121 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             </button>
           </div>
         )}
+
+        {/* Action: Pending Reward Redemptions */}
+        <div
+          className={`p-4 rounded-2xl bg-slate-900 border flex flex-col justify-between space-y-4 transition ${
+            pendingRedemptions.length > 0
+              ? 'sm:col-span-2 border-amber-500/50 hover:border-amber-400 shadow-md shadow-amber-500/10'
+              : 'border-slate-800 hover:border-amber-500/40 shadow-sm'
+          }`}
+        >
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center border border-amber-500/30">
+                <Gift className="w-5 h-5" />
+              </div>
+              <span
+                className={`text-xs px-2.5 py-0.5 rounded-full font-bold border ${
+                  pendingRedemptions.length > 0
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                    : 'bg-slate-800 text-slate-400 border-slate-700'
+                }`}
+              >
+                {pendingRedemptions.length.toLocaleString('fa-IR')} درخواست
+              </span>
+            </div>
+
+            <div>
+              <h3 className="font-bold text-sm text-slate-100">
+                {pendingRedemptions.length > 0
+                  ? `${pendingRedemptions.length.toLocaleString('fa-IR')} درخواست دریافت جایزه در انتظار تایید`
+                  : 'درخواست‌های دریافت جایزه'}
+              </h3>
+              <p className="text-xs text-slate-400 leading-relaxed mt-1">
+                {pendingRedemptions.length > 0
+                  ? 'افراد و فروشگاه‌های زیر امتیاز خود را برای دریافت جایزه ثبت کرده‌اند و منتظر تحویل یا تایید هستند:'
+                  : 'در حال حاضر درخواست جایزه جدیدی در انتظار بررسی وجود ندارد.'}
+              </p>
+            </div>
+
+            {loadingPendingRedemptions && pendingRedemptions.length === 0 ? (
+              <div className="py-3 text-xs text-slate-400 text-center bg-slate-950/50 rounded-xl border border-slate-800/80">
+                در حال دریافت درخواست‌های جایزه...
+              </div>
+            ) : pendingRedemptions.length > 0 ? (
+              <div className="max-h-56 overflow-y-auto space-y-2 pr-0.5">
+                {pendingRedemptions.map((req) => {
+                  const store = supermarketById.get(req.supermarket_id);
+                  const storeName = store?.name || 'فروشگاه ثبت‌نشده';
+                  const ownerName = store?.owner?.trim();
+                  return (
+                    <div
+                      key={req.id}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-950/70 border border-slate-800/90"
+                    >
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <div className="w-7 h-7 rounded-lg bg-amber-500/15 text-amber-300 flex items-center justify-center border border-amber-500/25 shrink-0 mt-0.5">
+                          <User className="w-3.5 h-3.5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+                            <span className="font-bold text-slate-100 truncate">
+                              {ownerName || storeName}
+                            </span>
+                            {ownerName && (
+                              <span className="text-[11px] text-slate-400 truncate">
+                                ({storeName})
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-amber-300 font-medium mt-0.5 truncate">
+                            {req.reward_title}
+                            {req.reward_qty > 1 && (
+                              <span className="text-slate-400 font-mono mr-1">
+                                × {req.reward_qty.toLocaleString('fa-IR')}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex sm:flex-col items-center sm:items-end justify-between gap-1 text-[11px] shrink-0">
+                        <span className="font-bold font-mono text-amber-400">
+                          {req.points_spent.toLocaleString('fa-IR')} امتیاز
+                        </span>
+                        <span className="text-slate-500 font-mono text-[10px]">
+                          {formatPersianDate(req.created_at, { includeTime: true })}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => onNavigateToLoyaltyRedemptions?.()}
+            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+              pendingRedemptions.length > 0
+                ? 'bg-amber-500 hover:bg-amber-400 active:scale-98 text-slate-950 shadow-md shadow-amber-500/20'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+            }`}
+          >
+            <span>
+              {pendingRedemptions.length > 0
+                ? 'بررسی و تحویل جوایز'
+                : 'مشاهده درخواست‌های جایزه'}
+            </span>
+            <ArrowLeft
+              className={`w-4 h-4 ${
+                pendingRedemptions.length > 0 ? 'text-slate-950' : 'text-amber-400'
+              }`}
+            />
+          </button>
+        </div>
 
         {/* Action 0: Supermarkets List */}
         <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col justify-between space-y-4 hover:border-purple-500/50 transition shadow-sm">

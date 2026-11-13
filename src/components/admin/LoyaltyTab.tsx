@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
-import { Product } from '../../types';
+import { Product, LoyaltyRedemption } from '../../types';
+export type { LoyaltyRedemption };
 import { formatPrice } from './helpers';
 import { formatPersianDate } from '../../utils/dateUtils';
 import {
@@ -74,29 +75,12 @@ export interface LoyaltyReward {
   quantity_label?: string | null;
 }
 
-export interface LoyaltyRedemption {
-  id: string;
-  supermarket_id: string;
-  reward_id?: string | null;
-  reward_title: string;
-  reward_qty: number;
-  points_spent: number;
-  status: 'pending' | 'delivered' | 'cancelled';
-  note?: string | null;
-  created_at: string;
-  delivered_at?: string | null;
-}
+export type LoyaltySubTab = 'settings' | 'products' | 'rewards' | 'redemptions' | 'stores';
 
-export interface LoyaltyBalanceRow {
-  supermarket_id: string;
-  name: string;
-  owner?: string | null;
-  balance: number;
-  earned_total: number;
-  earned_30d: number;
+export interface LoyaltyTabProps {
+  initialSubTab?: LoyaltySubTab;
+  onRedemptionsChanged?: () => void;
 }
-
-type LoyaltySubTab = 'settings' | 'products' | 'rewards' | 'redemptions' | 'stores';
 
 const DEFAULT_SETTINGS: LoyaltySettings = {
   enabled: true,
@@ -125,10 +109,28 @@ function parseRpcError(err: any, fallback: string): string {
   return msg || fallback;
 }
 
-export const LoyaltyTab: React.FC = () => {
+export interface LoyaltyBalanceRow {
+  supermarket_id: string;
+  name: string;
+  owner?: string | null;
+  balance: number;
+  earned_total: number;
+  earned_30d: number;
+}
+
+export const LoyaltyTab: React.FC<LoyaltyTabProps> = ({
+  initialSubTab,
+  onRedemptionsChanged,
+}) => {
   const { products, categories, supermarkets, orders, showToast } = useApp();
 
-  const [activeSubTab, setActiveSubTab] = useState<LoyaltySubTab>('settings');
+  const [activeSubTab, setActiveSubTab] = useState<LoyaltySubTab>(initialSubTab || 'settings');
+
+  useEffect(() => {
+    if (initialSubTab) {
+      setActiveSubTab(initialSubTab);
+    }
+  }, [initialSubTab]);
 
   // SubTab 1: Settings
   const [settings, setSettings] = useState<LoyaltySettings>(DEFAULT_SETTINGS);
@@ -580,6 +582,7 @@ export const LoyaltyTab: React.FC = () => {
       } else {
         showToast('درخواست جایزه به عنوان «تحویل شده» ثبت شد', 'success');
         await fetchRedemptions();
+        onRedemptionsChanged?.();
       }
     } catch (err) {
       showToast('خطای شبکه در ثبت تحویل', 'error');
@@ -608,6 +611,7 @@ export const LoyaltyTab: React.FC = () => {
         setCancellingRedemption(null);
         setCancelReasonNote('');
         await fetchRedemptions();
+        onRedemptionsChanged?.();
       }
     } catch (err) {
       showToast('خطای شبکه در لغو درخواست', 'error');

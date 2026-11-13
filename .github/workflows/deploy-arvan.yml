@@ -1,0 +1,55 @@
+name: Deploy to ArvanCloud Object Storage
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: arvan-deploy
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - run: npm ci || npm install
+
+      - name: Build
+        env:
+          VITE_BASE_URL: /          # دامنه‌ی اصلی روی ریشه سرو می‌شود (برای /admin و /visitor لازم است)
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: npm run build
+
+      - name: SPA routes
+        run: |
+          mkdir -p dist/admin dist/visitor
+          cp dist/index.html dist/admin/index.html
+          cp dist/index.html dist/visitor/index.html
+          cp dist/index.html dist/404.html
+
+      - name: Upload to Arvan
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.ARVAN_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.ARVAN_SECRET_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_EC2_METADATA_DISABLED: "true"
+          ENDPOINT: https://s3.ir-central1.arvanstorage.ir   # مطابق آدرس باکت شما
+          BUCKET: ${{ secrets.ARVAN_BUCKET }}                # babol-pakhsh
+        run: |
+          set -e
+          # 1) فایل‌های هش‌دار: کش بلندمدت
+          aws s3 sync dist/assets s3://$BUCKET/assets --endpoint-url="$ENDPOINT" \
+            --acl public-read --cache-control "public, max-age=31536000, immutable" --no-progress
+          # 2) بقیه‌ی فایل‌ها (index.html، sw.js، ...) بدون کش
+          aws s3 sync dist s3://$BUCKET --endpoint-url="$ENDPOINT" --exclude "assets/*" \
+            --acl public-read --cache-control "public, max-age=0, must-revalidate" --no-progress

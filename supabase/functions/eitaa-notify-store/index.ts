@@ -243,6 +243,10 @@ Deno.serve(async (req: Request) => {
 
     // Resolve all admin recipient chat IDs from eitaa_links for profiles with role in ('admin', 'superadmin')
     const adminChatIds = new Set<string>();
+    let diagAdminProfilesCount: number | null = null;
+    let diagProfErr: unknown = null;
+    let diagLinksCount: number | null = null;
+    let diagLinkErr: unknown = null;
 
     if (adminClient) {
       try {
@@ -250,6 +254,9 @@ Deno.serve(async (req: Request) => {
           .from('profiles')
           .select('id')
           .in('role', ['admin', 'superadmin']);
+
+        diagAdminProfilesCount = Array.isArray(adminProfiles) ? adminProfiles.length : 0;
+        diagProfErr = profErr ?? null;
 
         if (profErr) {
           console.warn('Could not query admin profiles for eitaa notification:', profErr);
@@ -259,6 +266,9 @@ Deno.serve(async (req: Request) => {
             .from('eitaa_links')
             .select('profile_id, eitaa_user_id')
             .in('profile_id', adminProfileIds);
+
+          diagLinksCount = Array.isArray(links) ? links.length : 0;
+          diagLinkErr = linkErr ?? null;
 
           if (linkErr) {
             console.warn('Could not query eitaa_links for admin profiles:', linkErr);
@@ -285,6 +295,18 @@ Deno.serve(async (req: Request) => {
         adminChatIds.add(fallbackId);
       }
     }
+
+    console.log('[eitaa-notify-store][diag]', {
+      hasAdminClient: Boolean(adminClient),
+      hasSupabaseUrl: Boolean(supabaseUrl),
+      hasSupabaseServiceRoleKey: Boolean(supabaseServiceRoleKey),
+      adminProfilesCount: diagAdminProfilesCount,
+      profErr: diagProfErr,
+      eitaaLinksCount: diagLinksCount,
+      linkErr: diagLinkErr,
+      eitaaTokenLength: eitaaToken ? eitaaToken.length : 0,
+      adminChatIdsSize: adminChatIds.size,
+    });
 
     const type = body.type || 'INSERT';
     const validTypes = ['INSERT', 'STORE_WELCOME', 'STORE_APPROVED', 'STORE_REJECTED'];

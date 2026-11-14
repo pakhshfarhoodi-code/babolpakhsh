@@ -497,7 +497,7 @@ Deno.serve(async (req: Request) => {
         adminMsg = `🔓 فروشگاه اکسلی برای اولین بار وارد سامانه شد\n\nنام فروشگاه: ${name}\nمالک: ${owner}\nموبایل: ${phone}\nآدرس: ${address}\nویزیتور: ${visitorName}\nزمان ورود: ${tehranTime}`;
       } else {
         // Default new store registration message
-        adminMsg = `🛒 ثبت‌نام فروشگاه جدید در سامانه پخش فرهودی\n\nنام فروشگاه: ${name}\nمدیر / صاحب فروشگاه: ${owner}\nشماره همراه: ${phone}\nآدرس: ${address}\nمبدأ ثبت‌نام: ${regSource}\nزمان ثبت: ${new Date().toLocaleTimeString('fa-IR')}`;
+        adminMsg = `🛒 ثبت‌نام فروشگاه جدید در سامانه پخش فرهودی\n\nنام فروشگاه: ${name}\nمدیر / صاحب فروشگاه: ${owner}\nشماره همراه: ${phone}\nآدرس: ${address}\nمبدأ ثبت‌نام: ${regSource}\nزمان ثبت: ${formatTehranDateTime(new Date())}`;
       }
 
       if (!tgBotToken || adminChatIds.size === 0) {
@@ -640,9 +640,10 @@ Deno.serve(async (req: Request) => {
     }
 
     const isConsumer = s.verification_type === 'bulk_consumer';
-    const orderDate = orderData.order_date
-      ? new Date(orderData.order_date).toLocaleTimeString('fa-IR')
-      : new Date().toLocaleTimeString('fa-IR');
+    const parsedOrderDate = orderData.order_date ? new Date(orderData.order_date) : new Date();
+    const orderDate = formatTehranDateTime(
+      Number.isNaN(parsedOrderDate.getTime()) ? new Date() : parsedOrderDate
+    );
 
     const fin = computeOrderFinancials(orderData, items, isConsumer);
 

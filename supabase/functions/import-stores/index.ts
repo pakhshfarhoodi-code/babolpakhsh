@@ -34,9 +34,9 @@ const normalizePhone = (str: string): string => {
   return clean;
 };
 
-// Generate a random 6-character numeric password
+// Fixed initial 6-digit password for imported stores (must change on first login)
 const generateNumericPassword = (): string => {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return '123456';
 };
 
 Deno.serve(async (req: Request) => {
@@ -196,7 +196,7 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
-        // 2. Generate random password
+        // 2. Fixed initial password
         const password = generateNumericPassword();
         const email = `${cleanPhone}@babolpakhsh.internal`;
 

@@ -287,7 +287,7 @@ const ExcelStoreImportModalInner: React.FC<Omit<ExcelStoreImportModalProps, 'isO
       const hasCreated = allResults.some((r) => r.status === 'created');
       if (hasCreated && !hasDownloadedExport) {
         e.preventDefault();
-        e.returnValue = 'رمزهای عبور موقت ایجاد شده هنوز دانلود نشده‌اند و در صورت بستن صفحه از بین خواهند رفت.';
+        e.returnValue = 'فایل اکسل خروجی فروشگاه‌های ایجاد شده هنوز دانلود نشده است.';
         return e.returnValue;
       }
     };
@@ -1418,10 +1418,10 @@ const ExcelStoreImportModalInner: React.FC<Omit<ExcelStoreImportModalProps, 'isO
               <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
               <div className="space-y-0.5">
                 <p className="font-bold text-xs text-amber-300">
-                  توجه بسیار مهم: رمزها فقط همین‌جا نمایش داده می‌شوند و جای دیگر ذخیره نمی‌شوند!
+                  نکته مهم درباره رمز عبور اولیه فروشگاه‌ها:
                 </p>
                 <p className="text-[11px] text-amber-200/90 leading-relaxed">
-                  جهت حفظ امنیت، رمزهای عبور تولید شده در هیچ پایگاه داده‌ای ثبت دائمی نمی‌شوند. حتماً پیش از بستن این پنجره، فایل اکسل خروجی را دانلود نمایید.
+                  رمز اولیه 123456 است و فروشگاه بعد از اولین ورود باید رمز را تغییر دهد. جهت ارسال دعوت‌نامه، فایل اکسل خروجی را دانلود نمایید.
                 </p>
               </div>
             </div>
@@ -1625,7 +1625,7 @@ const ExcelStoreImportModalInner: React.FC<Omit<ExcelStoreImportModalProps, 'isO
               <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-300">
                 <p className="font-bold text-xs">یادآوری مهم:</p>
                 <p className="text-[11px] mt-0.5 text-amber-200/90">
-                  فقط حساب کاربری این فروشگاه‌ها در سامانه ساخته می‌شود و هیچ پیامکی ارسال نمی‌شود. پس از اتمام، رمزهای ایجاد شده در قالب فایل اکسل در اختیار شما قرار می‌گیرند.
+                  فقط حساب کاربری این فروشگاه‌ها در سامانه ساخته می‌شود و هیچ پیامکی ارسال نمی‌شود. رمز اولیه 123456 است و فروشگاه بعد از اولین ورود باید رمز را تغییر دهد.
                 </p>
               </div>
             </div>
@@ -1666,12 +1666,11 @@ const ExcelStoreImportModalInner: React.FC<Omit<ExcelStoreImportModalProps, 'isO
               <div className="w-8 h-8 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center border border-rose-500/30">
                 <AlertCircle className="w-4 h-4" />
               </div>
-              <h4 className="font-bold text-sm text-slate-100">رمزهای عبور هنوز دانلود نشده‌اند!</h4>
+              <h4 className="font-bold text-sm text-slate-100">فایل اکسل خروجی هنوز دانلود نشده است!</h4>
             </div>
 
             <p className="text-slate-300 leading-relaxed text-xs">
-              رمزهای عبور ایجاد شده در هیچ کجای سرور ذخیره نشده‌اند و با بستن این صفحه برای همیشه از بین خواهند رفت.
-              آیا مایل به دانلود فایل اکسل خروجی هستید؟
+              رمز اولیه 123456 است و فروشگاه بعد از اولین ورود باید رمز را تغییر دهد. آیا مایل به دانلود فایل اکسل خروجی (شامل متن پیامک‌های دعوت) قبل از بستن هستید؟
             </p>
 
             <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-800">

@@ -1,17 +1,22 @@
-import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useApp } from './context/AppContext';
 import { Header } from './components/Header';
 import type { AdminTabKey } from './components/AdminPanel';
 import { LoginScreen } from './components/LoginScreen';
-import { UserRole } from './types';
+import { Order, UserRole } from './types';
 import { getMessengerScope } from './lib/messengerScope';
 import { lazyWithRetry } from './lib/chunkReload';
+import { supabase } from './lib/supabase';
+import { getOrderChannel } from './context/utils';
 import appLogo from './assets/images/farhoodi_b2b_logo.webp';
 
 const AdminPanel = lazyWithRetry(() => import('./components/AdminPanel').then((m) => ({ default: m.AdminPanel })));
 const VisitorPortal = lazyWithRetry(() => import('./components/VisitorPortal').then((m) => ({ default: m.VisitorPortal })));
 const SupermarketPortal = lazyWithRetry(() => import('./components/SupermarketPortal').then((m) => ({ default: m.SupermarketPortal })));
 const WarehousePanel = lazyWithRetry(() => import('./components/WarehousePanel').then((m) => ({ default: m.WarehousePanel })));
+const OrderInvoiceModal = lazyWithRetry(() =>
+  import('./components/invoice/OrderInvoiceModal').then((m) => ({ default: m.OrderInvoiceModal }))
+);
 import { ForcePasswordChangeModal } from './components/ForcePasswordChangeModal';
 import { AlertTriangle, RefreshCw, Loader2 } from 'lucide-react';
 
@@ -44,6 +49,28 @@ function getExpectedPathForRole(userRole: UserRole): string {
   return '/';
 }
 
+function getInvoiceParamFromUrl(): { hasParam: boolean; orderId: string } {
+  if (typeof window === 'undefined') return { hasParam: false, orderId: '' };
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('invoice')) return { hasParam: false, orderId: '' };
+    return { hasParam: true, orderId: (params.get('invoice') || '').trim() };
+  } catch {
+    return { hasParam: false, orderId: '' };
+  }
+}
+
+function removeInvoiceParamFromUrl(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('invoice')) {
+      url.searchParams.delete('invoice');
+      window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+    }
+  } catch {}
+}
+
 export const App: React.FC = () => {
   const {
     role,
@@ -56,6 +83,13 @@ export const App: React.FC = () => {
     theme,
     invoiceSettings,
     mustChangePassword,
+    currentUser,
+    selectedVisitorId,
+    selectedSupermarketId,
+    supermarkets,
+    visitors,
+    orders,
+    showToast,
   } = useApp();
 
   const currentLogo = invoiceSettings?.logo_url || appLogo;
@@ -70,6 +104,11 @@ export const App: React.FC = () => {
   const [showStaffLogin, setShowStaffLogin] = useState<boolean>(
     () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('staff') === '1'
   );
+
+  const [pendingInvoice, setPendingInvoice] = useState<{ hasParam: boolean; orderId: string }>(getInvoiceParamFromUrl);
+  const [deepLinkOrder, setDeepLinkOrder] = useState<Order | null>(null);
+  const [isLoadingDeepLinkInvoice, setIsLoadingDeepLinkInvoice] = useState(false);
+  const handledInvoiceKeyRef = useRef<string | null>(null);
 
   // Clear any legacy cached active tabs so default tabs always take effect
   useEffect(() => {
@@ -87,6 +126,15 @@ export const App: React.FC = () => {
     }
   }, [isLoggedIn, role]);
 
+  // Reset deep-link state on logout
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setDeepLinkOrder(null);
+      setIsLoadingDeepLinkInvoice(false);
+      handledInvoiceKeyRef.current = null;
+    }
+  }, [isLoggedIn]);
+
   // Synchronize route changes via replaceState without redundant history entries
   const navigateTo = useCallback((targetPath: string) => {
     if (typeof window !== 'undefined') {
@@ -95,7 +143,9 @@ export const App: React.FC = () => {
       const currentNorm = window.location.pathname.replace(/\/+$/, '');
       const targetNorm = fullPath.replace(/\/+$/, '');
       if (currentNorm !== targetNorm) {
-        window.history.replaceState({}, '', fullPath);
+        const search = window.location.search || '';
+        const hash = window.location.hash || '';
+        window.history.replaceState({}, '', `${fullPath}${search}${hash}`);
       }
     }
     setCurrentPath(targetPath);
@@ -106,6 +156,11 @@ export const App: React.FC = () => {
     const handlePopState = () => {
       const path = getNormalizedPath();
       setCurrentPath(path);
+      const nextInv = getInvoiceParamFromUrl();
+      if (nextInv.hasParam) {
+        handledInvoiceKeyRef.current = null;
+        setPendingInvoice(nextInv);
+      }
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -119,11 +174,172 @@ export const App: React.FC = () => {
     if (typeof window !== 'undefined') {
       const base = getBasePath();
       const fullPath = expectedPath === '/' ? (base ? `${base}/` : '/') : `${base}${expectedPath}`;
-      window.history.replaceState({}, '', fullPath);
+      const search = window.location.search || '';
+      const hash = window.location.hash || '';
+      window.history.replaceState({}, '', `${fullPath}${search}${hash}`);
     }
   }
 
   const effectivePath = isLoggedIn ? expectedPath : currentPath;
+
+  // Handle ?invoice=<orderId> deep-link after authentication and data readiness
+  useEffect(() => {
+    if (!pendingInvoice.hasParam) return;
+    if (!authReady || !isLoggedIn || justLoggedIn) return;
+    if (isOnlineDb && (!isDataReady || Boolean(fetchError))) return;
+
+    const orderId = pendingInvoice.orderId;
+    const handleKey = `${role}:${currentUser.id}:${orderId}`;
+    if (handledInvoiceKeyRef.current === handleKey) return;
+
+    if (!orderId) {
+      handledInvoiceKeyRef.current = handleKey;
+      removeInvoiceParamFromUrl();
+      setPendingInvoice({ hasParam: false, orderId: '' });
+      navigateTo(expectedPath);
+      showToast('فاکتور پیدا نشد', 'error');
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingDeepLinkInvoice(true);
+
+    const loadAndOpenInvoice = async () => {
+      try {
+        let fetchedOrder: Order | null = null;
+
+        if (isOnlineDb && supabase) {
+          const { data: ordData, error: ordErr } = await supabase
+            .from('orders')
+            .select('id, supermarket_id, supermarket_name, assigned_visitor_id, visitor_name, status, total_amount, order_source, order_channel, reassignment_id, loading_bill_id, invoice_revised_at, order_date, stock_deducted, discount_percent, discount_status, discount_set_by, discount_reviewed_by, discount_reviewed_at, pickup_discount_percent, founder_discount_percent, founder_campaign_no, items:order_items(id, order_id, product_id, name, price, quantity, items_per_package, unit, discount_percent, created_at)')
+            .eq('id', orderId)
+            .maybeSingle();
+
+          if (!ordErr && ordData) {
+            fetchedOrder = ordData as Order;
+          } else if (ordErr) {
+            const { data: rawOrder } = await supabase
+              .from('orders')
+              .select('*')
+              .eq('id', orderId)
+              .maybeSingle();
+            if (rawOrder) {
+              const { data: rawItems } = await supabase
+                .from('order_items')
+                .select('id, order_id, product_id, name, price, quantity, items_per_package, unit, discount_percent, created_at')
+                .eq('order_id', orderId);
+              fetchedOrder = {
+                ...(rawOrder as Order),
+                items: (rawItems || []) as Order['items'],
+              };
+            }
+          }
+        } else {
+          fetchedOrder = orders.find((o) => o.id === orderId) || null;
+        }
+
+        if (cancelled) return;
+
+        if (!fetchedOrder || !fetchedOrder.id) {
+          handledInvoiceKeyRef.current = handleKey;
+          removeInvoiceParamFromUrl();
+          setPendingInvoice({ hasParam: false, orderId: '' });
+          navigateTo(expectedPath);
+          showToast('فاکتور پیدا نشد', 'error');
+          return;
+        }
+
+        const isAuthorized = (() => {
+          if (role === 'admin') return true;
+          if (role === 'visitor') {
+            const myVisitorId = currentUser.id || selectedVisitorId;
+            return Boolean(
+              fetchedOrder.assigned_visitor_id &&
+                fetchedOrder.assigned_visitor_id !== 'direct' &&
+                myVisitorId &&
+                (fetchedOrder.assigned_visitor_id === currentUser.id ||
+                  (selectedVisitorId && fetchedOrder.assigned_visitor_id === selectedVisitorId))
+            );
+          }
+          if (role === 'supermarket') {
+            const myStoreId = currentUser.id || selectedSupermarketId;
+            return Boolean(
+              fetchedOrder.supermarket_id &&
+                myStoreId &&
+                (fetchedOrder.supermarket_id === currentUser.id ||
+                  (selectedSupermarketId && fetchedOrder.supermarket_id === selectedSupermarketId))
+            );
+          }
+          return false;
+        })();
+
+        if (!isAuthorized) {
+          handledInvoiceKeyRef.current = handleKey;
+          removeInvoiceParamFromUrl();
+          setPendingInvoice({ hasParam: false, orderId: '' });
+          navigateTo(expectedPath);
+          showToast('فاکتور پیدا نشد', 'error');
+          return;
+        }
+
+        const matchedSm = supermarkets.find((s) => s.id === fetchedOrder!.supermarket_id);
+        const isBulkConsumer = matchedSm?.verification_type === 'bulk_consumer';
+        const normalizedOrder: Order = {
+          ...fetchedOrder,
+          customer_type: fetchedOrder.customer_type || (isBulkConsumer ? 'consumer' : 'store'),
+          supermarket_id: fetchedOrder.supermarket_id || '',
+          supermarket_name: fetchedOrder.supermarket_name || matchedSm?.name || 'فروشگاه نامشخص',
+          assigned_visitor_id: fetchedOrder.assigned_visitor_id || 'direct',
+          visitor_name:
+            fetchedOrder.visitor_name ||
+            (fetchedOrder.assigned_visitor_id && fetchedOrder.assigned_visitor_id !== 'direct'
+              ? 'ویزیتور'
+              : 'خرید مستقیم از پخش مرکزی'),
+          order_channel: getOrderChannel(fetchedOrder),
+          items: Array.isArray(fetchedOrder.items) ? fetchedOrder.items : [],
+        };
+
+        handledInvoiceKeyRef.current = handleKey;
+        setDeepLinkOrder(normalizedOrder);
+        removeInvoiceParamFromUrl();
+        setPendingInvoice({ hasParam: false, orderId: '' });
+      } catch {
+        if (cancelled) return;
+        handledInvoiceKeyRef.current = handleKey;
+        removeInvoiceParamFromUrl();
+        setPendingInvoice({ hasParam: false, orderId: '' });
+        navigateTo(expectedPath);
+        showToast('فاکتور پیدا نشد', 'error');
+      } finally {
+        if (!cancelled) {
+          setIsLoadingDeepLinkInvoice(false);
+        }
+      }
+    };
+
+    loadAndOpenInvoice();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    pendingInvoice,
+    authReady,
+    isLoggedIn,
+    justLoggedIn,
+    isOnlineDb,
+    isDataReady,
+    fetchError,
+    role,
+    currentUser.id,
+    selectedVisitorId,
+    selectedSupermarketId,
+    supermarkets,
+    orders,
+    expectedPath,
+    navigateTo,
+    showToast,
+  ]);
 
   const [authDelayWarning, setAuthDelayWarning] = useState(false);
 
@@ -322,6 +538,35 @@ export const App: React.FC = () => {
           )}
         </Suspense>
       </main>
+
+      {/* Deep-linked Invoice Loading Overlay */}
+      {isLoadingDeepLinkInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl px-5 py-4 flex items-center gap-3 shadow-2xl text-slate-100">
+            <Loader2 className="w-5 h-5 animate-spin text-blue-400" />
+            <span className="text-xs font-bold">در حال دریافت فاکتور...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Deep-linked Invoice Modal */}
+      <Suspense fallback={null}>
+        <OrderInvoiceModal
+          isOpen={Boolean(deepLinkOrder)}
+          onClose={() => setDeepLinkOrder(null)}
+          order={deepLinkOrder}
+          supermarket={
+            deepLinkOrder
+              ? supermarkets.find((s) => s.id === deepLinkOrder.supermarket_id) || null
+              : null
+          }
+          visitor={
+            deepLinkOrder
+              ? visitors.find((v) => v.id === deepLinkOrder.assigned_visitor_id) || null
+              : null
+          }
+        />
+      </Suspense>
 
       {/* Mandatory password change for Excel-imported store accounts */}
       <ForcePasswordChangeModal isOpen={isLoggedIn && mustChangePassword} />

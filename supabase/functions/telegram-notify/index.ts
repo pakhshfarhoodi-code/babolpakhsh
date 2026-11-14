@@ -1,451 +1,260 @@
-// @ts-nocheck
-import { createClient } from 'npm:@supabase/supabase-js@2.49.1';
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-webhook-secret',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
+
+const supabase = createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+);
+
+// ---------- محاسبه‌ی مالی (مطابق orderLine.ts و InvoiceDocument) ----------
+const getPack = (v: unknown) => {
+  const n = Number(v);
+  return n > 0 ? n : 1;
 };
 
-// Constant-time string comparison to prevent timing attacks
-function constantTimeEqual(a: string, b: string): boolean {
-  if (typeof a !== 'string' || typeof b !== 'string') return false;
-  const enc = new TextEncoder();
-  const aBytes = enc.encode(a);
-  const bBytes = enc.encode(b);
-  if (aBytes.length !== bBytes.length) return false;
-  let diff = 0;
-  for (let i = 0; i < aBytes.length; i++) {
-    diff |= aBytes[i] ^ bBytes[i];
+function unitFromCatalog(raw: number, pack: number, p: any): number {
+  const pStore = Number(p?.price ?? 0);
+  const pVis = Number(p?.visitor_price ?? 0);
+  const hasRaw = raw > 1;
+  if (pStore > 1) {
+    if (hasRaw && Math.abs(raw - pStore * pack) < Math.abs(raw - pStore)) return Math.round(raw / pack);
+    return pStore;
   }
-  return diff === 0;
+  if (hasRaw) return raw;
+  if (pVis > 1) return pVis;
+  return raw;
 }
 
-// HTML escape helper for safe Telegram HTML formatting
-function escapeHtml(text: string = ''): string {
-  return String(text)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-// Helper: compute order financials strictly conforming to getOrderPricing / computeLine
-interface OrderLineItem {
-  name?: string;
-  quantity: number;
-  price: number;
-  items_per_package?: number;
-  discount_percent?: number | null;
-  unit?: string;
-}
-
-interface FinancialResult {
-  rawSubtotal: number;
-  productDiscountAmount: number;
-  orderDiscountAmount: number;
-  totalDiscountAmount: number;
-  orderDiscountLabel: string;
-  taxAmount: number;
-  payableAmount: number;
-  itemsCount: number;
-}
-
-function computeOrderFinancials(
-  order: {
-    total_amount?: number;
-    pickup_discount_percent?: number;
-    founder_discount_percent?: number;
-    discount_percent?: number;
-    discount_status?: string;
-  },
-  items: OrderLineItem[],
-  isConsumer: boolean = false
-): FinancialResult {
-  const pickupPercent = isConsumer ? 0 : Number(order.pickup_discount_percent || 0);
-  const founderPercent = isConsumer ? 0 : Number(order.founder_discount_percent || 0);
-  const manualPercent =
-    isConsumer || order.discount_status !== 'approved' ? 0 : Number(order.discount_percent || 0);
-  const totalOrderDiscountPercent = isConsumer
-    ? 0
-    : Math.min(100, Math.max(0, pickupPercent + founderPercent + manualPercent));
-
-  let rawSubtotal = 0;
-  let itemDiscSubtotal = 0;
-  let finalSubtotal = 0;
-
-  for (const item of items) {
-    const qty = Number(item.quantity) || 0;
-    const pack = Number(item.items_per_package) > 1 ? Number(item.items_per_package) : 1;
-    const rawPrice = Number(item.price) || 0;
-    const unitPrice = pack > 1 ? Math.round(rawPrice / pack) : rawPrice;
-
-    const itemDisc = isConsumer
-      ? 0
-      : Math.max(0, Math.min(100, Number(item.discount_percent || 0)));
-
-    const itemDiscountedUnitPrice = Math.round((unitPrice * (100 - itemDisc)) / 100);
-    const combinedPercent = Math.min(100, itemDisc + totalOrderDiscountPercent);
-    const discountedUnitPrice = Math.round((unitPrice * (100 - combinedPercent)) / 100);
-    const lineTotal = Math.round(qty * pack * discountedUnitPrice);
-    const lineRawTotal = Math.round(qty * pack * unitPrice);
-    const lineItemDiscTotal = Math.round(qty * pack * itemDiscountedUnitPrice);
-
-    rawSubtotal += lineRawTotal;
-    itemDiscSubtotal += lineItemDiscTotal;
-    finalSubtotal += lineTotal;
+async function financialBlock(o: any, items: any[]): Promise<string> {
+  const ids = items.map((i) => i.product_id).filter(Boolean);
+  const prodMap = new Map<string, any>();
+  if (ids.length) {
+    const { data } = await supabase
+      .from("products").select("id, price, visitor_price, items_per_package").in("id", ids);
+    (data ?? []).forEach((p: any) => prodMap.set(p.id, p));
   }
 
-  // Fall back to saved total_amount only when items are empty
-  if (items.length === 0) {
-    finalSubtotal = Number(order.total_amount || 0);
-    rawSubtotal = finalSubtotal;
-    itemDiscSubtotal = finalSubtotal;
+  const isConsumer = o.customer_type === "consumer";
+  const pickup = Number(o.pickup_discount_percent ?? 0);
+  const founder = Number(o.founder_discount_percent ?? 0);
+  const manual = o.discount_status === "approved" ? Number(o.discount_percent ?? 0) : 0;
+  const totalPct = isConsumer ? 0 : Math.min(100, Math.max(0, pickup + founder + manual));
+
+  let subtotal = 0;
+  let discounted = 0;
+  for (const it of items) {
+    const p = prodMap.get(it.product_id);
+    const pack = getPack(it.items_per_package || p?.items_per_package);
+    const qty = Number(it.quantity) || 0;
+    const raw = Number(it.price) || 0;
+    const unit = isConsumer ? raw / pack : unitFromCatalog(raw, pack, p);
+    subtotal += Math.round(qty * pack * unit);
+    const du = Math.round((unit * (100 - totalPct)) / 100);
+    discounted += Math.round(qty * pack * du);
+  }
+  if (subtotal <= 0) {
+    subtotal = Number(o.total_amount ?? 0);
+    discounted = Math.round((subtotal * (100 - totalPct)) / 100);
   }
 
-  const productDiscountAmount = Math.max(0, rawSubtotal - itemDiscSubtotal);
-  const totalDiscountAmount = Math.max(0, rawSubtotal - finalSubtotal);
-  const orderDiscountAmount = Math.max(0, totalDiscountAmount - productDiscountAmount);
-  const taxAmount = 0;
-  const payableAmount = finalSubtotal + taxAmount;
-
-  const labelParts: string[] = [];
-  if (pickupPercent > 0) labelParts.push(`تحویل حضوری ${pickupPercent}٪`);
-  if (founderPercent > 0) labelParts.push(`فروشگاه مؤسس ${founderPercent}٪`);
-  if (manualPercent > 0) labelParts.push(`تخفیف توافقی ${manualPercent}٪`);
-  const orderDiscountLabel = labelParts.length > 0 ? labelParts.join(' + ') : 'تخفیف سفارش';
-
-  return {
-    rawSubtotal,
-    productDiscountAmount,
-    orderDiscountAmount,
-    totalDiscountAmount,
-    orderDiscountLabel,
-    taxAmount,
-    payableAmount,
-    itemsCount: items.length,
-  };
-}
-
-function buildTelegramFinancialBlock(fin: FinancialResult): string {
   const lines: string[] = [];
-  lines.push(`💰 <b>جزئیات مالی فاکتور:</b>`);
-  lines.push(`▫️ <b>جمع اولیه اقلام:</b> ${fin.rawSubtotal.toLocaleString('fa-IR')} تومان`);
-  if (fin.productDiscountAmount > 0) {
-    lines.push(`▫️ <b>تخفیف کالاها:</b> ${fin.productDiscountAmount.toLocaleString('fa-IR')} تومان-`);
+
+  if (isConsumer) {
+    const savings = Number(o.consumer_savings ?? 0);
+    if (savings > 0) {
+      lines.push(`مبلغ قبل از تخفیف: ${fmt(subtotal + savings)} تومان`);
+      lines.push(`تخفیف اعمال‌شده: -${fmt(savings)} تومان`);
+    }
+    lines.push(`مبلغ قابل پرداخت: ${fmt(subtotal)} تومان`);
+    return lines.join("\n");
   }
-  if (fin.orderDiscountAmount > 0) {
-    lines.push(`▫️ <b>تخفیف سفارش (${fin.orderDiscountLabel}):</b> ${fin.orderDiscountAmount.toLocaleString('fa-IR')} تومان-`);
+
+  let vatAmount = 0;
+  let vatPercent = 0;
+  const { data: st } = await supabase
+    .from("app_settings").select("value").eq("key", "invoice_settings").maybeSingle();
+  if (st?.value?.has_vat) {
+    vatPercent = Number(st.value.vat_percent) || 0;
+    vatAmount = Math.round((discounted * vatPercent) / 100);
   }
-  if (fin.taxAmount > 0) {
-    lines.push(`▫️ <b>مالیات بر ارزش افزوده:</b> ${fin.taxAmount.toLocaleString('fa-IR')} تومان`);
+
+  lines.push(`مبلغ فاکتور: ${fmt(subtotal)} تومان`);
+  if (totalPct > 0) {
+    if (pickup > 0) lines.push(`تخفیف درب انبار (${pickup}٪): -${fmt(Math.round((subtotal * pickup) / 100))}`);
+    if (founder > 0) lines.push(`تخفیف ویژه فروشگاه‌های اول (${founder}٪): -${fmt(Math.round((subtotal * founder) / 100))}`);
+    if (manual > 0) lines.push(`تخفیف ویژه (${manual}٪): -${fmt(Math.round((subtotal * manual) / 100))}`);
+    lines.push(`جمع تخفیف: -${fmt(subtotal - discounted)} تومان`);
+    lines.push(`جمع پس از تخفیف: ${fmt(discounted)} تومان`);
   }
-  lines.push(`💳 <b>مبلغ نهایی قابل پرداخت:</b> <b>${fin.payableAmount.toLocaleString('fa-IR')} تومان</b>`);
-  return lines.join('\n');
+  if (vatAmount > 0) lines.push(`مالیات (${vatPercent}٪): +${fmt(vatAmount)}`);
+  if (totalPct > 0 || vatAmount > 0) lines.push(`مبلغ قابل پرداخت: ${fmt(discounted + vatAmount)} تومان`);
+  return lines.join("\n");
 }
 
-Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+// ---------- ارسال ----------
+const DEFAULT_KEYBOARD = [[{ text: "🛒 باز کردن بارفروش", web_app: { url: "https://Barfroosh.ir" } }]];
 
-  // 1. Validate x-webhook-secret in constant time
-  const incomingSecret = req.headers.get('x-webhook-secret');
-  if (!incomingSecret) {
-    return new Response(
-      JSON.stringify({ success: false, error: 'Unauthorized: missing x-webhook-secret header' }),
-      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-
-  const configuredSecret =
-    Deno.env.get('WEBHOOK_SECRET') ||
-    Deno.env.get('NOTIFY_WEBHOOK_SECRET') ||
-    Deno.env.get('SUPABASE_WEBHOOK_SECRET') ||
-    '';
-
-  if (configuredSecret && !constantTimeEqual(incomingSecret.trim(), configuredSecret.trim())) {
-    return new Response(
-      JSON.stringify({ success: false, error: 'Unauthorized: invalid x-webhook-secret header' }),
-      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-
+async function sendTelegram(chatId: string, text: string, inlineKeyboard = DEFAULT_KEYBOARD) {
+  const token = Deno.env.get("TELEGRAM_BOT_TOKEN")!;
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-    const supabaseServiceRoleKey =
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ||
-      Deno.env.get('SERVICE_ROLE_KEY') ||
-      Deno.env.get('SUPABASE_SECRET_KEYS') ||
-      '';
-
-    let body: any = {};
-    try {
-      body = await req.json();
-    } catch {
-      body = {};
-    }
-
-    let adminClient: any = null;
-    if (supabaseUrl && supabaseServiceRoleKey) {
-      adminClient = createClient(supabaseUrl, supabaseServiceRoleKey, {
-        auth: { autoRefreshToken: false, persistSession: false },
-      });
-    }
-
-    // Resolve Telegram bot credentials from env or app_settings
-    let tgBotToken = Deno.env.get('TELEGRAM_BOT_TOKEN') || '';
-    let tgChatId = Deno.env.get('TELEGRAM_ADMIN_CHAT_ID') || '';
-
-    if (adminClient && (!tgBotToken || !tgChatId)) {
-      try {
-        const { data: settings } = await adminClient
-          .from('app_settings')
-          .select('key, value')
-          .in('key', ['bot_notifications', 'telegram_bot_token', 'telegram_admin_chat_id']);
-
-        if (settings && Array.isArray(settings)) {
-          for (const s of settings) {
-            if (s.key === 'bot_notifications' && typeof s.value === 'object' && s.value !== null) {
-              tgBotToken = tgBotToken || s.value.telegram_bot_token || '';
-              tgChatId = tgChatId || s.value.telegram_admin_chat_id || '';
-            }
-            if (s.key === 'telegram_bot_token') tgBotToken = tgBotToken || String(s.value);
-            if (s.key === 'telegram_admin_chat_id') tgChatId = tgChatId || String(s.value);
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to load telegram bot credentials from app_settings:', e);
-      }
-    }
-
-    // Resolve all admin recipient chat IDs from telegram_links for profiles with role in ('admin', 'superadmin')
-    const adminChatIds = new Set<string>();
-
-    if (adminClient) {
-      try {
-        const { data: adminProfiles, error: profErr } = await adminClient
-          .from('profiles')
-          .select('id')
-          .in('role', ['admin', 'superadmin']);
-
-        if (profErr) {
-          console.warn('Could not query admin profiles for telegram notification:', profErr);
-        } else if (adminProfiles && adminProfiles.length > 0) {
-          const adminProfileIds = adminProfiles.map((p: any) => String(p.id));
-          const { data: links, error: linkErr } = await adminClient
-            .from('telegram_links')
-            .select('profile_id, telegram_user_id')
-            .in('profile_id', adminProfileIds);
-
-          if (linkErr) {
-            console.warn('Could not query telegram_links for admin profiles:', linkErr);
-          } else if (links && Array.isArray(links)) {
-            for (const l of links) {
-              if (l.telegram_user_id) {
-                const cleanId = String(l.telegram_user_id).trim();
-                if (cleanId) {
-                  adminChatIds.add(cleanId);
-                }
-              }
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to query admin telegram_links:', e);
-      }
-    }
-
-    // Fallbacks: TELEGRAM_ADMIN_CHAT_ID secret or app_settings telegram_admin_chat_id
-    if (tgChatId) {
-      const fallbackId = String(tgChatId).trim();
-      if (fallbackId) {
-        adminChatIds.add(fallbackId);
-      }
-    }
-
-    // Determine event type: Order or Store Registration
-    const isSupermarketEvent =
-      body.table === 'supermarkets' ||
-      body.type === 'store_registration' ||
-      Boolean(body.store) ||
-      (Boolean(body.name) && !body.order_id && !body.order && !body.table);
-
-    let messageHtml = '';
-
-    if (isSupermarketEvent) {
-      // Event A: Store Registration Notification for Admins
-      const storeData = body.store || body.record || body;
-      const storeName = storeData.name || 'فروشگاه جدید';
-      const storeOwner = storeData.owner || 'متصدی فروشگاه';
-      const storePhone = storeData.phone || 'بدون شماره';
-      const storeAddress = storeData.address || 'ثبت نشده';
-      const regSource = storeData.registration_source || 'مستقیم از وب‌سایت';
-
-      messageHtml = `
-🛒 <b>ثبت‌نام فروشگاه جدید در سامانه پخش فرهودی</b>
-
-🏪 <b>نام فروشگاه:</b> ${escapeHtml(storeName)}
-👤 <b>مدیر / صاحب فروشگاه:</b> ${escapeHtml(storeOwner)}
-📞 <b>شماره همراه:</b> <code>${escapeHtml(storePhone)}</code>
-📍 <b>آدرس:</b> ${escapeHtml(storeAddress)}
-🌐 <b>مبدأ ثبت‌نام:</b> ${escapeHtml(regSource)}
-⏰ <b>زمان ثبت:</b> ${new Date().toLocaleTimeString('fa-IR')}
-`.trim();
-    } else {
-      // Event B: Order Placement Notification for Admins
-      let orderData = body.order || body.record || body;
-      let orderId = orderData.id || orderData.order_id || body.order_id;
-      let supermarketId = orderData.supermarket_id;
-
-      let items: OrderLineItem[] = [];
-      let supermarketRecord: any = null;
-
-      if (adminClient && orderId) {
-        // Query order columns without customer_type and consumer_savings
-        try {
-          const { data: oRec } = await adminClient
-            .from('orders')
-            .select(
-              'id, supermarket_id, supermarket_name, assigned_visitor_id, visitor_name, status, total_amount, order_source, order_channel, order_date, pickup_discount_percent, founder_discount_percent, discount_percent, discount_status'
-            )
-            .eq('id', orderId)
-            .maybeSingle();
-
-          if (oRec) {
-            orderData = { ...oRec, ...orderData };
-            supermarketId = oRec.supermarket_id || supermarketId;
-          }
-        } catch (err) {
-          console.warn('Failed to fetch order record:', err);
-        }
-
-        // Query order items with discount_percent column
-        try {
-          const { data: oItems } = await adminClient
-            .from('order_items')
-            .select('name, quantity, price, items_per_package, unit, discount_percent')
-            .eq('order_id', orderId);
-
-          if (oItems && Array.isArray(oItems)) {
-            items = oItems;
-          }
-        } catch (err) {
-          console.warn('Failed to fetch order items:', err);
-        }
-      }
-
-      if (items.length === 0 && Array.isArray(orderData.items)) {
-        items = orderData.items;
-      }
-
-      // Query supermarket to determine bulk_consumer verification type and details
-      if (adminClient && supermarketId) {
-        try {
-          const { data: sm } = await adminClient
-            .from('supermarkets')
-            .select('id, name, owner, phone, address, verification_type')
-            .eq('id', supermarketId)
-            .maybeSingle();
-
-          if (sm) {
-            supermarketRecord = sm;
-          }
-        } catch (err) {
-          console.warn('Failed to fetch supermarket record:', err);
-        }
-      }
-
-      const isConsumer = supermarketRecord?.verification_type === 'bulk_consumer';
-      const storeName = supermarketRecord?.name || orderData.supermarket_name || 'فروشگاه نامشخص';
-      const storeOwner = supermarketRecord?.owner || 'متصدی فروشگاه';
-      const storePhone = supermarketRecord?.phone || '';
-      const orderDate = orderData.order_date
-        ? new Date(orderData.order_date).toLocaleTimeString('fa-IR')
-        : new Date().toLocaleTimeString('fa-IR');
-
-      // Compute exact financial block matching utils/orderLine.ts
-      const fin = computeOrderFinancials(orderData, items, isConsumer);
-
-      // Build items summary preview
-      let itemsListHtml = '';
-      if (items.length > 0) {
-        const itemRows = items.slice(0, 8).map((it, idx) => {
-          const qty = Number(it.quantity) || 0;
-          const u = it.unit || 'عدد';
-          return `${idx + 1}. ${escapeHtml(it.name || 'کالا')} (${qty} ${u})`;
-        });
-        if (items.length > 8) {
-          itemRows.push(`... و ${items.length - 8} قلم دیگر`);
-        }
-        itemsListHtml = `\n📦 <b>اقلام سفارش (${items.length} ردیف):</b>\n${itemRows.join('\n')}\n`;
-      }
-
-      const financialBlock = buildTelegramFinancialBlock(fin);
-
-      messageHtml = `
-🛍️ <b>سفارش جدید در سامانه پخش فرهودی</b>
-
-🆔 <b>شماره سفارش:</b> <code>${escapeHtml(orderId || 'نامشخص')}</code>
-🏪 <b>فروشگاه:</b> ${escapeHtml(storeName)}
-👤 <b>مدیر فروشگاه:</b> ${escapeHtml(storeOwner)}${storePhone ? `\n📞 <b>تماس:</b> <code>${escapeHtml(storePhone)}</code>` : ''}
-⏰ <b>زمان:</b> ${orderDate}
-${itemsListHtml}
-${financialBlock}
-`.trim();
-    }
-
-    if (!tgBotToken || adminChatIds.size === 0) {
-      console.warn('Telegram token or admin recipients not configured');
-      return new Response(
-        JSON.stringify({
-          success: true,
-          message: 'Webhook processed, but Telegram bot or admin chat_id is not configured',
-          recipientsCount: adminChatIds.size,
-        }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Send to all admin recipients
-    const results: any[] = [];
-    for (const chatId of adminChatIds) {
-      try {
-        const tgRes = await fetch(`https://api.telegram.org/bot${tgBotToken}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text: messageHtml,
-            parse_mode: 'HTML',
-          }),
-        });
-        const json = await tgRes.json();
-        results.push({ chat_id: chatId, ok: json.ok, error: json.description });
-        if (!json.ok) {
-          console.error(`Telegram admin send failed for ${chatId}:`, json);
-        }
-      } catch (err) {
-        console.error(`Telegram fetch error for ${chatId}:`, err);
-        results.push({ chat_id: chatId, ok: false, error: String(err) });
-      }
-    }
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        message: 'نوتیفیکیشن تلگرام ادمین ارسال شد.',
-        results,
+    const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        reply_markup: {
+          inline_keyboard: inlineKeyboard,
+        },
       }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  } catch (err: any) {
-    console.error('telegram-notify function error:', err);
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: err.message || 'خطای سرور در ارسال اعلان تلگرام ادمین',
-      }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    });
+    if (!r.ok) console.error("telegram send failed", chatId, r.status, await r.text());
+  } catch (e) {
+    console.error("telegram send error", chatId, e);
   }
+}
+
+Deno.serve(async (req) => {
+  const secret = Deno.env.get("TELEGRAM_NOTIFY_SECRET") ?? Deno.env.get("EITAA_NOTIFY_SECRET");
+  if (!secret || req.headers.get("x-webhook-secret") !== secret) {
+    return new Response("unauthorized", { status: 401 });
+  }
+
+  let payload: any;
+  try { payload = await req.json(); } catch { return new Response("bad json", { status: 400 }); }
+
+  const type = payload.type as string;
+  const rec = payload.record;
+  const old = payload.old_record;
+  if (!rec?.id) return new Response("no record", { status: 200 });
+
+  let title = "";
+  let notifyAdmins = false;
+  let notifyStore = false;
+  let visitorId: string | null = null;
+
+  if (type === "INSERT") {
+    if (rec.status !== "assigned") return new Response("skip", { status: 200 });
+    title = "🛒 سفارش جدید";
+    notifyAdmins = true;
+    notifyStore = true;
+    if (rec.assigned_visitor_id && rec.assigned_visitor_id !== "direct" && rec.order_channel !== "visitor_field") {
+      visitorId = rec.assigned_visitor_id;
+    }
+    await sleep(2000); // صبر برای ثبت آیتم‌ها
+  } else if (type === "UPDATE") {
+    if (
+      !rec.assigned_visitor_id ||
+      rec.assigned_visitor_id === "direct" ||
+      rec.assigned_visitor_id === old?.assigned_visitor_id
+    ) return new Response("skip", { status: 200 });
+    title = "📦 سفارش به شما ارجاع شد";
+    visitorId = rec.assigned_visitor_id;
+  } else {
+    return new Response("skip", { status: 200 });
+  }
+
+  const { data: order } = await supabase
+    .from("orders")
+    .select(
+      "id, supermarket_id, supermarket_name, visitor_name, total_amount, customer_type, consumer_savings, pickup_discount_percent, founder_discount_percent, discount_percent, discount_status",
+    )
+    .eq("id", rec.id)
+    .maybeSingle();
+  const o = order ?? rec;
+
+  // اطلاعات تماس مشتری
+  let sm: any = null;
+  if (o.supermarket_id) {
+    const { data } = await supabase
+      .from("supermarkets")
+      .select("owner, phone, address")
+      .eq("id", o.supermarket_id)
+      .maybeSingle();
+    sm = data;
+  }
+
+  const { data: items } = await supabase
+    .from("order_items")
+    .select("product_id, name, price, quantity, items_per_package")
+    .eq("order_id", rec.id);
+  const allItems = items ?? [];
+
+  const shown = allItems.slice(0, 12).map((i: any) => `• ${i.name} × ${i.quantity}`).join("\n");
+  const more = allItems.length > 12 ? `\n… و ${allItems.length - 12} قلم دیگر` : "";
+  const itemsText = allItems.length ? `\n\n${shown}${more}` : "";
+
+  const money = await financialBlock(o, allItems);
+  const head =
+    `${title}\n\n` +
+    `شماره: ${o.id}\n` +
+    `فروشگاه: ${o.supermarket_name ?? "—"}\n`;
+  const customerInfo =
+    (o.customer_type === "consumer" ? "نوع مشتری: مصرف‌کننده\n" : "") +
+    (sm?.owner && sm.owner !== o.supermarket_name ? `مالک: ${sm.owner}\n` : "") +
+    `تلفن: ${sm?.phone || "—"}\n` +
+    `آدرس: ${sm?.address || "—"}\n`;
+  const rest = `ویزیتور: ${o.visitor_name || "—"}\n` + money + itemsText;
+  const staffText = head + customerInfo + rest;
+  let storeText = `✅ سفارش شما ثبت شد\n\n${head}${rest}`;
+
+  if (notifyStore && o.customer_type !== "consumer") {
+    try {
+      const [ptsRes, cfgRes] = await Promise.all([
+        supabase.rpc("_loyalty_order_points", { p_order_id: rec.id }),
+        supabase.rpc("_loyalty_settings"),
+      ]);
+      if (!ptsRes.error && !cfgRes.error) {
+        const pts = Number(ptsRes.data ?? 0);
+        const rawCfg = Array.isArray(cfgRes.data) ? cfgRes.data[0] : cfgRes.data;
+        const cfg = typeof rawCfg === "string" ? JSON.parse(rawCfg) : rawCfg;
+        if (pts > 0 && cfg?.enabled === true) {
+          storeText += `\n\n⭐ ${pts} امتیاز بابت خرید شما به زودی به حساب شما اضافه خواهد شد.`;
+        }
+      } else {
+        console.error("loyalty rpc error", ptsRes.error ?? cfgRes.error);
+      }
+    } catch (e) {
+      console.error("loyalty rpc exception", e);
+    }
+  }
+
+  const storeKeyboard = [
+    [{ text: "🛒 باز کردن بارفروش", web_app: { url: "https://Barfroosh.ir" } }],
+    [{ text: "🧾 مشاهده فاکتور", web_app: { url: `https://barfroosh.ir/?invoice=${encodeURIComponent(String(o.id))}` } }],
+  ];
+
+  const recipients = new Map<string, { text: string; keyboard?: typeof DEFAULT_KEYBOARD }>();
+
+  if (notifyStore && o.supermarket_id) {
+    const { data: l } = await supabase
+      .from("telegram_links").select("telegram_user_id").eq("profile_id", o.supermarket_id).maybeSingle();
+    if (l?.telegram_user_id) {
+      recipients.set(String(l.telegram_user_id), { text: storeText, keyboard: storeKeyboard });
+    }
+  }
+
+  const staffIds: string[] = [];
+  if (visitorId) staffIds.push(visitorId);
+  if (notifyAdmins) {
+    const { data: admins } = await supabase
+      .from("profiles").select("id").eq("role", "admin").eq("is_active", true);
+    (admins ?? []).forEach((a: any) => staffIds.push(a.id));
+  }
+  if (staffIds.length) {
+    const { data: contacts } = await supabase
+      .from("telegram_contacts").select("telegram_user_id").in("profile_id", staffIds);
+    (contacts ?? []).forEach((c: any) => recipients.set(String(c.telegram_user_id), { text: staffText }));
+  }
+
+  for (const [chatId, msg] of recipients) {
+    await sendTelegram(chatId, msg.text, msg.keyboard);
+    await sleep(250);
+  }
+
+  return new Response(JSON.stringify({ ok: true, sent: recipients.size }), {
+    headers: { "Content-Type": "application/json" },
+  });
 });
